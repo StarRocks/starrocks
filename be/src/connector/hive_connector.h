@@ -124,19 +124,6 @@ private:
     const TupleDescriptor* _min_max_tuple_desc = nullptr;
     std::vector<std::string> _hive_column_names;
     const HiveTableDescriptor* _hive_table = nullptr;
-<<<<<<< HEAD
-
-    bool _has_scan_range_indicate_const_column = false;
-    bool _use_partition_column_value_only = false;
-    // only used in global late materialization
-    int32_t _scan_range_id = -1;
-
-    // ======================================
-    // The following are profile metrics
-    HdfsScanProfile _profile;
-=======
-    std::vector<ColumnAccessPathPtr> _column_access_paths;
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
 };
 
 } // namespace starrocks::connector

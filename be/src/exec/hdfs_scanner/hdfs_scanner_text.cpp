@@ -17,11 +17,6 @@
 #include <unordered_map>
 
 #include "column/column_helper.h"
-<<<<<<< HEAD
-#include "exec/exec_node.h"
-=======
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
-#include "gutil/strings/substitute.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_decompressor.h"
 #include "util/utf8_check.h"
@@ -315,18 +310,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     ChunkPtr ck = *chunk;
     // do stats before we filter rows which does not match.
     _app_stats.raw_rows_read += ck->num_rows();
-<<<<<<< HEAD
-    for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
-        // do evaluation.
-        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, ck.get()));
-        if (ck->num_rows() == 0) {
-            break;
-        }
-    }
-=======
     // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     return Status::OK();
 }
 

@@ -47,7 +47,7 @@ namespace starrocks::parquet {
 
 namespace {
 
-void deduplicate_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges) {
+void deduplicate_io_ranges(std::vector<starrocks::io::SharedBufferedInputStream::IORange>* ranges) {
     if (ranges == nullptr || ranges->size() <= 1) {
         return;
     }
@@ -139,7 +139,7 @@ Status GroupReader::prepare() {
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        std::vector<starrocks::io::SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
         int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
@@ -448,19 +448,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
-<<<<<<< HEAD
         if (column.t_lake_schema_field == nullptr) {
-=======
-        if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
-            schema_node->type == ColumnType::STRUCT) {
-            // Physical VARIANT columns use _get_variant_shredded_hints; this path
-            // is for non-virtual VARIANT columns that appear directly in the SELECT list.
-            VariantShreddedReadHints hints = build_variant_shredded_hints(
-                    _param.scanner_ctx->params->column_access_paths, column.slot_desc->col_name());
-            ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
-                                                                                              schema_node, hints));
-        } else if (column.t_lake_schema_field == nullptr) {
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
@@ -468,29 +456,11 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));
         }
-<<<<<<< HEAD
-        if (_param.global_dictmaps->contains(column.slot_id())) {
-            ASSIGN_OR_RETURN(
-                    column_reader,
-                    ColumnReaderFactory::create(std::move(column_reader), _param.global_dictmaps->at(column.slot_id()),
-                                                column.slot_id(), _row_group_metadata->num_rows));
-=======
         auto* global_dictmaps = _param.scanner_ctx->params->global_dictmaps;
         if (global_dictmaps->contains(column.slot_id())) {
-            GlobalDictReaderKind kind = GlobalDictReaderKind::kNone;
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create(
                                                     std::move(column_reader), global_dictmaps->at(column.slot_id()),
-                                                    column.slot_id(), _row_group_metadata->num_rows, &kind));
-            if (_param.stats != nullptr && kind != GlobalDictReaderKind::kNone) {
-                _param.stats->global_dict_applied_slots++;
-                if (kind == GlobalDictReaderKind::kDictCode) {
-                    _param.stats->global_dict_dict_code_reader_slots++;
-                } else if (kind == GlobalDictReaderKind::kLowRowsEncode) {
-                    _param.stats->global_dict_encode_reader_slots++;
-                }
-                _global_dict_applied_in_group = true;
-            }
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+                                                    column.slot_id(), _row_group_metadata->num_rows));
         }
         if (column_reader == nullptr) {
             // this shouldn't happen but guard
@@ -528,8 +498,8 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
 
 // ── IO range collection ─────────────────────────────────────────────────────
 
-void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                    ColumnIOTypeFlags types) {
+void GroupReader::collect_io_ranges(std::vector<starrocks::io::SharedBufferedInputStream::IORange>* ranges,
+                                    int64_t* end_offset, ColumnIOTypeFlags types) {
     int64_t end = 0;
     _column_materializer->collect_io_ranges(ranges, &end, types);
     deduplicate_io_ranges(ranges);

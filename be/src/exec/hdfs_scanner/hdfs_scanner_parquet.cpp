@@ -19,7 +19,6 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/file_reader.h"
 #include "util/runtime_profile.h"
 
@@ -251,7 +250,7 @@ Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     // materialisation will replace this with interleaved column-load/evaluate.
     if ((*chunk)->num_rows() > 0 && !_scanner_params.conjuncts.scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, chunk->get()));
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, chunk->get()));
     }
     return Status::OK();
 }

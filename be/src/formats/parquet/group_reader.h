@@ -104,26 +104,9 @@ struct GroupReaderParam {
     // used to identify io coalesce
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
 
-<<<<<<< HEAD
-    // used for pageIndex
-    std::vector<ExprContext*> min_max_conjunct_ctxs;
-    const PredicateTree* predicate_tree = nullptr;
-
-    // partition column
-    const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
-    // partition column value which read from hdfs file path
-    const Columns* partition_values = nullptr;
-    // not existed column
-    const std::vector<SlotDescriptor*>* not_existed_slots = nullptr;
-    // reserved field slots
-    const std::vector<SlotDescriptor*>* reserved_field_slots = nullptr;
-    // used for global low cardinality optimization
-    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
-
-=======
     // Kept directly in GroupReaderParam for test-compatibility; also used by
     // _get_extended_bigint_value() to read extended_columns from the scan range.
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+
     int32_t scan_range_id = -1;
     const THdfsScanRange* scan_range = nullptr;
 };

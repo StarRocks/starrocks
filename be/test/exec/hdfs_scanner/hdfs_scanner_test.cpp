@@ -750,13 +750,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -786,13 +781,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -822,13 +812,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -897,15 +882,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
         param->conjuncts.by_slot[0].push_back(ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : param->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : param->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -989,15 +968,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
         param->conjuncts.by_slot[1].push_back(ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : param->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : param->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1094,13 +1067,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         param->conjuncts.min_max_ctxs.push_back(ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1197,15 +1165,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
         param->conjuncts.by_slot[0].push_back(ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : param->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : param->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1326,13 +1288,8 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
             param->conjuncts.min_max_ctxs.push_back(ctx);
         }
 
-<<<<<<< HEAD
-        ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-        ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-        ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+        ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+        ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, *param);
@@ -1382,13 +1339,8 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
         param->conjuncts.min_max_ctxs.push_back(ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     auto scanner = std::make_shared<HdfsOrcScanner>();
     Status status = scanner->init(_runtime_state, *param);
@@ -1533,15 +1485,9 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
         param->conjuncts.by_slot[0].push_back(ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : param->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : param->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1605,15 +1551,9 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
         param->conjuncts.by_slot[0].push_back(ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : param->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : param->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1671,15 +1611,9 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
         param->conjuncts.by_slot[0].push_back(ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : param->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : param->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1775,13 +1709,8 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
         param->conjuncts.scanner_ctxs.push_back(ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->scanner_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->scanner_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.scanner_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.scanner_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.scanner_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.scanner_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1970,13 +1899,8 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     }
 
     param->min_max_tuple_desc = min_max_tuple_desc;
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2731,13 +2655,8 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
         param->conjuncts.scanner_ctxs.push_back(ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2902,13 +2821,8 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
         param->conjuncts.scanner_ctxs.push_back(ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2954,13 +2868,8 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         param->conjuncts.all_ctxs.push_back(ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());

@@ -894,11 +894,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
-<<<<<<< HEAD
-    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
-=======
     _scanner_params.scan_range = (_create_scan_range(no_field_id_file_path));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);

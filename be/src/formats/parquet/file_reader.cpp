@@ -87,13 +87,6 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 }
 
 std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-<<<<<<< HEAD
-    if (_scanner_ctx->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
-        // If we want read this parquet file with iceberg/paimon schema,
-        // we also need to make sure it contains parquet field id.
-        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
-                                                _scanner_ctx->lake_schema);
-=======
     if (_scanner_ctx->params->table_specific.iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // Use LakeMetaHelper only when both an Iceberg/Paimon lake schema is present AND
         // the parquet file carries field ids.  Without field ids, the lake schema cannot
@@ -101,7 +94,6 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
         // col_unique_id / col_physical_name / name lookup chains correctly.
         return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options.case_sensitive,
                                                 _scanner_ctx->params->table_specific.iceberg_schema);
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     } else {
         return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options.case_sensitive);
     }
@@ -241,13 +233,8 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
-<<<<<<< HEAD
     _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
                                        existed_column_names);
-=======
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _scanner_ctx->params->column_access_paths,
-                                       _group_reader_param.read_cols, existed_column_names);
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     _no_materialized_column_scan =
             (_group_reader_param.read_cols.empty() && _scanner_ctx->reserved_field_slots.empty());
 }
@@ -296,21 +283,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
-<<<<<<< HEAD
-    _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
-    _group_reader_param.use_file_pagecache = fd_scanner_ctx.use_file_pagecache;
-    _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
-    _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
-    _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
-    _group_reader_param.not_existed_slots = &fd_scanner_ctx.not_existed_slots;
-    _group_reader_param.reserved_field_slots = &fd_scanner_ctx.reserved_field_slots;
-    // for pageIndex
-    _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
-    _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
-    _group_reader_param.global_dictmaps = fd_scanner_ctx.global_dictmaps;
-=======
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.params->lazy_column_coalesce_counter;
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;

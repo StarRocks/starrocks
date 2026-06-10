@@ -111,15 +111,9 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
 bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
-<<<<<<< HEAD
-    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.params->min_max_tuple_desc;
     ChunkPtr min_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
-=======
-    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.params->min_max_tuple_desc;
-    ChunkPtr min_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
-    ChunkPtr max_chunk = RuntimeChunkHelper::new_chunk(*min_max_tuple_desc, 0);
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
         const orc::Type* orc_type = _reader->get_orc_type_by_slot_id(slot->id());
@@ -595,7 +589,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     // row-level pass is still required for correctness.
     if (rows_read > 0 && !_scanner_params.conjuncts.scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, chunk->get()));
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, chunk->get()));
         rows_read = (*chunk)->num_rows();
     }
 

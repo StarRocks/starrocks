@@ -242,7 +242,6 @@ void HiveDataSource::_init_global_late_materialization_context(RuntimeState* sta
 
     if (will_be_lazy_read) {
         auto glm_ctx_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
-<<<<<<< HEAD
         pipeline::IcebergGlobalLateMaterilizationContext* glm_ctx =
                 static_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
                         glm_ctx_mgr->get_or_create_ctx(row_source_slot_id, [&]() {
@@ -251,16 +250,7 @@ void HiveDataSource::_init_global_late_materialization_context(RuntimeState* sta
                             ctx->hdfs_scan_node = _provider->_hdfs_scan_node;
                             return ctx;
                         }));
-        _scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
-=======
-        IcebergGlobalLateMaterilizationContext* glm_ctx =
-                static_cast<IcebergGlobalLateMaterilizationContext*>(glm_ctx_mgr->get_or_create_ctx(scan_id, [&]() {
-                    auto ctx = state->query_ctx()->object_pool()->add(new IcebergGlobalLateMaterilizationContext());
-                    ctx->hdfs_scan_node = hdfs_scan_node;
-                    return ctx;
-                }));
         _scanner_params.scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 }
 
@@ -275,42 +265,24 @@ void HiveDataSource::_update_has_any_predicate() {
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
-<<<<<<< HEAD
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs, state));
+        RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts,
+                                                &_scanner_params.conjuncts.min_max_ctxs, state));
     }
 
     if (hdfs_scan_node.__isset.partition_conjuncts) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs, state));
-        _has_partition_conjuncts = true;
-=======
-        RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts,
-                                                       &_scanner_params.conjuncts.min_max_ctxs, state));
-    }
-
-    if (hdfs_scan_node.__isset.partition_conjuncts) {
-        RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts,
-                                                       &_partition_filter.conjunct_ctxs, state));
+        RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts,
+                                                &_partition_filter.conjunct_ctxs, state));
         _partition_filter.has_conjuncts = true;
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     }
 
     if (hdfs_scan_node.__isset.case_sensitive) {
         _scanner_params.options.case_sensitive = hdfs_scan_node.case_sensitive;
     }
 
-<<<<<<< HEAD
-    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
-=======
-    RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_params.conjuncts.min_max_ctxs, state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_filter.conjunct_ctxs, state));
-    RETURN_IF_ERROR(ExprExecutor::open(_scanner_params.conjuncts.min_max_ctxs, state));
-    RETURN_IF_ERROR(ExprExecutor::open(_partition_filter.conjunct_ctxs, state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    RETURN_IF_ERROR(Expr::prepare(_scanner_params.conjuncts.min_max_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_filter.conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_scanner_params.conjuncts.min_max_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_filter.conjunct_ctxs, state));
     _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
@@ -318,10 +290,10 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     // Build all_ctxs: clone of (min_max_ctxs ∪ scan conjuncts), used to build
     // ScanConjunctsManager / PredicateTree inside each scanner's context.
     std::vector<ExprContext*> cloned;
-    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _scanner_params.conjuncts.min_max_ctxs, &cloned));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _scanner_params.conjuncts.min_max_ctxs, &cloned));
     for (auto* ctx : cloned) _scanner_params.conjuncts.all_ctxs.emplace_back(ctx);
     cloned.clear();
-    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned));
     for (auto* ctx : cloned) _scanner_params.conjuncts.all_ctxs.emplace_back(ctx);
 
     return Status::OK();
@@ -346,16 +318,10 @@ Status HiveDataSource::_init_partition_values() {
     // must live and close within the fragment scope — they cannot be shared from the
     // (query-scoped) HdfsPartitionDescriptor.
     const auto& thrift_partition_key_exprs = partition_desc->thrift_partition_key_exprs();
-<<<<<<< HEAD
-    RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::open(_partition_values, _runtime_state));
-=======
-    RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_filter.values,
-                                                   _runtime_state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_filter.values, _runtime_state));
-    RETURN_IF_ERROR(ExprExecutor::open(_partition_filter.values, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    RETURN_IF_ERROR(
+            Expr::create_expr_trees(&_pool, thrift_partition_key_exprs, &_partition_filter.values, _runtime_state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_filter.values, _runtime_state));
+    RETURN_IF_ERROR(Expr::open(_partition_filter.values, _runtime_state));
 
     // init partition chunk
     auto partition_chunk = std::make_shared<Chunk>();
@@ -377,18 +343,11 @@ Status HiveDataSource::_init_partition_values() {
         if (it != _scanner_params.conjuncts.by_slot.end()) {
             ctxs.insert(ctxs.end(), it->second.begin(), it->second.end());
         }
-<<<<<<< HEAD
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
-    } else if (_has_partition_conjuncts) {
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
-=======
     }
     if (!ctxs.empty()) {
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, partition_chunk.get()));
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
     } else if (_partition_filter.has_conjuncts) {
-        RETURN_IF_ERROR(
-                ChunkPredicateEvaluator::eval_conjuncts(_partition_filter.conjunct_ctxs, partition_chunk.get()));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_filter.conjunct_ctxs, partition_chunk.get()));
     }
 
     if (!partition_chunk->has_rows()) {
@@ -420,16 +379,10 @@ Status HiveDataSource::_init_extended_values() {
         extended_column_values.emplace_back(id_to_column[id]);
     }
 
-<<<<<<< HEAD
-    RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, extended_column_values, &_extended_column_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::prepare(_extended_column_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::open(_extended_column_values, _runtime_state));
-=======
-    RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, extended_column_values, &_scanner_params.extended_col_values,
-                                                   _runtime_state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_params.extended_col_values, _runtime_state));
-    RETURN_IF_ERROR(ExprExecutor::open(_scanner_params.extended_col_values, _runtime_state));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, extended_column_values, &_scanner_params.extended_col_values,
+                                            _runtime_state));
+    RETURN_IF_ERROR(Expr::prepare(_scanner_params.extended_col_values, _runtime_state));
+    RETURN_IF_ERROR(Expr::open(_scanner_params.extended_col_values, _runtime_state));
 
     return Status::OK();
 }
@@ -607,31 +560,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         }
     }
     // rewrite dict
-<<<<<<< HEAD
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_scanner_conjunct_ctxs));
-    return Status::OK();
-}
-
-Status HiveDataSource::_setup_all_conjunct_ctxs(RuntimeState* state) {
-    // clone conjunct from _min_max_conjunct_ctxs & _conjunct_ctxs
-    // then we will generate PredicateTree based on _all_conjunct_ctxs
-    std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
-    for (auto* ctx : cloned_conjunct_ctxs) {
-        _all_conjunct_ctxs.emplace_back(ctx);
-    }
-
-    cloned_conjunct_ctxs.clear();
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
-    for (auto* ctx : cloned_conjunct_ctxs) {
-        _all_conjunct_ctxs.emplace_back(ctx);
-    }
-=======
-    auto* fragment_dict_state = state->fragment_dict_state();
-    DCHECK(fragment_dict_state != nullptr);
-    RETURN_IF_ERROR(fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(
-            state, &_scanner_params.conjuncts.scanner_ctxs));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_scanner_params.conjuncts.scanner_ctxs));
     return Status::OK();
 }
 
@@ -824,30 +753,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
-<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
-    HdfsScannerParams scanner_params;
-=======
-    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     HdfsScannerParams scanner_params = _scanner_params;
-    if (hdfs_scan_node.__isset.column_access_paths && _column_access_paths.empty()) {
-        bool failed = false;
-        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
-        for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
-            auto st = ColumnAccessPath::create(thrift_path, path_resolver);
-            if (LIKELY(st.ok())) {
-                _column_access_paths.emplace_back(std::move(st.value()));
-            } else {
-                LOG(WARNING) << "Failed to create column access path: " << st.status();
-                failed = true;
-                break;
-            }
-        }
-        if (failed) {
-            _column_access_paths.clear();
-        }
-    }
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
@@ -906,21 +813,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     // setup options for datacache
-<<<<<<< HEAD
-    scanner_params.datacache_options = _datacache_options;
-    scanner_params.use_file_metacache = _use_file_metacache;
-    scanner_params.use_file_pagecache = _use_file_pagecache;
-
-    scanner_params.use_min_max_opt = _use_min_max_opt;
-    scanner_params.can_use_any_column = _can_use_any_column;
-    scanner_params.use_count_opt = _use_count_opt;
-    scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
-=======
     scanner_params.datacache_options = _scanner_params.datacache_options;
-    if (!_column_access_paths.empty()) {
-        scanner_params.column_access_paths = &_column_access_paths;
-    }
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
@@ -1046,21 +939,12 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
-<<<<<<< HEAD
-    Expr::close(_min_max_conjunct_ctxs, state);
-    Expr::close(_partition_conjunct_ctxs, state);
-    Expr::close(_partition_values, state);
-    Expr::close(_scanner_conjunct_ctxs, state);
-    for (auto& it : _conjunct_ctxs_by_slot) {
-        Expr::close(it.second, state);
-=======
-    ExprExecutor::close(_scanner_params.conjuncts.min_max_ctxs, state);
-    ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
-    ExprExecutor::close(_partition_filter.values, state);
-    ExprExecutor::close(_scanner_params.conjuncts.scanner_ctxs, state);
+    Expr::close(_scanner_params.conjuncts.min_max_ctxs, state);
+    Expr::close(_partition_filter.conjunct_ctxs, state);
+    Expr::close(_partition_filter.values, state);
+    Expr::close(_scanner_params.conjuncts.scanner_ctxs, state);
     for (auto& it : _scanner_params.conjuncts.by_slot) {
-        ExprExecutor::close(it.second, state);
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+        Expr::close(it.second, state);
     }
 }
 

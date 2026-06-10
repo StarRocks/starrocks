@@ -287,20 +287,7 @@ struct HdfsScannerParams {
     const TupleDescriptor* min_max_tuple_desc = nullptr;
     std::vector<std::string>* hive_column_names = nullptr;
     std::string avro_schema_json;
-<<<<<<< HEAD
-
-    bool case_sensitive = false;
-
-    HdfsScanProfile* profile = nullptr;
-
-    std::vector<const TIcebergDeleteFile*> deletes;
-
-    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
-
-    const TIcebergSchema* lake_schema = nullptr;
-=======
     const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
 
     // ---- table-format-specific data ----
     TableSpecificData table_specific;
@@ -367,11 +354,6 @@ struct HdfsScannerContext {
 
     std::string timezone;
 
-<<<<<<< HEAD
-    const TIcebergSchema* lake_schema = nullptr;
-
-=======
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     HdfsScanStats* stats = nullptr;
 
     RuntimeScanRangePruner* runtime_filter_scan_range_pruner = nullptr;

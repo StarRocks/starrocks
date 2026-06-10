@@ -19,11 +19,6 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-<<<<<<< HEAD
-#include "common/config.h"
-=======
-#include "common/config_scan_io_fwd.h"
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
 #include "runtime/runtime_state.h"
 #include "util/timezone_utils.h"
 
@@ -131,18 +126,7 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     _scanner_ctx.append_or_update_partition_column_to_chunk(&ck, row_count);
     _scanner_ctx.append_or_update_extended_column_to_chunk(&ck, row_count);
 
-<<<<<<< HEAD
-    // Post-read row-level conjunct evaluation (Avro has no block statistics for pushdown).
-    for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
-        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, ck.get()));
-        if (ck->num_rows() == 0) {
-            break;
-        }
-    }
-=======
     // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
 
     // Note: _app_stats.rows_read is updated by the base class HdfsScanner::get_next
     // after do_get_next returns. Do NOT update it here to avoid double-counting.

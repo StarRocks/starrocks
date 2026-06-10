@@ -171,14 +171,8 @@ Status HdfsScanner::_build_scanner_context() {
             // A slot must be decoded eagerly if it is an output column OR if it
             // appears in a multi-field conjunct that the reader cannot push down.
             column.decode_needed =
-<<<<<<< HEAD
-                    slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
-                                                        _scanner_params.slots_of_multi_field_conjunct.end();
-            ctx.materialized_columns.emplace_back(std::move(column));
-=======
                     slot->is_output_column() || _scanner_params.conjuncts.slots_of_multi_field.count(slot->id());
-            ctx.materialized_columns.emplace_back(column);
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+            ctx.materialized_columns.emplace_back(std::move(column));
         }
     }
 
@@ -200,10 +194,6 @@ Status HdfsScanner::_build_scanner_context() {
 
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.timezone = _runtime_state->timezone();
-<<<<<<< HEAD
-    ctx.lake_schema = _scanner_params.lake_schema;
-=======
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     ctx.stats = &_app_stats;
 
     ScanConjunctsManagerOptions opts;
@@ -298,12 +288,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         // return true from scanner_handles_multi_slot_conjuncts_internally().
         if (!scanner_handles_multi_slot_conjuncts_internally() && !_scanner_params.conjuncts.scanner_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-<<<<<<< HEAD
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.scanner_conjunct_ctxs, (*chunk).get()));
-=======
-            RETURN_IF_ERROR(
-                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, (*chunk).get()));
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, (*chunk).get()));
         }
     } else if (status.is_end_of_file()) {
         // do nothing.
@@ -356,15 +341,9 @@ void HdfsScanner::close() noexcept {
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
-<<<<<<< HEAD
         std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
-    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.path))
-=======
-        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options) {
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, options.fs->new_random_access_file(options.file_path))
->>>>>>> 4e0fe034f9 ([Refactor] Consolidate scanner options and conjuncts into shared structs, unify predicate evaluation in base class (#74559))
     int64_t file_size = options.file_size;
     if (file_size < 0) {
         ASSIGN_OR_RETURN(file_size, raw_file->stream()->get_size());
