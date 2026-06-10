@@ -79,8 +79,8 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
         auto expr_name = ExprJITCodegen::func_name(_expr, state);
         ASSIGN_OR_RETURN(_jit_callable, jit_engine->get_jit_callable(expr_name, context, _expr, _children));
         auto elapsed = MonotonicNanos() - start;
-        if (state->fragment_ctx() != nullptr) {
-            state->fragment_ctx()->update_jit_profile(elapsed);
+        if (auto* fragment_runtime_state = state->fragment_runtime_state(); fragment_runtime_state != nullptr) {
+            fragment_runtime_state->update_jit_profile(elapsed);
         }
     }
     return Status::OK();

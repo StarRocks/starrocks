@@ -336,11 +336,12 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     auto* state = context->state();
-    if (state->fragment_ctx() == nullptr) {
+    auto* fragment_runtime_state = state->fragment_runtime_state();
+    if (fragment_runtime_state == nullptr) {
         return Status::NotSupported("unsupport get_query_profile for no-pipeline");
     }
 
-    const auto& fe_addr = state->fragment_ctx()->fe_addr();
+    const auto& fe_addr = fragment_runtime_state->fe_addr();
     TGetProfileResponse res;
     TGetProfileRequest req;
 

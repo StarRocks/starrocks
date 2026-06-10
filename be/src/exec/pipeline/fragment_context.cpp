@@ -93,6 +93,7 @@ private:
 FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
 FragmentContext::~FragmentContext() {
+    _fragment_runtime_state.clear_jit_profile_counters();
     _close_stream_load_contexts();
     _data_sink.reset();
     _fragment_runtime_state.runtime_filter_hub()->close_all_in_filters(_runtime_state.get());
@@ -132,6 +133,7 @@ void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
     state->set_fragment_ctx(this);
     state->set_fragment_runtime_state(&fragment_runtime_state());
+    _fragment_runtime_state.seal_runtime_parameters();
 }
 
 void FragmentContext::count_down_execution_group(size_t val) {
@@ -160,7 +162,8 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
+    auto workgroup = this->workgroup();
+    workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
 
     if (_report_when_finish) {
         /// TODO: report fragment finish to BE coordinator
@@ -170,7 +173,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
         params.__set_fragment_instance_id(fragment_instance_id());
         // params.query_id = query_id();
         // params.fragment_instance_id = fragment_instance_id();
-        const auto& fe_addr = state->fragment_ctx()->fe_addr();
+        const auto& fe_addr = this->fe_addr();
 
         class RpcRunnable : public Runnable {
         public:
@@ -250,7 +253,8 @@ void FragmentContext::report_exec_state_if_necessary() {
                 driver->runtime_report_action();
             }
         });
-        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
+        auto workgroup = this->workgroup();
+        workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
     }
 }
 
@@ -274,8 +278,9 @@ void FragmentContext::set_final_status(const Status& status) {
 
         const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
         if (!s_status.ok() && !finished_cancel) {
-            const auto* executors = _workgroup != nullptr
-                                            ? _workgroup->executors()
+            auto workgroup = this->workgroup();
+            const auto* executors = workgroup != nullptr
+                                            ? workgroup->executors()
                                             : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
             auto* executor = executors->driver_executor();
             auto* query_ctx = _runtime_state->query_ctx();
@@ -295,9 +300,10 @@ void FragmentContext::set_final_status(const Status& status) {
                 LOG(WARNING) << cancel_msg;
             }
 
+            auto workgroup = this->workgroup();
             const auto* executors =
-                    _workgroup != nullptr
-                            ? _workgroup->executors()
+                    workgroup != nullptr
+                            ? workgroup->executors()
                             : execution_services(_runtime_state.get()).workgroup_manager->shared_executors();
             auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
@@ -460,20 +466,17 @@ TQueryType::type FragmentContext::query_type() const {
 }
 
 void FragmentContext::init_jit_profile() {
+    RuntimeProfile::Counter* jit_counter = nullptr;
+    RuntimeProfile::Counter* jit_timer = nullptr;
     if (runtime_state() && RuntimeStateHelper::is_jit_enabled(runtime_state()) && runtime_state()->runtime_profile()) {
-        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
-        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
+        jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
+        jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
     }
+    _fragment_runtime_state.set_jit_profile_counters(jit_counter, jit_timer);
 }
 
 void FragmentContext::update_jit_profile(int64_t time_ns) {
-    if (_jit_counter != nullptr) {
-        COUNTER_UPDATE(_jit_counter, 1);
-    }
-
-    if (_jit_timer != nullptr) {
-        COUNTER_UPDATE(_jit_timer, time_ns);
-    }
+    _fragment_runtime_state.update_jit_profile(time_ns);
 }
 void FragmentContext::iterate_pipeline(const std::function<void(Pipeline*)>& call) {
     for (auto& group : _execution_groups) {
