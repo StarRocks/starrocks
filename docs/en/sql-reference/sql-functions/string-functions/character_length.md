@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function is an alias of `char_length`, please check [char_length](./char_length.md) function for detailed explanation."
+description: "Alias of char_length; returns the number of characters in a string."
 ---
 
 # character_length

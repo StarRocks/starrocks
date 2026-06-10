@@ -94,6 +94,122 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
+    public void testIVMWithSelectDistinctNoAggregate() throws Exception {
+        // Statement-level SELECT DISTINCT used to pick AUTO_INCREMENT and crash refresh
+        // TypeChecker on the __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        doTestWith3RunsNoCheckRewrite("SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a;",
+                plan -> {
+                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
+                            "TABLE: unpartitioned_db.t0\n" +
+                                    "     TABLE VERSION: Delta@[0,1]");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithSelectDistinctOverJoin() throws Exception {
+        // DISTINCT over a join normalizes to GROUP BY a.id, b.data and rides the same __ROW_ID__
+        // merge path — covers the join scope.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT DISTINCT a.id, b.data FROM `iceberg0`.`unpartitioned_db`.`t0` a " +
+                        "INNER JOIN `iceberg0`.`partitioned_db`.`t1` b ON a.id = b.id;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithSelectDistinctConstantOutput() throws Exception {
+        // Constant outputs are dropped from the group keys, so __ROW_ID__ encodes only id — the
+        // constant must not leak into the row-id encoding.
+        doTestWith3RunsNoCheckRewrite("SELECT DISTINCT 1, id FROM `iceberg0`.`unpartitioned_db`.`t0` as a;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithSelectDistinctDuplicateKeys() throws Exception {
+        // Duplicate DISTINCT keys are deduped to match the refresh aggregate's grouping; otherwise
+        // the encoded __ROW_ID__ would differ from the merge join key and probe the wrong rows.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT DISTINCT id AS a, id AS b FROM `iceberg0`.`unpartitioned_db`.`t0`;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithGroupByAllConstantKey() throws Exception {
+        // GROUP BY 1 is a positional ordinal; after __ROW_ID__ is prepended as output column 1 it must
+        // still resolve to the constant output column (one global group), not to __ROW_ID__ -- else the
+        // merge re-encodes the row id and splits the group across snapshots.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT 1, count(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY 1;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithGroupByOrdinalColumn() throws Exception {
+        // A positional GROUP BY ordinal pointing at a real column must resolve to that column after
+        // __ROW_ID__ is prepended (ordinal shifted past it), so the aggregate groups by id -- not by
+        // __ROW_ID__, which would re-encode the row id and split each group across refreshes.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT id, count(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY 1;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
     public void testIVMWithScanProjectFilter() throws Exception {
         doTestWith3Runs("SELECT id * 2 + 1, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` where id > 10;",
                 plan -> {
