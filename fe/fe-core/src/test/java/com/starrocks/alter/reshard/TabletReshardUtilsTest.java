@@ -190,6 +190,22 @@ public class TabletReshardUtilsTest {
         assertEquals(Config.tablet_reshard_max_split_count, TabletReshardUtils.calcSplitCount(data, t));
     }
 
+    @Test
+    public void parallelismFloor_clampsAndBounds() {
+        // typical: floor follows compute node count
+        assertEquals(4, TabletReshardUtils.parallelismFloor(4, 1024));
+        // upper clamp at max split count
+        assertEquals(1024, TabletReshardUtils.parallelismFloor(2000, 1024));
+        // lower bound at 2 (matches pre-split's clamp(...,2,...))
+        assertEquals(2, TabletReshardUtils.parallelismFloor(1, 1024));
+        assertEquals(2, TabletReshardUtils.parallelismFloor(2, 1024));
+        // zero-node edge: computeNodeCount guarantees >= 1 in practice, but floor still holds
+        assertEquals(2, TabletReshardUtils.parallelismFloor(0, 1024));
+        // max split count < 2 => pre-split disabled => no floor (degrades to 1)
+        assertEquals(1, TabletReshardUtils.parallelismFloor(5, 1));
+        assertEquals(1, TabletReshardUtils.parallelismFloor(5, 0));
+    }
+
     /**
      * Static check of the convergence invariants. These two inequalities are what prevent
      * split↔merge oscillation. If they ever fail, the algorithm can ping-pong indefinitely.
