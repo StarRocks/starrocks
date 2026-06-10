@@ -819,6 +819,7 @@ public:
     void test_convert_from_with_mutiple_segment(bool enable_persistent_index);
     void test_reorder_from(bool enable_persistent_index);
     void test_load_snapshot_incremental(bool enable_persistent_index);
+    void test_load_snapshot_incremental_with_merge_condition(bool enable_persistent_index);
     void test_load_snapshot_incremental_ignore_already_committed_version(bool enable_persistent_index);
     void test_load_snapshot_incremental_mismatched_tablet_id(bool enable_persistent_index);
     void test_load_snapshot_incremental_data_file_not_exist(bool enable_persistent_index);
