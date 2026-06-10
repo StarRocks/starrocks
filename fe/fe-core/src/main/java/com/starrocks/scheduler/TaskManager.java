@@ -45,6 +45,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TaskRunHistory;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -342,39 +343,68 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
-        TaskRun taskRun;
-        SubmitResult submitResult;
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
-        }
-        try {
-            taskRun = TaskRunBuilder.newBuilder(task)
-                    .properties(option.getTaskRunProperties())
-                    .setExecuteOption(option)
-                    .setConnectContext(ConnectContext.get()).build();
-            submitResult = taskRunManager.submitTaskRun(taskRun, option);
-            if (submitResult.getStatus() != SUBMITTED) {
-                throw new DmlException("execute task:" + task.getName() + " failed");
+        // For partitioned MV refresh, one sync SQL call may fan out into multiple internal task runs
+        // bounded by `partition_refresh_number`. The loop here keeps the SQL caller blocked on a single
+        // worker thread at a time until all batches finish — preserving "one sync call = fully refreshed"
+        // while still respecting the internal per-task-run resource cap.
+        SubmitResult firstResult = null;
+        ExecuteOption currentOption = option;
+        while (true) {
+            TaskRun taskRun;
+            SubmitResult submitResult;
+            if (!tryTaskLock()) {
+                throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
             }
-        } finally {
-            taskUnlock();
-        }
+            try {
+                taskRun = TaskRunBuilder.newBuilder(task)
+                        .properties(currentOption.getTaskRunProperties())
+                        .setExecuteOption(currentOption)
+                        .setConnectContext(ConnectContext.get()).build();
+                submitResult = taskRunManager.submitTaskRun(taskRun, currentOption);
+                if (submitResult.getStatus() != SUBMITTED) {
+                    throw new DmlException("execute task:" + task.getName() + " failed");
+                }
+                if (firstResult == null) {
+                    firstResult = submitResult;
+                }
+            } finally {
+                taskUnlock();
+            }
 
-        try {
-            taskRunScheduler.addSyncRunningTaskRun(taskRun);
-            Constants.TaskRunState taskRunState = taskRun.getFuture().get();
-            if (!taskRunState.isSuccessState()) {
-                String msg = taskRun.getStatus().getErrorMessage();
-                throw new DmlException("execute task %s failed: %s", task.getName(), msg);
+            try {
+                taskRunScheduler.addSyncRunningTaskRun(taskRun);
+                Constants.TaskRunState taskRunState = taskRun.getFuture().get();
+                if (!taskRunState.isSuccessState()) {
+                    String msg = taskRun.getStatus().getErrorMessage();
+                    throw new DmlException("execute task %s failed: %s", task.getName(), msg);
+                }
+            } catch (InterruptedException | ExecutionException e) {
+                Throwable rootCause = e.getCause() == null ? e : e.getCause();
+                throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
+            } catch (DmlException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
+            } finally {
+                taskRunScheduler.removeSyncRunningTaskRun(taskRun);
             }
-            return submitResult;
-        } catch (InterruptedException | ExecutionException e) {
-            Throwable rootCause = e.getCause();
-            throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
-        } catch (Exception e) {
-            throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
-        } finally {
-            taskRunScheduler.removeSyncRunningTaskRun(taskRun);
+
+            // Only drive the batch-continuation loop when the caller explicitly requested sync
+            // semantics (i.e., ExecuteOption.isSync = true). The legacy single-arg
+            // executeTaskSync(task) path builds an option with isSync=false and relies on the
+            // MV processor's own async follow-up spawn in generateNextTaskRunIfNeeded — looping
+            // here too would double-dispatch the next batch.
+            if (!currentOption.getIsSync()) {
+                return firstResult;
+            }
+            // Construction of the next batch's ExecuteOption lives in MVPCTRefreshProcessor
+            // so that the sync loop and the async follow-up share one implementation — future
+            // fields added to continuation batches land in a single place.
+            ExecuteOption nextOption = MVPCTRefreshProcessor.buildNextBatchOption(taskRun);
+            if (nextOption == null) {
+                return firstResult;
+            }
+            currentOption = nextOption;
         }
     }
 

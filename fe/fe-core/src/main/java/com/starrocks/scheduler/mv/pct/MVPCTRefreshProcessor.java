@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
@@ -28,7 +27,6 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.LogUtil;
-import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
@@ -36,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -45,7 +44,9 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -70,7 +71,7 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
 /**
  * PCT(Partition Change Tracking) based materialized view refresh processor which is designed to refresh materialized views
  * based on partition changes in the base tables.
- * MVPCTBasedRefreshProcessor is not thread safe for concurrent runs of the same materialized view
+ * MVPCTRefreshProcessor is not thread safe for concurrent runs of the same materialized view
  */
 public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
 
@@ -287,40 +288,10 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             return;
         }
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Map<String, String> properties = mvContext.getProperties();
-        long mvId = Long.parseLong(properties.get(MV_ID));
-        String taskName = TaskBuilder.getMvTaskName(mvId);
-        Map<String, String> newProperties = Maps.newHashMap();
-        for (Map.Entry<String, String> proEntry : properties.entrySet()) {
-            // skip uncopyable properties: partition_values/... which only can be set specifically.
-            if (proEntry.getKey() == null || proEntry.getValue() == null
-                    || MV_UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
-                continue;
-            }
-            newProperties.put(proEntry.getKey(), proEntry.getValue());
-        }
-        PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (partitionInfo.isListPartition()) {
-            //TODO: partition values may be too long, need to be optimized later.
-            newProperties.put(TaskRun.PARTITION_VALUES, mvContext.getNextPartitionValues());
-        } else {
-            newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
-            newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
-        }
-        String startTaskRunId = getStartTaskRunId();
-        if (startTaskRunId != null) {
-            newProperties.put(TaskRun.START_TASK_RUN_ID, startTaskRunId);
-            // Propagate pinned-job identity so the next batch runs in pinned mode and is not merged
-            // with other jobs' batches by TaskRunManager. Omitted for pure PCT to preserve merging.
-            if (isPinnedMode()) {
-                newProperties.put(TaskRun.PINNED_REFRESH_JOB_ID, startTaskRunId);
-            }
-        }
-        // warehouse
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
-        }
+        // Publish the next-batch cursor to the persisted TaskRunStatus. This is the single
+        // source of truth that downstream continuation readers — both the async follow-up
+        // dispatch below and the sync continuation loop in TaskManager.executeTaskSync — read
+        // to reconstruct the next batch's ExecuteOption via buildNextBatchOption().
         updateTaskRunStatus(status -> {
             MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
             extraMessage.setNextPartitionStart(mvContext.getNextPartitionStart());
@@ -328,27 +299,147 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             extraMessage.setNextPartitionValues(mvContext.getNextPartitionValues());
         });
 
-        // Partition refreshing task run should have the HIGHER priority, and be scheduled before other tasks
-        // Otherwise this round of partition refreshing would be staved and never got finished
-        ExecuteOption executeOption = mvContext.getExecuteOption();
-        int priority = executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
-                executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
-        ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        // Construct the next-batch option through the shared builder. Using the same path for
+        // sync and async ensures the two continuation flows never drift apart (e.g., someone
+        // adding a new property for async forgetting to add it for sync).
+        ExecuteOption nextOption = buildNextBatchOption(mvContext.getTaskRun());
+        if (nextOption == null) {
+            return;
+        }
+
+        // Dispatch asymmetrically (sync / test / async), but the option itself is identical
+        // regardless of caller: the only thing that differs is who drives the follow-up.
+        if (nextOption.getIsSync()) {
+            // Sync: the TaskManager.executeTaskSync loop reads the cursor from extra message
+            // (via buildNextBatchOption) and submits the next batch itself. We must NOT
+            // auto-dispatch here or it would race the caller's loop.
+            logger.info("[MV] Sync refresh defers next batch to TaskManager loop for MV {}-{}: " +
+                            "start={}, end={}, values={}", mv.getName(), mv.getId(),
+                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(),
+                    mvContext.getNextPartitionValues());
+            return;
+        }
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        long mvId = Long.parseLong(mvContext.getProperties().get(MV_ID));
+        String taskName = TaskBuilder.getMvTaskName(mvId);
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
-                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, newProperties);
+                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(),
+                nextOption.getPriority(), nextOption.getTaskRunProperties());
 
-        if (properties.containsKey(TaskRun.IS_TEST) && properties.get(TaskRun.IS_TEST).equalsIgnoreCase("true")) {
-            // for testing
-            TaskRun taskRun = TaskRunBuilder
+        if ("true".equalsIgnoreCase(mvContext.getProperties().getOrDefault(TaskRun.IS_TEST, ""))) {
+            // test-only hook: stash for the test driver to pick up
+            nextTaskRun = TaskRunBuilder
                     .newBuilder(taskManager.getTask(taskName))
-                    .properties(option.getTaskRunProperties())
-                    .setExecuteOption(option)
+                    .properties(nextOption.getTaskRunProperties())
+                    .setExecuteOption(nextOption)
                     .build();
-            nextTaskRun = taskRun;
         } else {
-            taskManager.executeTask(taskName, option);
+            taskManager.executeTask(taskName, nextOption);
         }
+    }
+
+    /**
+     * Build the {@link ExecuteOption} for the next refresh batch given the previous batch's
+     * {@link TaskRun}, which carries everything needed in one object:
+     * <ul>
+     *   <li>its merged runtime properties (source of FORCE, warehouse, etc. — including any
+     *       properties mutated after the option was constructed),</li>
+     *   <li>its original {@link ExecuteOption} (for priority / isSync / isManual inheritance),</li>
+     *   <li>its persisted {@link TaskRunStatus} with the
+     *       {@link MVTaskRunExtraMessage} next-partition cursor.</li>
+     * </ul>
+     *
+     * <p>This is the <b>single</b> entry point used by both continuation paths:
+     * <ul>
+     *   <li>{@link #generateNextTaskRunIfNeeded} — async follow-up dispatch from within
+     *       the worker thread that just finished batch N;</li>
+     *   <li>{@link com.starrocks.scheduler.TaskManager#executeTaskSync} — sync continuation
+     *       loop on the SQL thread that submitted the original REFRESH ... WITH SYNC MODE.</li>
+     * </ul>
+     * Centralising the option construction here is important: any future field that needs to
+     * flow across batches (new property, new cursor type, new priority rule) must be added in
+     * one place rather than kept in lockstep across parallel sync/async implementations.
+     *
+     * @return a new option for the next batch, or {@code null} if the previous TaskRun carries
+     *         no continuation cursor — signalling "no more batches" to both drivers.
+     */
+    public static ExecuteOption buildNextBatchOption(TaskRun prevTaskRun) {
+        if (prevTaskRun == null) {
+            return null;
+        }
+        TaskRunStatus prevStatus = prevTaskRun.getStatus();
+        ExecuteOption prevOption = prevTaskRun.getExecuteOption();
+        if (prevStatus == null || prevOption == null) {
+            return null;
+        }
+        MVTaskRunExtraMessage extra = prevStatus.getMvTaskRunExtraMessage();
+        if (extra == null) {
+            return null;
+        }
+        String nextStart = extra.getNextPartitionStart();
+        String nextEnd = extra.getNextPartitionEnd();
+        String nextValues = extra.getNextPartitionValues();
+        boolean hasRangeCursor = !Strings.isNullOrEmpty(nextStart) && !Strings.isNullOrEmpty(nextEnd);
+        boolean hasListCursor = !Strings.isNullOrEmpty(nextValues);
+        if (!hasRangeCursor && !hasListCursor) {
+            return null;
+        }
+
+        // Read from the TaskRun's merged runtime properties (not the option's snapshot) so we
+        // catch any properties set on the TaskRun after its option was built — most notably
+        // FORCE, which tests and external callers toggle directly on the TaskRun.
+        Map<String, String> prevProps = prevTaskRun.getProperties();
+        Map<String, String> nextProps = Maps.newHashMap();
+        if (prevProps != null) {
+            for (Map.Entry<String, String> entry : prevProps.entrySet()) {
+                // Skip per-batch keys that must be set specifically for the next batch (the
+                // current PARTITION_START / PARTITION_END / PARTITION_VALUES belong to batch N,
+                // not batch N+1).
+                if (entry.getKey() == null || entry.getValue() == null
+                        || MV_UNCOPYABLE_PROPERTIES.contains(entry.getKey())) {
+                    continue;
+                }
+                nextProps.put(entry.getKey(), entry.getValue());
+            }
+        }
+        // Install the new partition cursor. Cursor shape (range vs list) comes from whichever
+        // field the partitioner populated — we do not need the MV object here.
+        if (hasListCursor) {
+            nextProps.put(TaskRun.PARTITION_VALUES, nextValues);
+        } else {
+            nextProps.put(TaskRun.PARTITION_START, nextStart);
+            nextProps.put(TaskRun.PARTITION_END, nextEnd);
+        }
+        // Preserve the originating task run id so every continuation batch is grouped in
+        // history under the first batch's id.
+        if (!Strings.isNullOrEmpty(prevStatus.getStartTaskRunId())) {
+            nextProps.put(TaskRun.START_TASK_RUN_ID, prevStatus.getStartTaskRunId());
+        }
+        if (isPinnedRefreshTaskRun(prevTaskRun) && !Strings.isNullOrEmpty(prevStatus.getStartTaskRunId())) {
+            nextProps.put(TaskRun.PINNED_REFRESH_JOB_ID, prevStatus.getStartTaskRunId());
+        }
+
+        // Bump priority to HIGHER for continuation batches so a long refresh does not starve
+        // behind newly arriving lower-priority tasks (matches the pre-refactor async path).
+        int priority = prevOption.getPriority() > Constants.TaskRunPriority.LOWEST.value()
+                ? prevOption.getPriority()
+                : Constants.TaskRunPriority.HIGHER.value();
+        ExecuteOption nextOption = new ExecuteOption(priority, true, nextProps);
+        nextOption.setSync(prevOption.getIsSync());
+        nextOption.setManual(prevOption.isManual());
+        return nextOption;
+    }
+
+    private static boolean isPinnedRefreshTaskRun(TaskRun prevTaskRun) {
+        if (!(prevTaskRun.getProcessor() instanceof MVTaskRunProcessor)) {
+            return false;
+        }
+        MVRefreshProcessor refreshProcessor =
+                ((MVTaskRunProcessor) prevTaskRun.getProcessor()).getMVRefreshProcessor();
+        return (refreshProcessor instanceof MVPCTRefreshProcessor || refreshProcessor instanceof MVHybridRefreshProcessor)
+                && refreshProcessor.isPinnedMode();
     }
 
     @VisibleForTesting

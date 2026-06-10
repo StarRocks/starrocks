@@ -33,7 +33,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
@@ -209,13 +208,12 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Whether can generate next task run according to the current refresh context.
+     *
+     * <p>Note: Sync refresh also returns true here so that {@code filterPartitionByRefreshNumber}
+     * still honors {@code partition_refresh_number}. For sync refresh, {@code generateNextTaskRunIfNeeded}
+     * intentionally skips spawning an async follow-up task run so the SQL caller controls re-invocation.
      */
     public boolean isGenerateNextTaskRun() {
-        // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
-        ExecuteOption executeOption = mvContext.getExecuteOption();
-        if (executeOption != null && executeOption.getIsSync()) {
-            return false;
-        }
         // ignore if mv is not partitioned.
         if (!mv.isPartitionedTable()) {
             return false;
