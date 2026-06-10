@@ -130,8 +130,7 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
 
 void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
-    state->set_fragment_ctx(this);
-    state->set_fragment_runtime_state(&fragment_runtime_state());
+    state->set_fragment_ctx(this, &fragment_runtime_state());
 }
 
 void FragmentContext::count_down_execution_group(size_t val) {

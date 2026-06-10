@@ -35,15 +35,18 @@ TEST(RuntimeStateCoreTest, FragmentDictStateSetGet) {
     EXPECT_EQ(ptr, const_state.fragment_dict_state());
 }
 
-TEST(RuntimeStateCoreTest, SetFragmentCtxKeepsFragmentDictStateExplicit) {
+TEST(RuntimeStateCoreTest, SetFragmentCtxAlsoSetsFragmentRuntimeStateAndKeepsFragmentDictStateExplicit) {
     EXPECT_EXIT(
             [] {
                 RuntimeState state;
                 auto* fragment_ctx = reinterpret_cast<pipeline::FragmentContext*>(static_cast<uintptr_t>(0x1234));
+                auto* fragment_runtime_state =
+                        reinterpret_cast<pipeline::FragmentRuntimeState*>(static_cast<uintptr_t>(0x3456));
                 auto* fragment_dict_state = reinterpret_cast<FragmentDictState*>(static_cast<uintptr_t>(0x5678));
                 state.set_fragment_dict_state(fragment_dict_state);
-                state.set_fragment_ctx(fragment_ctx);
-                if (state.fragment_ctx() != fragment_ctx || state.fragment_dict_state() != fragment_dict_state) {
+                state.set_fragment_ctx(fragment_ctx, fragment_runtime_state);
+                if (state.fragment_ctx() != fragment_ctx || state.fragment_runtime_state() != fragment_runtime_state ||
+                    state.fragment_dict_state() != fragment_dict_state) {
                     std::_Exit(1);
                 }
                 std::_Exit(0);
