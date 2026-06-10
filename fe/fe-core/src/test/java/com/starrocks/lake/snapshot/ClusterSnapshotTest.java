@@ -614,16 +614,8 @@ public class ClusterSnapshotTest {
         };
 
         {
-<<<<<<< HEAD
-            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
-            localClusterSnapshotMgr.clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(null, null);
-            Assertions.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == Long.MAX_VALUE);
-            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-            Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
-
-            ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-=======
-            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgrEPack();
+            mgr.clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(null, null);
             // snapshot OFF -> no constraint
             Assertions.assertEquals(Long.MAX_VALUE, mgr.getSafeDeletionTimeMs());
 
@@ -636,7 +628,6 @@ public class ClusterSnapshotTest {
 
             // exactly one FINISHED -> protect it
             ClusterSnapshotJob job1 = mgr.createAutomatedSnapshotJob();
->>>>>>> 65583237831... [BugFix] Do not freeze CatalogRecycleBin when cluster snapshot keeps failing (backport #74379) (#74546)
             job1.setState(ClusterSnapshotJobState.FINISHED);
             Assertions.assertEquals(job1.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
 
@@ -742,13 +733,9 @@ public class ClusterSnapshotTest {
         };
 
         {
-<<<<<<< HEAD
             final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
             localClusterSnapshotMgr.clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(null, null);
-=======
-            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
             // snapshot OFF -> always safe to delete tablets
->>>>>>> 65583237831... [BugFix] Do not freeze CatalogRecycleBin when cluster snapshot keeps failing (backport #74379) (#74546)
             Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
             Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
 
