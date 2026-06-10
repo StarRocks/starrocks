@@ -26,12 +26,9 @@ import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
-<<<<<<< HEAD
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.extension.ExtensionManager;
-=======
 import com.starrocks.load.DeleteMgr;
->>>>>>> 57bf51464d2... [Enhancement] Add informational notice for DELETE on non-Primary-Key tables (#73878)
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
