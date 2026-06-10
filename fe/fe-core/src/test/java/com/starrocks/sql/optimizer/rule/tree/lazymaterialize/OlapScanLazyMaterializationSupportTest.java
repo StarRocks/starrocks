@@ -39,10 +39,10 @@ import java.util.Map;
 /**
  * Focused unit tests for {@link OlapScanLazyMaterializationSupport#predicateUsedColumns}.
  *
- * The PR that introduced these tests narrowed the embedding-column eager-materialization
- * carve-out from {@code isEnableUseANN()} to {@code isUseIVFPQ()}: HNSW queries flow through
- * the global lazy-materialize rule, IVFPQ keeps the original eager path. These tests pin
- * that contract directly, independent of the rest of the planner pipeline.
+ * The embedding-column eager-materialization carve-out is keyed on {@code isRefineDistance()}: a
+ * trust-path query (refine off) flows through the global lazy-materialize rule and can defer/prune
+ * the embedding, while a refine-path query keeps it eager so the row-by-row exact recompute can
+ * reach the TopN. These tests pin that contract directly, independent of the rest of the planner.
  */
 public class OlapScanLazyMaterializationSupportTest {
 
@@ -107,7 +107,7 @@ public class OlapScanLazyMaterializationSupportTest {
     }
 
     /**
-     * HNSW (isEnableUseANN=true, isUseIVFPQ=false): the rule's carve-out is skipped,
+     * HNSW (isEnableUseANN=true, isRefineDistance=false): the rule's carve-out is skipped,
      * so with no predicate, predicateUsedColumns must be empty. This is the CHANGED
      * behavior — before the PR, isEnableUseANN alone would have added v.
      */
@@ -120,7 +120,7 @@ public class OlapScanLazyMaterializationSupportTest {
 
         VectorSearchOptions hnsw = new VectorSearchOptions();
         hnsw.setEnableUseANN(true);
-        hnsw.setUseIVFPQ(false);
+        hnsw.setRefineDistance(false);
 
         PhysicalOlapScanOperator scan = buildScan(table, meta, null, hnsw);
         ColumnRefSet result = new OlapScanLazyMaterializationSupport().predicateUsedColumns(scan);
@@ -130,31 +130,31 @@ public class OlapScanLazyMaterializationSupportTest {
     }
 
     /**
-     * IVFPQ: the carve-out still applies. The embedding column must be added so the
-     * row-by-row approx_*_distance refine pass keeps v reaching the TopN.
+     * Refine path (isRefineDistance=true): the carve-out applies. The embedding column must be added
+     * so the row-by-row approx_*_distance exact recompute keeps v reaching the TopN.
      */
     @Test
-    public void testIvfpqForcesEmbeddingEager() {
+    public void testRefineForcesEmbeddingEager() {
         OlapTable table = buildOlapTableWithVectorIndex("v");
         ColumnRefOperator vRef = vectorColumnRef();
         ColumnRefOperator idRef = idColumnRef();
         Map<ColumnRefOperator, Column> meta = twoColumnMeta(vRef, vectorColumnMeta(), idRef, idColumnMeta());
 
-        VectorSearchOptions ivfpq = new VectorSearchOptions();
-        ivfpq.setEnableUseANN(true);
-        ivfpq.setUseIVFPQ(true);
+        VectorSearchOptions refine = new VectorSearchOptions();
+        refine.setEnableUseANN(true);
+        refine.setRefineDistance(true);
 
-        PhysicalOlapScanOperator scan = buildScan(table, meta, null, ivfpq);
+        PhysicalOlapScanOperator scan = buildScan(table, meta, null, refine);
         ColumnRefSet result = new OlapScanLazyMaterializationSupport().predicateUsedColumns(scan);
 
         Assertions.assertTrue(result.contains(vRef),
-                "IVFPQ must include the embedding column in predicate-used");
+                "Refine path must include the embedding column in predicate-used");
         Assertions.assertFalse(result.contains(idRef),
-                "Non-vector columns must not be force-included by the IVFPQ carve-out");
+                "Non-vector columns must not be force-included by the refine carve-out");
     }
 
     /**
-     * No ANN (isEnableUseANN=false, isUseIVFPQ=false): regression guard. The rule must
+     * No ANN (isEnableUseANN=false, isRefineDistance=false): regression guard. The rule must
      * remain a no-op for non-vector scans regardless of whether the table has a vector
      * index defined.
      */
@@ -168,7 +168,7 @@ public class OlapScanLazyMaterializationSupportTest {
         VectorSearchOptions noAnn = new VectorSearchOptions();
         // both default to false; set explicitly for clarity
         noAnn.setEnableUseANN(false);
-        noAnn.setUseIVFPQ(false);
+        noAnn.setRefineDistance(false);
 
         PhysicalOlapScanOperator scan = buildScan(table, meta, null, noAnn);
         ColumnRefSet result = new OlapScanLazyMaterializationSupport().predicateUsedColumns(scan);
@@ -177,10 +177,10 @@ public class OlapScanLazyMaterializationSupportTest {
     }
 
     /**
-     * HNSW with a predicate referencing the embedding column: even though the rule's
-     * IVFPQ carve-out is skipped, the predicate's own getUsedColumns must still seed v
-     * into the result. Without this, a downstream lazy-mat pass could prune v out from
-     * under the predicate and produce wrong results.
+     * Trust path with a predicate referencing the embedding column: even though the refine
+     * carve-out is skipped, the predicate's own getUsedColumns must still seed v into the result.
+     * Without this, a downstream lazy-mat pass could prune v out from under the predicate and
+     * produce wrong results.
      */
     @Test
     public void testHnswPredicateOnEmbeddingStillIncludesIt() {
@@ -191,7 +191,7 @@ public class OlapScanLazyMaterializationSupportTest {
 
         VectorSearchOptions hnsw = new VectorSearchOptions();
         hnsw.setEnableUseANN(true);
-        hnsw.setUseIVFPQ(false);
+        hnsw.setRefineDistance(false);
 
         // ColumnRefOperator is itself a ScalarOperator; using it as the predicate is the
         // smallest scalar tree whose getUsedColumns deterministically returns {v}.
@@ -205,22 +205,22 @@ public class OlapScanLazyMaterializationSupportTest {
     }
 
     /**
-     * IVFPQ when the matched vector column ref is NOT in the scan's colRefToColumnMetaMap
+     * Refine path when the matched vector column ref is NOT in the scan's colRefToColumnMetaMap
      * (e.g. some earlier rule already pruned it). The carve-out must remain a no-op for
      * that column rather than referencing a non-existent ColumnRefOperator id.
      */
     @Test
-    public void testIvfpqSkipsWhenVectorColumnAlreadyPruned() {
+    public void testRefineSkipsWhenVectorColumnAlreadyPruned() {
         OlapTable table = buildOlapTableWithVectorIndex("v");
         ColumnRefOperator idRef = idColumnRef();
         Map<ColumnRefOperator, Column> meta = new LinkedHashMap<>();
         meta.put(idRef, idColumnMeta()); // v intentionally absent
 
-        VectorSearchOptions ivfpq = new VectorSearchOptions();
-        ivfpq.setEnableUseANN(true);
-        ivfpq.setUseIVFPQ(true);
+        VectorSearchOptions refine = new VectorSearchOptions();
+        refine.setEnableUseANN(true);
+        refine.setRefineDistance(true);
 
-        PhysicalOlapScanOperator scan = buildScan(table, meta, null, ivfpq);
+        PhysicalOlapScanOperator scan = buildScan(table, meta, null, refine);
         ColumnRefSet result = new OlapScanLazyMaterializationSupport().predicateUsedColumns(scan);
 
         Assertions.assertTrue(result.isEmpty(),

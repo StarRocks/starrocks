@@ -108,7 +108,7 @@ private:
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     bool _use_vector_index = false;
-    bool _use_ivfpq = false;
+    bool _refine_distance = false;
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id;
 

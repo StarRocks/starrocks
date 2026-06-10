@@ -2,6 +2,10 @@
 
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
+-- IVFPQ is a quantized index; turn refine on so distances are recomputed exactly and the
+-- distance-range filter is rechecked on the exact distance (results are exact and stable).
+SET enable_vector_index_refine = true;
+
 
 
 CREATE TABLE __row_util_base (

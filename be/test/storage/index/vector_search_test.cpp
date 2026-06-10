@@ -202,6 +202,58 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
 #endif
 }
 
+// HNSW + sq8 quantizer: build a real quantized .vi and search it. The query path is the same as
+// the non-quantized index (the quantizer is a build/meta-time property); this pins that a quantized
+// HNSW index builds and is searchable. The lossy index distance it returns is what the FE refine
+// path (enable_vector_index_refine) re-ranks exactly on the full-precision vectors above the scan.
+TEST_F(VectorIndexSearchTest, test_search_hnsw_quantizer_sq8) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_index_properties("quantizer", "sq8"); // non-flat -> quantized index
+    tablet_index->add_search_properties("efsearch", "40");
+
+    auto index_path = test_vector_index_dir + "/hnsw_sq8_index.vi";
+    write_vector_index(index_path, tablet_index);
+
+#ifdef WITH_TENANN
+    try {
+        const auto& empty_meta = std::map<std::string, std::string>{};
+        auto status = get_vector_meta(tablet_index, empty_meta);
+        CHECK_OK(status);
+        auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
+
+        std::shared_ptr<VectorIndexReader> ann_reader;
+        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
+        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
+        ASSERT_TRUE(!init_status.is_not_supported());
+
+        constexpr int kTopK = 1;
+        std::vector<int64_t> result_ids(kTopK);
+        std::vector<float> result_distances(kTopK);
+        SparseRange<> scan_range;
+        DelIdFilter del_id_filter(scan_range);
+        std::vector<float> query_vector = {1.0f, 2.0f, 3.0f};
+        tenann::PrimitiveSeqView query_view =
+                tenann::PrimitiveSeqView{.data = reinterpret_cast<uint8_t*>(query_vector.data()),
+                                         .size = static_cast<uint32_t>(3),
+                                         .elem_type = tenann::PrimitiveType::kFloatType};
+
+        auto st = ann_reader->search(query_view, kTopK, result_ids.data(),
+                                     reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
+        CHECK_OK(st);
+        ASSERT_EQ(result_ids.size(), kTopK);
+    } catch (tenann::Error& e) {
+        LOG(WARNING) << e.what();
+    }
+#endif
+}
+
 // IVFPQ + threshold not met: VectorIndexWriter::finish() short-circuits and no .vi
 // file is produced. Reader-side, VectorIndexReaderFactory::create_from_file surfaces
 // the missing file as NotFound; the segment_iterator brute-force fallback (added by
@@ -516,7 +568,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     // vector_column_id will be set to num_columns (virtual column), matching the FE rewrite behavior
     vector_search_opt->vector_column_id = schema->num_columns();
     vector_search_opt->vector_slot_id = 100; // arbitrary slot id
-    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->refine_distance = false;
     vector_search_opt->vector_range = -1.0;
     vector_search_opt->result_order = 0;
     vector_search_opt->pq_refine_factor = 1.0;
@@ -569,6 +621,70 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     chunk_iter->close();
 }
 
+// Test: same missing-.vi segment as above, but refine_distance = true. The refine path recomputes
+// the exact distance from the full-precision vectors ABOVE the scan, so the segment iterator must
+// NOT set up the brute-force fallback. Contrast with test_brute_force_l2_distance_fallback (same
+// setup, refine_distance = false), which appends a [id, distance] output: here no distance column
+// is synthesized -- the iterator returns the raw read-schema rows for the upper layer to refine.
+TEST_F(BruteForceVectorFallbackTest, test_refine_distance_missing_vi_skips_brute_fallback) {
+    std::vector<int64_t> ids = {1, 2, 3};
+    std::vector<std::vector<float>> vectors = {
+            {1.0f, 2.0f, 3.0f},
+            {4.0f, 5.0f, 6.0f},
+            {0.0f, 0.0f, 0.0f},
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+    ASSERT_FALSE(segment->skip_vector_index());
+
+    auto schema = build_read_schema_with_vector_index();
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+
+    auto vector_search_opt = std::make_shared<VectorSearchOption>();
+    vector_search_opt->use_vector_index = true;
+    vector_search_opt->query_vector = {1.0f, 1.0f, 1.0f};
+    vector_search_opt->k = 3;
+    vector_search_opt->k_factor = 1.0;
+    vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
+    vector_search_opt->vector_column_id = schema->num_columns();
+    vector_search_opt->vector_slot_id = 100;
+    vector_search_opt->refine_distance = true; // refine path: no BE-produced distance column
+    vector_search_opt->vector_range = -1.0;
+    vector_search_opt->result_order = 0;
+    vector_search_opt->pq_refine_factor = 1.0;
+
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = vector_search_opt;
+
+    // Read only the id column. On the trust path the brute fallback would still append a distance
+    // column; on the refine path it must not, so the output stays exactly the read schema.
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_TRUE(chunk_iter != nullptr);
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+    ASSERT_OK(st);
+    ASSERT_EQ(chunk->num_rows(), 3);
+
+    // No brute-force fallback was set up, so no distance column was appended: output is id only,
+    // and the distance slot is absent (the refine path produces no BE-side distance column).
+    ASSERT_EQ(chunk->num_columns(), 1);
+    ASSERT_FALSE(chunk->is_slot_exist(vector_search_opt->vector_slot_id));
+
+    chunk_iter->close();
+}
+
 // Test: when vector column is already in read schema (not pruned),
 // _setup_brute_force_fallback should find it without adding a duplicate.
 TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) {
@@ -595,7 +711,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
     vector_search_opt->vector_column_id = schema->num_columns();
     vector_search_opt->vector_slot_id = 200;
-    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->refine_distance = false;
     vector_search_opt->vector_range = -1.0;
     vector_search_opt->result_order = 0;
     vector_search_opt->pq_refine_factor = 1.0;
@@ -658,7 +774,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
     vector_search_opt->vector_column_id = schema->num_columns();
     vector_search_opt->vector_slot_id = 300;
-    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->refine_distance = false;
     // Set vector_range = 3.0: only rows with L2 distance <= 3.0 should pass
     // Row 1 (dist=2): pass, Row 2 (dist=3): pass, Row 3 (dist=0): pass, Row 4 (dist=48): filtered
     vector_search_opt->vector_range = 3.0;
@@ -759,7 +875,7 @@ VectorSearchOptionPtr make_vector_search_opt(int slot_id, int num_columns, const
     opt->vector_distance_column_name = "__vector_approx_l2_distance";
     opt->vector_column_id = num_columns;
     opt->vector_slot_id = slot_id;
-    opt->use_ivfpq = false;
+    opt->refine_distance = false;
     opt->vector_range = -1.0;
     opt->result_order = 0;
     opt->pq_refine_factor = 1.0;
