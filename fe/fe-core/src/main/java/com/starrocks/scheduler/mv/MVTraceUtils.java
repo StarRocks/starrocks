@@ -17,6 +17,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -26,6 +27,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.Logger;
@@ -109,7 +111,12 @@ public class MVTraceUtils {
             return "";
         } else {
             StringBuilder sb = new StringBuilder();
-            sb.append(" [").append(mv.getName()).append("] ");
+            sb.append(" [");
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+            if (db != null) {
+                sb.append(db.getFullName()).append(".");
+            }
+            sb.append(mv.getName()).append("] ");
             return sb.toString();
         }
     }
