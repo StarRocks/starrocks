@@ -206,6 +206,13 @@ public class RestoreClusterSnapshotMgrTest {
                 return 10L;
             }
         };
+        // Stub the storage volume accessibility check so the test does not depend on
+        // reachability of, or global state of, an externally-owned S3 bucket.
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String svName, String svType, List<String> locations, Map<String, String> params) {
+            }
+        };
 
         RestoreClusterSnapshotMgr.init("src/test/resources/conf/external_cluster_snapshot.yaml", true);
         RestoreClusterSnapshotMgr.getConfig().getComputeNodes().get(0).setCNGroup(null);

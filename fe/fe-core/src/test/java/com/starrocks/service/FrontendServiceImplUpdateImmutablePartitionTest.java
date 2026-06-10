@@ -20,10 +20,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TNodeInfo;
@@ -148,6 +150,19 @@ public class FrontendServiceImplUpdateImmutablePartitionTest {
             public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
                 return Lists.newArrayList(
                         nodeIdOf(computeResource, loadComputeResource, acquiredComputeResource));
+            }
+        };
+
+        // WarehouseManagerEPack overrides getComputeNodeAssignedToTablet and resolves the node
+        // through the real StarOS agent, so the base-class mock above never sees the call (a MockUp
+        // on a base class does not intercept a subclass override). Mock the override with the same
+        // resource -> node mapping.
+        new MockUp<WarehouseManagerEPack>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                long nodeId = nodeIdOf(computeResource, loadComputeResource, acquiredComputeResource);
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNode(nodeId);
             }
         };
 
