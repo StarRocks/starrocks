@@ -484,7 +484,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         // LakeTableAlterMetaJobBase.replay() already do. Acquire the lock
         // before the try so a failed lock() does not run unLock() in finally.
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         try {
             if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN
                     || jobState == JobState.RUNNING) {
@@ -533,7 +533,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                 table.setState(OlapTable.OlapTableState.NORMAL);
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
     }
 
