@@ -763,27 +763,17 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     // 2. (meta - be)
                     // may need delete from meta
                     LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
-                    tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletId);
+                    List<Long> tabletIds = tabletDeleteFromMeta.get(tabletMeta.getDbId(), tabletMeta.getTableId());
+                    if (tabletIds == null) {
+                        tabletIds = Lists.newArrayList();
+                        tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletMeta.getTableId(), tabletIds);
+                    }
+                    tabletIds.add(tabletId);
                 }
-<<<<<<< HEAD
             } // end for replicaMetaWithBackend
         } finally {
             tabletInvertedIndex.readUnlock();
         }
-=======
-            } else {
-                // 2. (meta - be)
-                // may need delete from meta
-                LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
-                List<Long> tabletIds = tabletDeleteFromMeta.get(tabletMeta.getDbId(), tabletMeta.getTableId());
-                if (tabletIds == null) {
-                    tabletIds = Lists.newArrayList();
-                    tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletMeta.getTableId(), tabletIds);
-                }
-                tabletIds.add(tabletId);
-            }
-        } // end for replicaMetaWithBackend
->>>>>>> ee66a0a0ab ([BugFix] Narrow DB-WRITE locks to table-scoped intensive WRITE (shared-nothing) (#74523))
 
         long end = System.currentTimeMillis();
         LOG.info("finished to do tablet diff with backend[{}]. sync: {}. metaDel: {}. foundValid: {}. "
@@ -1211,11 +1201,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         } // end for dbs
     }
 
-<<<<<<< HEAD
-    private static void deleteFromMeta(ListMultimap<Long, Long> tabletDeleteFromMeta, long backendId,
-=======
     protected static void deleteFromMeta(Table<Long, Long, List<Long>> tabletDeleteFromMeta, long backendId,
->>>>>>> ee66a0a0ab ([BugFix] Narrow DB-WRITE locks to table-scoped intensive WRITE (shared-nothing) (#74523))
                                        long backendReportVersion) {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -1225,12 +1211,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 .getClusterInfo().getBackend(backendId).getDisks().values()) {
             hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
         }
-<<<<<<< HEAD
-        final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<Long> deleteTablets = new ArrayList<>();
-=======
-        List<LocalTablet> deleteTablets = new ArrayList<>();
->>>>>>> ee66a0a0ab ([BugFix] Narrow DB-WRITE locks to table-scoped intensive WRITE (shared-nothing) (#74523))
         List<ReplicaPersistInfo> replicaPersistInfoList = new ArrayList<>();
         // tabletDeleteFromMeta is grouped by (dbId, tableId), so each batch of doomed tablets is
         // table-local. Scope the WRITE to that single table with an intensive lock instead of a
