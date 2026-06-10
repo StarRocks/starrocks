@@ -561,4 +561,174 @@ public class StreamLoadMultiStmtTaskTest {
         Assertions.assertDoesNotThrow(deserialized::cancelAfterRestart);
         Assertions.assertEquals("CANCELLED", deserialized.getStateName());
     }
+
+    private StreamLoadTask addSubTask(String tableName, StreamLoadTask.State state) {
+        StreamLoadTask sub = new StreamLoadTask(2L, db, new OlapTable(), "label_multi", "u",
+                "127.0.0.1", 1000, 1, 0,
+                System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(sub, "tableName", tableName);
+        Deencapsulation.setField(sub, "state", state);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, StreamLoadTask> map =
+                (java.util.Map<String, StreamLoadTask>) Deencapsulation.getField(multiTask,
+                        "taskMaps");
+        map.put(tableName, sub);
+        return sub;
+    }
+
+    private void mockCommitTxnDependencies(long txnId) {
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(txnId);
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+            }
+
+            @Mock
+            public void commitStmt(com.starrocks.qe.ConnectContext context,
+                                   com.starrocks.sql.ast.txn.CommitStmt stmt) {
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+        };
+    }
+
+    // ---- Commit success must propagate final state to sub-tasks so that
+    // information_schema.loads / SHOW STREAM LOAD do not show PREPARING forever ----
+    @Test
+    public void testCommitTxnPropagatesFinishedToSubTasksWhenTxnVisible() throws Exception {
+        mockCommitTxnDependencies(777L);
+        TransactionState visibleTxn = new TransactionState();
+        visibleTxn.setTransactionStatus(TransactionStatus.VISIBLE);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return visibleTxn;
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARED);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+        Assertions.assertTrue(sub.endTimeMs() > 0);
+        Assertions.assertEquals("FINISHED", multiTask.toThrift().get(0).getState());
+    }
+
+    @Test
+    public void testCommitTxnPropagatesCommittedWhenTxnStatusUnknown() throws Exception {
+        mockCommitTxnDependencies(778L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return null;
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARED);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+    }
+
+    // ---- Reconcile finding the txn committed must not leave sub-tasks CANCELLED ----
+    @Test
+    public void testReconcileCommittedPropagatesToSubTasksInsteadOfCancel() throws Exception {
+        ExplicitTxnState explicitState = new ExplicitTxnState();
+        TransactionState txnState = new TransactionState();
+        txnState.setTransactionStatus(TransactionStatus.VISIBLE);
+        explicitState.setTransactionState(txnState);
+        setupRollbackFailWithReconcileMock(300L, explicitState, false);
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.manualCancelTask(resp);
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+    }
+
+    // ---- New loads must be rejected while the commit is in progress ----
+    @Test
+    public void testTryLoadWhenCommiting() throws StarRocksException {
+        Deencapsulation.setField(multiTask, "state", StreamLoadMultiStmtTask.State.COMMITING);
+        TransactionResult resp = new TransactionResult();
+        Assertions.assertNull(multiTask.tryLoad(0, "t", resp));
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("committing"));
+    }
+
+    @Test
+    public void testExecuteTaskWhenCommiting() {
+        Deencapsulation.setField(multiTask, "state", StreamLoadMultiStmtTask.State.COMMITING);
+        HttpHeaders headers = new DefaultHttpHeaders();
+        TransactionResult resp = new TransactionResult();
+        Assertions.assertNull(multiTask.executeTask(0, "t", headers, resp));
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("committing"));
+    }
+
+    // ---- A COMMITED sub-task is upgraded to FINISHED once the txn becomes visible ----
+    @Test
+    public void testMarkCommittedByParentUpgradesCommittedToFinished() {
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        long now = System.currentTimeMillis();
+
+        sub.markCommittedByParent(false, now);
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+
+        // repeated non-visible propagation is a no-op
+        sub.markCommittedByParent(false, now + 1);
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+
+        sub.markCommittedByParent(true, now + 2);
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+        Assertions.assertEquals(now + 2, sub.endTimeMs());
+        // commitTimeMs from the first propagation is preserved
+        Assertions.assertEquals(now, sub.commitTimeMs());
+
+        // CANCELLED/FINISHED are never overridden
+        sub.markCommittedByParent(false, now + 3);
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+    }
+
+    // ---- The cleaner thread converges COMMITED sub-tasks once the txn is visible ----
+    @Test
+    public void testCheckNeedRemoveUpgradesCommittedSubTasksWhenVisible() {
+        TransactionState visibleTxn = new TransactionState();
+        visibleTxn.setTransactionStatus(TransactionStatus.VISIBLE);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return visibleTxn;
+            }
+        };
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.COMMITED);
+        Deencapsulation.setField(multiTask, "state", StreamLoadMultiStmtTask.State.COMMITED);
+        Deencapsulation.setField(multiTask, "endTimeMs", System.currentTimeMillis());
+
+        Assertions.assertFalse(multiTask.checkNeedRemove(System.currentTimeMillis(), false));
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+    }
 }
