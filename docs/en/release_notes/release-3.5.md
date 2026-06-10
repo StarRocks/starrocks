@@ -27,6 +27,48 @@ description: "StarRocks 3.5 release notes: Iceberg view creation, OAuth 2.0 and 
 
 :::
 
+## 3.5.18
+
+Release date: June 5, 2026
+
+### Behavior Changes
+
+- `SHOW` statements are now allowed inside explicit transactions. [#72954](https://github.com/StarRocks/starrocks/pull/72954)
+- `get_json_string` now respects `ALLOW_THROW_EXCEPTION` when handling JSON parsing errors. [#73199](https://github.com/StarRocks/starrocks/pull/73199)
+- `IGNORE NULLS` is now preserved in view definitions when the window function argument is an expression. [#69971](https://github.com/StarRocks/starrocks/pull/69971)
+- Ranger row filter and masking policies are now correctly applied to Hive views and to base tables expanded from Hive view definitions. [#73265](https://github.com/StarRocks/starrocks/pull/73265)
+- Hive partition statistics are no longer automatically refreshed per partition. Existing cached stats are preserved while a table-level asynchronous refresh updates the cache in batches. [#73563](https://github.com/StarRocks/starrocks/pull/73563)
+
+### Improvements
+
+- Supports caching Java UDAF class-level initialization so shared UDAFs can reuse loaded classes and generated stubs across aggregator and window-function instances. [#72038](https://github.com/StarRocks/starrocks/pull/72038)
+- Supports Paimon time types and improves Paimon materialized view handling. [#58292](https://github.com/StarRocks/starrocks/pull/58292)
+- Added an Avro schema cache for shadowed `PartitionData` during partition load. [#72215](https://github.com/StarRocks/starrocks/pull/72215)
+- Added a configurable FE write timeout `mysql_send_packet_timeout_ms` for the MySQL result send path to prevent indefinitely blocked result sending to slow clients. [#73646](https://github.com/StarRocks/starrocks/pull/73646)
+- Optimized `CatalogRecycleBin` adjusted recycle timestamp lookup. [#72128](https://github.com/StarRocks/starrocks/pull/72128)
+- Reduced metadata and lock overhead in load balancing, compaction scheduling, consistency checks, and StarMgr metadata synchronization paths. [#73555](https://github.com/StarRocks/starrocks/pull/73555) [#72218](https://github.com/StarRocks/starrocks/pull/72218) [#72178](https://github.com/StarRocks/starrocks/pull/72178) [#72108](https://github.com/StarRocks/starrocks/pull/72108)
+- Improved diagnostics for filesystem copy failures and Parquet broker load errors by surfacing the underlying cause and file/column/row context. [#73414](https://github.com/StarRocks/starrocks/pull/73414) [#73236](https://github.com/StarRocks/starrocks/pull/73236)
+- Reduced external catalog and information schema metadata overhead by deferring JDBC REMARKS fetching, avoiding redundant Paimon snapshot lookups, and pushing down `table_name` predicates for `information_schema.tables_config`. [#73488](https://github.com/StarRocks/starrocks/pull/73488) [#72892](https://github.com/StarRocks/starrocks/pull/72892) [#73210](https://github.com/StarRocks/starrocks/pull/73210)
+- Simplified the scalar-function merge implementation by using `merge()` directly. [#69575](https://github.com/StarRocks/starrocks/pull/69575)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Empty `ALTER TABLE` statements could be parsed as OPTIMIZE clauses, and replaying malformed OPTIMIZE jobs could clear a table's default distribution. [#73352](https://github.com/StarRocks/starrocks/pull/73352)
+- Decimal-valued unit counters in runtime profiles could cause query progress parsing failures and noisy FE warnings. [#73683](https://github.com/StarRocks/starrocks/pull/73683)
+- Concurrent `SegmentFlushTask` race in `DeltaWriter::commit()` and loss of `merge_condition` during normal rowset commit. [#73371](https://github.com/StarRocks/starrocks/pull/73371) [#72542](https://github.com/StarRocks/starrocks/pull/72542)
+- Crashes, hangs, or unsafe cleanup in `SinkBuffer` graceful exit, `PipelineTimerTask`, runtime filter workers, spillable hash join probe, `information_schema.warehouse_queries`, lake vacuum, HTTP connection unregister paths, and query queue timeout handling. [#73202](https://github.com/StarRocks/starrocks/pull/73202) [#73082](https://github.com/StarRocks/starrocks/pull/73082) [#72058](https://github.com/StarRocks/starrocks/pull/72058) [#72626](https://github.com/StarRocks/starrocks/pull/72626) [#72397](https://github.com/StarRocks/starrocks/pull/72397) [#72019](https://github.com/StarRocks/starrocks/pull/72019) [#73088](https://github.com/StarRocks/starrocks/pull/73088) [#72006](https://github.com/StarRocks/starrocks/pull/72006) [#65802](https://github.com/StarRocks/starrocks/pull/65802)
+- Materialized view issues involving JDBC SQL Server tables, lost index properties, cached plan context memory leaks, Paimon tables, and incorrect shuffle distribution after MV rewrite. [#72962](https://github.com/StarRocks/starrocks/pull/72962) [#69187](https://github.com/StarRocks/starrocks/pull/69187) [#72300](https://github.com/StarRocks/starrocks/pull/72300) [#58292](https://github.com/StarRocks/starrocks/pull/58292) [#71075](https://github.com/StarRocks/starrocks/pull/71075)
+- Query planning and rewrite issues in Spark connector external scans, `INSERT OVERWRITE` re-planning, aggregation spill with small LIMIT, and generated columns produced by `UNNEST`. [#73225](https://github.com/StarRocks/starrocks/pull/73225) [#72832](https://github.com/StarRocks/starrocks/pull/72832) [#72705](https://github.com/StarRocks/starrocks/pull/72705) [#72027](https://github.com/StarRocks/starrocks/pull/72027)
+- Paimon Primary Key columns could be incorrectly marked as non-nullable when querying external catalogs. [#71660](https://github.com/StarRocks/starrocks/pull/71660)
+- Primary Key and tablet metadata issues including partial tablet schema short-key mismatch, rowset metadata cache warmup deadlock, disk data cache expansion failure, Azure filesystem client cache issues in Starlet, and colocate-heavy cluster-balance performance issues in StarOS. [#70586](https://github.com/StarRocks/starrocks/pull/70586) [#71459](https://github.com/StarRocks/starrocks/pull/71459) [#58206](https://github.com/StarRocks/starrocks/pull/58206) [#73145](https://github.com/StarRocks/starrocks/pull/73145) [#72391](https://github.com/StarRocks/starrocks/pull/72391)
+- Locker rollback and unlock-order issues during partial intensive-lock acquisition. [#72789](https://github.com/StarRocks/starrocks/pull/72789) [#72423](https://github.com/StarRocks/starrocks/pull/72423)
+- Dependency CVEs and broker dependency regressions. [#72905](https://github.com/StarRocks/starrocks/pull/72905) [#72797](https://github.com/StarRocks/starrocks/pull/72797) [#72184](https://github.com/StarRocks/starrocks/pull/72184) [#72191](https://github.com/StarRocks/starrocks/pull/72191)
+- JNI local-reference leaks in JDBC scanner initialization. [#72913](https://github.com/StarRocks/starrocks/pull/72913)
+- Arrow dictionary values in Parquet scanner and Apache Parquet namespace ambiguity during scanner builds. [#71855](https://github.com/StarRocks/starrocks/pull/71855) [#72284](https://github.com/StarRocks/starrocks/pull/72284)
+- NPE in Iceberg `getPartitionLastUpdatedTime` when the snapshot is expired. [#68925](https://github.com/StarRocks/starrocks/pull/68925)
+
 ## 3.5.17
 
 Release date: May 13, 2026

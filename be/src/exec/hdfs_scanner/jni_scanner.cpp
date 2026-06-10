@@ -386,12 +386,11 @@ Status JniScanner::_release_off_heap_table(JNIEnv* env) {
 Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // fill chunk with all wanted column.
     ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
-    // ====== conjunct evaluation ======
-    // important to add columns before evaluation
-    // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+    // Partition and not-existed columns must be appended before predicate evaluation
+    // because ctxs_by_slot may reference non-file or partition slots.
     RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
+    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
     return Status::OK();
 }
 
@@ -452,7 +451,7 @@ Status JniScanner::update_jni_scanner_params() {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx.materialized_columns) {
             if (column.name() == "___count___") continue;
-            auto col_name = column.formatted_name(_scanner_ctx.case_sensitive);
+            auto col_name = column.formatted_name(_scanner_ctx.params->options.case_sensitive);
             names.insert(col_name);
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
@@ -496,9 +495,9 @@ Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     // fill chunk with all wanted column exclude partition columns
     ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
     RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
-    // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
+    // only Hive needs partition columns appended explicitly; Paimon and Hudi append them on the Java side.
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
+    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
     return Status::OK();
 }
 

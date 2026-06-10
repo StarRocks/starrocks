@@ -395,7 +395,7 @@ VariantProjectionHandler::~VariantProjectionHandler() = default;
 // ── _build_shredded_hints ────────────────────────────────────────────────────
 
 VariantShreddedReadHints VariantProjectionHandler::_build_shredded_hints(std::string_view column_name) const {
-    return build_variant_shredded_hints(_param.column_access_paths, column_name);
+    return build_variant_shredded_hints(_param.scanner_ctx->params->column_access_paths, column_name);
 }
 
 // ── setup_readers ────────────────────────────────────────────────────────────
@@ -872,11 +872,12 @@ const cctz::time_zone& VariantProjectionHandler::projection_timezone() {
         return _timezone_obj;
     }
     _timezone_resolved = true;
-    if (_param.timezone.empty()) {
+    if (_param.scanner_ctx->timezone.empty()) {
         return _timezone_obj;
     }
-    if (!TimezoneUtils::find_cctz_time_zone(_param.timezone, _timezone_obj)) {
-        LOG(WARNING) << "VariantProjectionHandler: fallback to UTC for invalid timezone: " << _param.timezone;
+    if (!TimezoneUtils::find_cctz_time_zone(_param.scanner_ctx->timezone, _timezone_obj)) {
+        LOG(WARNING) << "VariantProjectionHandler: fallback to UTC for invalid timezone: "
+                     << _param.scanner_ctx->timezone;
         _timezone_obj = cctz::utc_time_zone();
     }
     return _timezone_obj;

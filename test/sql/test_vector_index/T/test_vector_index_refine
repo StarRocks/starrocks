@@ -1,0 +1,128 @@
+-- name: test_vector_index_refine @sequential @native
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
+-- =====================================================================
+-- Quantized vector index + enable_vector_index_refine on/off.
+--   refine on  : the index produces candidates, the exact distance is recomputed on the
+--                full-precision vectors -> exact ranking + exact distance-range recheck.
+--   refine off : trust the (lossy) quantized index distance.
+-- Covered: IVFPQ and HNSW+sq8 (quantized) under both settings, plus HNSW+flat where the
+-- session variable is a no-op (a non-quantized index is already exact). The first section
+-- exercises the WITH-.vi (index) path; the last section exercises the missing-.vi fallback.
+--
+-- index_build_threshold=1 forces the (default sync) inline .vi build for these small row counts;
+-- the default threshold is 10000, which a SQL-tester-sized table never reaches, so without this
+-- the queries would silently run the missing-.vi fallback instead of the index path.
+-- =====================================================================
+
+CREATE TABLE __refine_rows (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+insert into __refine_rows select generate_series from TABLE(generate_series(0, 8192 - 1));
+
+-- ============================ IVFPQ (quantized, WITH .vi) ============================
+CREATE TABLE t_ivfpq (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2",
+    "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_ivfpq select k1, [k1, k1, k1, k1] from __refine_rows;
+
+-- refine on: candidates from the index are re-ranked by the exact distance -> exact nearest-k
+-- and an exact range recheck (no out-of-range false positives).
+set enable_vector_index_refine = true;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_ivfpq order by dis, id limit 6;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_ivfpq
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+
+-- refine off: trust the lossy index distance. An exact-match query has an unambiguous nearest
+-- even under quantization, so this stays deterministic. (The lossy distance value itself is not
+-- asserted; only the matched id is.)
+set enable_vector_index_refine = false;
+select id from t_ivfpq order by approx_l2_distance([100,100,100,100], v), id limit 1;
+
+-- ============================ HNSW + sq8 (quantized, WITH .vi) ============================
+CREATE TABLE t_hnsw_sq8 (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40", "quantizer" = "sq8",
+    "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_hnsw_sq8 select k1, [k1, k1, k1, k1] from __refine_rows;
+
+-- refine on: the same refine path as IVFPQ, keyed on quantization rather than index family.
+set enable_vector_index_refine = true;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_sq8 order by dis, id limit 6;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_sq8
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+
+-- refine off: trust the lossy index distance (exact-match query, deterministic).
+set enable_vector_index_refine = false;
+select id from t_hnsw_sq8 order by approx_l2_distance([100,100,100,100], v), id limit 1;
+
+-- ============================ HNSW + flat (non-quantized, WITH .vi) ============================
+-- A non-quantized index is exact, so enable_vector_index_refine has no effect: the result is
+-- identical whether refine is on or off.
+CREATE TABLE t_hnsw_flat (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40",
+    "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_hnsw_flat select k1, [k1, k1, k1, k1] from __refine_rows;
+
+set enable_vector_index_refine = true;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_flat order by dis, id limit 6;
+set enable_vector_index_refine = false;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_flat order by dis, id limit 6;
+
+-- ============================ Missing .vi (default threshold not met) ============================
+-- Default index_build_threshold (10000) with only 200 rows -> no .vi is produced. Both settings
+-- then fall back to scanning the rows and computing the exact distance (refine: recomputed above
+-- the scan; trust: brute-force), so both are exact. This covers the missing-.vi path end to end.
+CREATE TABLE t_novi (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_novi select k1, [k1, k1, k1, k1] from __refine_rows where k1 < 200;
+
+set enable_vector_index_refine = true;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_novi
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+set enable_vector_index_refine = false;
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_novi
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+
+DROP TABLE IF EXISTS t_ivfpq;
+DROP TABLE IF EXISTS t_hnsw_sq8;
+DROP TABLE IF EXISTS t_hnsw_flat;
+DROP TABLE IF EXISTS t_novi;
+DROP TABLE IF EXISTS __refine_rows;
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

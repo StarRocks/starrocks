@@ -25,6 +25,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/pipeline_group.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
@@ -56,10 +57,10 @@ concept PipelineCallable = std::invocable<T, Pipeline*> &&
         (std::same_as<std::invoke_result_t<T, Pipeline*>, void> ||
          std::same_as<std::invoke_result_t<T, Pipeline*>, Status>);
 // clang-format on
-class ExecutionGroup {
+class ExecutionGroup : public PipelineGroup {
 public:
     ExecutionGroup(ExecutionGroupType type) : _type(type) {}
-    virtual ~ExecutionGroup() = default;
+    ~ExecutionGroup() override = default;
     virtual Status prepare_pipelines(RuntimeState* state) = 0;
     virtual Status prepare_drivers(RuntimeState* state) = 0;
     virtual void submit_active_drivers() = 0;
@@ -85,7 +86,7 @@ public:
     virtual std::string to_string() const = 0;
     void attach_driver_executor(DriverExecutor* executor) { _executor = executor; }
 
-    void count_down_pipeline(RuntimeState* state);
+    void count_down_pipeline(RuntimeState* state) override;
 
     size_t total_logical_dop() const { return _total_logical_dop; }
 
@@ -97,6 +98,7 @@ public:
 
     ExecutionGroupType type() const { return _type; }
     bool is_colocate_exec_group() const { return type() == ExecutionGroupType::COLOCATE; }
+    bool is_group_execution() const override { return is_colocate_exec_group(); }
 
     bool contains(int32_t plan_node_id) { return _plan_node_ids.contains(plan_node_id); }
     const std::unordered_set<int32_t>& plan_node_ids() const { return _plan_node_ids; }
