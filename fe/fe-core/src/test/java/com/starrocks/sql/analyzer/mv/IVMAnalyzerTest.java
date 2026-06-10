@@ -119,6 +119,30 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * SELECT DISTINCT (no GROUP BY) must yield QUERY_COMPUTED like the equivalent GROUP BY,
+     * else the MV's AUTO_INCREMENT BIGINT __ROW_ID__ can't match refresh's VARCHAR key.
+     */
+    @Test
+    public void testSelectDistinctYieldsQueryComputedStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_select_distinct "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0`";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "SELECT DISTINCT MV query must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "SELECT DISTINCT must yield QUERY_COMPUTED, not AUTO_INCREMENT");
+    }
+
+    /**
      * Distinct aggregates must be rejected at IVM analysis time; otherwise incremental
      * refresh would silently produce wrong data (the rewrite drops the DISTINCT flag).
      * MIN/MAX(DISTINCT) is not covered: the analyzer normalizes their DISTINCT away
@@ -175,6 +199,28 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 "INCREMENTAL refresh must reject HAVING that references an aggregate");
         assertTrue(ex.getMessage().contains("does not support HAVING"),
                 "error message must mention HAVING rejection, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testRejectGroupByAll() throws Exception {
+        // GROUP BY ALL re-derives its keys from the output list, which now leads with the prepended
+        // __ROW_ID__; grouping by it would double-encode the row id at refresh, so reject at CREATE.
+        String ddl = "CREATE MATERIALIZED VIEW mv_group_all "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY ALL";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject GROUP BY ALL");
+        assertTrue(ex.getMessage().contains("does not support")
+                        && ex.getMessage().contains("incremental view maintenance"),
+                "error must mention the unsupported grouping type, got: " + ex.getMessage());
     }
 
     /**

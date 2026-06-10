@@ -1,0 +1,167 @@
+-- name: test_ivm_with_iceberg_distinct
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table dist_base (
+  k int,
+  v bigint
+);
+-- result:
+-- !result
+insert into dist_base values (1, 10), (1, 10), (2, 20);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT DISTINCT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT count(*) FROM test_mv1;
+-- result:
+2
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k, v;
+-- result:
+1	10
+2	20
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base values (2, 20), (3, 30);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT count(*) FROM test_mv1;
+-- result:
+3
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k, v;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_dup
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT DISTINCT k AS a, k AS b FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_dup WITH SYNC MODE;
+SELECT count(*) FROM test_mv_dup;
+-- result:
+3
+-- !result
+SELECT a, b FROM test_mv_dup ORDER BY a, b;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+DROP MATERIALIZED VIEW test_mv_dup;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_const
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT 1 AS c, count(v) AS cnt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base GROUP BY 1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_const WITH SYNC MODE;
+SELECT c, cnt FROM test_mv_const;
+-- result:
+1	5
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base values (4, 40);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_const WITH SYNC MODE;
+SELECT c, cnt FROM test_mv_const;
+-- result:
+1	6
+-- !result
+DROP MATERIALIZED VIEW test_mv_const;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_ord
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, count(v) AS cnt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base GROUP BY 1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_ord WITH SYNC MODE;
+SELECT k, cnt FROM test_mv_ord ORDER BY k;
+-- result:
+1	2
+2	2
+3	1
+4	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base values (2, 20);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_ord WITH SYNC MODE;
+SELECT k, cnt FROM test_mv_ord ORDER BY k;
+-- result:
+1	2
+2	3
+3	1
+4	1
+-- !result
+DROP MATERIALIZED VIEW test_mv_ord;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
