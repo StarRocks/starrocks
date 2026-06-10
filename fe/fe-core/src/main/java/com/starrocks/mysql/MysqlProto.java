@@ -42,11 +42,7 @@ import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.ConfigBase;
-import com.starrocks.common.DdlException;
-=======
->>>>>>> 467751f0b0 ([BugFix] Catch exceptions in MysqlProto to prevent ERROR 2013 (#70072))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
