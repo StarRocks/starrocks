@@ -158,9 +158,12 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -405,7 +408,6 @@ import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
@@ -775,19 +777,56 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetProfileResponse getQueryProfile(TGetProfileRequest params) throws TException {
         LOG.debug("get query profile request: {}", params);
-        List<String> queryIds = params.query_id;
+        boolean isRequestAllFrontend = params == null || !params.isSetIs_request_all_frontend()
+                || params.isIs_request_all_frontend();
+        List<String> queryIds = params == null ? null : params.getQuery_id();
         TGetProfileResponse result = new TGetProfileResponse();
         if (queryIds != null) {
             for (String queryId : queryIds) {
                 String profile = ProfileManager.getInstance().getProfile(queryId);
-                if (profile != null && !profile.isEmpty()) {
-                    result.addToQuery_result(profile);
-                } else {
-                    result.addToQuery_result("");
+                if ((profile == null || profile.isEmpty()) && isRequestAllFrontend) {
+                    profile = getProfileFromOtherFEs(queryId);
                 }
+                result.addToQuery_result(Strings.nullToEmpty(profile));
             }
         }
         return result;
+    }
+
+    private String getProfileFromOtherFEs(String queryId) {
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        List<Frontend> frontends = nodeMgr.getOtherFrontends()
+                .stream()
+                .filter(Frontend::isAlive)
+                .collect(Collectors.toList());
+
+        for (Frontend frontend : frontends) {
+
+            try {
+                TGetProfileRequest request = new TGetProfileRequest();
+                List<String> queryIds = Lists.newArrayList(queryId);
+                request.setQuery_id(queryIds);
+                request.setIs_request_all_frontend(false);
+
+                TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
+                TGetProfileResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
+                        client -> client.getQueryProfile(request));
+
+                if (response.isSetQuery_result() && !response.getQuery_result().isEmpty()) {
+                    String profile = response.getQuery_result().get(0);
+                    if (profile != null && !profile.isEmpty()) {
+                        LOG.debug("Found profile for query {} on remote FE {}", queryId, frontend.getHost());
+                        return profile;
+                    }
+                }
+            } catch (TException e) {
+                LOG.warn("Failed to get profile for query {} from FE {}", queryId, frontend.getHost(), e);
+            }
+        }
+
+        return null;
     }
 
     @Override
@@ -1952,16 +1991,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
 
-        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        if (request.isSetBackend_id()) {
-            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
-                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        }
-        // TODO(ComputeResource): support more better compute resource acquiring.
+        // The whole load transaction runs on a single compute resource (worker group). The new
+        // sub-partition shards, the tablet locations, and the nodes_info built below must all be
+        // derived from this same resource; otherwise a tablet location may reference a compute node
+        // that is absent from nodes_info and the BE reports "Unknown node_id". This mirrors the
+        // self-consistent handling on the create-partition path (buildCreatePartitionResponse).
+        final ComputeResource computeResource = txnState.getComputeResource();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        // Validate the resource before mutating any metadata below, so an unavailable worker group
+        // fails fast instead of leaving partitions marked immutable with no replacement created.
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "No available worker group for warehouse " + computeResource));
+            result.setStatus(errorStatus);
+            return result;
+        }
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
@@ -2028,9 +2072,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setPartitions(partitions);
         result.setTablets(tablets);
 
-        // build nodes
-        // TODO(ComputeResource): support more better compute resource acquiring.
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
+        // build nodes from the same compute resource used for the tablet locations above, so every
+        // location node id is guaranteed to be present in nodes_info.
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));

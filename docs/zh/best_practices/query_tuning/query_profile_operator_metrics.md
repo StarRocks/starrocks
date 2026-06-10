@@ -1,7 +1,8 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Query Profile发出的所有原始指标的参考，按操作符类型组织。"
 sidebar_position: 80
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', '指标']
 ---
 
 # 查询概要指标

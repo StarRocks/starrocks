@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for authentication, query execution, and data loading."
 sidebar_label: "用户管理、查询引擎和导入导出"
 ---
 
@@ -802,6 +803,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 统计信息缓存的更新间隔。
+- 引入版本: -
+
+### `statistics_large_string_column_merge_threshold`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 默认关闭（`0`）。设为正值后，在统计信息收集的过程中，会单独生成一条 SQL 来收集声明长度超过该阈值的字符串列（`VARCHAR` / `CHAR`）的统计信息，不与其他列合并起来收集。抽样统计和全量统计都遵循该策略。这样做是为了限制单条统计 SQL 在 Exchange 阶段的内存峰值，避免长字符串列与其他列合并后进一步放大聚合算子的状态。保持为 `0` 时，所有列走原先的合并批量收集路径。注意，`STRING` 在内部会表示为最大长度的 `VARCHAR`，因此启用该配置并设置正值阈值后，`STRING` 列也可能被单独拆分出来收集。
 - 引入版本: -
 
 ### `task_check_interval_second`

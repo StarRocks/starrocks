@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Overview of memory classification and memory management strategies in StarRocks."
 ---
 
 # 管理内存

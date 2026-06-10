@@ -83,7 +83,7 @@ public class ElasticsearchMetadata
         try {
             List<Column> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
             properties.put(EsTable.KEY_INDEX, tableName);
-            EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+            EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                     catalogName, dbName, tableName, columns, properties, new SinglePartitionInfo());
             esTable.setComment("created by external es catalog");
             esTable.syncTableMetaData(esRestClient);

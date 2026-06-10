@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "主キーテーブルは StarRocks でリアルタイムアップサートと強い一貫性をサポートし、アドホッククエリに効率的です。"
 sidebar_position: 20
 ---
 

@@ -113,12 +113,20 @@ public class StatisticUtils {
             default:
                 throw new IllegalStateException("Unexpected value: " + connectType);
         }
+        // Set warehouse FIRST: ConnectContext.setCurrentWarehouse() replaces sessionVariable
+        // with a fresh clone of defaultSessionVariable, which would discard every override
+        // applied below (enable_profile, queryTimeoutS, parallelism, pipeline, CTE reuse, etc.).
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getBackgroundWarehouse();
+        context.setCurrentWarehouse(warehouse.getName());
+
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setBigQueryProfileThreshold("0s");
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         // Note: queryTimeoutS and insertTimeoutS will be set dynamically based on remaining job time
         // in StatisticsCollectJob.calculateAndSetRemainingTimeout() to ensure the total job timeout
@@ -136,10 +144,6 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableSPMRewrite(false);
         context.getSessionVariable().setSingleNodeExecPlan(false);
         context.getSessionVariable().setEnablePredicateColLateMaterialize(false);
-
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = manager.getBackgroundWarehouse();
-        context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
         context.setOnlyReadIcebergCache(true);

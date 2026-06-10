@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_FLATTEN関数はネストされた配列の一層をフラット化します。"
 ---
 
 # array_flatten

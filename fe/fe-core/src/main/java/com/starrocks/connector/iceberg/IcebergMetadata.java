@@ -1137,7 +1137,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
                      buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, tvrVersionRange,
-                             connectContext, enableCollectColumnStatistics)) {
+                             connectContext, enableCollectColumnStatistics, params.getFieldNames())) {
             while (iterator.hasNext()) {
                 FileScanTask scanTask = iterator.next();
 
@@ -1232,7 +1232,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                        GetRemoteFilesParams params) {
         CloseableIterator<FileScanTask> iterator =
                 buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
-                        params.isEnableColumnStats());
+                        params.isEnableColumnStats(), params.getFieldNames());
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
@@ -1277,7 +1277,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                                       Expression icebergPredicate,
                                                                       TvrVersionRange tvrVersionRange,
                                                                       ConnectContext connectContext,
-                                                                      boolean enableCollectColumnStats) {
+                                                                      boolean enableCollectColumnStats,
+                                                                      List<String> fieldNames) {
         if (tvrVersionRange.isEmpty()) {
             return new CloseableIterator<>() {
                 @Override
@@ -1340,6 +1341,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         if (icebergPredicate.op() != Expression.Operation.TRUE) {
             scan = (Scan) scan.filter(icebergPredicate);
+        }
+
+        if (fieldNames != null) {
+            scan = (Scan) scan.select(fieldNames);
         }
 
         Scan tableScan = scan;

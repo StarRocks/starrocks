@@ -890,6 +890,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_execution_time_us += closure->result.execution_time_us();
         _add_batch_counter.add_batch_wait_lock_time_us += closure->result.wait_lock_time_us();
         _add_batch_counter.add_batch_wait_memtable_flush_time_us += closure->result.wait_memtable_flush_time_us();
+        _add_batch_counter.add_batch_wait_writer_time_us += closure->result.wait_writer_time_us();
         _add_batch_counter.add_batch_num++;
     }
 

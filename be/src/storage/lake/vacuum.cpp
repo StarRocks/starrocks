@@ -400,6 +400,11 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto min_version = std::max(1L, tablet_info.min_version());
     // grace_timestamp <= 0 means no grace timestamp
     auto skip_check_grace_timestamp = grace_timestamp <= 0;
+    // Whether the walk read at least one tablet metadata at or below |min_retain_version|. It stays
+    // false when the loop never runs (|min_version| has already advanced past |min_retain_version|)
+    // or when the very first read returns NotFound, i.e. the metadata at and below the retain
+    // boundary has already been vacuumed away by a previous run.
+    bool read_any_metadata = false;
     size_t extra_file_size = 0;
     int64_t prepare_vacuum_file_size = 0;
     // Starting at |*final_retain_version|, read the tablet metadata forward along
@@ -416,6 +421,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             return res.status();
         } else {
             auto metadata = std::move(res).value();
+            read_any_metadata = true;
             extra_file_size += collect_extra_files_size(*metadata, min_retain_version);
             if (skip_check_grace_timestamp) {
                 DCHECK_LE(version, final_retain_version);
@@ -470,6 +476,18 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
     if (!skip_check_grace_timestamp) {
+        if (!read_any_metadata) {
+            // No tablet metadata exists at or below |final_retain_version| (== min_retain_version): the
+            // metadata down there has already been vacuumed away by a previous run. Reporting
+            // `final_retain_version - 1` here understates the real progress. When min_retain_version is
+            // pinned to a PhysicalPartition.metadataSwitchVersion whose metadata is already gone, that
+            // understatement permanently strands the switch version on the FE, because the FE only clears
+            // it once vacuumed_version >= switch_version. Report the true cleaned watermark instead: every
+            // version below |min_version| is gone, so cleanup has reached at least `min_version - 1`, and
+            // never below `final_retain_version` (which itself no longer exists).
+            *vacuumed_version = std::max<int64_t>(final_retain_version, min_version - 1);
+            return Status::OK();
+        }
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
         // The final_retain_version is set to min_retain_version or minmum exist version which has garbage files.
         // So we set vacuumed_version to `final_retain_version - 1` to avoid the garbage files of final_retain_version can

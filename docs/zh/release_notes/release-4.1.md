@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.1 版本发布说明：多租户范围分片自动拆分、超大容量 tablet、Fast Schema Evolution V2。"
 ---
 
 # StarRocks version 4.1
@@ -53,8 +54,7 @@ displayed_sidebar: docs
 - 新增支持基于时间间隔的调度，用于自动化集群快照。[#67525](https://github.com/StarRocks/starrocks/pull/67525)
 - 支持 MemTable 刷写和合并的管道执行，提高共享数据集群中云原生表的摄取吞吐量。[#67878](https://github.com/StarRocks/starrocks/pull/67878)
 - 支持 `dry_run` 模式修复云原生表，允许用户在执行前预览修复操作。[#68494](https://github.com/StarRocks/starrocks/pull/68494)
-- 在无共享集群中为发布事务添加了线程池，提高了发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
-- 支持动态修改云原生表的 `datacache.enable` 属性。[#69011](https://github.com/StarRocks/starrocks/pull/69011)
+- 在存算一体集群中为发布事务添加了线程池，提高了发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
 
 ### 数据湖分析
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks FE、BE 和 CN 节点支持优雅退出，实现无中断升级和重启。"
 ---
 
 # 优雅退出

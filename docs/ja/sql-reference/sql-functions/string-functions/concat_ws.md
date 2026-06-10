@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたセパレータを使用して文字列を結合します。"
 ---
 
 # concat_ws
