@@ -809,6 +809,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
+
+        cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/lance-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/starrocks-lance-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/starrocks-lance-reader.jar ${STARROCKS_OUTPUT}/be/lib/lance-reader-lib
     fi
 
     cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages

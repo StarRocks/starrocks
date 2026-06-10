@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -66,6 +67,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimizeOption scanOptimizeOption;
     protected TvrVersionRange tvrVersionRange;
+    // only used by lance vector(knn) search push down
+    protected List<Ordering> orderByElements;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -125,6 +128,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Map<Column, ColumnRefOperator> getColumnMetaToColRefMap() {
         return columnMetaToColRefMap;
+    }
+
+    public List<Ordering> getOrderByElements() {
+        return orderByElements;
     }
 
     private Optional<Map<String, ColumnRefOperator>> cachedColumnNameToColRefMap = Optional.empty();
@@ -262,6 +269,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.scanOptimizeOption = scanOperator.scanOptimizeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
             builder.tvrVersionRange = scanOperator.tvrVersionRange;
+            builder.orderByElements = scanOperator.orderByElements;
             return (B) this;
         }
 
@@ -303,6 +311,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
         public B setTableVersionRange(TvrVersionRange tableVersionRange) {
             builder.tvrVersionRange = tableVersionRange;
+            return (B) this;
+        }
+
+        public B setOrderByElements(List<Ordering> orderByElements) {
+            builder.orderByElements = orderByElements;
             return (B) this;
         }
     }

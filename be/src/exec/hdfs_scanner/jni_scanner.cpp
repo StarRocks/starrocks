@@ -578,6 +578,25 @@ std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOp
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
+// -------------lance jni scanner---------------------
+std::unique_ptr<JniScanner> create_lance_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["dataset_uri"] = scan_range.dataset_uri;
+    jni_scanner_params["fragment_id"] = std::to_string(scan_range.fragment_id);
+    // Storage credentials/endpoint are forwarded from FE (sourced from table PROPERTIES),
+    // never hardcoded. They are prefixed so the reader can pick them out of the param map.
+    if (scan_range.__isset.lance_storage_options) {
+        for (const auto& [key, value] : scan_range.lance_storage_options) {
+            jni_scanner_params["storage_option." + key] = value;
+        }
+    }
+
+    std::string scanner_factory_class = "com/starrocks/lance/reader/LanceSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
 // -------------hudi jni scanner---------------------
 std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);

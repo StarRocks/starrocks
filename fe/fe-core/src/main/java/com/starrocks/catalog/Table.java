@@ -86,6 +86,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         MYSQL,
         @SerializedName("OLAP")
         OLAP,
+        @SerializedName("LANCE")
+        LANCE,
         @SerializedName("OLAP_EXTERNAL")
         OLAP_EXTERNAL,
         @SerializedName("SCHEMA")

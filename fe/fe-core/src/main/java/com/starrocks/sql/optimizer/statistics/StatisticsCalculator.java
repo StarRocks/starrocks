@@ -88,6 +88,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLanceScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
@@ -670,6 +671,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitLogicalPaimonScan(LogicalPaimonScanOperator node, ExpressionContext context) {
         return computePaimonScanNode(node, context, node.getTable(),
                 node.getColRefToColumnMetaMap(), node.getTvrVersionRange());
+    }
+
+    @Override
+    public Void visitLogicalLanceScan(LogicalLanceScanOperator node, ExpressionContext context) {
+        // TODO: implement lance table statistics
+        context.setStatistics(Statistics.builder().build());
+        return visitOperator(node, context);
     }
 
     @Override

@@ -26,6 +26,7 @@ public enum OperatorType {
     LOGICAL,
     LOGICAL_PROJECT,
     LOGICAL_OLAP_SCAN,
+    LOGICAL_LANCE_SCAN,
     LOGICAL_HIVE_SCAN,
     LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
@@ -79,6 +80,7 @@ public enum OperatorType {
 
     // TODO: collapse these verbose scans
     PHYSICAL_OLAP_SCAN,
+    PHYSICAL_LANCE_SCAN,
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,

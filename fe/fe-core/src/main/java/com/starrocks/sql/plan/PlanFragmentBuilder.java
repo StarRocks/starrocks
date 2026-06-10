@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.lancedb.lance.ipc.Query;
 import com.starrocks.analysis.RowPositionDescriptor;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -29,6 +30,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -119,6 +121,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.planner.lance.LanceScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -187,6 +190,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLanceScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
@@ -1617,6 +1621,54 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), paimonScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalLanceScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalLanceScanOperator node = (PhysicalLanceScanOperator) optExpression.getOp();
+
+            LanceTable referenceTable = (LanceTable) node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            LanceScanNode scanNode =
+                    new LanceScanNode(context.getNextNodeId(), tupleDescriptor, "LanceScanNode");
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            currentExecGroup.add(scanNode, true);
+
+            // set predicate
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+            for (ScalarOperator predicate : predicates) {
+                scanNode.getConjuncts()
+                        .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            // set lance query for vector(knn) search push down
+            if (node.isVectorSearch()) {
+                scanNode.setQuery(new Query.Builder()
+                        .setColumn(node.getVectorColumnName())
+                        .setK((int) node.getLimit())
+                        .setDistanceType(node.getDistanceType())
+                        .setKey(node.getSearchVector())
+                        .build());
+            }
+
+            scanNode.computeScanRangeLocations(referenceTable.getDatasetURI());
+            scanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            registerScanNode(node, scanNode, context);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

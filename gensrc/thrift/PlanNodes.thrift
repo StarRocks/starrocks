@@ -348,6 +348,13 @@ struct TDeletionVectorDescriptor {
   5: optional i64 cardinality
 }
 
+struct TLanceQuery {
+    1: optional string column
+    2: optional list<double> key
+    3: optional i32 k
+    4: optional bool use_index
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -456,6 +463,15 @@ struct THdfsScanRange {
     // as first_row_id + row_position for non-compacted files.
     // The _last_updated_sequence_number fallback value is passed via the extended_columns map.
     37: optional i64 first_row_id;
+
+    // lance
+    38: optional string dataset_uri
+    39: optional i64 fragment_id
+    // whether to use JNI scanner to read data of lance table
+    40: optional bool use_lance_jni_reader
+    41: optional TLanceQuery lance_query
+    // storage credentials/endpoint forwarded to the lance reader, sourced from table PROPERTIES
+    42: optional map<string, string> lance_storage_options
 }
 
 struct TBinlogScanRange {

@@ -266,6 +266,10 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
           _time_zone(tdesc.paimonTable.time_zone, mr),
           _t_paimon_schema(tdesc.paimonTable.paimon_schema) {}
 
+LanceTableDescriptor::LanceTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                           std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr) {}
+
 std::string_view PaimonTableDescriptor::get_paimon_native_table() const {
     return _paimon_native_table;
 }
@@ -558,6 +562,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::PAIMON_TABLE:
             desc = ALLOC_DESC(PaimonTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::LANCE_TABLE:
+            desc = ALLOC_DESC(LanceTableDescriptor, tdesc, pool, mr);
             break;
         case TTableType::JDBC_TABLE:
             desc = ALLOC_DESC(JDBCTableDescriptor, tdesc, mr);

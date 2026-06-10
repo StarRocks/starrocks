@@ -671,6 +671,10 @@ struct TPaimonTable {
     4: optional TIcebergSchema paimon_schema
 }
 
+struct TLanceTable {
+    1: optional string lance_column_names
+}
+
 struct TDeltaLakeTable {
     // table location
     1: optional string location
@@ -738,6 +742,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Lance Table schema
+  37: optional TLanceTable lanceTable
 }
 
 struct TDescriptorTable {

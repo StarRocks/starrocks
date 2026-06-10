@@ -523,6 +523,10 @@ public class FunctionSet {
     public static final String SQUARE = "square";
     public static final String TAN = "tan";
     public static final String TRUNCATE = "truncate";
+
+    // vector distance functions used for lance vector(knn) search push down
+    public static final String COSINE_SIMILARITY = "cosine_similarity";
+    public static final String L2_DISTANCE = "l2_distance";
     public static final String ICEBERG_TRANSFORM_TRUNCATE = "__iceberg_transform_truncate";
     public static final String ICEBERG_TRANSFORM_BUCKET = "__iceberg_transform_bucket";
 

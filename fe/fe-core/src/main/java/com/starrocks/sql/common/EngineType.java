@@ -20,6 +20,7 @@ import java.util.Set;
 
 public enum EngineType {
     OLAP,
+    LANCE,
     MYSQL,
     BROKER,
     ELASTICSEARCH,

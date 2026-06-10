@@ -24,6 +24,9 @@ public class TableFactoryProvider {
         if (EngineType.OLAP.name().equalsIgnoreCase(engineName)) {
             return OlapTableFactory.INSTANCE;
         }
+        if (EngineType.LANCE.name().equalsIgnoreCase(engineName)) {
+            return LanceTableFactory.INSTANCE;
+        }
         if (EngineType.FILE.name().equalsIgnoreCase(engineName)) {
             return FileTableFactory.INSTANCE;
         }

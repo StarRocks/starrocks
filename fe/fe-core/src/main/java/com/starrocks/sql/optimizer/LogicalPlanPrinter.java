@@ -379,6 +379,10 @@ public class LogicalPlanPrinter {
         /**
          * Physical operator visitor
          */
+        public OperatorStr visitPhysicalLanceScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "LANCE SCAN");
+        }
+
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, Integer step) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");

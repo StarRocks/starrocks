@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -53,6 +54,8 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected TvrVersionRange tvrVersionRange;
     protected DataCacheOptions dataCacheOptions = null;
     protected boolean enableGlobalLateMaterialization = false;
+    // only used by lance vector(knn) search push down
+    protected List<Ordering> orderByElements;
 
     protected PhysicalScanOperator(OperatorType type) {
         super(type);
@@ -112,6 +115,11 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
                 scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTvrVersionRange());
         this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
         this.columnAccessPaths = ImmutableList.copyOf(scanOperator.getColumnAccessPaths());
+        this.orderByElements = scanOperator.getOrderByElements();
+    }
+
+    public List<Ordering> getOrderByElements() {
+        return orderByElements;
     }
 
     public List<ColumnRefOperator> getOutputColumns() {

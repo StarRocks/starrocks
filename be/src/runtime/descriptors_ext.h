@@ -209,6 +209,14 @@ private:
     TIcebergSchema _t_paimon_schema;
 };
 
+class LanceTableDescriptor : public HiveTableDescriptor {
+public:
+    LanceTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                         std::pmr::memory_resource* mr = std::pmr::get_default_resource());
+    ~LanceTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+};
+
 class OdpsTableDescriptor : public HiveTableDescriptor {
 public:
     OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
