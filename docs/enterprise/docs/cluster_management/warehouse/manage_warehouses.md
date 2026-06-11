@@ -643,15 +643,22 @@ GRANT
 
 ## Usage notes
 
-Some of the system background tasks are performed only within the `default_warehouse`. Therefore, suspending the `default_warehouse` or removing all compute nodes from it will cause these tasks to fail. These background tasks are as follows:
+Each shared-data cluster is provided with a built-in warehouse named `default_warehouse`, which is automatically created when you create the cluster. If no warehouse is explicitly specified, all DML workloads will be routed to the default warehouse. It has no access control and can be used by all users within the cluster. The default warehouse cannot be deleted or suspended separately from the FE node. It will be suspended only when the cluster is suspended.
 
-- SUBMIT TASK
-- Statistics collection
-- Dynamic partition creation and deletion
-- Schema Change
-- AutoVacuum (Garbage Collection after Compaction)
-- Garbage Collection
-- Statistics report for SHOW DATA
-- ANALYZE TABLE
+Some of the system background tasks are performed by specific warehouses:
+
+| Task                                                | Warehouse                                                                     |
+| --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Compaction                                          | The warehouse used for the last non-Compaction transaction on the table if available. Otherwise, it falls back to the warehouse specified in the FE configuration item `lake_compaction_warehouse` (Default: `default_warehouse`). |
+| SUBMIT TASK                                         | The warehouse specified in `PROPERTIES("warehouse" = "...")`, or the warehouse set for the session if it the `PROPERTIES` clause is not set. |
+| Pipe                                                | The warehouse specified in `PROPERTIES("warehouse" = "...")`, or the warehouse set for the session if it the `PROPERTIES` clause is not set. |
+| Automatic and background statistics collection      | The warehouse specified in the FE configuration item `lake_background_warehouse` (Default: `default_warehouse`). |
+| Dynamic partition creation                          | The warehouse used for the last non-Compaction transaction on the table if available. Otherwise, it falls back to the warehouse specified in the FE configuration item `lake_background_warehouse` (Default: `default_warehouse`). |
+| Schema Change                                       | The warehouse set for the session.                                            |
+| AutoVacuum (Garbage Collection after Compaction)    | The warehouse used for the last non-Compaction transaction on the table if available. Otherwise, it falls back to the warehouse specified in the FE configuration item `lake_background_warehouse` (Default: `default_warehouse`). |
+| Garbage Collection                                  | The warehouse used for the last non-Compaction transaction on the table if available. Otherwise, it falls back to the warehouse specified in the FE configuration item `lake_background_warehouse` (Default: `default_warehouse`). |
+| Statistics report for SHOW DATA                     | The warehouse used for the last non-Compaction transaction on the table if available. Otherwise, it falls back to the warehouse specified in the FE configuration item `lake_background_warehouse` (Default: `default_warehouse`). |
+| Asynchronous materialized view refresh              | The warehouse specified in `PROPERTIES("warehouse" = "...")` for materialized view creation. It can be changed via `ALTER MATERIALIZED VIEW SET ("warehouse" = ...)`. |
+| ANALYZE TABLE                                       | The warehouse set for the session.                                            |
 
 Please note that downgrading a StarRocks cluster with multiple warehouses to versions earlier than v3.2 will cause the CNs in the user-created warehouses to get removed from the cluster.
