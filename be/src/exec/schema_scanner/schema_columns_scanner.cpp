@@ -389,8 +389,24 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 13: {
             // DATETIME_PRECISION
             {
+<<<<<<< HEAD
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
                 fill_data_column_with_null(column.get());
+=======
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(13);
+                int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
+                if (data_type == TPrimitiveType::DATETIME) {
+                    // StarRocks DATETIME stores fractional seconds up to microsecond (6 digits).
+                    // Report a non-NULL precision so MySQL-protocol clients can compute COLUMN_SIZE.
+                    // The MySQL JDBC driver derives COLUMN_SIZE from DATETIME_PRECISION; a NULL here
+                    // makes COLUMN_SIZE NULL and breaks type mapping for callers such as Trino's
+                    // mysql connector (IllegalStateException: column size not present).
+                    int64_t value = 6;
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+>>>>>>> 241f0d2165 ([BugFix] Populate DATETIME_PRECISION in information_schema.COLUMNS (#74623))
             }
             break;
         }
