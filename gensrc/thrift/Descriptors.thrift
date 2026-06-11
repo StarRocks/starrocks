@@ -709,6 +709,10 @@ struct TJDBCTable {
     8: optional string jdbc_passwd
 }
 
+struct TLanceTable {
+  1: optional string lance_dataset_uri
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -748,6 +752,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Lance Table
+  37: optional TLanceTable lanceTable
 }
 
 struct TDescriptorTable {
