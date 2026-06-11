@@ -91,7 +91,7 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
 
     /**
      * Successful lock() then unlock() round-trip must work end-to-end without throwing,
-     * and a subsequent unlock() must be a no-op (heldEntries was cleared by the first unlock).
+     * and a subsequent unlock() must be a no-op (the stack was emptied by the first unlock).
      */
     @Test
     public void lockThenUnlockRoundTrip() throws Exception {
@@ -99,7 +99,7 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
         PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
         Assertions.assertDoesNotThrow(locker::lock);
         Assertions.assertDoesNotThrow(locker::unlock);
-        // Second unlock is a no-op (heldEntries already cleared).
+        // Second unlock is a no-op (the stack is already empty).
         Assertions.assertDoesNotThrow(locker::unlock);
     }
 
@@ -144,9 +144,9 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
     /**
      * Multi-db variant: when the inner Locker throws on the SECOND db, PlannerMetaLocker's
      * own rollback loop must release the FIRST db before re-throwing — otherwise the caller's
-     * unlock() in finally would either skip release (post-fix, via heldEntries=null) and leak
-     * the first db's lock, or (pre-fix) try to release the second db's never-acquired locks
-     * and crash.
+     * unlock() in finally would either skip release (post-fix, because a failed lock() pushes
+     * no frame) and leak the first db's lock, or (pre-fix) try to release the second db's
+     * never-acquired locks and crash.
      */
     @Test
     public void lockRollsBackEarlierDbsOnLaterDbFailure() throws Exception {
@@ -177,7 +177,7 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
             Mockito.verify(constructed.get(0), Mockito.times(1))
                     .unLockTablesWithIntensiveDbLock(anyLong(), anyList(), any(LockType.class));
 
-            // After rollback, unlock() must still be a no-op (heldEntries cleared).
+            // After rollback, unlock() must still be a no-op (no frame was pushed).
             Assertions.assertDoesNotThrow(locker::unlock);
             // And the unlock() call above must not have invoked unLockTablesWithIntensiveDbLock again.
             Mockito.verify(constructed.get(0), Mockito.times(1))
@@ -191,48 +191,39 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
      * and the retry iteration calls {@code StatementPlanner.reAnalyzeStmt}, which itself
      * does {@code try { lock(); ... } finally { unlock(); }} on the same instance).
      *
-     * <p>Pre-fix, lock() unconditionally overwrote {@code heldEntries} every call, and
-     * unlock() unconditionally cleared it. So:
+     * <p>Pre-fix, lock() kept a single {@code heldEntries} snapshot that every call overwrote and
+     * every unlock() cleared. So:
      *   <ul>
      *     <li>inner lock() overwrote outer's snapshot (with the same content — no observable harm yet);</li>
-     *     <li>inner unlock() decremented LockManager refCount by 1 per rid (2 → 1) AND cleared {@code heldEntries};</li>
-     *     <li>outer unlock() saw {@code heldEntries == null} and was a no-op — but LockManager refCount
+     *     <li>inner unlock() decremented LockManager refCount by 1 per rid (2 → 1) AND cleared the snapshot;</li>
+     *     <li>outer unlock() saw the snapshot gone and was a no-op — but LockManager refCount
      *         was still 1 per rid, so the locks were LEAKED, and the retry body continued to plan WHILE
      *         STILL HOLDING the meta locks (the opposite of the design intent of the unlock-plan-relock cycle).</li>
      *   </ul>
      *
-     * <p>Fix uses an explicit {@code lockDepth} counter so nested lock()/unlock() pairs only
-     * touch their own LockManager refCount slot, and {@code heldEntries} is only cleared
-     * when the outermost unlock() drains the depth.
+     * <p>Fix keeps a stack of acquisition frames: each lock() pushes its own frame and each
+     * unlock() pops exactly one (releasing it in reverse order), so nested pairs only touch
+     * their own LockManager refCount slot and a full unwind leaves the manager balanced.
      */
     @Test
     public void nestedLockUnlockReleasesAllReferences() throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser("select * from t0", connectContext);
         PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
 
-        Assertions.assertEquals(0, readLockDepth(locker), "fresh instance must have depth 0");
-        Assertions.assertNull(readHeldEntries(locker), "fresh instance must have no snapshot");
+        Assertions.assertEquals(0, readLockDepth(locker), "fresh instance must hold no frames");
 
         locker.lock();                                              // outer
-        Assertions.assertEquals(1, readLockDepth(locker), "outer lock must increment depth to 1");
-        Assertions.assertNotNull(readHeldEntries(locker), "outer lock must record the snapshot");
-        Object outerSnapshot = readHeldEntries(locker);
+        Assertions.assertEquals(1, readLockDepth(locker), "outer lock must push one frame");
 
         locker.lock();                                              // inner (nested)
-        Assertions.assertEquals(2, readLockDepth(locker), "nested lock must bump depth to 2");
-        Assertions.assertSame(outerSnapshot, readHeldEntries(locker),
-                "nested lock must NOT overwrite the outer snapshot — the outer unlock relies on it");
+        Assertions.assertEquals(2, readLockDepth(locker), "nested lock must push a second frame");
 
         locker.unlock();                                            // inner
         Assertions.assertEquals(1, readLockDepth(locker),
-                "inner unlock must decrement depth to 1, not drain to 0");
-        Assertions.assertSame(outerSnapshot, readHeldEntries(locker),
-                "inner unlock must NOT clear the snapshot — outer still needs it");
+                "inner unlock must pop exactly one frame, not drain the stack");
 
         locker.unlock();                                            // outer
-        Assertions.assertEquals(0, readLockDepth(locker), "outer unlock must drain depth to 0");
-        Assertions.assertNull(readHeldEntries(locker),
-                "outer unlock must clear the snapshot now that no acquisition is in scope");
+        Assertions.assertEquals(0, readLockDepth(locker), "outer unlock must pop the last frame");
 
         // After full unwind a new lock/unlock cycle must work cleanly — proves the LockManager
         // state is balanced (no leaked LockHolders carrying refCount from the previous cycle).
@@ -242,7 +233,6 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
         Assertions.assertDoesNotThrow(locker::unlock,
                 "follow-up unlock() must release cleanly.");
         Assertions.assertEquals(0, readLockDepth(locker));
-        Assertions.assertNull(readHeldEntries(locker));
     }
 
     /**
@@ -262,33 +252,29 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
         locker.lock();
         locker.lock();
         Assertions.assertEquals(3, readLockDepth(locker));
-        Assertions.assertNotNull(readHeldEntries(locker));
 
         locker.close();
 
         Assertions.assertEquals(0, readLockDepth(locker),
                 "close() must drain all nested lock acquisitions, not just one level");
-        Assertions.assertNull(readHeldEntries(locker),
-                "close() must clear the snapshot once depth hits zero");
 
         // After close() drains, the LockManager state must allow a fresh lock/unlock cycle.
         // If close() left stale LockHolders behind, the next lock() would reenter at a higher
-        // refCount than expected; if it left depth/heldEntries inconsistent, the next
-        // unlock() would either no-op or crash.
+        // refCount than expected; if it left the stack inconsistent, the next unlock() would
+        // either no-op or crash.
         Assertions.assertDoesNotThrow(locker::lock);
         Assertions.assertDoesNotThrow(locker::unlock);
         Assertions.assertEquals(0, readLockDepth(locker));
     }
 
+    /**
+     * Number of acquisition frames the locker still owes an unlock() for — i.e. the size of the
+     * internal {@code heldStack}. Read reflectively so the test can assert the nested
+     * lock/unlock bookkeeping without widening the production API.
+     */
     private static int readLockDepth(PlannerMetaLocker locker) throws Exception {
-        Field f = PlannerMetaLocker.class.getDeclaredField("lockDepth");
+        Field f = PlannerMetaLocker.class.getDeclaredField("heldStack");
         f.setAccessible(true);
-        return f.getInt(locker);
-    }
-
-    private static Object readHeldEntries(PlannerMetaLocker locker) throws Exception {
-        Field f = PlannerMetaLocker.class.getDeclaredField("heldEntries");
-        f.setAccessible(true);
-        return f.get(locker);
+        return ((java.util.Collection<?>) f.get(locker)).size();
     }
 }

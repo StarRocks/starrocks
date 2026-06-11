@@ -40,7 +40,9 @@ import com.starrocks.sql.ast.ViewRelation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -74,33 +76,23 @@ public class PlannerMetaLocker implements AutoCloseable {
     private Map<Long, Set<Long>> tables = Maps.newTreeMap(Long::compareTo);
 
     /**
-     * Entries successfully locked by the outermost {@link #lock()} / {@link #tryLock} that
-     * is currently active on this instance. {@code unlock()} uses this snapshot to release
-     * the right rids, regardless of how deeply nested the lock/unlock calls are.
+     * Stack of acquisitions still owed a matching {@code unlock()}. Each successful
+     * {@link #lock()} / {@link #tryLock} pushes the list of {@code (dbId, tableIds)} entries it
+     * acquired; each {@link #unlock()} pops the most recent frame and releases its entries in
+     * reverse order. {@link #close()} drains the whole stack.
      *
-     * <p>Null when {@link #lockDepth} is 0 (no acquisition currently in scope, or already
-     * fully released). See {@code lockDepth} for the depth semantics.
+     * <p>This makes nested lock/unlock symmetric without a separate depth counter. Nesting
+     * happens for real on the optimistic-retry path:
+     * {@link com.starrocks.sql.InsertPlanner#buildExecPlanWithRetry} unlocks during planning then
+     * re-locks before validation, and {@link com.starrocks.sql.StatementPlanner#reAnalyzeStmt}
+     * additionally does {@code try { lock(); ... } finally { unlock(); }} on the SAME instance
+     * inside the retry iteration. The underlying {@link Locker} is reentrant (LockManager
+     * refcounts per rid), so each lock()/unlock() pair only adjusts its own refCount slot and a
+     * full unwind leaves the LockManager balanced. An empty stack makes {@code unlock()} a no-op,
+     * so callers that always pair lock() with unlock() in a {@code finally} block never hit a
+     * spurious "Attempt to unlock lock" when lock() failed partway and rolled itself back.
      */
-    private List<Map.Entry<Long, Set<Long>>> heldEntries;
-
-    /**
-     * Number of currently-pending {@code lock()}/{@code tryLock()} acquisitions on this
-     * instance — i.e., how many matching {@code unlock()} calls are still owed.
-     *
-     * <p>Nested acquisitions happen for real on the optimistic-retry path:
-     * {@link com.starrocks.sql.InsertPlanner#buildExecPlanWithRetry} unlocks during planning
-     * then re-locks before validation, and {@link com.starrocks.sql.StatementPlanner#reAnalyzeStmt}
-     * additionally calls {@code lock()}/{@code unlock()} on the SAME instance inside the retry
-     * iteration. The inner pair must not release the outer acquisition's LockManager refCount,
-     * and the inner {@code unlock()} must not clear {@link #heldEntries} (otherwise the outer
-     * {@code unlock()} would become a no-op and leak the locks).
-     *
-     * <p>{@code lock()} increments after a successful acquire; {@code unlock()} decrements
-     * unconditionally when in-scope and clears {@code heldEntries} once it hits zero. A failed
-     * {@code lock()} (partial-acquire that rolled itself back) does NOT increment, so the
-     * outer state — if any — is preserved untouched.
-     */
-    private int lockDepth = 0;
+    private final Deque<List<Map.Entry<Long, Set<Long>>>> heldStack = new ArrayDeque<>();
 
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
@@ -128,13 +120,8 @@ public class PlannerMetaLocker implements AutoCloseable {
                 lockedEntries.add(entry);
             }
             isLockSuccess = true;
-            lockDepth++;
-            // Only the outermost successful acquisition records the snapshot. Nested calls
-            // re-enter the same rids in LockManager (refCount++) but the entry list is
-            // unchanged because `tables` is fixed at construction time.
-            if (lockDepth == 1) {
-                heldEntries = lockedEntries;
-            }
+            // Record this acquisition so the matching unlock() releases exactly what it locked.
+            heldStack.push(lockedEntries);
         } finally {
             if (!isLockSuccess) {
                 for (Database database : lockedDbs) {
@@ -160,23 +147,17 @@ public class PlannerMetaLocker implements AutoCloseable {
                 locker.lockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
                 lockedEntries.add(entry);
             }
-            lockDepth++;
-            // Only the outermost successful acquisition records the snapshot. Nested lock()
-            // calls re-enter the same rids in LockManager (refCount goes up by 1 per call) but
-            // the snapshot is unchanged because `tables` is fixed at construction. Overwriting
-            // here would let an inner unlock() clear the outer's record and turn the outer
-            // unlock() into a no-op, leaking the locks. See POST-1561 review feedback.
-            if (lockDepth == 1) {
-                heldEntries = lockedEntries;
-            }
+            // Record this acquisition so the matching unlock() releases exactly what it locked.
+            // Each lock() pushes its own frame, so nested calls stack independently and a later
+            // unlock() pops them one at a time in reverse acquisition order.
+            heldStack.push(lockedEntries);
         } catch (Throwable t) {
             // Partial-acquire rollback at the multi-db level. Inner
             // Locker.lockTablesWithIntensiveDbLock is atomic per-db (it rolls itself back on
             // failure), so a throw here means earlier (db, tableIds) entries are fully held
             // while the current and later ones are not. Release the earlier ones in reverse
-            // order before re-throwing. {@code lockDepth} / {@code heldEntries} are NOT
-            // modified — we never reached the increment, so outer state (if this was a nested
-            // call) stays exactly as it was.
+            // order before re-throwing. The stack is NOT pushed — we never reached the push, so
+            // any outer frame (if this was a nested call) stays exactly as it was.
             for (int i = lockedEntries.size() - 1; i >= 0; i--) {
                 Map.Entry<Long, Set<Long>> entry = lockedEntries.get(i);
                 try {
@@ -192,7 +173,7 @@ public class PlannerMetaLocker implements AutoCloseable {
     }
 
     public void unlock() {
-        if (lockDepth == 0) {
+        if (heldStack.isEmpty()) {
             // No acquisition currently in scope. Either lock()/tryLock() was never called
             // successfully on this instance, or all prior acquisitions have already been
             // released. This is the safety net that lets callers pair lock() with unlock() in
@@ -201,15 +182,13 @@ public class PlannerMetaLocker implements AutoCloseable {
             return;
         }
         Locker locker = new Locker();
-        // Each unlock() decrements LockManager refCount by 1 per rid. The snapshot
-        // (heldEntries) is the same across nested unlocks because `tables` is fixed; we use
-        // it for every release and only clear it on the outermost unlock.
-        List<Map.Entry<Long, Set<Long>>> entriesToRelease = heldEntries;
-        lockDepth--;
-        if (lockDepth == 0) {
-            heldEntries = null;
-        }
-        for (Map.Entry<Long, Set<Long>> entry : entriesToRelease) {
+        // Pop the most recent acquisition and release its entries in reverse order — the
+        // mirror image of how lock() acquired them. Each unlock() drops exactly one frame, so
+        // nested lock()/unlock() pairs stay symmetric and the underlying reentrant LockManager
+        // refCount is decremented once per rid per pop.
+        List<Map.Entry<Long, Set<Long>>> entriesToRelease = heldStack.pop();
+        for (int i = entriesToRelease.size() - 1; i >= 0; i--) {
+            Map.Entry<Long, Set<Long>> entry = entriesToRelease.get(i);
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
             try {
@@ -226,9 +205,9 @@ public class PlannerMetaLocker implements AutoCloseable {
     public void close() {
         // AutoCloseable contract: release everything this instance still holds, regardless of
         // how many lock()/tryLock() calls have not yet been matched by an explicit unlock().
-        // Drain the nested depth so try-with-resources cleanup is total even if the body did
+        // Drain the whole stack so try-with-resources cleanup is total even if the body did
         // multiple lock()s. (No current caller does that, but the contract should hold.)
-        while (lockDepth > 0) {
+        while (!heldStack.isEmpty()) {
             unlock();
         }
     }
