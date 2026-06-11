@@ -842,6 +842,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         return snapshotId;
     }
 
+    // Schema bound to the given snapshot. Returns null when it cannot be resolved (e.g. legacy
+    // metadata without a per-snapshot schema id), in which case callers keep the current schema.
+    public static Schema getSnapshotSchema(org.apache.iceberg.Table table, long snapshotId) {
+        Snapshot snapshot = table.snapshot(snapshotId);
+        if (snapshot == null || snapshot.schemaId() == null) {
+            return null;
+        }
+        return table.schemas().get(snapshot.schemaId());
+    }
+
+
     private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         try {
             if (version.getType() != DateType.DATETIME &&
@@ -1217,8 +1228,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         boolean enableCollectColumnStatistics = params.isEnableColumnStats();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
-        Types.StructType schema = nativeTbl.schema().asStruct();
-
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
         // Cast-on-string-partition-column conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are pruned unsoundly
         // by Iceberg's native string comparison, so keep them out of the pushed predicate and evaluate them
@@ -1226,8 +1235,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
         boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
+        Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
@@ -1297,9 +1305,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             // pushed predicate and evaluate them here so pruning stays consistent with the backend filter.
             PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
                     scalarOperators, identityStringPartitionColumns(icebergTable));
-            ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
-                    icebergTable.getNativeTable().schema().asStruct());
-            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
+            Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
             baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
             if (residual.hasResidual()) {
                 baseSource = filterByPartitionResidual(baseSource, residual.residual, icebergTable,
@@ -1794,9 +1800,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // filter the returned delete files against their partition values StarRocks-side.
         PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
-                table.schema().asStruct());
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
+        Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
                 catalogName, dbName, tableName, PlanMode.LOCAL, ConnectContext.get());
@@ -1865,6 +1869,16 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.debug("failed to decode delete file partition values, keep file: {}", file.path(), e);
             return Collections.emptyMap();
         }
+    }
+
+    private Expression convertPredicate(IcebergTable icebergTable, ScalarOperator predicate) {
+        return convertPredicate(icebergTable, Utils.extractConjuncts(predicate));
+    }
+
+    private Expression convertPredicate(IcebergTable icebergTable, List<ScalarOperator> conjuncts) {
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
+                icebergTable.getReadSchema().asStruct());
+        return new ScalarOperatorToIcebergExpr().convert(conjuncts, icebergContext);
     }
 
     /**

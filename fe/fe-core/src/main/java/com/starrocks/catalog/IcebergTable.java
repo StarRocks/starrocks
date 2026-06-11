@@ -128,6 +128,7 @@ public class IcebergTable extends Table {
     private Map<String, String> icebergProperties = Maps.newHashMap();
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
+    private transient Schema readSchema;
     private List<Column> partitionColumns;
     private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
@@ -184,9 +185,8 @@ public class IcebergTable extends Table {
     @Override
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
-            List<PartitionField> partitionFields = this.getNativeTable().spec().fields();
-            Schema schema = this.getNativeTable().schema();
-            partitionColumns = partitionFields.stream().map(partitionField ->
+            Schema schema = getReadSchema();
+            partitionColumns = readSchemaPartitionFields().stream().map(partitionField ->
                     getColumn(getPartitionSourceName(schema, partitionField))).collect(Collectors.toList());
         }
         return partitionColumns;
@@ -198,13 +198,13 @@ public class IcebergTable extends Table {
 
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
-        for (PartitionField field : getNativeTable().spec().fields()) {
+        Schema schema = getReadSchema();
+        // readSchemaPartitionFields() guarantees the source column resolves, so no null check.
+        for (PartitionField field : readSchemaPartitionFields()) {
             if (!field.transform().isIdentity() && hasPartitionTransformedEvolution()) {
                 continue;
             }
-            String baseColumnName = nativeTable.schema().findColumnName(field.sourceId());
-            Column partitionCol = getColumn(baseColumnName);
-            allPartitionColumns.add(partitionCol);
+            allPartitionColumns.add(getColumn(schema.findColumnName(field.sourceId())));
         }
         return allPartitionColumns;
     }
@@ -222,7 +222,7 @@ public class IcebergTable extends Table {
 
     public PartitionField getPartitionField(String partitionColumnName) {
         List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
-        Schema schema = this.getNativeTable().schema();
+        Schema schema = getReadSchema();
         for (PartitionField field : allPartitionFields) {
             if (getPartitionSourceName(schema, field).equalsIgnoreCase(partitionColumnName)) {
                 return field;
@@ -392,8 +392,9 @@ public class IcebergTable extends Table {
         List<BucketProperty> bucketProperties = new ArrayList<>();
         List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = getBucketSourceIdWithBucketNum(getNativeTable().spec());
 
+        Schema schema = getReadSchema();
         for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
-            Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
+            Column column = getColumn(schema.findColumnName(bucket.first));
             if (!bucketPropertySupported(column.getType())) {
                 continue;
             }
@@ -440,6 +441,33 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
+    // Return a per-query copy bound to the given read schema (a targeted snapshot's schema for
+    // time travel), with the StarRocks full schema rebuilt from it.
+    public IcebergTable withReadSchema(Schema schema) {
+        IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
+                comment, IcebergApiConverter.toFullSchemas(schema, getNativeTable()), getNativeTable(), icebergProperties);
+        table.readSchema = schema;
+        table.setUniqueConstraints(getUniqueConstraints());
+        table.setForeignKeyConstraints(getForeignKeyConstraints());
+        table.metricsReporter = metricsReporter;
+        return table;
+    }
+
+    // Current-spec partition fields whose source column exists in the read schema. Time travel
+    // drops fields added by later spec evolution; non-time-travel keeps the full spec.
+    private List<PartitionField> readSchemaPartitionFields() {
+        Schema schema = getReadSchema();
+        return getNativeTable().spec().fields().stream()
+                .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .collect(Collectors.toList());
+    }
+
+    // The Iceberg schema this table instance is read with: the targeted snapshot's schema for a
+    // time-travel read (bound via withReadSchema), otherwise the current table schema.
+    public Schema getReadSchema() {
+        return readSchema != null ? readSchema : getNativeTable().schema();
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
@@ -448,7 +476,7 @@ public class IcebergTable extends Table {
         tIcebergTable.setLocation(getNativeTable().location());
 
         List<TColumn> tColumns = Lists.newArrayList();
-        Schema iceSchema = nativeTable.schema();
+        Schema iceSchema = getReadSchema();
         for (Column column : getBaseSchema()) {
             TColumn tc = column.toThrift();
             // Per Iceberg spec, the read path should ONLY use initial-default to backfill
@@ -468,10 +496,15 @@ public class IcebergTable extends Table {
         }
         tIcebergTable.setColumns(tColumns);
 
-        tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
+        tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(iceSchema));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
         if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
-            List<String> exprStr = IcebergApiConverter.toPartitionFields(nativeTable.spec(), true);
+            // Resolve partition source names against the read schema so the generated
+            // expressions match the column names in fullSchema.
+            List<PartitionField> partitionFields = readSchemaPartitionFields();
+            List<String> exprStr = partitionFields.stream()
+                    .map(field -> IcebergApiConverter.toPartitionField(iceSchema, field, true))
+                    .collect(Collectors.toList());
             List<Expr> partitionExprs = exprStr.stream()
                     .map(expr -> {
                         if (expr.startsWith(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "void")) {
@@ -525,11 +558,11 @@ public class IcebergTable extends Table {
             }
             List<TIcebergPartitionInfo> partitionInfos = Lists.newArrayList();
             for (int i = 0; i < partitionExprs.size(); i++) {
+                PartitionField field = partitionFields.get(i);
                 TIcebergPartitionInfo partInfo = new TIcebergPartitionInfo();
-                partInfo.setSource_column_name(nativeTable.schema()
-                        .findColumnName(nativeTable.spec().fields().get(i).sourceId()));
-                partInfo.setPartition_column_name(nativeTable.spec().fields().get(i).name());
-                partInfo.setTransform_expr(nativeTable.spec().fields().get(i).transform().toString());
+                partInfo.setSource_column_name(iceSchema.findColumnName(field.sourceId()));
+                partInfo.setPartition_column_name(field.name());
+                partInfo.setTransform_expr(field.transform().toString());
                 partInfo.setPartition_expr(ExprToThrift.treeToThrift(partitionExprs.get(i)));
                 partitionInfos.add(partInfo);
             }
