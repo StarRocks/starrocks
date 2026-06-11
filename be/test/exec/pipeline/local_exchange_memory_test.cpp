@@ -25,6 +25,7 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "types/logical_type.h"
@@ -37,7 +38,7 @@ public:
     void SetUp() override {
         _exec_env = ExecEnv::GetInstance();
 
-        _query_context = std::make_shared<QueryContext>();
+        _query_context = make_test_query_context();
         _query_context->set_query_execution_services(&_exec_env->query_execution_services());
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 

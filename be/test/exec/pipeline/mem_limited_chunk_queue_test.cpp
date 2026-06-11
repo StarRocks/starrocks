@@ -30,6 +30,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -58,7 +59,7 @@ public:
         dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, dummy_dir_mgr.get());
 
         dummy_fragment_ctx.set_workgroup(dummy_wg);
-        dummy_query_ctx = std::make_shared<QueryContext>();
+        dummy_query_ctx = make_test_query_context();
 
         dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx, &dummy_fragment_ctx.fragment_runtime_state());
         dummy_runtime_state.set_fragment_dict_state(dummy_fragment_ctx.dict_state());

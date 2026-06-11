@@ -24,6 +24,7 @@ class QueryContext;
 using QueryContextPtr = std::shared_ptr<QueryContext>;
 class QueryRuntimeState;
 class FragmentRuntimeState;
+class QueryLifecycle;
 class QueryContextManager;
 class FragmentContext;
 using FragmentContextPtr = std::shared_ptr<FragmentContext>;

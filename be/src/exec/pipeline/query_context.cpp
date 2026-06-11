@@ -44,8 +44,8 @@ const RuntimeServices* runtime_services(const QueryExecutionServices* query_exec
 
 } // namespace
 
-QueryContext::QueryContext()
-        : _fragment_mgr(new FragmentContextManager()),
+QueryContext::QueryContext(QueryLifecycle* query_lifecycle)
+        : _fragment_mgr(new FragmentContextManager(query_lifecycle)),
 
           _num_fragments(0),
           _num_active_fragments(0),

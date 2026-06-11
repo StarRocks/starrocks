@@ -29,6 +29,7 @@
 #include "base/uid_util.h"
 #include "compute_env/profile_report_task.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/query_lifecycle.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
@@ -37,7 +38,7 @@
 namespace starrocks::pipeline {
 
 // TODO: use brpc::TimerThread refactor QueryContext
-class QueryContextManager {
+class QueryContextManager : public QueryLifecycle {
 public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
@@ -45,6 +46,7 @@ public:
     StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     void count_down_fragments(QueryContext* query_ctx);
+    void on_fragment_finished(FragmentContextPtr fragment_ctx) override;
     size_t size();
     bool remove(const TUniqueId& query_id);
     // used for graceful exit

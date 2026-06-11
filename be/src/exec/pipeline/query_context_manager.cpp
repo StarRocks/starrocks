@@ -23,15 +23,34 @@
 #include "common/config_rpc_client_fwd.h"
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_manager.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "gen_cpp/FrontendService.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+
+const QueryExecutionServices& query_execution_services(const RuntimeState* state) {
+    DCHECK(state != nullptr);
+    return *state->query_execution_services();
+}
+
+const ExecutionEnv& execution_services(const RuntimeState* state) {
+    return *query_execution_services(state).execution;
+}
+
+} // namespace
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
         : _num_slots(1 << log2_num_slots),
@@ -167,7 +186,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
         }
 
         // finally, find no query contexts, so create a new one
-        auto&& ctx = std::make_shared<QueryContext>();
+        auto&& ctx = std::make_shared<QueryContext>(this);
         auto* ctx_raw_ptr = ctx.get();
         ctx_raw_ptr->set_query_id(query_id);
         ctx_raw_ptr->increment_num_fragments();
@@ -216,6 +235,55 @@ void QueryContextManager::count_down_fragments(QueryContext* query_ctx) {
 
     const auto query_id = query_ctx->query_id();
     remove(query_id);
+}
+
+void QueryContextManager::on_fragment_finished(FragmentContextPtr fragment_ctx) {
+    DCHECK(fragment_ctx != nullptr);
+    auto* state = fragment_ctx->runtime_state();
+    DCHECK(state != nullptr);
+
+    auto query_ctx = get(fragment_ctx->query_id());
+    if (query_ctx == nullptr) {
+        LOG(WARNING) << "Query context missing when fragment finished, query_id=" << print_id(fragment_ctx->query_id())
+                     << ", fragment_instance_id=" << print_id(fragment_ctx->fragment_instance_id());
+        fragment_ctx->destroy_pass_through_chunk_buffer();
+        return;
+    }
+
+    auto status = fragment_ctx->final_status();
+    fragment_ctx->workgroup()->executors()->driver_executor()->report_exec_state(query_ctx.get(), fragment_ctx.get(),
+                                                                                 status, true);
+
+    if (fragment_ctx->report_when_finish()) {
+        TReportFragmentFinishResponse res;
+        TReportFragmentFinishParams params;
+        params.__set_query_id(fragment_ctx->query_id());
+        params.__set_fragment_instance_id(fragment_ctx->fragment_instance_id());
+        const auto& fe_addr = fragment_ctx->fe_addr();
+
+        class RpcRunnable : public Runnable {
+        public:
+            RpcRunnable(const TNetworkAddress& fe_addr, const TReportFragmentFinishResponse& res,
+                        const TReportFragmentFinishParams& params)
+                    : fe_addr(fe_addr), res(res), params(params) {}
+
+            const TNetworkAddress fe_addr;
+            TReportFragmentFinishResponse res;
+            const TReportFragmentFinishParams params;
+
+            void run() override {
+                (void)ThriftRpcHelper::rpc<FrontendServiceClient>(
+                        fe_addr.hostname, fe_addr.port,
+                        [&](FrontendServiceConnection& client) { client->reportFragmentFinish(res, params); });
+            }
+        };
+
+        auto runnable = std::make_shared<RpcRunnable>(fe_addr, res, params);
+        (void)execution_services(state).streaming_load_thread_pool->submit(runnable);
+    }
+
+    fragment_ctx->destroy_pass_through_chunk_buffer();
+    count_down_fragments(query_ctx.get());
 }
 
 size_t QueryContextManager::size() {

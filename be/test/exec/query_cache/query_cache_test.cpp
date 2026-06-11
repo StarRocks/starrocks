@@ -30,6 +30,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/multilane_operator.h"
@@ -41,7 +42,8 @@ namespace starrocks {
 
 struct QueryCacheTest : public ::testing::Test {
     RuntimeState state;
-    std::unique_ptr<pipeline::QueryContext> query_ctx = std::make_unique<pipeline::QueryContext>();
+    std::unique_ptr<pipeline::QueryContext> query_ctx =
+            std::make_unique<pipeline::QueryContext>(pipeline::test_query_lifecycle());
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 
     void SetUp() override { state.set_query_ctx(query_ctx.get(), &query_ctx->query_runtime_state()); }

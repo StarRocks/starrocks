@@ -16,6 +16,7 @@
 
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
@@ -37,7 +38,7 @@ protected:
     DescriptorTbl* _tbl = nullptr;
     TPlanNode _tnode;
     ChunkBufferLimiterPtr _chunk_buffer_limiter;
-    QueryContext _query_ctx;
+    QueryContext _query_ctx{test_query_lifecycle()};
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
 };
 

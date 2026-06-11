@@ -39,6 +39,7 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec/pipeline/primitives/query_lifecycle.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
@@ -133,6 +134,11 @@ void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
     state->set_fragment_ctx(this, &fragment_runtime_state());
 }
 
+void FragmentContext::attach_query_lifecycle(QueryLifecycle* lifecycle) {
+    DCHECK_NE(nullptr, lifecycle);
+    _query_lifecycle = lifecycle;
+}
+
 void FragmentContext::count_down_execution_group(size_t val) {
     // Note that _pipelines may be destructed after fetch_add
     // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
@@ -147,7 +153,6 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     // dump profile if necessary
     auto* state = runtime_state();
-    auto* query_ctx = state->query_ctx();
     state->runtime_profile()->reverse_childs();
     if (config::pipeline_print_profile) {
         std::stringstream ss;
@@ -158,43 +163,11 @@ void FragmentContext::count_down_execution_group(size_t val) {
     }
 
     finish();
-    auto status = final_status();
-    workgroup()->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
-
-    if (_report_when_finish) {
-        /// TODO: report fragment finish to BE coordinator
-        TReportFragmentFinishResponse res;
-        TReportFragmentFinishParams params;
-        params.__set_query_id(query_id());
-        params.__set_fragment_instance_id(fragment_instance_id());
-        // params.query_id = query_id();
-        // params.fragment_instance_id = fragment_instance_id();
-        const auto& fe_addr = state->fragment_runtime_state()->fe_addr();
-
-        class RpcRunnable : public Runnable {
-        public:
-            RpcRunnable(const TNetworkAddress& fe_addr, const TReportFragmentFinishResponse& res,
-                        const TReportFragmentFinishParams& params)
-                    : fe_addr(fe_addr), res(res), params(params) {}
-            const TNetworkAddress fe_addr;
-            TReportFragmentFinishResponse res;
-            const TReportFragmentFinishParams params;
-
-            void run() override {
-                (void)ThriftRpcHelper::rpc<FrontendServiceClient>(
-                        fe_addr.hostname, fe_addr.port,
-                        [&](FrontendServiceConnection& client) { client->reportFragmentFinish(res, params); });
-            }
-        };
-        //
-        std::shared_ptr<Runnable> runnable;
-        runnable = std::make_shared<RpcRunnable>(fe_addr, res, params);
-        (void)execution_services(state).streaming_load_thread_pool->submit(runnable);
-    }
-
-    destroy_pass_through_chunk_buffer();
-
-    runtime_services(state).query_context_mgr->count_down_fragments(query_ctx);
+    DCHECK_NE(nullptr, _query_lifecycle);
+    // Keep this fragment alive until the member function returns. The query lifecycle callback may remove the owning
+    // QueryContext and release the FragmentContextManager's reference.
+    auto self = shared_from_this();
+    _query_lifecycle->on_fragment_finished(self);
 }
 
 bool FragmentContext::need_report_exec_state() {

@@ -47,7 +47,7 @@ struct ConnectorScanOperatorMemShareArbitrator;
 // The context for all fragment of one query in one BE
 class QueryContext : public QueryContextLifetime, public std::enable_shared_from_this<QueryContext> {
 public:
-    QueryContext();
+    explicit QueryContext(QueryLifecycle* query_lifecycle);
     ~QueryContext() noexcept;
     void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
         _query_execution_services = query_execution_services;

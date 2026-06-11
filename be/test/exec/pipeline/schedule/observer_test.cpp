@@ -36,6 +36,7 @@
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
@@ -168,7 +169,7 @@ TEST(TimerThreadTest, test) {
 class PipelineObserverTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _dummy_query_ctx = std::make_shared<QueryContext>();
+        _dummy_query_ctx = make_test_query_context();
         _dummy_fragment_ctx = std::make_shared<FragmentContext>();
         _exec_group = std::make_shared<NormalExecutionGroup>();
         _runtime_state = std::make_shared<RuntimeState>();

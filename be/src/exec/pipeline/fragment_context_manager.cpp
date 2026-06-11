@@ -39,14 +39,19 @@ const RuntimeServices& runtime_services(const RuntimeState* state) {
 
 } // namespace
 
+FragmentContextManager::FragmentContextManager(QueryLifecycle* query_lifecycle) : _query_lifecycle(query_lifecycle) {
+    DCHECK_NE(nullptr, _query_lifecycle);
+}
+
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);
     if (it != _fragment_contexts.end()) {
         return it->second.get();
     } else {
-        auto&& ctx = std::make_unique<FragmentContext>();
+        auto ctx = std::make_shared<FragmentContext>();
         auto* raw_ctx = ctx.get();
+        _attach_query_lifecycle(ctx);
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
         raw_ctx->_set_default_workgroup();
         return raw_ctx;
@@ -72,8 +77,13 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
         RETURN_IF_ERROR(runtime_services(fragment_ctx->runtime_state())
                                 .profile_report_worker->register_pipeline_load(fragment_ctx->query_id(), fragment_id));
     }
+    _attach_query_lifecycle(fragment_ctx);
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
     return Status::OK();
+}
+
+void FragmentContextManager::_attach_query_lifecycle(const FragmentContextPtr& fragment_ctx) const {
+    fragment_ctx->attach_query_lifecycle(_query_lifecycle);
 }
 
 FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {

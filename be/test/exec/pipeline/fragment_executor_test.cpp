@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -103,7 +104,7 @@ TEST_F(FragmentExecutorPartitionTest, PartitionDescriptorOutlivesFragmentPool) {
 
     // The QueryContext owns the per-query ObjectPool; the partition descriptor must
     // ultimately end up here so it survives fragment teardown.
-    auto query_ctx = std::make_shared<QueryContext>();
+    auto query_ctx = make_test_query_context();
 
     DescriptorTbl* desc_tbl = nullptr;
     {

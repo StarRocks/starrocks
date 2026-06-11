@@ -27,6 +27,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
@@ -98,7 +99,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // Prepare drivers.
-    QueryContext query_context;
+    QueryContext query_context(test_query_lifecycle());
     auto driver71 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
                                                      nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver71.get(), 7);
@@ -185,7 +186,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // Prepare drivers.
-    QueryContext query_context;
+    QueryContext query_context(test_query_lifecycle());
     auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
                                                     nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver1.get(), 1);
@@ -248,7 +249,7 @@ protected:
 };
 
 TEST_F(WorkGroupDriverQueueTest, test_basic) {
-    QueryContext query_ctx;
+    QueryContext query_ctx(test_query_lifecycle());
     PipelineExecutorMetrics metrics;
     WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
@@ -336,7 +337,7 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
 }
 
 TEST_F(WorkGroupDriverQueueTest, test_take_block) {
-    QueryContext query_ctx;
+    QueryContext query_ctx(test_query_lifecycle());
     PipelineExecutorMetrics metrics;
     WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
@@ -360,7 +361,7 @@ TEST_F(WorkGroupDriverQueueTest, test_take_block) {
 }
 
 TEST_F(WorkGroupDriverQueueTest, test_take_uses_injected_policy) {
-    QueryContext query_ctx;
+    QueryContext query_ctx(test_query_lifecycle());
     PipelineExecutorMetrics metrics;
     std::atomic<bool> block_wg2{true};
     _schedule_policy.should_yield_func = [&](const workgroup::WorkGroup* wg) {
@@ -388,7 +389,7 @@ TEST_F(WorkGroupDriverQueueTest, test_take_uses_injected_policy) {
 }
 
 TEST_F(WorkGroupDriverQueueTest, test_update_statistics_uses_injected_workgroup_count_policy) {
-    QueryContext query_ctx;
+    QueryContext query_ctx(test_query_lifecycle());
     PipelineExecutorMetrics metrics;
     _schedule_policy.num_workgroups_value = 1;
     WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);

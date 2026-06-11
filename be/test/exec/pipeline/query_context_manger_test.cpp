@@ -17,14 +17,103 @@
 
 #include "base/testutil/assert.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
+#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+
+class MockQueryLifecycle final : public QueryLifecycle {
+public:
+    void on_fragment_finished(FragmentContextPtr fragment_ctx) override {
+        ++num_finished_fragments;
+        last_fragment = std::move(fragment_ctx);
+    }
+
+    size_t num_finished_fragments = 0;
+    FragmentContextPtr last_fragment;
+};
+
+TUniqueId make_test_id(int64_t hi, int64_t lo) {
+    TUniqueId id;
+    id.hi = hi;
+    id.lo = lo;
+    return id;
+}
+
+void attach_test_runtime_state(FragmentContext* fragment_ctx, QueryContext* query_ctx = nullptr) {
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::SELECT;
+    TQueryGlobals query_globals;
+    auto runtime_state = std::make_shared<RuntimeState>(fragment_ctx->query_id(), fragment_ctx->fragment_instance_id(),
+                                                        query_options, query_globals, ExecEnv::GetInstance());
+    fragment_ctx->set_runtime_state(std::move(runtime_state));
+    fragment_ctx->attach_to_runtime_state(fragment_ctx->runtime_state());
+    if (query_ctx != nullptr) {
+        query_ctx->attach_to_runtime_state(fragment_ctx->runtime_state());
+    }
+}
+
+void attach_single_pipeline_group(FragmentContext* fragment_ctx) {
+    ExecutionGroupPtr group = ExecutionGroupBuilder::create_normal_exec_group();
+    Pipelines pipelines;
+    pipelines.emplace_back(std::make_shared<Pipeline>(1, OpFactories{}, group.get()));
+    group->add_pipeline(pipelines.back().get());
+
+    ExecutionGroups groups;
+    groups.emplace_back(std::move(group));
+    fragment_ctx->set_pipelines(std::move(groups), std::move(pipelines));
+}
+
+} // namespace
+
+TEST(QueryContextManagerTest, FragmentManagerAttachesQueryLifecycle) {
+    MockQueryLifecycle lifecycle;
+    FragmentContextManager fragment_mgr(&lifecycle);
+    auto query_id = make_test_id(10, 20);
+    auto fragment_id = make_test_id(30, 40);
+
+    auto* fragment_ctx = fragment_mgr.get_or_register(fragment_id);
+    fragment_ctx->set_query_id(query_id);
+    fragment_ctx->set_fragment_instance_id(fragment_id);
+    attach_test_runtime_state(fragment_ctx);
+    attach_single_pipeline_group(fragment_ctx);
+
+    fragment_ctx->count_down_execution_group();
+
+    EXPECT_EQ(1, lifecycle.num_finished_fragments);
+    ASSERT_NE(nullptr, lifecycle.last_fragment);
+    EXPECT_EQ(fragment_ctx, lifecycle.last_fragment.get());
+}
+
+TEST(QueryContextManagerTest, FragmentCompletionCallbackCountsDownQuery) {
+    auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+    auto query_id = make_test_id(11, 22);
+    auto fragment_id = make_test_id(33, 44);
+
+    ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
+    query_ctx->set_total_fragments(1);
+    auto* fragment_ctx = query_ctx->fragment_mgr()->get_or_register(fragment_id);
+    fragment_ctx->set_query_id(query_id);
+    fragment_ctx->set_fragment_instance_id(fragment_id);
+    attach_test_runtime_state(fragment_ctx, query_ctx);
+    attach_single_pipeline_group(fragment_ctx);
+
+    fragment_ctx->count_down_execution_group();
+
+    EXPECT_EQ(nullptr, query_ctx_mgr->get(query_id));
+}
 
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
@@ -340,7 +429,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
 }
 
 TEST(QueryContextManagerTest, testReadStats) {
-    QueryContext ctx;
+    QueryContext ctx(test_query_lifecycle());
     ctx.incr_read_stats(100, 200);
     ASSERT_EQ(100, ctx.get_read_local_cnt());
     ASSERT_EQ(200, ctx.get_read_remote_cnt());
@@ -348,7 +437,7 @@ TEST(QueryContextManagerTest, testReadStats) {
 
 TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateExecStats) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
-    QueryContext ctx;
+    QueryContext ctx(test_query_lifecycle());
     TUniqueId query_id;
     query_id.hi = 3;
     query_id.lo = 4;
@@ -390,7 +479,7 @@ TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateExecStats)
 
 TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateCpuAndScanStats) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
-    QueryContext ctx;
+    QueryContext ctx(test_query_lifecycle());
     ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
 
     auto& query_runtime_state = ctx.query_runtime_state();
@@ -437,7 +526,7 @@ TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateCpuAndScan
 }
 
 TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
-    auto query_ctx = std::make_shared<QueryContext>();
+    auto query_ctx = make_test_query_context();
     TUniqueId query_id;
     query_id.hi = 3;
     query_id.lo = 4;
@@ -461,7 +550,7 @@ TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
 
 TEST(QueryContextManagerTest, testInitMemTrackerWiresQueryRuntimeStateMemTracker) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
-    QueryContext query_ctx;
+    QueryContext query_ctx(test_query_lifecycle());
     TUniqueId query_id;
     query_id.hi = 5;
     query_id.lo = 6;

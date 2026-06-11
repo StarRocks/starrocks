@@ -27,6 +27,7 @@
 #include "common/util/thrift_util.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "exec/tablet_info.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
@@ -238,7 +239,7 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
 
 TEST_F(TabletSinkIndexChannelTest, pipeline_load_channel_profile) {
     TQueryOptions query_options;
-    pipeline::QueryContext query_ctx;
+    pipeline::QueryContext query_ctx(pipeline::test_query_lifecycle());
     query_ctx.set_enable_profile();
     query_ctx.set_big_query_profile_threshold(10, TTimeUnit::SECOND);
     query_ctx.set_runtime_profile_report_interval(5);

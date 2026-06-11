@@ -27,7 +27,7 @@ namespace starrocks::pipeline {
 
 class FragmentContextManager {
 public:
-    FragmentContextManager() = default;
+    explicit FragmentContextManager(QueryLifecycle* query_lifecycle);
     ~FragmentContextManager() = default;
 
     FragmentContextManager(const FragmentContextManager&) = delete;
@@ -46,8 +46,11 @@ public:
     void for_each_fragment(const std::function<void(const FragmentContextPtr&)>& caller);
 
 private:
+    void _attach_query_lifecycle(const FragmentContextPtr& fragment_ctx) const;
+
     std::mutex _lock;
     std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;
+    QueryLifecycle* _query_lifecycle;
 };
 
 } // namespace starrocks::pipeline

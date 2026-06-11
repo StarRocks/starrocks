@@ -5,6 +5,7 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gtest/gtest.h"
@@ -19,7 +20,7 @@ protected:
 
 private:
     RuntimeState _runtime_state;
-    std::unique_ptr<QueryContext> _query_ctx = std::make_unique<QueryContext>();
+    std::unique_ptr<QueryContext> _query_ctx = std::make_unique<QueryContext>(test_query_lifecycle());
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     TPlanNode _tnode;

@@ -59,7 +59,7 @@ class PassThroughChunkBufferGuard;
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
-class FragmentContext : public FragmentLifecycle {
+class FragmentContext : public FragmentLifecycle, public std::enable_shared_from_this<FragmentContext> {
     friend class FragmentContextManager;
 
 public:
@@ -87,6 +87,7 @@ public:
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
     void attach_to_runtime_state(RuntimeState* state);
+    void attach_query_lifecycle(QueryLifecycle* lifecycle);
     FragmentDictState* dict_state() const { return _fragment_dict_state.get(); }
     ExecNode*& plan() { return _plan; }
 
@@ -179,6 +180,7 @@ public:
     void set_enable_group_execution(bool enable_group_execution) { _enable_group_execution = enable_group_execution; }
 
     void set_report_when_finish(bool report) { _report_when_finish = report; }
+    bool report_when_finish() const { return _report_when_finish; }
 
     // acquire runtime filter from cache
     void acquire_runtime_filters();
@@ -238,6 +240,7 @@ private:
     RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
+    QueryLifecycle* _query_lifecycle = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks

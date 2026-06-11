@@ -32,6 +32,7 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/query_context_test_helper.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "pipeline_test_base.h"
@@ -688,7 +689,7 @@ struct SpillDriverTestHarness {
     spill::DirManager spill_dir_manager;
     RuntimeServices runtime_services;
     QueryExecutionServices query_execution_services;
-    QueryContext query_ctx;
+    QueryContext query_ctx{test_query_lifecycle()};
     FragmentContext fragment_ctx;
     Pipeline pipeline;
 
