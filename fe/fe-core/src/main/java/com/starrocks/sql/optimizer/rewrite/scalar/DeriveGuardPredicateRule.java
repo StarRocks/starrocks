@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -105,7 +106,7 @@ public class DeriveGuardPredicateRule extends BaseScalarOperatorRewriteRule {
             Map<Integer, List<ScalarOperator>> colPreds = new HashMap<>();
             List<ScalarOperator> conjuncts = disjunctConjuncts.get(di);
             for (ScalarOperator conjunct : conjuncts) {
-                if (isRangeColumnPredicate(conjunct)) {
+                if (isGuardCandidatePredicate(conjunct)) {
                     ColumnRefSet usedCols = conjunct.getUsedColumns();
                     if (usedCols.cardinality() == 1) {
                         int colId = usedCols.getFirstId();
@@ -195,23 +196,70 @@ public class DeriveGuardPredicateRule extends BaseScalarOperatorRewriteRule {
     }
 
     /**
-     * Check if this is a single-column predicate that provides a range constraint
-     * (GE, LE, GT, LT, IN). Equality-only predicates are excluded to avoid creating
-     * non-selective guards for low-cardinality payload columns.
+     * Check if this predicate should contribute to a guard.
+     * <p>
+     * Guard derivation strategy:
+     * <ul>
+     *   <li><b>Range predicates (GE, LE, GT, LT)</b>: always collected. These are the primary
+     *       target — they form contiguous intervals that are inherently selective.</li>
+     *   <li><b>IN predicates</b>: always collected. IN lists on date/numeric columns are
+     *       selective and commonly used as pivot columns in OR branches.</li>
+     *   <li><b>EQ on DATE / DATETIME / TIMESTAMP / numeric types</b>: collected.
+     *       EQ on a high-cardinality date or numeric column (e.g. {@code l_shipdate = '1998-12-01'})
+     *       is as selective as a range predicate and should contribute to the guard.
+     *       <p>
+     *       <b>EQ on VARCHAR / CHAR / BOOLEAN is intentionally excluded.</b>
+     *       These columns are typically low-cardinality payload columns (e.g.
+     *       {@code l_returnflag = 'R'}). Adding a guard for them would:
+     *       <ol>
+     *         <li>Produce a non-selective guard (e.g. {@code returnflag = 'R' OR returnflag = 'A'})</li>
+     *         <li>Put the column into {@code conjunct_ctxs_by_slot} → ACTIVE →
+     *             decoded for all rows instead of LAZY (decoded only for survivor rows)</li>
+     *         <li>Negate the benefit of the real guard on the pivot column</li>
+     *       </ol>
+     *       This is the key difference from Trino's TupleDomain: Trino's TupleDomain is
+     *       only used for page-level pruning and does NOT force column decoding order.
+     *       Our guard flows through {@code conjunct_ctxs_by_slot} which DOES control the
+     *       ACTIVE vs LAZY column split, so we must be more selective.</li>
+     * </ul>
      */
-    private static boolean isRangeColumnPredicate(ScalarOperator op) {
+    private static boolean isGuardCandidatePredicate(ScalarOperator op) {
         if (op instanceof BinaryPredicateOperator) {
-            if (op.getUsedColumns().cardinality() != 1) {
-                return false;
-            }
-            BinaryPredicateOperator bop = (BinaryPredicateOperator) op;
-            BinaryType type = bop.getBinaryType();
-            return type == BinaryType.GE || type == BinaryType.LE
-                    || type == BinaryType.GT || type == BinaryType.LT;
+            return isGuardCandidateBinaryPredicate((BinaryPredicateOperator) op);
         }
         if (op instanceof InPredicateOperator) {
             return op.getUsedColumns().cardinality() == 1;
         }
+        return false;
+    }
+
+    /**
+     * Check if a BinaryPredicateOperator is a guard candidate.
+     * Range predicates (GE, LE, GT, LT) are always candidates.
+     * EQ is only a candidate on high-cardinality types (date/datetime/numeric).
+     */
+    private static boolean isGuardCandidateBinaryPredicate(BinaryPredicateOperator bop) {
+        ColumnRefSet usedCols = bop.getUsedColumns();
+        if (usedCols.cardinality() != 1) {
+            return false;
+        }
+        BinaryType type = bop.getBinaryType();
+
+        // Range predicates: always candidates
+        if (type == BinaryType.GE || type == BinaryType.LE
+                || type == BinaryType.GT || type == BinaryType.LT) {
+            return true;
+        }
+
+        // EQ: only for high-cardinality column types
+        // Skip VARCHAR/CHAR/BOOLEAN to avoid creating non-selective guards
+        // that would make low-cardinality payload columns ACTIVE unnecessarily
+        if (type == BinaryType.EQ) {
+            // After NormalizePredicateRule, the column reference is child(0)
+            Type colType = bop.getChild(0).getType();
+            return colType.isNumericType() || colType.isDateType() || colType.isDatetime();
+        }
+
         return false;
     }
 }
