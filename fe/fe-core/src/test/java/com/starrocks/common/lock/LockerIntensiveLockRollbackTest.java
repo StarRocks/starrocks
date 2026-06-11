@@ -14,7 +14,6 @@
 package com.starrocks.common.lock;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
@@ -47,7 +46,6 @@ public class LockerIntensiveLockRollbackTest {
     @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_enabled = true;
     }
 
     @AfterEach

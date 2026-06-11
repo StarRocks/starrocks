@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -51,7 +50,6 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
     @BeforeEach
     public void resetLockManager() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_enabled = true;
     }
 
     @AfterEach
