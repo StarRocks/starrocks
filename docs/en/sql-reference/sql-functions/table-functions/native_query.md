@@ -7,7 +7,7 @@ description: "native_query is a JDBC catalog table function."
 
 `native_query` is a JDBC catalog table function. It executes a database-native `SELECT` statement through a JDBC catalog and exposes the result as a StarRocks relation.
 
-Use this function when the source database must run SQL that is hard to express against a single JDBC external table, such as a pre-filtered subquery, a join in the source database, or vendor-specific SQL syntax. After `native_query` returns a relation, you can use StarRocks to apply additional filters, joins, aggregations, projections, or load the result with [INSERT INTO](../../sql-statements/loading_unloading/INSERT.md).
+Use this function when the source database must run SQL that is hard to express against a single JDBC external table, such as a pre-filtered subquery, a join in the source database, or vendor-specific SQL syntax. After `native_query` returns a relation, you can use StarRocks to apply additional filters, joins, aggregations, projections, or load the result with `INSERT INTO`.
 
 This function is supported from v4.1 onwards.
 
