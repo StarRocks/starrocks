@@ -53,15 +53,23 @@ import java.util.Objects;
  * {@link BoundaryPlanner#validateTupleAgainstSchema} — the caller (a
  * {@link RowGroupStatisticsProvider}) just aggregates results across files.
  *
- * <p>Supported type window (intentionally conservative for P1):
+ * <p>Supported type window:
  * <ul>
  *   <li>Unannotated Parquet INT32/INT64 → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
  *   <li>Unannotated Parquet BOOLEAN → StarRocks BOOLEAN</li>
- *   <li>Parquet BINARY with UTF8 (string) logical annotation → StarRocks CHAR/VARCHAR
+ *   <li>Parquet INT32 with DATE annotation → StarRocks DATE</li>
+ *   <li>Parquet INT64 with TIMESTAMP annotation, {@code isAdjustedToUTC=false}
+ *       (MILLIS/MICROS/NANOS) → StarRocks DATETIME. UTC-adjusted timestamps are
+ *       deferred (the load applies a session-tz offset this reader cannot reproduce).</li>
+ *   <li>Parquet BINARY with UTF8 (string) annotation → StarRocks CHAR/VARCHAR
  *       (always marked truncated → forces data-tier fallback for string sort keys)</li>
  * </ul>
- * Anything else (DATE, DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, FLOAT, DOUBLE,
- * INT96, FIXED_LEN_BYTE_ARRAY, raw BINARY for VARBINARY) makes the reader throw
+ * <p>DATE/DATETIME values are additionally gated to {@code [1970-01-01, 9999-12-31]}; values
+ * outside that window (year &le; 0 mis-renders through the {@code yyyy} formatters, pre-1970
+ * has unverified FE/BE timestamp-division parity, pre-1582 has calendar-parity questions)
+ * fall back to data tier.
+ * Anything else (DECIMAL, UINT_*, UTC-adjusted/INT96 timestamps, JSON, BSON, UUID,
+ * FLOAT, DOUBLE, FIXED_LEN_BYTE_ARRAY, raw BINARY for VARBINARY) makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
  * load failure. Pure I/O failures surface as {@link StarRocksException}.
  */

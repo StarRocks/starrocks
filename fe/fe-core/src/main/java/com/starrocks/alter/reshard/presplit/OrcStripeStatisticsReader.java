@@ -44,16 +44,18 @@ import java.util.Objects;
  * tuples already carry the StarRocks-side primitive type and feed the same
  * format-agnostic {@link ParquetMetadataSampler}.
  *
- * <p>Supported type window (intentionally conservative, matching the Parquet
- * reader's integer subset):
+ * <p>Supported type window:
  * <ul>
  *   <li>ORC BYTE/SHORT/INT/LONG → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
+ *   <li>ORC DATE → StarRocks DATE (day-of-epoch, timezone-free), gated to
+ *       {@code [1970-01-01, 9999-12-31]} — values outside that window (year &le; 0
+ *       rendering, pre-1582 proleptic/hybrid calendar ambiguity) fall back to data tier</li>
  * </ul>
- * Everything else — STRING/CHAR/VARCHAR (whose stats would always need data-tier
- * fallback anyway), BOOLEAN, FLOAT/DOUBLE, DATE, TIMESTAMP, DECIMAL, and any
- * complex type — makes the reader throw {@link MetaTierUnavailableException} so
- * the pipeline falls back to data tier. That is NOT a load failure. Pure I/O
- * failures surface as {@link StarRocksException}.
+ * Everything else — STRING/CHAR/VARCHAR (data-tier fallback anyway), BOOLEAN,
+ * FLOAT/DOUBLE, TIMESTAMP/TIMESTAMP_INSTANT (reader-local-tz stats, deferred),
+ * DECIMAL, and any complex type — makes the reader throw
+ * {@link MetaTierUnavailableException} so the pipeline falls back to data tier. That is
+ * NOT a load failure. Pure I/O failures surface as {@link StarRocksException}.
  */
 public final class OrcStripeStatisticsReader {
 
