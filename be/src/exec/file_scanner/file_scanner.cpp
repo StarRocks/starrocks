@@ -18,6 +18,7 @@
 #include <cctype>
 #include <memory>
 
+#include "base/compression/compression_utils.h"
 #include "base/compression/stream_decompressor.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -40,7 +41,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "base/compression/compression_utils.h"
 
 namespace starrocks {
 

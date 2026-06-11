@@ -24,6 +24,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -35,7 +36,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "base/uid_util.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 
 namespace starrocks {
