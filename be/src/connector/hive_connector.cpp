@@ -582,6 +582,19 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _scanner_ctx.profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _scanner_ctx.profile.late_materialize_skip_rows_counter =
             ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
+    _scanner_ctx.profile.parquet_lazy_col_skip_rows_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyColSkipRows", TUnit::UNIT);
+    _scanner_ctx.profile.parquet_lazy_slot_triggered_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazySlotTriggered", TUnit::UNIT);
+    _scanner_ctx.profile.parquet_lazy_read_count_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyReadCount", TUnit::UNIT);
+    _scanner_ctx.profile.parquet_lazy_read_timer = ADD_TIMER(_runtime_profile, "ParquetLazyReadTime");
+    _scanner_ctx.profile.parquet_lazy_materialization_enabled_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyMaterializationEnabled", TUnit::UNIT);
+    COUNTER_SET(_scanner_ctx.profile.parquet_lazy_materialization_enabled_counter,
+                static_cast<int64_t>(config::parquet_late_materialization_enable ? 1 : 0));
+    _scanner_ctx.profile.parquet_lazy_full_trigger_count_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyFullTriggerCount", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
 

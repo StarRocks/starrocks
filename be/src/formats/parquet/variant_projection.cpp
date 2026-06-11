@@ -821,6 +821,9 @@ Status VariantProjectionHandler::backfill_sources(const Range<uint64_t>& full_ra
 
     auto lazy_hidden_chunk = std::make_shared<Chunk>();
     for (SlotId slot_id : _lazy_hidden_slot_ids) {
+        // Skip slots already triggered via LazyMaterializationContext.
+        if (active_chunk->is_slot_exist(slot_id)) continue;
+
         auto* hidden_src = _hidden_slot_index.at(slot_id);
         ColumnPtr col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
         if (has_filter) {
@@ -831,11 +834,36 @@ Status VariantProjectionHandler::backfill_sources(const Range<uint64_t>& full_ra
         }
         lazy_hidden_chunk->append_column(std::move(col), slot_id);
     }
+    if (lazy_hidden_chunk->num_columns() == 0) {
+        return Status::OK();
+    }
     if (lazy_hidden_chunk->num_rows() != active_chunk->num_rows()) {
         return Status::InternalError(fmt::format("Unmatched row count, active_rows={}, lazy_hidden_rows={}",
                                                  active_chunk->num_rows(), lazy_hidden_chunk->num_rows()));
     }
     active_chunk->merge(std::move(*lazy_hidden_chunk));
+    return Status::OK();
+}
+
+Status VariantProjectionHandler::materialize_hidden_source(SlotId slot_id, const Range<uint64_t>& range,
+                                                           const Filter* filter, ChunkPtr& active_chunk) {
+    // Check this is actually a lazy hidden source slot.
+    auto& lazy_ids = _lazy_hidden_slot_ids;
+    if (std::find(lazy_ids.begin(), lazy_ids.end(), slot_id) == lazy_ids.end()) {
+        return Status::OK();
+    }
+    // Already present (triggered earlier this iteration)?
+    if (active_chunk->is_slot_exist(slot_id)) {
+        return Status::OK();
+    }
+    auto it = _hidden_slot_index.find(slot_id);
+    if (it == _hidden_slot_index.end()) {
+        return Status::InternalError(
+                fmt::format("materialize_hidden_source: slot {} not in hidden_slot_index", slot_id));
+    }
+    ColumnPtr col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
+    RETURN_IF_ERROR(it->second->reader->read_range(range, filter, col));
+    active_chunk->append_column(std::move(col), slot_id);
     return Status::OK();
 }
 
