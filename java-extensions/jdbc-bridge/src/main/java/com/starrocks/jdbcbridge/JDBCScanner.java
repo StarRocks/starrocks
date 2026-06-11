@@ -82,7 +82,7 @@ public class JDBCScanner {
         this.isOracleDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("oracle");
         this.isPostgresDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("postgresql");
         String driverClassLower = scanContext.getDriverClassName().toLowerCase(Locale.ROOT);
-        this.isBigQueryDriver = driverClassLower.contains("bigquery") || driverClassLower.contains("googlebigquery");
+        this.isBigQueryDriver = driverClassLower.contains("bigquery");
         this.queryTimeZone = resolveQueryTimeZone(scanContext.getQueryTimeZone());
     }
 
@@ -313,12 +313,12 @@ public class JDBCScanner {
                     if (shouldConvertPostgresTimestampWithTimezoneColumn(i)) {
                         Timestamp timestampValue =
                                 resultObject instanceof Timestamp ? (Timestamp) resultObject : resultSet.getTimestamp(i + 1);
-                        dataColumn[resultNumRows] = convertPostgresTimestampWithTimezoneValue(timestampValue);
+                        dataColumn[resultNumRows] = convertTimestampWithTimezoneValue(timestampValue);
                     } else if (shouldConvertBigQueryTimestampColumn(i)) {
                         Timestamp timestampValue =
                                 resultObject instanceof Timestamp ? (Timestamp) resultObject : resultSet.getTimestamp(i + 1);
                         // BigQuery TIMESTAMP is UTC; reuse the same UTC→queryTZ adjustment.
-                        dataColumn[resultNumRows] = convertPostgresTimestampWithTimezoneValue(timestampValue);
+                        dataColumn[resultNumRows] = convertTimestampWithTimezoneValue(timestampValue);
                     } else {
                         dataColumn[resultNumRows] = resultObject;
                     }
@@ -452,14 +452,14 @@ public class JDBCScanner {
         return new Time(sourceMillis + computeTimezoneOffsetMillis(sourceMillis));
     }
 
-    private Timestamp convertPostgresTimestampWithTimezoneValue(Timestamp sourceValue) {
+    private Timestamp convertTimestampWithTimezoneValue(Timestamp sourceValue) {
         if (sourceValue == null || queryTimeZone == null) {
             return sourceValue;
         }
         // Avoid Timestamp.toInstant() as it uses the proleptic Gregorian calendar,
         // while java.sql.Timestamp uses the Julian calendar for dates before October 15, 1582.
         // This calendar mismatch causes incorrect date conversion for very old dates (e.g., year 0001).
-        // Instead, adjust via epoch millis like convertPostgresTimeWithTimezoneValue does.
+        // Instead, adjust via epoch millis like convertTimeWithTimezoneValue does.
         long sourceMillis = sourceValue.getTime();
         int nanos = sourceValue.getNanos();
         Timestamp result = new Timestamp(sourceMillis + computeTimezoneOffsetMillis(sourceMillis));

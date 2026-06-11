@@ -137,7 +137,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             return new OracleSchemaResolver(properties);
         } else if (driverClass.contains("sqlserver")) {
             return new SqlServerSchemaResolver();
-        } else if (driverClass.contains("bigquery") || driverClass.contains("googlebigquery")) {
+        } else if (driverClass.contains("bigquery")) {
             return new BigQuerySchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
