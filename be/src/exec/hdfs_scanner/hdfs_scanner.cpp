@@ -203,29 +203,25 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.timezone = _runtime_state->timezone();
     ctx.stats = &_app_stats;
 
-    if (ctx.obj_pool == nullptr) {
-        ctx.obj_pool = _runtime_state->obj_pool();
-    }
-
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_ctx->conjuncts.all_ctxs;
     opts.tuple_desc = _scanner_ctx->tuple_desc;
-    opts.obj_pool = ctx.obj_pool;
+    opts.obj_pool = _runtime_state->obj_pool();
     opts.runtime_filters = _scanner_ctx->runtime_filter_collector;
     opts.runtime_state = _runtime_state;
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
 
-    auto* s = ctx.obj_pool->add(new HdfsScannerState());
-    s->conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
-    RETURN_IF_ERROR(s->conjuncts_manager->parse_conjuncts());
-    s->predicate_parser = std::make_unique<ConnectorPredicateParser>(&_scanner_ctx->tuple_desc->decoded_slots());
-    ASSIGN_OR_RETURN(s->predicate_tree,
-                     s->conjuncts_manager->get_predicate_tree(s->predicate_parser.get(), s->predicate_free_pool));
-    s->runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>(
-            s->predicate_parser.get(), s->conjuncts_manager->unarrived_runtime_filters());
-    ctx.state = s;
+    ctx.predicates.conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
+    RETURN_IF_ERROR(ctx.predicates.conjuncts_manager->parse_conjuncts());
+    ctx.predicates.predicate_parser =
+            std::make_unique<ConnectorPredicateParser>(&_scanner_ctx->tuple_desc->decoded_slots());
+    ASSIGN_OR_RETURN(ctx.predicates.predicate_tree,
+                     ctx.predicates.conjuncts_manager->get_predicate_tree(ctx.predicates.predicate_parser.get(),
+                                                                          ctx.predicates.predicate_free_pool));
+    ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>(
+            ctx.predicates.predicate_parser.get(), ctx.predicates.conjuncts_manager->unarrived_runtime_filters());
 
     ctx.update_return_count_columns();
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
@@ -476,9 +472,8 @@ void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* paren
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
-    if (_scanner_ctx != nullptr && _scanner_ctx->state != nullptr &&
-        _scanner_ctx->state->estimated_mem_usage_per_split_task != 0) {
-        return _scanner_ctx->state->estimated_mem_usage_per_split_task;
+    if (_scanner_ctx != nullptr && _scanner_ctx->split.estimated_mem_usage_per_split_task != 0) {
+        return _scanner_ctx->split.estimated_mem_usage_per_split_task;
     }
     if (_shared_buffered_input_stream != nullptr) {
         return _shared_buffered_input_stream->estimated_mem_usage();
@@ -930,8 +925,8 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
 }
 
 void HdfsScannerContext::merge_split_tasks() {
-    DCHECK(state != nullptr);
-    auto& split_tasks = state->split_tasks;
+    DCHECK(predicates.conjuncts_manager != nullptr);
+    auto& split_tasks = this->split.split_tasks;
     if (split_tasks.size() < 2) return;
 
     // NOTE: the prerequisites of `split_tasks` are
@@ -986,15 +981,15 @@ void HdfsScannerContext::merge_split_tasks() {
 }
 
 void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
-    if (_scanner_ctx == nullptr || _scanner_ctx->state == nullptr) return;
+    if (_scanner_ctx == nullptr) return;
     size_t max_split_size = 0;
-    for (auto& t : _scanner_ctx->state->split_tasks) {
+    for (auto& t : _scanner_ctx->split.split_tasks) {
         size_t size = (t->split_end - t->split_start);
         max_split_size = std::max(max_split_size, size);
         split_tasks->emplace_back(std::move(t));
     }
     if (split_tasks->size() > 0) {
-        _scanner_ctx->state->estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
+        _scanner_ctx->split.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
 }
 

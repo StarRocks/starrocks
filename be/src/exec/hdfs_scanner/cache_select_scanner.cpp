@@ -95,7 +95,7 @@ Status CacheSelectScanner::_fetch_orc() {
     // resolve columns
     {
         std::unordered_set<std::string> known_column_names;
-        OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx->hive_column_names, reader->getType(),
+        OrcChunkReader::build_column_name_set(&known_column_names, &_scanner_ctx->hive_column_names, reader->getType(),
                                               _scanner_ctx->options.case_sensitive,
                                               _scanner_ctx->options.orc_use_column_names);
         RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(known_column_names));
@@ -124,7 +124,7 @@ Status CacheSelectScanner::_fetch_orc() {
         ASSIGN_OR_RETURN(std::unique_ptr<OrcMapping> orc_mapping,
                          OrcMappingFactory::build_mapping(slot_descriptors, reader->getType(),
                                                           _scanner_ctx->options.orc_use_column_names,
-                                                          _scanner_ctx->hive_column_names, orc_mapping_options));
+                                                          &_scanner_ctx->hive_column_names, orc_mapping_options));
 
         for (size_t i = 0; i < slot_descriptors.size(); i++) {
             SlotDescriptor* desc = slot_descriptors[i];

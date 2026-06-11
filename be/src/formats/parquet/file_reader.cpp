@@ -72,15 +72,15 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_build_split_tasks());
-    if (_scanner_ctx->state != nullptr && _scanner_ctx->state->split_tasks.size() > 0) {
-        _scanner_ctx->state->has_split_tasks = true;
+    if (_scanner_ctx->split.split_tasks.size() > 0) {
+        _scanner_ctx->split.has_split_tasks = true;
         _is_file_filtered = true;
         return Status::OK();
     }
 
-    if (_scanner_ctx->state != nullptr && _scanner_ctx->state->runtime_filter_scan_range_pruner != nullptr) {
+    if (_scanner_ctx->predicates.runtime_filter_scan_range_pruner != nullptr) {
         _runtime_filter_scan_range_pruner =
-                std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->state->runtime_filter_scan_range_pruner);
+                std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->predicates.runtime_filter_scan_range_pruner);
     }
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
@@ -146,21 +146,21 @@ Status FileReader::_build_split_tasks() {
         split_ctx->split_end = end_offset;
         split_ctx->file_metadata = _file_metadata;
         split_ctx->skip_rows_ctx = _skip_rows_ctx;
-        _scanner_ctx->state->split_tasks.emplace_back(std::move(split_ctx));
+        _scanner_ctx->split.split_tasks.emplace_back(std::move(split_ctx));
     }
     _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->state->split_tasks.size() <= 1) {
-        _scanner_ctx->state->split_tasks.clear();
+    if (_scanner_ctx->split.split_tasks.size() <= 1) {
+        _scanner_ctx->split.split_tasks.clear();
     }
 
     if (VLOG_OPERATOR_IS_ON) {
         std::stringstream ss;
-        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->state->split_tasks) {
+        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->split.split_tasks) {
             ss << "[" << ctx->split_start << "," << ctx->split_end << "]";
         }
         VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                      << ", split_tasks.size = " << _scanner_ctx->state->split_tasks.size() << ", range = " << ss.str();
+                      << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size() << ", range = " << ss.str();
     }
     return Status::OK();
 }
@@ -170,13 +170,10 @@ Status FileReader::_build_split_tasks() {
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     bool& filtered = group_reader->get_is_group_filtered();
     filtered = false;
-    if (_scanner_ctx->state == nullptr) {
-        return false;
-    }
-    auto visitor = PredicateFilterEvaluator{_scanner_ctx->state->predicate_tree, group_reader.get(),
+    auto visitor = PredicateFilterEvaluator{_scanner_ctx->predicates.predicate_tree, group_reader.get(),
                                             _scanner_ctx->options.parquet_page_index_enable,
                                             _scanner_ctx->options.parquet_bloom_filter_enable};
-    auto sparse_range = _scanner_ctx->state->predicate_tree.visit(visitor);
+    auto sparse_range = _scanner_ctx->predicates.predicate_tree.visit(visitor);
     _group_reader_param.stats->bloom_filter_tried_counter += visitor.counter.bloom_filter_tried_counter;
     _group_reader_param.stats->bloom_filter_success_counter += visitor.counter.bloom_filter_success_counter;
     _group_reader_param.stats->statistics_tried_counter += visitor.counter.statistics_tried_counter;
@@ -236,7 +233,7 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _scanner_ctx->column_access_paths,
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, &_scanner_ctx->column_access_paths,
                                        _group_reader_param.read_cols, existed_column_names);
     _no_materialized_column_scan =
             (_group_reader_param.read_cols.empty() && _scanner_ctx->reserved_field_slots.empty());

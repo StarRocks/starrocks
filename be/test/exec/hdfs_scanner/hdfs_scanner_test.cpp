@@ -154,7 +154,6 @@ HdfsScannerContext* HdfsScannerTest::_create_ctx(const std::string& file, THdfsS
 
 void HdfsScannerTest::build_hive_column_names(HdfsScannerContext* ctx, const TupleDescriptor* tuple_desc,
                                               bool diff_case_sensitive) {
-    std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
         std::string col_name(slot->col_name());
         if (diff_case_sensitive && std::isupper(col_name[0])) {
@@ -162,9 +161,8 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerContext* ctx, const Tup
         } else if (diff_case_sensitive && std::islower(col_name[0])) {
             std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::toupper);
         }
-        hive_column_names->emplace_back(col_name);
+        ctx->hive_column_names.emplace_back(col_name);
     }
-    ctx->hive_column_names = hive_column_names;
 }
 
 TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
@@ -2384,7 +2382,7 @@ TEST_F(HdfsScannerTest, TestCSVDifferentOrderColumn) {
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* ctx = _create_ctx(small_file, range, tuple_desc);
         std::vector<std::string> hive_column_names{"name2", "age", "name1", "newly"};
-        ctx->hive_column_names = &hive_column_names;
+        ctx->hive_column_names = std::move(hive_column_names);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, ctx);
@@ -2433,7 +2431,7 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* ctx = _create_ctx(small_file, range, tuple_desc);
         std::vector<std::string> hive_column_names{"id", "struct", "map"};
-        ctx->hive_column_names = &hive_column_names;
+        ctx->hive_column_names = std::move(hive_column_names);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, ctx);
@@ -2474,7 +2472,7 @@ TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* ctx = _create_ctx(small_file, range, tuple_desc);
         std::vector<std::string> hive_column_names{"id", "array", "sex"};
-        ctx->hive_column_names = &hive_column_names;
+        ctx->hive_column_names = std::move(hive_column_names);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, ctx);
@@ -2505,7 +2503,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     auto* common_range = _create_scan_range(small_file, 0, 0);
     auto* ctx = _create_ctx(small_file, common_range, tuple_desc);
     std::vector<std::string> hive_column_names{"id"};
-    ctx->hive_column_names = &hive_column_names;
+    ctx->hive_column_names = std::move(hive_column_names);
 
     {
         auto* range = _create_scan_range(small_file, 0, 0);

@@ -401,7 +401,7 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
 
 Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
-    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx->hive_column_names, reader->getType(),
+    OrcChunkReader::build_column_name_set(&known_column_names, &_scanner_ctx->hive_column_names, reader->getType(),
                                           _scanner_ctx->options.case_sensitive,
                                           _scanner_ctx->options.orc_use_column_names);
     RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(known_column_names));
@@ -457,15 +457,15 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
         ctx->footer = footer;
         ctx->split_start = info.offset();
         ctx->split_end = info.offset() + info.length();
-        _scanner_ctx->state->split_tasks.emplace_back(std::move(ctx));
+        _scanner_ctx->split.split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->state->split_tasks.size() <= 1) {
-        _scanner_ctx->state->split_tasks.clear();
+    if (_scanner_ctx->split.split_tasks.size() <= 1) {
+        _scanner_ctx->split.split_tasks.clear();
     }
     VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                  << ", split_tasks.size = " << _scanner_ctx->state->split_tasks.size();
+                  << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size();
 
     return Status::OK();
 }
@@ -507,8 +507,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
-    if (_scanner_ctx->state->split_tasks.size() > 0) {
-        _scanner_ctx->state->has_split_tasks = true;
+    if (_scanner_ctx->split.split_tasks.size() > 0) {
+        _scanner_ctx->split.has_split_tasks = true;
         _should_skip_file = true;
         return Status::OK();
     }
@@ -528,7 +528,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx->timezone));
-    _orc_reader->set_hive_column_names(_scanner_ctx->hive_column_names);
+    _orc_reader->set_hive_column_names(&_scanner_ctx->hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_ctx->options.case_sensitive);
     _orc_reader->set_use_orc_column_names(_scanner_ctx->options.orc_use_column_names);
     // for hive table, we set this flag

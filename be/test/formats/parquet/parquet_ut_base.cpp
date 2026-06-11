@@ -268,15 +268,13 @@ void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = {true, true};
-    ctx->obj_pool = runtime_state->obj_pool();
-    auto* s = ctx->obj_pool->add(new HdfsScannerState());
-    ctx->state = s;
-    s->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
-    ASSERT_TRUE(s->conjuncts_manager->parse_conjuncts().ok());
+    ctx->predicates.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ASSERT_TRUE(ctx->predicates.conjuncts_manager->parse_conjuncts().ok());
     ConnectorPredicateParser predicate_parser{&tuple_desc->decoded_slots()};
-    auto st = s->conjuncts_manager->get_predicate_tree(&predicate_parser, s->predicate_free_pool);
+    auto st = ctx->predicates.conjuncts_manager->get_predicate_tree(&predicate_parser,
+                                                                    ctx->predicates.predicate_free_pool);
     ASSERT_TRUE(st.ok());
-    s->predicate_tree = st.value();
+    ctx->predicates.predicate_tree = st.value();
 }
 
 void ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::type opcode, starrocks::SlotId slot_id,

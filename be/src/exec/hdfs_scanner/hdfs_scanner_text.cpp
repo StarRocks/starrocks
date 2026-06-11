@@ -457,7 +457,7 @@ StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
     // For some table like file table, there is no hive_column_names at all.
     // So we use slot order defined in table schema.
-    if (_scanner_ctx->hive_column_names->empty()) {
+    if (_scanner_ctx->hive_column_names.empty()) {
         _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx->materialized_columns.size());
         for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
             _materialize_slots_index_2_csv_column_index[i] = i;
@@ -470,8 +470,8 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)
     std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;
 
-    for (size_t i = 0; i < _scanner_ctx->hive_column_names->size(); i++) {
-        const std::string& name = (*_scanner_ctx->hive_column_names)[i];
+    for (size_t i = 0; i < _scanner_ctx->hive_column_names.size(); i++) {
+        const std::string& name = _scanner_ctx->hive_column_names[i];
         const std::string formatted_column_name = _scanner_ctx->formatted_name(name);
         formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
     }

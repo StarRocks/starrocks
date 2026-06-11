@@ -3967,7 +3967,7 @@ TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyOnInvalidAccessPath) 
     field_arr->children().emplace_back(std::move(offset_0));
     root->children().emplace_back(std::move(field_arr));
     column_access_paths.emplace_back(std::move(root));
-    param->scanner_ctx->column_access_paths = &column_access_paths;
+    param->scanner_ctx->column_access_paths = std::move(column_access_paths);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));

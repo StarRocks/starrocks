@@ -395,7 +395,7 @@ VariantProjectionHandler::~VariantProjectionHandler() = default;
 // ── _build_shredded_hints ────────────────────────────────────────────────────
 
 VariantShreddedReadHints VariantProjectionHandler::_build_shredded_hints(std::string_view column_name) const {
-    return build_variant_shredded_hints(_param.scanner_ctx->column_access_paths, column_name);
+    return build_variant_shredded_hints(&_param.scanner_ctx->column_access_paths, column_name);
 }
 
 // ── setup_readers ────────────────────────────────────────────────────────────

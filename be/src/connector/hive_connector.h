@@ -36,7 +36,7 @@ public:
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
-    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
+    ConnectorChunkSinkProviderPtr create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
 };
@@ -120,24 +120,12 @@ private:
     // Partition-level predicate evaluation — not passed to scanners.
     struct PartitionFilter {
         std::vector<ExprContext*> conjunct_ctxs;
-        std::vector<ExprContext*> values;
         bool has_conjuncts = false;
         bool filter_by_eval = false;
     };
     PartitionFilter _partition_filter;
 
-    // ExprContexts for extended column values (iceberg data_seq_num, etc.).
-    // Lifetime managed by _pool; passed to HdfsScannerContext before scanner init.
-    std::vector<ExprContext*> _extended_column_expr_ctxs;
-
-    // Per-range scan_range_id assigned by the global late materialization context.
-    int32_t _scan_range_id = -1;
-
     bool _no_more_chunks = false;
-    const TupleDescriptor* _min_max_tuple_desc = nullptr;
-    std::vector<std::string> _hive_column_names;
-    const HiveTableDescriptor* _hive_table = nullptr;
-    std::vector<ColumnAccessPathPtr> _column_access_paths;
 };
 
 } // namespace starrocks::connector

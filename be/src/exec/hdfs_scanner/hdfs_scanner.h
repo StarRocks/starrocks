@@ -38,6 +38,7 @@
 
 namespace starrocks {
 
+class HiveTableDescriptor;
 class RuntimeFilterProbeCollector;
 
 struct HdfsSplitContext : public pipeline::ScanSplitContext {
@@ -264,43 +265,17 @@ struct TableSpecificData {
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file;
 };
 
-// Owns all non-copyable scanner state built by HdfsScanner::_build_scanner_context().
-// Allocated in HdfsScannerContext::obj_pool (lifetime tied to RuntimeState fragment pool).
-// HdfsScannerContext holds only a raw non-owning pointer so the context stays copyable.
-//
-// Predicate member declaration order is significant (C++ destroys in reverse order):
-//   split_tasks (independent, destroyed first)
-//   → runtime_filter_scan_range_pruner (holds ref into conjuncts_manager)
-//   → predicate_tree  (holds ColumnPredicate* into predicate_free_pool)
-//   → predicate_parser
-//   → predicate_free_pool
-//   → conjuncts_manager (dies last)
-struct HdfsScannerState {
-    // --- predicate state ---
-    std::unique_ptr<ScanConjunctsManager> conjuncts_manager;
-    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
-    std::unique_ptr<ConnectorPredicateParser> predicate_parser;
-    PredicateTree predicate_tree;
-    std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
-
-    // --- split task state (destroyed before predicate state; independent) ---
-    std::vector<HdfsSplitContextPtr> split_tasks;
-    bool has_split_tasks = false;
-    size_t estimated_mem_usage_per_split_task = 0;
-};
-
 // HdfsScannerContext carries all state needed by an HdfsScanner from creation
 // through close().  It was formed by merging the former HdfsScannerParams (the
 // immutable input struct filled by HiveDataSource) with the former working-state
 // struct (which held a back-pointer to params).  The merge eliminates the
 // ctx.params->field double-indirection that made every callsite noisy.
 //
-// Copy semantics: all fields are POD or trivially copyable; the default copy
-// constructor and assignment work correctly.  HiveDataSource keeps a shared
-// template (_scanner_ctx) and _init_scanner() copies it with a plain `= _scanner_ctx`,
-// then overwrites only the per-range fields (scan_range, file_path, etc.).
-// Non-copyable scanner state (predicates, split tasks) lives in HdfsScannerState,
-// which is obj_pool-allocated; ctx holds only a raw non-owning pointer (state).
+// Pointer-based zero-copy: HdfsScannerContext is passed by pointer into scanners
+// (never copied), so non-copyable unique_ptr members (predicates, split tasks)
+// live directly in this struct.  HiveDataSource keeps a shared template
+// (_scanner_ctx) and _init_scanner() assigns its pointer; per-range fields are
+// overwritten in-place without copying.
 struct HdfsScannerContext {
     struct ColumnInfo {
         int idx_in_chunk;
@@ -352,9 +327,10 @@ struct HdfsScannerContext {
 
     const TupleDescriptor* tuple_desc = nullptr;
     const TupleDescriptor* min_max_tuple_desc = nullptr;
-    std::vector<std::string>* hive_column_names = nullptr;
+    const HiveTableDescriptor* hive_table = nullptr;
+    std::vector<std::string> hive_column_names;
     std::string avro_schema_json;
-    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
+    std::vector<ColumnAccessPathPtr> column_access_paths;
 
     // TODO: probably should be removed in later version.
     std::atomic<int32_t>* lazy_column_coalesce_counter;
@@ -404,11 +380,6 @@ struct HdfsScannerContext {
 
     HdfsScannerStats* stats = nullptr;
 
-    // Both set by HdfsScanner::_build_scanner_context() during open(); null until then.
-    // state is allocated from obj_pool so they share the same lifetime.
-    ObjectPool* obj_pool = nullptr;
-    HdfsScannerState* state = nullptr;
-
     bool can_use_count_optimization() const;
 
     bool can_use_min_max_optimization() const;
@@ -452,6 +423,33 @@ struct HdfsScannerContext {
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
+
+    // ObjectPool for allocations built by _build_scanner_context().
+    // Prefer HiveDataSource::_pool (shorter lifetime); fall back to
+    // runtime_state->obj_pool() in tests and non-connector paths.
+    ObjectPool* obj_pool = nullptr;
+
+    // Embedded value structs — no pointers, no pool allocation.
+    // Since ctx is pointer-passed (never copied), unique_ptr members work naturally.
+
+    struct SplitState {
+        std::vector<HdfsSplitContextPtr> split_tasks;
+        bool has_split_tasks = false;
+        size_t estimated_mem_usage_per_split_task = 0;
+    } split;
+
+    // Destruction order within predicates matters (C++ reverse declaration):
+    //   runtime_filter_scan_range_pruner (refs into conjuncts_manager) → destroyed 1st
+    //   predicate_tree / predicate_parser (raw ptrs into predicate_free_pool)
+    //   predicate_free_pool (owns ColumnPredicates)
+    //   conjuncts_manager → destroyed last
+    struct PredicateState {
+        std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
+        PredicateTree predicate_tree;
+        std::unique_ptr<ConnectorPredicateParser> predicate_parser;
+        std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
+        std::unique_ptr<ScanConjunctsManager> conjuncts_manager;
+    } predicates;
 
     void merge_split_tasks();
 };
@@ -512,9 +510,7 @@ public:
     // once it can interleave predicate evaluation with column loading.
     virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
-    bool has_split_tasks() const {
-        return _scanner_ctx != nullptr && _scanner_ctx->state != nullptr && _scanner_ctx->state->has_split_tasks;
-    }
+    bool has_split_tasks() const { return _scanner_ctx != nullptr && _scanner_ctx->split.has_split_tasks; }
 
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
