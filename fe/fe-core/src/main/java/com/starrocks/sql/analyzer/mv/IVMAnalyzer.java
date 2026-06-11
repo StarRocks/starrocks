@@ -293,9 +293,7 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support HAVING with aggregate functions, " +
                     "but got: %s", ExprToSql.toSql(selectRelation.getHaving()));
         }
-<<<<<<< HEAD
         IvmBaseTableValidator.validate(selectRelation);
-=======
         // GROUPING SETS / ROLLUP / CUBE have no IVM delta rule (they lower to a Repeat operator), and
         // GROUP BY ALL would fold the prepended __ROW_ID__ output into the grouping keys and double-encode
         // the row id at refresh. Only plain GROUP BY keeps the encoded __ROW_ID__ aligned with the keys.
@@ -304,7 +302,6 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support %s for incremental view maintenance",
                     groupByClause.getGroupingType());
         }
->>>>>>> c1225f29ecf... [BugFix] Fix __ROW_ID__ group keys for SELECT DISTINCT and positional GROUP BY in incremental MV (#74493)
         boolean isRetractable = checkAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
         isRetractable |= checkRelation(innerRelation);
