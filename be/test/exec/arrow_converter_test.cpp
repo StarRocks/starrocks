@@ -984,8 +984,8 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_naive_preserves_wall_cl
         ctx.state = &state;
         ColumnPtr column = TimestampColumn::create();
         Filter filter(1, 1);
-        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), column, 0, 0, &filter,
-                                                                 &ctx));
+        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), column, 0, 0,
+                                                                 &filter, &ctx));
         ASSERT_EQ(down_cast<TimestampColumn*>(column.get())->get_data()[0],
                   string_to_datetime<TYPE_DATETIME>("1970-01-01 00:00:00"))
                 << "naive timestamp must not be shifted by session timezone";
