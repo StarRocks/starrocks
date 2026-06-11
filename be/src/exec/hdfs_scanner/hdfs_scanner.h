@@ -423,7 +423,7 @@ struct HdfsScannerContext {
     bool can_use_count_optimization() const;
 
     bool can_use_min_max_optimization() const;
-    
+
     void update_with_none_existed_slot(SlotDescriptor* slot);
     void update_return_count_columns();
     void update_min_max_columns();
