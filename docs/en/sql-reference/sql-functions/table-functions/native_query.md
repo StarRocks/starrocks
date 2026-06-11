@@ -23,7 +23,7 @@ FROM TABLE(<jdbc_catalog>.native_query('<select_sql>')) [AS] <alias>
 
 ### `jdbc_catalog`
 
-The name of a [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md). Only JDBC catalogs support this function.
+The name of a JDBC catalog. Only JDBC catalogs support this function.
 
 ### `select_sql`
 
