@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -21,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -33,9 +33,13 @@ import java.util.Set;
 
 /**
  * Derive guard predicates from OR expressions where every branch contains
- * a comparison on a common pivot column. The guard is a single-slot predicate
+ * a comparison on a common pivot column.  The guard is a single-slot predicate
  * that enters conjunct_ctxs_by_slot in the BE, making the pivot column ACTIVE
  * while branch-local columns remain LAZY.
+ * <p>
+ * This is a one-pass transformation (like ScalarRangePredicateExtractor),
+ * NOT a ScalarOperatorRewriteRule.  It is called directly from
+ * PushDownPredicateScanRule after the scalar rewriter completes.
  * <p>
  * Example:
  * <pre>
@@ -50,60 +54,30 @@ import java.util.Set;
  *     OR (l_shipdate BETWEEN '1998-06-15' AND '1998-06-15' AND l_returnflag = 'A'))
  * </pre>
  * <p>
- * This is V1: only handles top-level OR conjuncts (children of the root AND).
- * The guard is purely additive (AND with the original), so correctness is
- * preserved even if guard logic has gaps.
+ * V1: processes top-level OR conjuncts (children of the root AND). The guard
+ * is purely additive (AND with the original), so correctness is preserved.
  */
-public class DeriveGuardPredicateRule extends BaseScalarOperatorRewriteRule {
+public class DeriveGuardPredicateRule {
 
     /**
-     * Track OR nodes that have already been wrapped with a guard,
-     * to prevent infinite rewrite loops across fixpoint iterations.
-     * After wrapping, the original OR remains in the tree as a child
-     * of AND(guard, OR) and would be re-processed on the next iteration.
-     * Keyed by System.identityHashCode.
-     * <p>
-     * Cleared at the start of each ScalarOperatorRewriter.rewrite() call
-     * (when context.changeNum() == 0, indicating context.reset() was just called).
+     * Apply guard derivation to the predicate tree.  Called once per query,
+     * outside any fixpoint rewrite loop.
      */
-    private final Set<Integer> wrappedOrIdentities = new HashSet<>();
-    private int clearEpoch = 0;
-
-    @Override
-    public boolean isOnlyOnce() {
-        return true;
-    }
-
-    @Override
-    public ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context) {
-        // Clear the seen set at the start of a new rewrite pass
-        if (context.changeNum() == 0 && clearEpoch != 0) {
-            wrappedOrIdentities.clear();
-            clearEpoch = 0;
-        }
-        clearEpoch = context.changeNum();
-
-        // Flatten the root AND to find all top-level OR conjuncts.
-        List<ScalarOperator> conjuncts = Utils.extractConjuncts(root);
+    public static ScalarOperator apply(ScalarOperator predicate) {
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         boolean changed = false;
         for (int i = 0; i < conjuncts.size(); i++) {
             ScalarOperator conjunct = conjuncts.get(i);
             if (conjunct instanceof CompoundPredicateOperator
                     && ((CompoundPredicateOperator) conjunct).isOr()) {
-                // Skip ORs already wrapped in a previous iteration
-                if (wrappedOrIdentities.contains(System.identityHashCode(conjunct))) {
-                    continue;
-                }
                 ScalarOperator wrapped = tryDeriveGuard((CompoundPredicateOperator) conjunct);
                 if (wrapped != conjunct) {
                     conjuncts.set(i, wrapped);
-                    wrappedOrIdentities.add(System.identityHashCode(conjunct));
-                    context.change();
                     changed = true;
                 }
             }
         }
-        return changed ? Utils.compoundAnd(conjuncts) : root;
+        return changed ? Utils.compoundAnd(conjuncts) : predicate;
     }
 
     /**
@@ -111,6 +85,7 @@ public class DeriveGuardPredicateRule extends BaseScalarOperatorRewriteRule {
      * Returns the wrapped expression AND(guard, orExpr) if guards can be derived,
      * or the original orExpr unchanged.
      */
+    @VisibleForTesting
     static ScalarOperator tryDeriveGuard(CompoundPredicateOperator orExpr) {
         List<ScalarOperator> disjuncts = Utils.extractDisjunctive(orExpr);
         if (disjuncts.size() <= 1) {

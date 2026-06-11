@@ -21,7 +21,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
@@ -109,8 +108,7 @@ public class DeriveGuardPredicateRuleTest {
     public void testSingleDisjunct() {
         // Single disjunct (not really an OR) — no rewriting
         ScalarOperator expr = eq(colInt(1, "a"), ConstantOperator.createInt(1));
-        ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
-        ScalarOperator result = new DeriveGuardPredicateRule().apply(expr, context);
+        ScalarOperator result = DeriveGuardPredicateRule.apply(expr);
         assertEquals(expr, result);
     }
 
@@ -141,8 +139,7 @@ public class DeriveGuardPredicateRuleTest {
                 eq(b, ConstantOperator.createInt(2))
         );
 
-        ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
-        ScalarOperator result = new DeriveGuardPredicateRule().apply(andExpr, context);
+        ScalarOperator result = DeriveGuardPredicateRule.apply(andExpr);
         assertEquals(andExpr, result);
     }
 
