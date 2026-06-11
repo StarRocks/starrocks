@@ -26,6 +26,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/fragment_lifecycle.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -59,6 +60,33 @@ private:
     ThreadPool* _tp;
     ColocateExecutionGroup* _group;
 };
+
+class MockFragmentLifecycle final : public FragmentLifecycle {
+public:
+    void on_execution_group_finished() override { ++num_finished_groups; }
+
+    size_t num_finished_groups = 0;
+};
+
+TEST(ExecutionGroupTest, NotifiesFragmentLifecycleOnceWhenAllPipelinesFinish) {
+    NormalExecutionGroup group;
+    MockFragmentLifecycle lifecycle;
+    group.attach_fragment_lifecycle(&lifecycle);
+
+    Pipeline pipeline1(1, {}, &group);
+    Pipeline pipeline2(2, {}, &group);
+    group.add_pipeline(&pipeline1);
+    group.add_pipeline(&pipeline2);
+
+    group.count_down_pipeline();
+    EXPECT_EQ(0, lifecycle.num_finished_groups);
+
+    group.count_down_pipeline();
+    EXPECT_EQ(1, lifecycle.num_finished_groups);
+
+    group.count_down_pipeline();
+    EXPECT_EQ(1, lifecycle.num_finished_groups);
+}
 
 TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
     std::unique_ptr<ThreadPool> tp;

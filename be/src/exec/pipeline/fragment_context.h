@@ -33,6 +33,7 @@
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/fragment_lifecycle.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/runtime/fragment_runtime_state.h"
@@ -58,7 +59,7 @@ class PassThroughChunkBufferGuard;
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
-class FragmentContext {
+class FragmentContext : public FragmentLifecycle {
     friend class FragmentContextManager;
 
 public:
@@ -97,6 +98,7 @@ public:
 
     bool all_execution_groups_finished() const { return _num_finished_execution_groups == _execution_groups.size(); }
     void count_down_execution_group(size_t val = 1);
+    void on_execution_group_finished() override { count_down_execution_group(); }
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();

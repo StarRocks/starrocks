@@ -25,6 +25,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/fragment_lifecycle.h"
 #include "exec/pipeline/primitives/pipeline_group.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -85,8 +86,9 @@ public:
     virtual bool is_empty() const = 0;
     virtual std::string to_string() const = 0;
     void attach_driver_executor(DriverExecutor* executor) { _executor = executor; }
+    void attach_fragment_lifecycle(FragmentLifecycle* lifecycle) { _fragment_lifecycle = lifecycle; }
 
-    void count_down_pipeline(RuntimeState* state) override;
+    void count_down_pipeline() override;
 
     size_t total_logical_dop() const { return _total_logical_dop; }
 
@@ -113,6 +115,7 @@ protected:
     std::atomic<size_t> _num_finished_pipelines{};
     size_t _num_pipelines{};
     DriverExecutor* _executor;
+    FragmentLifecycle* _fragment_lifecycle = nullptr;
     PipelineRawPtrs _pipelines;
     void clear_all_drivers(Pipelines& pipelines);
 };
