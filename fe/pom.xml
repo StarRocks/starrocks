@@ -1425,6 +1425,12 @@ under the License.
                         <groupId>org.apache.hadoop</groupId>
                         <artifactId>hadoop-client-runtime</artifactId>
                     </exclusion>
+                  <!-- FE uses slf4j 1.7.x with log4j-slf4j-impl; exclude delta's slf4j 2.x binding to avoid
+                       NoClassDefFoundError: org/slf4j/spi/LoggingEventBuilder at startup -->
+                  <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-slf4j2-impl</artifactId>
+                  </exclusion>
                 </exclusions>
             </dependency>
 
