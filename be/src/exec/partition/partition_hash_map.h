@@ -384,8 +384,8 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, fal
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
-                                ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                                ObjectPool* obj_pool, NewPartitionCallback&& new_partition_cb,
+                                PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<const ColumnType*>(key_columns[0].get());
         const auto key_column_data = key_column->immutable_data();
@@ -410,8 +410,8 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<tr
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
-                                ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                                ObjectPool* obj_pool, NewPartitionCallback&& new_partition_cb,
+                                PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<const NullableColumn>(key_columns[0].get());
         const auto key_column_data =
@@ -434,8 +434,8 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase<false, fal
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
-                                ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                                ObjectPool* obj_pool, NewPartitionCallback&& new_partition_cb,
+                                PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<const BinaryColumn*>(key_columns[0].get());
         RETURN_IF_ERROR(append_chunk_for_one_key<EnablePassthrough>(
@@ -461,8 +461,8 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase<tr
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
-                                ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                                ObjectPool* obj_pool, NewPartitionCallback&& new_partition_cb,
+                                PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0].get());
         const auto* key_column = down_cast<const BinaryColumn*>(nullable_key_column->data_column().get());
@@ -500,8 +500,8 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
-                                ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                                ObjectPool* obj_pool, NewPartitionCallback&& new_partition_cb,
+                                PartitionChunkConsumer&& partition_chunk_consumer) {
         if (is_passthrough) {
             return is_passthrough;
         }
@@ -525,12 +525,12 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
         RETURN_IF_ERROR(append_chunk_for_one_key<EnablePassthrough>(
                 hash_map, chunk,
                 [&](uint32_t offset) {
-                    return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
+            return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
                 },
                 [&](const KeyType& key) {
-                    uint8_t* pos = mem_pool->allocate(key.size);
-                    strings::memcpy_inlined(pos, key.data, key.size);
-                    return Slice{pos, key.size};
+            uint8_t* pos = mem_pool->allocate(key.size);
+            strings::memcpy_inlined(pos, key.data, key.size);
+            return Slice{pos, key.size};
                 },
                 obj_pool, std::forward<NewPartitionCallback>(new_partition_cb),
                 std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
@@ -569,8 +569,8 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
-                                ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                                ObjectPool* obj_pool, NewPartitionCallback&& new_partition_cb,
+                                PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(fixed_byte_size != -1);
 
         if (is_passthrough) {
@@ -596,8 +596,10 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<
         }
 
         RETURN_IF_ERROR(append_chunk_for_one_key<EnablePassthrough>(
-                hash_map, chunk, [&](uint32_t offset) { return keys[offset]; },
-                [&](const FixedSizeSliceKey& key) { return key; }, obj_pool,
+                hash_map, chunk, [&](uint32_t offset) {
+            return keys[offset]; },
+                [&](const FixedSizeSliceKey& key) {
+            return key; }, obj_pool,
                 std::forward<NewPartitionCallback>(new_partition_cb),
                 std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
 

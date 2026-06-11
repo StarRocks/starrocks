@@ -153,11 +153,10 @@ private:
                                      NewPartitionCallback&& new_partition_cb,
                                      PartitionChunkConsumer&& partition_chunk_consumer) {
         if (!_is_passthrough) {
-            ASSIGN_OR_RETURN(_is_passthrough,
-                             hash_map_with_key.template append_chunk<EnablePassthrough>(
-                                     chunk, _partition_columns, _mem_pool, _obj_pool.get(),
-                                     std::forward<NewPartitionCallback>(new_partition_cb),
-                                     std::forward<PartitionChunkConsumer>(partition_chunk_consumer)));
+            ASSIGN_OR_RETURN(_is_passthrough, hash_map_with_key.template append_chunk<EnablePassthrough>(
+                                                      chunk, _partition_columns, _mem_pool, _obj_pool.get(),
+                                                      std::forward<NewPartitionCallback>(new_partition_cb),
+                                                      std::forward<PartitionChunkConsumer>(partition_chunk_consumer)));
         }
         if (_is_passthrough) {
             _limited_buffer->push(chunk);
