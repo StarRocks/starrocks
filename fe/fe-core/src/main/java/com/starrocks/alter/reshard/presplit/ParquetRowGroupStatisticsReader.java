@@ -33,11 +33,14 @@ import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.StringLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -153,11 +156,20 @@ public final class ParquetRowGroupStatisticsReader {
                 yield logicalAnnotation instanceof DateLogicalTypeAnnotation
                         && starRocksPrimitive == PrimitiveType.DATE;
             }
-            case INT64 -> logicalAnnotation == null
-                    && (starRocksPrimitive == PrimitiveType.TINYINT
-                        || starRocksPrimitive == PrimitiveType.SMALLINT
-                        || starRocksPrimitive == PrimitiveType.INT
-                        || starRocksPrimitive == PrimitiveType.BIGINT);
+            case INT64 -> {
+                if (logicalAnnotation == null) {
+                    yield starRocksPrimitive == PrimitiveType.TINYINT
+                            || starRocksPrimitive == PrimitiveType.SMALLINT
+                            || starRocksPrimitive == PrimitiveType.INT
+                            || starRocksPrimitive == PrimitiveType.BIGINT;
+                }
+                // Only local (non-UTC-adjusted) timestamps: the load stores those ticks
+                // verbatim as the DATETIME wall clock, so the FE-rendered boundary matches.
+                // UTC-adjusted timestamps get a session-tz offset at load time → data tier.
+                yield logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation
+                        && !timestampAnnotation.isAdjustedToUTC()
+                        && starRocksPrimitive == PrimitiveType.DATETIME;
+            }
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> logicalAnnotation instanceof StringLogicalTypeAnnotation
                     && (starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR);
@@ -230,6 +242,15 @@ public final class ParquetRowGroupStatisticsReader {
             rejectUnsafeTemporalDate(date);
             return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER));
         }
+        if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
+            long ticks = ((Number) parquetValue).longValue();
+            LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
+            // Same safe window as DATE. A negative (pre-1970) tick lands on a date before
+            // MIN_SUPPORTED_DATE and is rejected here, which also keeps the floorDiv/floorMod
+            // conversion above in the range where it is provably identical to BE's signed division.
+            rejectUnsafeTemporalDate(dateTime.toLocalDate());
+            return Variant.of(location.starRocksColumn.getType(), renderDateTime(dateTime));
+        }
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
@@ -242,6 +263,40 @@ public final class ParquetRowGroupStatisticsReader {
                     "DATE/DATETIME meta tier supports [1970-01-01, 9999-12-31] only; value "
                             + date + " is outside that window");
         }
+    }
+
+    private static LocalDateTime epochTicksToUtcDateTime(long ticks, LogicalTypeAnnotation.TimeUnit unit) {
+        long ticksPerSecond;
+        long nanosPerTick;
+        switch (unit) {
+            case MILLIS -> {
+                ticksPerSecond = 1_000L;
+                nanosPerTick = 1_000_000L;
+            }
+            case MICROS -> {
+                ticksPerSecond = 1_000_000L;
+                nanosPerTick = 1_000L;
+            }
+            case NANOS -> {
+                ticksPerSecond = 1_000_000_000L;
+                nanosPerTick = 1L;
+            }
+            default -> throw new IllegalArgumentException("unsupported Parquet timestamp unit " + unit);
+        }
+        // floorDiv/floorMod keep pre-1970 (negative) ticks correct.
+        long epochSecond = Math.floorDiv(ticks, ticksPerSecond);
+        long nanoOfSecond = Math.floorMod(ticks, ticksPerSecond) * nanosPerTick;
+        return LocalDateTime.ofEpochSecond(epochSecond, (int) nanoOfSecond, ZoneOffset.UTC);
+    }
+
+    private static String renderDateTime(LocalDateTime dateTime) {
+        // Mirrors DateVariant.getStringValue: second precision unless there is a
+        // sub-second part, then 6-digit microseconds. parseStrictDateTime round-trips both.
+        if (dateTime.getNano() == 0) {
+            return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
+        }
+        return dateTime.format(DateUtils.DATE_TIME_FORMATTER)
+                + "." + String.format("%06d", dateTime.getNano() / 1000);
     }
 
     private static ColumnChunkMetaData findColumnChunk(BlockMetaData block, ColumnPath path) {

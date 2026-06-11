@@ -23,6 +23,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.MessageType;
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
+import org.apache.parquet.schema.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -333,6 +337,116 @@ class ParquetRowGroupStatisticsReaderTest {
                 ParquetRowGroupStatisticsReader.read(
                         statusOf(parquetPath), new Configuration(),
                         new Column("event_day", DateType.DATE)));
+    }
+
+    private static MessageType timestampSchema(LogicalTypeAnnotation.TimeUnit unit, boolean isAdjustedToUTC) {
+        return Types.buildMessage()
+                .required(PrimitiveTypeName.INT64)
+                .as(LogicalTypeAnnotation.timestampType(isAdjustedToUTC, unit))
+                .named("event_ts")
+                .named("schema");
+    }
+
+    private Path writeParquet(MessageType schema, int rowCount,
+            java.util.function.BiConsumer<org.apache.parquet.example.data.Group, Integer> rowFiller)
+            throws IOException {
+        return PresplitTestSupport.writeParquetFixture(tempDirectory, schema, rowCount, rowFiller);
+    }
+
+    @Test
+    void readsDatetimeStatisticsForNonUtcMillisTimestamp() throws Exception {
+        // epoch milli 0 = 1970-01-01 00:00:00 UTC; +1000ms per row. isAdjustedToUTC=false
+        // means the stored ticks ARE the wall clock, so no tz math is needed.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("event_ts", rowIndex * 1000L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("1970-01-01 00:00:00",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("1970-01-01 00:00:02",
+                stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsDatetimeStatisticsForNonUtcMicrosTimestampWithFraction() throws Exception {
+        // 1_500_000 micros = 1.5s → sub-second boundary text exercises the micros render path.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MICROS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", 1_500_000L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertEquals("1970-01-01 00:00:01.500000",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsDatetimeStatisticsForNonUtcNanosTruncatedToMicros() throws Exception {
+        // 1_500_000_500 ns = 1.5000005 s. StarRocks DATETIME is microsecond-precision and BE
+        // truncates nanos→micros at storage (of_epoch_second divides nanos by 1000), so the
+        // boundary must render ".500000" (the trailing 500 ns dropped), matching the loaded value.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.NANOS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", 1_500_000_500L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals("1970-01-01 00:00:01.500000",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void pre1970TimestampFallsBackToDataTier() throws Exception {
+        // -1000 ms = 1969-12-31 23:59:59 < 1970-01-01: outside the safe window, where the FE
+        // floorDiv/floorMod split is not proven equal to BE's signed C++ division. Defer to data tier.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("event_ts", -1000L - rowIndex));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        statusOf(parquetPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void utcAdjustedTimestampFallsBackToDataTier() throws Exception {
+        // isAdjustedToUTC=true: the load applies a session-tz offset the FE reader cannot
+        // reproduce here, so meta tier must defer to data tier rather than risk an offset boundary.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ true),
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("event_ts", rowIndex * 1000L));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        statusOf(parquetPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void timestampIntoNonDatetimeSortKeyFallsBackToDataTier() throws Exception {
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("event_ts", rowIndex * 1000L));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        statusOf(parquetPath), new Configuration(),
+                        new Column("event_ts", IntegerType.BIGINT)));
     }
 
     private Path writeParquet(
