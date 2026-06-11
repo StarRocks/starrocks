@@ -395,7 +395,7 @@ VariantProjectionHandler::~VariantProjectionHandler() = default;
 // ── _build_shredded_hints ────────────────────────────────────────────────────
 
 VariantShreddedReadHints VariantProjectionHandler::_build_shredded_hints(std::string_view column_name) const {
-    return build_variant_shredded_hints(_param.scanner_ctx->params->column_access_paths, column_name);
+    return build_variant_shredded_hints(&_param.scanner_ctx->column_access_paths, column_name);
 }
 
 // ── setup_readers ────────────────────────────────────────────────────────────
@@ -752,7 +752,7 @@ Status VariantProjectionHandler::fetch_sources(const Range<uint64_t>& range, Chu
 }
 
 StatusOr<Filter> VariantProjectionHandler::filter_subfields(ChunkPtr& active_chunk, size_t raw_count,
-                                                            HdfsScanStats* stats, const cctz::time_zone& zone) {
+                                                            HdfsScannerStats* stats, const cctz::time_zone& zone) {
     if (_deferred_variant_virtual_conjunct_ctxs.empty()) {
         return Filter{};
     }

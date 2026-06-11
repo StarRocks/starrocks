@@ -36,7 +36,7 @@ public:
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
-    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
+    ConnectorChunkSinkProviderPtr create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
 };
@@ -106,31 +106,28 @@ private:
 
     Status _init_partition_values();
     Status _init_extended_values();
-    Status _init_global_dicts(HdfsScannerParams* params);
+    Status _init_global_dicts(HdfsScannerContext* ctx);
     Status _init_scanner(RuntimeState* state);
     Status _check_all_slots_nullable();
 
     // =====================================
+    // _scanner_ctx must outlive _pool: pooled JNI scanners may dereference
+    // _scanner_ctx during destruction (JniScanner::~JniScanner → close()).
+    HdfsScannerContext _scanner_ctx;
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
 
     HdfsScanner* _scanner = nullptr;
-    HdfsScannerParams _scanner_params;
 
     // Partition-level predicate evaluation — not passed to scanners.
     struct PartitionFilter {
         std::vector<ExprContext*> conjunct_ctxs;
-        std::vector<ExprContext*> values;
         bool has_conjuncts = false;
         bool filter_by_eval = false;
     };
     PartitionFilter _partition_filter;
 
     bool _no_more_chunks = false;
-    const TupleDescriptor* _min_max_tuple_desc = nullptr;
-    std::vector<std::string> _hive_column_names;
-    const HiveTableDescriptor* _hive_table = nullptr;
-    std::vector<ColumnAccessPathPtr> _column_access_paths;
 };
 
 } // namespace starrocks::connector

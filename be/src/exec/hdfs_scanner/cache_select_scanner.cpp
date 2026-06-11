@@ -23,14 +23,14 @@
 
 namespace starrocks {
 
-Status CacheSelectScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+Status CacheSelectScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
     return Status::OK();
 }
 
 Status CacheSelectScanner::do_open(RuntimeState* runtime_state) {
-    bool cache_select_supported_format = _scanner_params.scan_range->file_format == THdfsFileFormat::PARQUET ||
-                                         _scanner_params.scan_range->file_format == THdfsFileFormat::ORC ||
-                                         _scanner_params.scan_range->file_format == THdfsFileFormat::TEXT;
+    bool cache_select_supported_format = _scanner_ctx->scan_range->file_format == THdfsFileFormat::PARQUET ||
+                                         _scanner_ctx->scan_range->file_format == THdfsFileFormat::ORC ||
+                                         _scanner_ctx->scan_range->file_format == THdfsFileFormat::TEXT;
     if (!cache_select_supported_format) {
         // note: return OK instead of an error to bypass the cache select.
         // this logic cannot be moved to the upper-level call.
@@ -54,21 +54,21 @@ void CacheSelectScanner::do_update_counter(HdfsScannerProfile* profile) {
 void CacheSelectScanner::do_close(RuntimeState* runtime_state) noexcept {}
 
 Status CacheSelectScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    if (_scanner_params.scan_range->file_format == THdfsFileFormat::TEXT) {
+    if (_scanner_ctx->scan_range->file_format == THdfsFileFormat::TEXT) {
         RETURN_IF_ERROR(_fetch_textfile());
-    } else if (_scanner_params.scan_range->file_format == THdfsFileFormat::PARQUET) {
+    } else if (_scanner_ctx->scan_range->file_format == THdfsFileFormat::PARQUET) {
         RETURN_IF_ERROR(_fetch_parquet());
-    } else if (_scanner_params.scan_range->file_format == THdfsFileFormat::ORC) {
+    } else if (_scanner_ctx->scan_range->file_format == THdfsFileFormat::ORC) {
         RETURN_IF_ERROR(_fetch_orc());
     } else {
         // note: return EOF instead of an error to bypass the cache select.
         // this logic cannot be moved to the upper-level call.
         return Status::EndOfFile("Unsupported file format in cache select: " +
-                                 to_string(_scanner_params.scan_range->file_format));
+                                 to_string(_scanner_ctx->scan_range->file_format));
     }
 
     // handle iceberg delete files
-    if (!_scanner_params.table_specific.iceberg_delete_files.empty()) {
+    if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
         RETURN_IF_ERROR(_fetch_iceberg_delete_files());
     }
 
@@ -95,18 +95,18 @@ Status CacheSelectScanner::_fetch_orc() {
     // resolve columns
     {
         std::unordered_set<std::string> known_column_names;
-        OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.params->hive_column_names,
-                                              reader->getType(), _scanner_ctx.params->options.case_sensitive,
-                                              _scanner_ctx.params->options.orc_use_column_names);
-        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
-        ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
+        OrcChunkReader::build_column_name_set(&known_column_names, &_scanner_ctx->hive_column_names, reader->getType(),
+                                              _scanner_ctx->options.case_sensitive,
+                                              _scanner_ctx->options.orc_use_column_names);
+        RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(known_column_names));
+        ASSIGN_OR_RETURN(auto skip, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
         if (skip) {
             LOG(INFO) << "CacheSelectScanner: orc skip file for non existed slot conjuncts.";
             return Status::EndOfFile("");
         }
 
-        for (const auto& column : _scanner_ctx.materialized_columns) {
-            const auto col_name = Utils::format_name(column.name(), _scanner_ctx.params->options.case_sensitive);
+        for (const auto& column : _scanner_ctx->materialized_columns) {
+            const auto col_name = Utils::format_name(column.name(), _scanner_ctx->options.case_sensitive);
             if (known_column_names.contains(col_name)) {
                 slot_descriptors.emplace_back(column.slot_desc);
             }
@@ -118,13 +118,13 @@ Status CacheSelectScanner::_fetch_orc() {
     {
         std::list<uint64_t> selected_leaf_column_ids{};
         OrcMappingOptions orc_mapping_options{};
-        orc_mapping_options.case_sensitive = _scanner_ctx.params->options.case_sensitive;
+        orc_mapping_options.case_sensitive = _scanner_ctx->options.case_sensitive;
         orc_mapping_options.filename = _file->filename();
         orc_mapping_options.invalid_as_null = true;
         ASSIGN_OR_RETURN(std::unique_ptr<OrcMapping> orc_mapping,
                          OrcMappingFactory::build_mapping(slot_descriptors, reader->getType(),
-                                                          _scanner_ctx.params->options.orc_use_column_names,
-                                                          _scanner_ctx.params->hive_column_names, orc_mapping_options));
+                                                          _scanner_ctx->options.orc_use_column_names,
+                                                          &_scanner_ctx->hive_column_names, orc_mapping_options));
 
         for (size_t i = 0; i < slot_descriptors.size(); i++) {
             SlotDescriptor* desc = slot_descriptors[i];
@@ -149,7 +149,7 @@ Status CacheSelectScanner::_fetch_orc() {
         uint64_t stripe_number = reader->getNumberOfStripes();
         std::vector<DiskRange> stripe_disk_ranges{};
 
-        const auto* scan_range = _scanner_ctx.params->scan_range;
+        const auto* scan_range = _scanner_ctx->scan_range;
         size_t scan_start = scan_range->offset;
         size_t scan_end = scan_start + scan_range->length;
 
@@ -180,10 +180,10 @@ Status CacheSelectScanner::_fetch_orc() {
 Status CacheSelectScanner::_fetch_parquet() {
     // create file reader
     std::shared_ptr<parquet::FileReader> reader = std::make_shared<parquet::FileReader>(
-            4096, _file.get(), _file->get_size().value(), _scanner_params.datacache_options,
+            4096, _file.get(), _file->get_size().value(), _scanner_ctx->datacache_options,
             _shared_buffered_input_stream.get(), nullptr);
 
-    RETURN_IF_ERROR(reader->init(&_scanner_ctx));
+    RETURN_IF_ERROR(reader->init(_scanner_ctx));
 
     std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     RETURN_IF_ERROR(reader->collect_scan_io_ranges(&io_ranges));
@@ -200,13 +200,13 @@ Status CacheSelectScanner::_fetch_parquet() {
 // Split text into multiply disk ranges, then fetch it
 Status CacheSelectScanner::_fetch_textfile() {
     // If it's compressed file, we only handle scan range whose offset == 0.
-    if (get_compression_type_from_path(_scanner_params.file_path) != UNKNOWN_COMPRESSION &&
-        _scanner_params.scan_range->offset != 0) {
+    if (get_compression_type_from_path(_scanner_ctx->file_path) != UNKNOWN_COMPRESSION &&
+        _scanner_ctx->scan_range->offset != 0) {
         return Status::OK();
     }
 
-    const int64_t start_offset = _scanner_params.scan_range->offset;
-    const int64_t end_offset = _scanner_params.scan_range->offset + _scanner_params.scan_range->length;
+    const int64_t start_offset = _scanner_ctx->scan_range->offset;
+    const int64_t end_offset = _scanner_ctx->scan_range->offset + _scanner_ctx->scan_range->length;
 
     std::vector<DiskRange> disk_ranges{};
     for (int64_t offset = start_offset; offset < end_offset;) {
@@ -221,20 +221,20 @@ Status CacheSelectScanner::_fetch_textfile() {
 
 // for iceberg delete files, we fetch an entire file directly
 Status CacheSelectScanner::_fetch_iceberg_delete_files() {
-    for (const auto* delete_file : _scanner_params.table_specific.iceberg_delete_files) {
+    for (const auto* delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
         RETURN_IF_ERROR(_write_entire_file(delete_file->full_path, delete_file->length));
     }
 
-    _app_stats.iceberg_delete_files_per_scan += _scanner_params.table_specific.iceberg_delete_files.size();
+    _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
     return Status::OK();
 }
 
 Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
     OpenFileOptions options{};
-    options.fs = _scanner_params.fs;
+    options.fs = _scanner_ctx->fs;
     options.file_path = file_path;
     options.file_size = file_size;
-    options.datacache_options = _scanner_params.datacache_options;
+    options.datacache_options = _scanner_ctx->datacache_options;
     options.fs_stats = &_fs_stats;
     options.app_stats = &_app_stats;
 

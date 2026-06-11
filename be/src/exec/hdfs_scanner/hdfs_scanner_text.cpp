@@ -168,8 +168,8 @@ char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, s
     }
 }
 
-Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    const TTextFileDesc& text_file_desc = _scanner_params.scan_range->text_file_desc;
+Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
+    const TTextFileDesc& text_file_desc = _scanner_ctx->scan_range->text_file_desc;
     RETURN_IF_ERROR(_setup_delimiter(text_file_desc));
     RETURN_IF_ERROR(_setup_compression_type(text_file_desc));
 
@@ -238,7 +238,7 @@ Status HdfsTextScanner::_setup_compression_type(const TTextFileDesc& text_file_d
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     } else {
         // if FE does not specify compress type, we choose it by looking at filename.
-        compression_type = get_compression_type_from_path(_scanner_params.file_path);
+        compression_type = get_compression_type_from_path(_scanner_ctx->file_path);
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;
@@ -247,7 +247,7 @@ Status HdfsTextScanner::_setup_compression_type(const TTextFileDesc& text_file_d
     }
 
     // If it's compressed file, we only handle scan range whose offset == 0.
-    if (_compression_type != NO_COMPRESSION && _scanner_params.scan_range->offset != 0) {
+    if (_compression_type != NO_COMPRESSION && _scanner_ctx->scan_range->offset != 0) {
         _no_data = true;
     }
     return Status::OK();
@@ -273,15 +273,15 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     // update materialized columns.
     {
         std::unordered_set<std::string> names;
-        for (const auto& column : _scanner_ctx.materialized_columns) {
+        for (const auto& column : _scanner_ctx->materialized_columns) {
             if (column.name() == "___count___") continue;
             names.emplace(column.name());
         }
-        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
+        RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
     }
 
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
-    for (const auto& column : _scanner_ctx.materialized_columns) {
+    for (const auto& column : _scanner_ctx->materialized_columns) {
         // We don't care about _invalid_field_as_null here, if get converter failed,
         // we use DefaultValueConverter instead.
         auto converter = csv::get_hive_converter(column.slot_type(), true);
@@ -360,11 +360,11 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
         fields.resize(0);
         _reader->split_record(record, &fields);
 
-        size_t num_materialize_columns = _scanner_ctx.materialized_columns.size();
+        size_t num_materialize_columns = _scanner_ctx->materialized_columns.size();
 
         // Fill materialize columns first, then fill partition column
         for (int j = 0; j < num_materialize_columns; j++) {
-            const auto& column_info = _scanner_ctx.materialized_columns[j];
+            const auto& column_info = _scanner_ctx->materialized_columns[j];
 
             size_t chunk_index = column_info.idx_in_chunk;
             size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
@@ -386,8 +386,8 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
-    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
-    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
+    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     // Check chunk's row number for each column
     chunk->get()->check_or_die();
@@ -396,7 +396,7 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
 }
 
 Status HdfsTextScanner::_create_csv_reader() {
-    const THdfsScanRange* scan_range = _scanner_ctx.params->scan_range;
+    const THdfsScanRange* scan_range = _scanner_ctx->scan_range;
 
     if (_compression_type != NO_COMPRESSION) {
         // we don't know real stream size in adavance, so we set a very large stream size
@@ -441,7 +441,7 @@ Status HdfsTextScanner::_create_csv_reader() {
 
 StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
     // if reading start of file, skipping UTF-8 BOM
-    if (_scanner_ctx.params->scan_range->offset == 0) {
+    if (_scanner_ctx->scan_range->offset == 0) {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
         CSVReader::Record first_line;
         RETURN_IF_ERROR(reader->next_record(&first_line));
@@ -457,29 +457,29 @@ StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
     // For some table like file table, there is no hive_column_names at all.
     // So we use slot order defined in table schema.
-    if (_scanner_ctx.params->hive_column_names->empty()) {
-        _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx.materialized_columns.size());
-        for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
+    if (_scanner_ctx->hive_column_names.empty()) {
+        _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx->materialized_columns.size());
+        for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
             _materialize_slots_index_2_csv_column_index[i] = i;
         }
         return Status::OK();
     }
 
-    const bool case_sensitive = _scanner_ctx.params->options.case_sensitive;
+    const bool case_sensitive = _scanner_ctx->options.case_sensitive;
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)
     std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;
 
-    for (size_t i = 0; i < _scanner_ctx.params->hive_column_names->size(); i++) {
-        const std::string& name = (*_scanner_ctx.params->hive_column_names)[i];
-        const std::string formatted_column_name = _scanner_ctx.formatted_name(name);
+    for (size_t i = 0; i < _scanner_ctx->hive_column_names.size(); i++) {
+        const std::string& name = _scanner_ctx->hive_column_names[i];
+        const std::string formatted_column_name = _scanner_ctx->formatted_name(name);
         formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
     }
 
     // Assign csv column index
-    _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx.materialized_columns.size());
-    for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
-        const auto& column = _scanner_ctx.materialized_columns[i];
+    _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx->materialized_columns.size());
+    for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
+        const auto& column = _scanner_ctx->materialized_columns[i];
         const std::string formatted_slot_name = column.formatted_name(case_sensitive);
         const auto& it = formatted_hive_column_name_2_index.find(formatted_slot_name);
         if (it == formatted_hive_column_name_2_index.end()) {

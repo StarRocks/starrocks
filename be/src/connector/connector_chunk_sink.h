@@ -113,4 +113,6 @@ public:
             std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) = 0;
 };
 
+using ConnectorChunkSinkProviderPtr = std::unique_ptr<ConnectorChunkSinkProvider>;
+
 } // namespace starrocks::connector

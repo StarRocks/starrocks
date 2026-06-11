@@ -29,7 +29,7 @@ public:
     Status do_open(RuntimeState* runtime_state) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
     void do_update_counter(HdfsScannerProfile* profile) override;
     // Parquet handles single-slot predicates via row-group zone-map, page-index,
     // dict-filter, and lazy materialisation inside FileReader; the base class must
