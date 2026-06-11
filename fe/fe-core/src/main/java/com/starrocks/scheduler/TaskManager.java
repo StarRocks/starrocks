@@ -1076,6 +1076,11 @@ public class TaskManager implements MemoryTrackable {
                         .build();
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
+                // The rebuilt run has no submitter context; keep the persisted submitter when present.
+                // Runs persisted before this field existed have none, so initStatus's "system" fallback stands.
+                if (!Strings.isNullOrEmpty(status.getSubmitUser())) {
+                    taskRun.getStatus().setSubmitUser(status.getSubmitUser());
+                }
                 if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
                     LOG.warn("Submit task run to pending queue failed in follower, reject the submit:{}", taskRun);
                 }

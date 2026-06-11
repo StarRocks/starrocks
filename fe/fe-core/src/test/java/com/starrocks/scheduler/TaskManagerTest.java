@@ -430,6 +430,45 @@ public class TaskManagerTest {
     }
 
     @Test
+    public void testReplayCreateTaskRunKeepsSystemFallbackWhenSubmitUserAbsent() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("submit_user_replay_absent");
+        task.setDefinition("select 1");
+        taskManager.replayCreateTask(task);
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus("q-old", System.currentTimeMillis());
+        // Simulate a run persisted before submitUser existed.
+        taskRun.getStatus().setSubmitUser(null);
+
+        taskManager.replayCreateTaskRun(taskRun.getStatus());
+
+        List<TaskRun> recovered = Lists.newArrayList(
+                taskManager.getTaskRunScheduler().getPendingTaskRunsByTaskId(task.getId()));
+        assertEquals(1, recovered.size());
+        assertEquals(TaskRun.SUBMIT_USER_SYSTEM, recovered.get(0).getStatus().getSubmitUser());
+    }
+
+    @Test
+    public void testReplayCreateTaskRunPreservesPersistedSubmitUser() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("submit_user_replay_present");
+        task.setDefinition("select 1");
+        taskManager.replayCreateTask(task);
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus("q-new", System.currentTimeMillis());
+        taskRun.getStatus().setSubmitUser("alice");
+
+        taskManager.replayCreateTaskRun(taskRun.getStatus());
+
+        List<TaskRun> recovered = Lists.newArrayList(
+                taskManager.getTaskRunScheduler().getPendingTaskRunsByTaskId(task.getId()));
+        assertEquals(1, recovered.size());
+        assertEquals("alice", recovered.get(0).getStatus().getSubmitUser());
+    }
+
+    @Test
     public void testReplayUpdateTaskRun1() {
         TaskManager taskManager = new TaskManager();
         Task task = new Task("test");

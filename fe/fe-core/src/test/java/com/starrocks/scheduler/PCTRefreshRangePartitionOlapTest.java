@@ -186,6 +186,9 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         Assertions.assertNotNull(nextTaskRun);
         Assertions.assertEquals(String.valueOf(leaderStartTime),
                 nextTaskRun.getProperties().get(TaskRun.MV_FRESHNESS_BASELINE_TIME));
+        String leaderSubmitUser = taskRun.getStatus().getSubmitUser();
+        Assertions.assertNotNull(leaderSubmitUser);
+        Assertions.assertEquals(leaderSubmitUser, nextTaskRun.getExecuteOption().getSubmitUser());
     }
 
     @Test
