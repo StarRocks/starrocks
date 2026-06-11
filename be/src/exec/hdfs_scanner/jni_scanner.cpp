@@ -354,15 +354,9 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
     }
     _app_stats.raw_rows_read += num_rows;
 
-<<<<<<< HEAD
-    for (size_t col_idx = 0; col_idx < _scanner_ctx.materialized_columns.size(); col_idx++) {
-        SlotDescriptor* slot_desc = _scanner_ctx.materialized_columns[col_idx].slot_desc;
-        const std::string& slot_name = slot_desc->col_name();
-=======
     for (size_t col_idx = 0; col_idx < _scanner_ctx->materialized_columns.size(); col_idx++) {
         SlotDescriptor* slot_desc = _scanner_ctx->materialized_columns[col_idx].slot_desc;
-        const auto slot_name = std::string(slot_desc->col_name());
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+        const std::string& slot_name = slot_desc->col_name();
         const TypeDescriptor& slot_type = slot_desc->type();
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         FillColumnArgs args{.num_rows = num_rows,

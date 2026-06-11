@@ -224,15 +224,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
     COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
-<<<<<<< HEAD
-    if (_scanner_ctx.conjuncts_manager != nullptr &&
-        _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
-        root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());
-=======
     if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter",
                               _scanner_ctx->predicates.predicate_tree.root().debug_string());
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     }
 }
 
@@ -256,11 +250,7 @@ Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     // materialisation will replace this with interleaved column-load/evaluate.
     if ((*chunk)->num_rows() > 0 && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-<<<<<<< HEAD
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, chunk->get()));
-=======
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, chunk->get()));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, chunk->get()));
     }
     return Status::OK();
 }

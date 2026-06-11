@@ -30,17 +30,10 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
     } else if (is_inline()) {
         return deserialized_inline_dv(_deletion_vector_descriptor->pathOrInlineDv, skip_rows_ctx);
     } else {
-<<<<<<< HEAD
         std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
         std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
-        HdfsScanStats app_scan_stats;
-        HdfsScanStats fs_scan_stats;
-=======
-        std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
-        std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
         HdfsScannerStats app_stats;
         HdfsScannerStats fs_stats;
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
 
         ASSIGN_OR_RETURN(auto path, get_absolute_path(_ctx.table_location));
         int64_t offset = _deletion_vector_descriptor->offset;
@@ -84,17 +77,10 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_file(
-<<<<<<< HEAD
-        const std::string& file_path, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
+        const std::string& file_path, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
         std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<io::CacheInputStream>& cache_input_stream) const {
-    const OpenFileOptions options{.fs = _params.fs,
-=======
-        const std::string& file_path, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
-        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _ctx.fs,
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
                                   .file_path = file_path,
                                   .fs_stats = &fs_stats,
                                   .app_stats = &app_stats,
@@ -185,15 +171,9 @@ std::string DeletionVector::assemble_deletion_vector_path(const string& table_lo
 }
 
 void DeletionVector::update_dv_file_io_counter(
-<<<<<<< HEAD
-        RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
+        RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
         const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
         const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream) {
-=======
-        RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
-        const std::shared_ptr<CacheInputStream>& cache_input_stream,
-        const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
     {

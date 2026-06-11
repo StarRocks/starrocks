@@ -557,13 +557,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     std::vector<ExprContext*> part_ctxs;
     extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(part_ctxs, _runtime_state));
 
     ctx->partition_expr_ctxs = std::move(part_ctxs);
     Status status = scanner->init(_runtime_state, ctx);
@@ -587,13 +582,8 @@ TEST_F(HdfsScannerTest, TestOrcSkipFile) {
     std::vector<ExprContext*> part_ctxs;
     extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(part_ctxs, _runtime_state));
 
     ctx->partition_expr_ctxs = std::move(part_ctxs);
     Status status = scanner->init(_runtime_state, ctx);
@@ -645,13 +635,8 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
         std::vector<ExprContext*> part_ctxs;
         extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-<<<<<<< HEAD
-        ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-        ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
-=======
-        ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+        ASSERT_OK(Expr::prepare(part_ctxs, _runtime_state));
+        ASSERT_OK(Expr::open(part_ctxs, _runtime_state));
 
         std::unique_ptr<BadOrcFileStream> file_stream(new BadOrcFileStream());
         file_stream->ret_errno = ec.ret_errno;
@@ -726,13 +711,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     std::vector<ExprContext*> part_ctxs;
     extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(part_ctxs, _runtime_state));
 
     // TupleDescriptor* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -765,15 +745,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     ctx->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
-<<<<<<< HEAD
-    extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
     extend_mtypes_orc_min_max_conjuncts(&_pool, ctx, thres);
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     ctx->partition_expr_ctxs = std::move(part_ctxs);
     Status status = scanner->init(_runtime_state, ctx);
@@ -797,27 +771,16 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     std::vector<ExprContext*> part_ctxs;
     extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(part_ctxs, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     ctx->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
-<<<<<<< HEAD
-    extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
     extend_mtypes_orc_min_max_conjuncts(&_pool, ctx, thres);
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     ctx->partition_expr_ctxs = std::move(part_ctxs);
     Status status = scanner->init(_runtime_state, ctx);
@@ -841,27 +804,16 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     std::vector<ExprContext*> part_ctxs;
     extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(part_ctxs, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     ctx->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
-<<<<<<< HEAD
-    extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
     extend_mtypes_orc_min_max_conjuncts(&_pool, ctx, thres);
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     ctx->partition_expr_ctxs = std::move(part_ctxs);
     Status status = scanner->init(_runtime_state, ctx);
@@ -931,15 +883,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
         ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjuncts.by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : ctx->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     }
 
     Status status = scanner->init(_runtime_state, ctx);
@@ -1023,15 +969,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
         ctx->conjuncts.by_slot[1].push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjuncts.by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : ctx->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     }
 
     Status status = scanner->init(_runtime_state, ctx);
@@ -1128,13 +1068,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
@@ -1231,15 +1166,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
         ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjuncts.by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : ctx->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     }
 
     Status status = scanner->init(_runtime_state, ctx);
@@ -1360,13 +1289,8 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
             ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
         }
 
-<<<<<<< HEAD
-        ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-        ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
-        ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+        ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+        ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, ctx);
@@ -1416,13 +1340,8 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
         ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     auto scanner = std::make_shared<HdfsOrcScanner>();
     Status status = scanner->init(_runtime_state, ctx);
@@ -1567,15 +1486,9 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
         ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjuncts.by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : ctx->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     }
 
     Status status = scanner->init(_runtime_state, ctx);
@@ -1639,15 +1552,9 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
         ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjuncts.by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : ctx->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     }
 
     Status status = scanner->init(_runtime_state, ctx);
@@ -1705,15 +1612,9 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
         ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    for (auto& it : param->conjuncts.by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
         ASSERT_OK(Expr::open(it.second, _runtime_state));
-=======
-    for (auto& it : ctx->conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     }
 
     Status status = scanner->init(_runtime_state, ctx);
@@ -1809,13 +1710,8 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
         ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->conjuncts.scanner_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.scanner_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.scanner_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.scanner_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.scanner_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.scanner_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
@@ -2003,15 +1899,9 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
         ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    param->min_max_tuple_desc = min_max_tuple_desc;
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
     ctx->min_max_tuple_desc = min_max_tuple_desc;
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
@@ -2766,13 +2656,8 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
         ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
@@ -2937,13 +2822,8 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
         ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
@@ -2989,13 +2869,8 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         ctx->conjuncts.all_ctxs.push_back(expr_ctx);
     }
 
-<<<<<<< HEAD
-    ASSERT_OK(Expr::prepare(param->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->conjuncts.min_max_ctxs, _runtime_state));
-=======
-    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    ASSERT_OK(Expr::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());

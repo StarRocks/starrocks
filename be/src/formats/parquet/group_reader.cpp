@@ -448,19 +448,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
-<<<<<<< HEAD
         if (column.t_lake_schema_field == nullptr) {
-=======
-        if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
-            schema_node->type == ColumnType::STRUCT) {
-            // Physical VARIANT columns use _get_variant_shredded_hints; this path
-            // is for non-virtual VARIANT columns that appear directly in the SELECT list.
-            VariantShreddedReadHints hints = build_variant_shredded_hints(&_param.scanner_ctx->column_access_paths,
-                                                                          column.slot_desc->col_name());
-            ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
-                                                                                              schema_node, hints));
-        } else if (column.t_lake_schema_field == nullptr) {
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {

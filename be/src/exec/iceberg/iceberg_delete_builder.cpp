@@ -38,17 +38,10 @@ static const IcebergColumnMeta k_delete_file_pos{
         .id = INT32_MAX - 102, .col_name = "pos", .type = TPrimitiveType::BIGINT};
 
 StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
-<<<<<<< HEAD
-        const TIcebergDeleteFile& delete_file, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
+        const TIcebergDeleteFile& delete_file, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
         std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<io::CacheInputStream>& cache_input_stream) const {
-    const OpenFileOptions options{.fs = _params.fs,
-=======
-        const TIcebergDeleteFile& delete_file, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
-        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _ctx.fs,
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
                                   .file_path = delete_file.full_path,
                                   .file_size = delete_file.length,
                                   .fs_stats = &fs_stats,
@@ -81,17 +74,10 @@ Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
 }
 
 Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {
-<<<<<<< HEAD
-    HdfsScanStats app_scan_stats;
-    HdfsScanStats fs_scan_stats;
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
-    std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
-=======
     HdfsScannerStats app_stats;
     HdfsScannerStats fs_stats;
-    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
-    std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
+    std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
                                                         cache_input_stream));
@@ -177,17 +163,10 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
     std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
                                  &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
 
-<<<<<<< HEAD
-    HdfsScanStats app_scan_stats;
-    HdfsScanStats fs_scan_stats;
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream;
-    std::shared_ptr<io::CacheInputStream> cache_input_stream;
-=======
     HdfsScannerStats app_stats;
     HdfsScannerStats fs_stats;
-    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
-    std::shared_ptr<CacheInputStream> cache_input_stream;
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<io::CacheInputStream> cache_input_stream;
 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
                                                         cache_input_stream));
@@ -255,15 +234,9 @@ SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& m
 }
 
 void IcebergDeleteBuilder::update_delete_file_io_counter(
-<<<<<<< HEAD
-        RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
+        RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
         const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
         const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream) {
-=======
-        RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
-        const std::shared_ptr<CacheInputStream>& cache_input_stream,
-        const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     const std::string ICEBERG_TIMER = "ICEBERG_V2_MOR";
     ADD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE);
     {

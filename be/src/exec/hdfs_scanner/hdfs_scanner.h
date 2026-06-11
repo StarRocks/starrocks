@@ -28,15 +28,11 @@
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
-<<<<<<< HEAD
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
-=======
-#include "runtime/runtime_state_fwd.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.h"
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 

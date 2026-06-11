@@ -178,13 +178,8 @@ Status HdfsScanner::_build_scanner_context() {
             // A slot must be decoded eagerly if it is an output column OR if it
             // appears in a multi-field conjunct that the reader cannot push down.
             column.decode_needed =
-<<<<<<< HEAD
-                    slot->is_output_column() || _scanner_params.conjuncts.slots_of_multi_field.count(slot->id());
-            ctx.materialized_columns.emplace_back(std::move(column));
-=======
                     slot->is_output_column() || _scanner_ctx->conjuncts.slots_of_multi_field.count(slot->id());
-            ctx.materialized_columns.emplace_back(column);
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+            ctx.materialized_columns.emplace_back(std::move(column));
         }
     }
 
@@ -192,26 +187,16 @@ Status HdfsScanner::_build_scanner_context() {
         auto* slot = _scanner_ctx->partition_slots[i];
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-<<<<<<< HEAD
-        column.idx_in_chunk = _scanner_params.partition_index_in_chunk[i];
-        ctx.partition_columns.emplace_back(std::move(column));
-=======
         column.idx_in_chunk = _scanner_ctx->partition_index_in_chunk[i];
-        ctx.partition_columns.emplace_back(column);
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+        ctx.partition_columns.emplace_back(std::move(column));
     }
 
     for (size_t i = 0; i < _scanner_ctx->extended_col_slots.size(); i++) {
         auto* slot = _scanner_ctx->extended_col_slots[i];
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-<<<<<<< HEAD
-        column.idx_in_chunk = _scanner_params.extended_col_index_in_chunk[i];
-        ctx.extended_columns.emplace_back(std::move(column));
-=======
         column.idx_in_chunk = _scanner_ctx->extended_col_index_in_chunk[i];
-        ctx.extended_columns.emplace_back(column);
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+        ctx.extended_columns.emplace_back(std::move(column));
     }
 
     ctx.slot_descs = _scanner_ctx->tuple_desc->slots();
@@ -227,18 +212,7 @@ Status HdfsScanner::_build_scanner_context() {
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
-<<<<<<< HEAD
-    ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
-    RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
-    auto* predicate_parser =
-            opts.obj_pool->add(new ConnectorPredicateParser(&_scanner_params.tuple_desc->decoded_slots()));
-    ASSIGN_OR_RETURN(ctx.predicate_tree,
-                     ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
-    ctx.runtime_filter_scan_range_pruner = opts.obj_pool->add(
-            new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
-=======
-
-    ctx.predicates.conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
+    ctx.predicates.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
     RETURN_IF_ERROR(ctx.predicates.conjuncts_manager->parse_conjuncts());
     ctx.predicates.predicate_parser =
             std::make_unique<ConnectorPredicateParser>(&_scanner_ctx->tuple_desc->decoded_slots());
@@ -247,7 +221,6 @@ Status HdfsScanner::_build_scanner_context() {
                                                                           ctx.predicates.predicate_free_pool));
     ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>(
             ctx.predicates.predicate_parser.get(), ctx.predicates.conjuncts_manager->unarrived_runtime_filters());
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
 
     ctx.update_return_count_columns();
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
@@ -323,12 +296,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         // return true from scanner_handles_multi_slot_conjuncts_internally().
         if (!scanner_handles_multi_slot_conjuncts_internally() && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-<<<<<<< HEAD
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjuncts.scanner_ctxs, (*chunk).get()));
-=======
-            RETURN_IF_ERROR(
-                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
         }
     } else if (status.is_end_of_file()) {
         // do nothing.
@@ -576,13 +544,8 @@ void HdfsScanner::update_counter() {
     DataCacheHitRateCounter::instance()->update_page_cache_stat(_app_stats.page_cache_read_counter,
                                                                 _app_stats.page_read_counter);
 
-<<<<<<< HEAD
-    if (_scanner_params.datacache_options.enable_datacache && _cache_input_stream) {
-        const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
-=======
     if (_scanner_ctx->datacache_options.enable_datacache && _cache_input_stream) {
-        const CacheInputStream::Stats& stats = _cache_input_stream->stats();
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
+        const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_block_cache_count);
         COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_mem_bytes, stats.read_mem_cache_bytes);

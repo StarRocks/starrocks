@@ -122,12 +122,6 @@ private:
     PartitionFilter _partition_filter;
 
     bool _no_more_chunks = false;
-<<<<<<< HEAD
-    const TupleDescriptor* _min_max_tuple_desc = nullptr;
-    std::vector<std::string> _hive_column_names;
-    const HiveTableDescriptor* _hive_table = nullptr;
-=======
->>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
 };
 
 } // namespace starrocks::connector
