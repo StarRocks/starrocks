@@ -357,8 +357,8 @@ Status GroupReader::_create_column_readers() {
         return Status::InternalError("GroupReader: scanner_ctx must not be null");
     }
     opts.timezone = _param.scanner_ctx->timezone;
-    opts.case_sensitive = _param.scanner_ctx->params->options.case_sensitive;
-    opts.use_file_pagecache = _param.scanner_ctx->params->options.use_file_pagecache;
+    opts.case_sensitive = _param.scanner_ctx->options.case_sensitive;
+    opts.use_file_pagecache = _param.scanner_ctx->options.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
@@ -456,7 +456,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));
         }
-        auto* global_dictmaps = _param.scanner_ctx->params->global_dictmaps;
+        auto* global_dictmaps = _param.scanner_ctx->global_dictmaps;
         if (global_dictmaps->contains(column.slot_id())) {
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create(
                                                     std::move(column_reader), global_dictmaps->at(column.slot_id()),

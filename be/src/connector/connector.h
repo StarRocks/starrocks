@@ -226,9 +226,6 @@ public:
         __builtin_unreachable();
     }
 
-    // virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
-    //                                                         const std::string& table_handle) const;
-
     virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
         CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
         __builtin_unreachable();

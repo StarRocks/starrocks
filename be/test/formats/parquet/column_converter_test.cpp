@@ -29,7 +29,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScanStats g_hdfs_scan_stats{};
+static HdfsScannerStats g_hdfs_stats{};
 
 class ColumnConverterTest : public testing::Test {
 public:
@@ -46,10 +46,9 @@ protected:
         auto* ctx = _pool.add(new HdfsScannerContext());
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
 
-        ctx->params = &_scanner_params;
-        _scanner_params.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
         ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &g_hdfs_scan_stats;
+        ctx->stats = &g_hdfs_stats;
         return ctx;
     }
 
@@ -88,7 +87,7 @@ protected:
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
-        _scanner_params.scan_range = (_create_scan_range(filepath));
+        ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
         Status status = file_reader->init(ctx);
@@ -129,7 +128,7 @@ protected:
 
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
-    HdfsScannerParams _scanner_params;
+    HdfsScannerContext _scanner_ctx;
 };
 
 TEST_F(ColumnConverterTest, TestByteArrayTest) {

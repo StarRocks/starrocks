@@ -24,7 +24,7 @@ class DeletionVectorTest : public testing::Test {
 public:
     void SetUp() override { dv = std::make_shared<DeletionVector>(params); }
 
-    HdfsScannerParams params;
+    HdfsScannerContext params;
     std::shared_ptr<DeletionVector> dv;
 };
 

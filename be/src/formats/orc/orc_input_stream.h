@@ -62,7 +62,7 @@ public:
     void set_lazy_column_coalesce_counter(std::atomic<int32_t>* lazy_column_coalesce_counter) {
         _lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     }
-    void set_app_stats(HdfsScanStats* stats) { _app_stats = stats; }
+    void set_app_stats(HdfsScannerStats* stats) { _app_stats = stats; }
     bool isIOCoalesceEnabled() const override { return config::orc_coalesce_read_enable; }
     bool isIOAdaptiveCoalesceEnabled() const override { return config::io_coalesce_adaptive_lazy_active; }
     bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const override;
@@ -77,6 +77,6 @@ private:
     uint64_t _length;
     io::SharedBufferedInputStream* _sb_stream;
     std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
-    HdfsScanStats* _app_stats = nullptr;
+    HdfsScannerStats* _app_stats = nullptr;
 };
 } // namespace starrocks
