@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.OdpsTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -507,5 +508,97 @@ public class MetadataMgrTest {
             AnalyzeTestUtil.getStarRocksAssert().dropCatalog(catalogName);
         } catch (Exception ignored) {
         }
+    }
+
+    @Test
+    public void testGetMaxPartitionValueWithOdpsCatalog() throws Exception {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        // Test with ODPS catalog
+        String createOdpsCatalogStmt = "CREATE EXTERNAL CATALOG odps_catalog PROPERTIES(\"type\"=\"odps\", " +
+                "\"odps.access.id\"=\"ak\", \"odps.access.key\"=\"sk\", \"odps.endpoint\"=\"http://127.0.0.1\", " +
+                "\"odps.project\"=\"odps_project\", \"odps.tunnel.quota\"=\"pay-as-you-go\")";
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        try {
+            starRocksAssert.withCatalog(createOdpsCatalogStmt);
+
+            // Create MockedMetadataMgr and register mocked OdpsMetadata
+            ConnectContext connectContext = AnalyzeTestUtil.getConnectContext();
+            MockedMetadataMgr mockedMetadataMgr = new MockedMetadataMgr(
+                    connectContext.getGlobalStateMgr().getLocalMetastore(),
+                    connectContext.getGlobalStateMgr().getConnectorMgr());
+
+            // Create a simple mock ConnectorMetadata that implements getMaxPartitionValue
+            ConnectorMetadata mockedOdpsMetadata = new ConnectorMetadata() {
+                @Override
+                public String getMaxPartitionValue(com.starrocks.catalog.Table table, boolean nonEmptyPartition) {
+                    return "20230101";
+                }
+            };
+
+            mockedMetadataMgr.registerMockedMetadata("odps_catalog", mockedOdpsMetadata);
+            GlobalStateMgr.getCurrentState().setMetadataMgr(mockedMetadataMgr);
+
+            // Create a mock ODPS table
+            OdpsTable odpsTable = new OdpsTable() {
+                @Override
+                public String getCatalogName() {
+                    return "odps_catalog";
+                }
+
+                @Override
+                public String getCatalogDBName() {
+                    return "odps_project";
+                }
+
+                @Override
+                public String getName() {
+                    return "odps_table";
+                }
+            };
+
+            // Test getMaxPartitionValue with ODPS table
+            String maxPartition = mockedMetadataMgr.getMaxPartitionValue(odpsTable, false);
+            Assertions.assertEquals("20230101", maxPartition);
+
+            // Test with nonEmptyPartition = true
+            String maxPartitionNonEmpty = mockedMetadataMgr.getMaxPartitionValue(odpsTable, true);
+            Assertions.assertEquals("20230101", maxPartitionNonEmpty);
+
+            // Restore original metadataMgr
+            GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
+        } finally {
+            try {
+                starRocksAssert.dropCatalog("odps_catalog");
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+        }
+    }
+
+    @Test
+    public void testGetMaxPartitionValueWithNonExistentCatalog() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        // Test with non-existent catalog
+        com.starrocks.catalog.Table nonExistentTable =
+                new com.starrocks.catalog.Table(com.starrocks.catalog.Table.TableType.ODPS) {
+                    @Override
+                    public String getCatalogName() {
+                        return "non_existent_catalog";
+                    }
+
+                    @Override
+                    public String getCatalogDBName() {
+                        return "db";
+                    }
+
+                    @Override
+                    public String getName() {
+                        return "table";
+                    }
+                };
+        String maxPartition = metadataMgr.getMaxPartitionValue(nonExistentTable, false);
+        Assertions.assertNull(maxPartition);
     }
 }

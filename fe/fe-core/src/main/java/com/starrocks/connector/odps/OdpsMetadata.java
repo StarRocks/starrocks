@@ -98,6 +98,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private LoadingCache<String, Set<String>> tableNameCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
     private LoadingCache<OdpsTableName, List<Partition>> partitionCache;
+    private LoadingCache<OdpsTableName, String> maxPartitionCache;
     private final Optional<OdpsCacheUpdateProcessor> cacheUpdateProcessor;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
@@ -118,7 +119,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         settings = settingsBuilder.build();
         initMetaCache();
         this.cacheUpdateProcessor = Optional.of(new OdpsCacheUpdateProcessor(
-                catalogName, odps, tableNameCache, tableCache, partitionCache));
+                catalogName, odps, tableNameCache, tableCache, partitionCache, maxPartitionCache));
     }
 
     public Optional<OdpsCacheUpdateProcessor> getCacheUpdateProcessor() {
@@ -148,9 +149,14 @@ public class OdpsMetadata implements ConnectorMetadata {
             partitionCache = newCacheBuilder(Long.parseLong(properties.get(OdpsProperties.PARTITION_CACHE_EXPIRE_TIME)),
                     Long.parseLong(properties.get(OdpsProperties.PARTITION_CACHE_SIZE)))
                     .build(asyncReloading(CacheLoader.from(this::loadPartitions), executor));
+            maxPartitionCache = newCacheBuilder(Long.parseLong(properties.get(OdpsProperties.PARTITION_CACHE_EXPIRE_TIME)),
+                    Long.parseLong(properties.get(OdpsProperties.PARTITION_CACHE_SIZE)))
+                    .build(asyncReloading(CacheLoader.from(this::loadMaxPartition), executor));
         } else {
             partitionCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
                     .build(asyncReloading(CacheLoader.from(this::loadPartitions), executor));
+            maxPartitionCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
+                    .build(asyncReloading(CacheLoader.from(this::loadMaxPartition), executor));
         }
     }
 
@@ -293,6 +299,45 @@ public class OdpsMetadata implements ConnectorMetadata {
         return OdpsUtils.getOdpsTablePartitions(odps, odpsTableName);
     }
 
+    private String loadMaxPartition(OdpsTableName odpsTableName) {
+        com.aliyun.odps.Table odpsTable = OdpsUtils.getOdpsTable(odps, odpsTableName);
+
+        String maxPt = null;
+        List<Partition> odpsPartitions = get(partitionCache, odpsTableName);
+        if (odpsPartitions != null && !odpsPartitions.isEmpty()) {
+            String partitionKey = odpsPartitions.get(0)
+                    .getPartitionSpec()
+                    .keys()
+                    .stream()
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Partition spec has no keys"));
+
+            // OdpsUtils.getOdpsTablePartitions returns partitions in ascending order.
+            // Scan from the end to find the latest non-empty partition in O(k) time
+            // instead of O(n) via stream().max(), mirroring the descending-iterator
+            // approach used in the else branch below.
+            for (int i = odpsPartitions.size() - 1; i >= 0; i--) {
+                Partition p = odpsPartitions.get(i);
+                if (p.getPhysicalSize() > 0) {
+                    maxPt = p.getPartitionSpec().get(partitionKey);
+                    break;
+                }
+            }
+        } else {
+            Iterator<Partition> iterator = odpsTable.getPartitionIterator(null, true, 10L, Long.MAX_VALUE);
+            while (iterator.hasNext()) {
+                Partition p = iterator.next();
+                PartitionSpec partitionSpec = p.getPartitionSpec();
+
+                if (p.getPhysicalSize() > 0) {
+                    maxPt = partitionSpec.get(partitionSpec.keys().stream().findFirst().orElse(null));
+                    break;
+                }
+            }
+        }
+        return maxPt;
+    }
+
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         if (partitionNames == null || partitionNames.isEmpty()) {
@@ -308,6 +353,27 @@ public class OdpsMetadata implements ConnectorMetadata {
         return partitions.stream()
                 .filter(partition -> filter.contains(partition.getPartitionSpec().toString(false, true)))
                 .map(OdpsPartition::new).collect(Collectors.toList());
+    }
+
+    @Override
+    public String getMaxPartitionValue(Table table, boolean nonEmptyPartition) {
+        if (nonEmptyPartition) {
+            return get(maxPartitionCache, OdpsTableName.of(table.getCatalogDBName(), table.getName()));
+        } else {
+            com.aliyun.odps.Table odpsTable = OdpsUtils.getOdpsTable(odps, table);
+            Iterator<Partition> iterator = odpsTable.getPartitionIterator(null, true, 10L, Long.MAX_VALUE);
+            String maxPt = null;
+            while (iterator.hasNext()) {
+                Partition p = iterator.next();
+                PartitionSpec partitionSpec = p.getPartitionSpec();
+
+                if (p.getPhysicalSize() > 0) {
+                    maxPt = partitionSpec.get(partitionSpec.keys().stream().findFirst().orElse(null));
+                    break;
+                }
+            }
+            return maxPt;
+        }
     }
 
     @Override

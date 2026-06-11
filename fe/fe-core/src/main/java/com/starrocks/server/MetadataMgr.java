@@ -704,6 +704,15 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public String getMaxPartitionValue(Table table, boolean nonEmptyPartition) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        String maxPartition = null;
+        if (connectorMetadata.isPresent()) {
+            maxPartition = connectorMetadata.get().getMaxPartitionValue(table, nonEmptyPartition);
+        }
+        return maxPartition;
+    }
+
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         Statistics.Builder statistics = Statistics.builder();
 

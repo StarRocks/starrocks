@@ -40,6 +40,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -834,6 +835,25 @@ public class MetaFunctions {
             return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
         return ConstantOperator.createVarchar(lastQueryId.toString());
+    }
+
+    @ConstantFunction(name = "max_pt", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator max_partition(ConstantOperator name) throws DdlException {
+        TableName tableName = TableName.fromString(name.getVarchar());
+
+        Table table =
+                GlobalStateMgr.getCurrentState()
+                        .getMetadataMgr()
+                        .getTable(new ConnectContext(), tableName)
+                        .orElseThrow(() -> new SemanticException("Table {} not found", tableName));
+
+        if (!table.isOdpsTable()) {
+            throw new SemanticException("`max_pt` function only support for [odps table].");
+        }
+
+        String partitionValue = GlobalStateMgr.getCurrentState().getMetadataMgr().getMaxPartitionValue(table, true);
+        return partitionValue == null ? ConstantOperator.createNull(VarcharType.VARCHAR)
+                : ConstantOperator.createVarchar(partitionValue);
     }
 
 }

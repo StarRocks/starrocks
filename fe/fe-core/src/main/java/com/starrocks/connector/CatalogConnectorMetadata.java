@@ -440,4 +440,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     public void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
         normal.executeMetadataDelete(table, predicate, context);
     }
+
+    @Override
+    public String getMaxPartitionValue(Table table, boolean nonEmptyPartition) {
+        return normal.getMaxPartitionValue(table, nonEmptyPartition);
+    }
 }
