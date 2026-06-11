@@ -69,8 +69,7 @@ double RowsetCandidate::io_count() const {
     // other levels in pick_max_level. This only raises selection PRIORITY/ordering; convergence is still
     // *guaranteed* by the force-include step in pick_rowset_indexes even if this never makes it win a
     // level. Added on every return path so the priority is consistent across rowset shapes.
-    const double sdcg_io =
-            sdcg_chain_score_contribution(sparse_chain_depth) * read_bytes() / (1024.0 * 1024.0);
+    const double sdcg_io = sdcg_chain_score_contribution(sparse_chain_depth) * read_bytes() / (1024.0 * 1024.0);
 
     // For non-overlapped rowsets that are already large enough, return 0
     // to indicate they don't need compaction. The only exception is if they have deletes,
@@ -361,8 +360,8 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             picked_set.insert(i);
             if (has_dels != nullptr) {
                 const auto& rs = tablet_metadata->rowsets(i);
-                const bool has_del = rs.has_num_dels() ? rs.num_dels() > 0
-                                                       : mgr->get_rowset_num_deletes(*tablet_metadata, rs) > 0;
+                const bool has_del =
+                        rs.has_num_dels() ? rs.num_dels() > 0 : mgr->get_rowset_num_deletes(*tablet_metadata, rs) > 0;
                 has_dels->push_back(has_del);
             }
         }

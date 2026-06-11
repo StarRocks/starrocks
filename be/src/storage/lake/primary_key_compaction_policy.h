@@ -61,8 +61,7 @@ inline double sdcg_chain_score_contribution(int64_t chain_depth) {
 // layers of its columns). Unlike inspect_existing_sparse_chain() on the write path -- which is scoped
 // to a single column batch -- this is column-agnostic: compaction rewrites the whole segment, so the
 // total layer count is the read-amplification measure that matters. Returns 0 for rowsets with no DCG.
-int64_t max_sparse_chain_depth_for_rowset(const RowsetMetadataPB& rowset,
-                                          const DeltaColumnGroupMetadataPB& dcg_meta);
+int64_t max_sparse_chain_depth_for_rowset(const RowsetMetadataPB& rowset, const DeltaColumnGroupMetadataPB& dcg_meta);
 
 struct RowsetStat {
     size_t num_rows = 0;
