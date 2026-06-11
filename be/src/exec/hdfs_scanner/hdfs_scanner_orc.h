@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
 #include <orc/OrcFile.hh>
 
 #include "exec/hdfs_scanner/hdfs_scanner.h"
@@ -78,6 +79,8 @@ private:
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
 
     StoragePageCache* _cache = nullptr;
+
+    FRIEND_TEST(HdfsScannerTest, TestOrcFooterCache);
 };
 
 } // namespace starrocks

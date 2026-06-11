@@ -506,8 +506,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             options.setSerializedFileTail(*(split_context->footer.get()));
             footer_from_cache = true;
         } else if (_cache != nullptr) {
-            metacache_key = get_file_cache_key(CacheType::META, _file->filename(), datacache_options.modification_time,
-                                               _file->get_size().value());
+            metacache_key = get_file_cache_key(CacheType::ORC_META, _file->filename(),
+                                               datacache_options.modification_time, _file->get_size().value());
             SCOPED_RAW_TIMER(&_app_stats.footer_cache_read_ns);
             if (_cache->lookup(metacache_key, &footer_cache_handle)) {
                 options.setSerializedFileTail(*(reinterpret_cast<const string*>(footer_cache_handle.data())));

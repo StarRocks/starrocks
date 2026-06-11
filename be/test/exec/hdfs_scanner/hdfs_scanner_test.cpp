@@ -3429,4 +3429,22 @@ TEST_F(HdfsScannerTest, TestOrcFooterCache) {
 #endif
 }
 
+TEST_F(HdfsScannerTest, TestOrcAndParquetFooterCacheKeyDiffer) {
+    const std::string filename = "hdfs://some/path/to/file.data";
+    const int64_t mtime = 1234567890;
+    const uint64_t file_size = 4096;
+
+    // same path + mtime, different format -> keys must differ
+    EXPECT_NE(get_file_cache_key(CacheType::META, filename, mtime, file_size),
+              get_file_cache_key(CacheType::ORC_META, filename, mtime, file_size));
+
+    // also differ when modification time is unsupported and only file size is used
+    EXPECT_NE(get_file_cache_key(CacheType::META, filename, 0, file_size),
+              get_file_cache_key(CacheType::ORC_META, filename, 0, file_size));
+
+    // each cache type is still deterministic for identical inputs
+    EXPECT_EQ(get_file_cache_key(CacheType::ORC_META, filename, mtime, file_size),
+              get_file_cache_key(CacheType::ORC_META, filename, mtime, file_size));
+}
+
 } // namespace starrocks
