@@ -525,15 +525,15 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
         RETURN_IF_ERROR(append_chunk_for_one_key<EnablePassthrough>(
                 hash_map, chunk,
                 [&](uint32_t offset) {
-            return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
+                    return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
                 },
                 [&](const KeyType& key) {
-            uint8_t* pos = mem_pool->allocate(key.size);
-            strings::memcpy_inlined(pos, key.data, key.size);
-            return Slice{pos, key.size};
+                    uint8_t* pos = mem_pool->allocate(key.size);
+                    strings::memcpy_inlined(pos, key.data, key.size);
+                    return Slice{pos, key.size};
                 },
                 obj_pool, std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer)));
 
         return is_passthrough;
     }
@@ -596,12 +596,10 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<
         }
 
         RETURN_IF_ERROR(append_chunk_for_one_key<EnablePassthrough>(
-                hash_map, chunk, [&](uint32_t offset) {
-            return keys[offset]; },
-                [&](const FixedSizeSliceKey& key) {
-            return key; }, obj_pool,
+                hash_map, chunk, [&](uint32_t offset) { return keys[offset]; },
+                [&](const FixedSizeSliceKey& key) { return key; }, obj_pool,
                 std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer)));
 
         return is_passthrough;
     }
