@@ -69,6 +69,17 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         this.useIncrementalScanRanges = useIncrementalScanRanges;
     }
 
+    static int adjustLogicalDopForIncrementalScanRangeReuse(
+            boolean reuseFragmentInstance,
+            int logicalDop,
+            int deployedLogicalDop) {
+        if (!reuseFragmentInstance) {
+            return logicalDop;
+        }
+
+        return Math.max(1, Math.min(logicalDop, deployedLogicalDop));
+    }
+
     @Override
     public void assignFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
         for (ScanNode scanNode : execFragment.getScanNodes()) {
@@ -281,7 +292,8 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
                 for (List<TScanRangeParams> scanRanges : scanRangesPerInstance) {
                     FragmentInstance instance = null;
-                    if (useIncrementalScanRanges && !fragmentInstanceMap.isEmpty()) {
+                    boolean reuse = useIncrementalScanRanges && !fragmentInstanceMap.isEmpty();
+                    if (reuse) {
                         instance = fragmentInstanceMap.get(workerId);
                     } else {
                         instance =
@@ -304,6 +316,10 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             maxDop = Math.max(maxDop, expectedPhysicalDop);
                             logicalDop = Math.min(scanRanges.size(), maxDop);
                         }
+                        logicalDop = adjustLogicalDopForIncrementalScanRangeReuse(
+                                reuse,
+                                logicalDop,
+                                instance.getGroupExecutionScanDop());
                         List<List<TScanRangeParams>> scanRangesPerDriverSeq;
                         if (Config.enable_schedule_insert_query_by_row_count && isLoadType
                                 && !scanRanges.isEmpty()
@@ -314,12 +330,14 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         }
                         // Make pipeline input dop == sink dop to avoid extra local-shuffle.
                         // TODO: Make XXXSink support group execution to further improve performance.
-                        if (fragment.isForceAssignScanRangesPerDriverSeq() &&
+                        if (!reuse && fragment.isForceAssignScanRangesPerDriverSeq() &&
                                 expectedPhysicalDop != pipelineDop) {
                             fragment.setPipelineDop(expectedPhysicalDop);
                         }
-                        instance.setPipelineDop(expectedPhysicalDop);
-                        instance.setGroupExecutionScanDop(logicalDop);
+                        if (!reuse) {
+                            instance.setPipelineDop(expectedPhysicalDop);
+                            instance.setGroupExecutionScanDop(logicalDop);
+                        }
 
                         for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                             instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
