@@ -187,6 +187,7 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 - 表达式分区生成列现在在 `DESC` 和 `SHOW CREATE TABLE` 的输出中被隐藏。[#69793](https://github.com/StarRocks/starrocks/pull/69793)
 - 审计日志中不再包含 Client ID 信息。[#69383](https://github.com/StarRocks/starrocks/pull/69383)
 - `REFRESH EXTERNAL TABLE` 的 `FORCE` 选项已回滚，不再支持。[#70428](https://github.com/StarRocks/starrocks/pull/70428)
+- 将 LIKE 谓词中反斜杠转义序列的使用方式与 MySQL 保持一致。用户需要在 LIKE 谓词中连续指定四个反斜杠 `\\\\` 才能匹配数据中的单个反斜杠 `\`，或在谓词中指定八个反斜杠 `\\\\\\\\` 才能匹配两个连续的反斜杠 `\\`。
 
 ### 功能优化
 

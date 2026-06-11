@@ -187,6 +187,7 @@ description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAu
 - 式パーティションの生成カラムが `DESC` および `SHOW CREATE TABLE` の出力から非表示になりました。[#69793](https://github.com/StarRocks/starrocks/pull/69793)
 - 監査ログにクライアント ID が含まれなくなりました。[#69383](https://github.com/StarRocks/starrocks/pull/69383)
 - `REFRESH EXTERNAL TABLE` の `FORCE` オプションが取り消され、サポートされなくなりました。[#70428](https://github.com/StarRocks/starrocks/pull/70428)
+- LIKE 述語におけるバックスラッシュのエスケープシーケンスの使用法を MySQL に合わせました。データ内のリテラルバックスラッシュ `\` に一致させるには、LIKE 述語内でバックスラッシュを 4 つ `\\\\` 連続して指定する必要があります。また、連続する 2 つのリテラルバックスラッシュ `\\` に一致させるには、述語内でバックスラッシュを 8 つ `\\\\\\\\` 指定する必要があります。
 
 ### 改善点
 

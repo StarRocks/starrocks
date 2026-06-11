@@ -186,6 +186,7 @@ Release Date: March 26, 2026
 - Expression partition generated columns are now hidden from `DESC` and `SHOW CREATE TABLE` output. [#69793](https://github.com/StarRocks/starrocks/pull/69793)
 - Client ID is no longer included in audit logs. [#69383](https://github.com/StarRocks/starrocks/pull/69383)
 - The `FORCE` option for `REFRESH EXTERNAL TABLE` has been reverted and is no longer supported. [#70428](https://github.com/StarRocks/starrocks/pull/70428)
+- Aligned the backslash escape sequence usage in LIKE predicates with MySQL. Users need to specify four backslashes `\\\\` in sequence in a LIKE predicate to match a literal backslash `\` in the data, and eight backslashes `\\\\\\\\` in the predicate to match two consecutive literal backslashes `\\`.
 
 ### Improvements
 
