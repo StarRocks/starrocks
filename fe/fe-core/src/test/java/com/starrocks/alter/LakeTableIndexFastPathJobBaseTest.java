@@ -286,13 +286,10 @@ public class LakeTableIndexFastPathJobBaseTest {
 
     private void runReplay(LakeTableAddIndexJob target, LakeTableAddIndexJob other,
                            Database db, OlapTable table) {
-        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
-        LocalMetastore lm = mock(LocalMetastore.class);
-        when(lm.getDb(2L)).thenReturn(db);
-        if (db != null) {
-            when(lm.getTable(2L, 3L)).thenReturn(table);
-        }
-        when(gsm.getLocalMetastore()).thenReturn(lm);
+        // replay() now takes the table WRITE lock around its catalog mutations
+        // (mirroring the live path), so the GSM mock must expose a real
+        // LockManager. Reuse the same lockable wiring as the cancelImpl tests.
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             target.replay(other);
