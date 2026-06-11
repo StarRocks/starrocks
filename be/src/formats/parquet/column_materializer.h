@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -30,12 +31,17 @@
 
 namespace starrocks::parquet {
 
+class LazyMaterializationContext;
+class ReadRangePlanner;
+
 class ColumnMaterializer {
 public:
     using ColumnReaderMap = std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>;
 
-    ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers)
-            : _param(param), _column_readers(column_readers) {}
+    ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers);
+
+    ReadRangePlanner* read_range_planner() const { return _read_range_planner.get(); }
+    HdfsScanStats* stats() const { return _param.stats; }
 
     void clear_classification();
     void add_active_column(int col_idx);
@@ -92,7 +98,10 @@ public:
                       ChunkPtr* chunk, bool ignore_reserved_field = false);
     Status read_active_range(const Range<uint64_t>& range, const Filter* filter, ChunkPtr* chunk);
     Status read_lazy_range(const Range<uint64_t>& range, const Filter* filter, ChunkPtr* chunk);
-    StatusOr<size_t> read_active_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
+    // read_active_range_round_by_round accepts an optional LazyMaterializationContext*
+    // as a forward-looking parameter for Phase 6 expression-driven materialization.
+    StatusOr<size_t> read_active_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk,
+                                                      LazyMaterializationContext* lazy_ctx = nullptr);
 
     Status rewrite_dict_conjuncts_to_predicate(bool* is_group_filtered);
     Status filter_dict_column(SlotId slot_id, ColumnPtr& column, Filter* filter,
@@ -116,11 +125,21 @@ public:
     // On-demand single-slot materialization.  Reads the slot through its
     // ColumnReader into _read_chunk and populates _slot_cache.  Returns OK
     // (no-op) if the slot is already cached for the current range.
+    // Also records the trigger for fallback tracking.
     Status materialize_slot(SlotId slot_id, const Range<uint64_t>& range, const Filter* filter);
 
+    // Per-row-group count of lazy slots triggered via materialize_slot().
+    // Reset at row-group boundaries (see reset_triggered_lazy_count).
+    int64_t lazy_triggered_count() const { return _lazy_triggered_count; }
+    void reset_triggered_lazy_count() { _lazy_triggered_count = 0; }
+
     // Post-filter lazy-column backfill.
+    // chunk_filter has full_range.span_size() entries and is used to apply the
+    // correct filter to any lazy columns that were already triggered (via
+    // LazyMaterializationContext) during predicate evaluation.
     Status read_lazy_columns(const Range<uint64_t>& full_range, const Range<uint64_t>& post_filter_range,
-                             const Filter& post_filter, bool has_filter, ChunkPtr& active_chunk);
+                             const Filter& post_filter, const Filter& chunk_filter, bool has_filter,
+                             ChunkPtr& active_chunk);
     // Emit physical + reserved-field columns into dst. Skips slots listed in skip_slots.
     Status emit_physical_columns(ChunkPtr& active_chunk, ChunkPtr* dst,
                                  const std::unordered_set<SlotId>* skip_slots = nullptr);
@@ -177,6 +196,12 @@ private:
     std::unordered_map<SlotId, SlotCacheEntry> _slot_cache;
 
     bool _lazy_column_needed = false;
+
+    // Per-row-group count: number of lazy slots triggered via materialize_slot().
+    // Reset at GroupReader destructor boundary for fallback ratio calculation.
+    int64_t _lazy_triggered_count = 0;
+
+    std::unique_ptr<ReadRangePlanner> _read_range_planner;
 };
 
 } // namespace starrocks::parquet

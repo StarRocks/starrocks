@@ -50,6 +50,7 @@ class THdfsScanRange;
 namespace parquet {
 class ColumnMaterializer;
 class FileMetaData;
+class LazyMaterializationContext;
 class VariantProjectionHandler;
 } // namespace parquet
 struct TypeDescriptor;
@@ -165,7 +166,8 @@ private:
     //    evaluates dict / expression filters.  Populates chunk_filter and
     //    fills active_chunk.  Returns true if rows survive.
     StatusOr<bool> _read_and_filter_active_columns(const Range<uint64_t>& r, Filter& chunk_filter,
-                                                   ChunkPtr& active_chunk, bool& has_filter, size_t count);
+                                                   ChunkPtr& active_chunk, bool& has_filter, size_t count,
+                                                   LazyMaterializationContext* lazy_ctx);
 
     // ── Member variables ─────────────────────────────────────────────────────
 

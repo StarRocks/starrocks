@@ -543,6 +543,11 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->raw_rows_read_counter, _app_stats.raw_rows_read);
     COUNTER_UPDATE(profile->rows_read_counter, _app_stats.rows_read);
     COUNTER_UPDATE(profile->late_materialize_skip_rows_counter, _app_stats.late_materialize_skip_rows);
+    COUNTER_UPDATE(profile->parquet_lazy_col_skip_rows_counter, _app_stats.parquet_lazy_col_skip_rows);
+    COUNTER_UPDATE(profile->parquet_lazy_slot_triggered_counter, _app_stats.parquet_lazy_slot_triggered);
+    COUNTER_UPDATE(profile->parquet_lazy_read_count_counter, _app_stats.parquet_lazy_read_count);
+    COUNTER_UPDATE(profile->parquet_lazy_read_timer, _app_stats.parquet_lazy_read_ns);
+    COUNTER_UPDATE(profile->parquet_lazy_full_trigger_count_counter, _app_stats.parquet_lazy_full_trigger_count);
     COUNTER_UPDATE(profile->expr_filter_timer, _app_stats.expr_filter_ns);
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);
