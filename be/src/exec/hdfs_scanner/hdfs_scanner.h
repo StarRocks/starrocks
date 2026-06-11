@@ -277,6 +277,7 @@ struct TableSpecificData {
 // (_scanner_ctx) and _init_scanner() assigns its pointer; per-range fields are
 // overwritten in-place without copying.
 struct HdfsScannerContext {
+    // ===== nested types =====
     struct ColumnInfo {
         int idx_in_chunk;
         SlotDescriptor* slot_desc;
@@ -293,23 +294,26 @@ struct HdfsScannerContext {
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
-    // ---- per-range (set once per datasource) ----
+    // ===== per-range fields =====
     const THdfsScanRange* scan_range = nullptr;
     int32_t scan_range_id = -1;
     FileSystem* fs = nullptr;
     std::string file_path;
     int64_t file_size = -1;
+    bool is_first_split = false;
     std::string table_location;
     const HdfsSplitContext* split_context = nullptr;
     DataCacheOptions datacache_options{};
     TableSpecificData table_specific;
 
-    // ---- shared across all scan ranges ----
+    // ===== shared scan fields =====
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+    const TupleDescriptor* tuple_desc = nullptr;
     HdfsScannerConjuncts conjuncts;
     HdfsScannerOptions options;
     HdfsScannerProfile profile;
 
+    // ===== column descriptors =====
     // ---- materialized columns ----
     std::vector<SlotDescriptor*> materialize_slots;
     std::vector<int> materialize_index_in_chunk;
@@ -325,23 +329,14 @@ struct HdfsScannerContext {
     std::vector<int> extended_col_index_in_chunk;
     std::vector<int> index_in_extended_columns;
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    // ===== table metadata =====
     const TupleDescriptor* min_max_tuple_desc = nullptr;
     const HiveTableDescriptor* hive_table = nullptr;
     std::vector<std::string> hive_column_names;
     std::string avro_schema_json;
     std::vector<ColumnAccessPathPtr> column_access_paths;
 
-    // TODO: probably should be removed in later version.
-    std::atomic<int32_t>* lazy_column_coalesce_counter;
-    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
-
-    bool is_lazy_materialization_slot(SlotId slot_id) const;
-
-    std::string formatted_name(const std::string& name) const {
-        return options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
-    }
-
+    // ===== working state =====
     std::vector<SlotDescriptor*> slot_descs;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
@@ -368,7 +363,6 @@ struct HdfsScannerContext {
     // Evaluated extended column values.
     Columns extended_values;
 
-    bool is_first_split = false;
     bool can_use_file_record_count = false;
 
     // used by short circuit cases:
@@ -380,14 +374,57 @@ struct HdfsScannerContext {
 
     HdfsScannerStats* stats = nullptr;
 
+    std::vector<SlotDescriptor*> not_existed_slots;
+
+    // for iceberg reserved fields
+    std::vector<SlotDescriptor*> reserved_field_slots;
+
+    std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
+
+    // TODO: probably should be removed in later version.
+    std::atomic<int32_t>* lazy_column_coalesce_counter;
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    // ===== infrastructure =====
+    // ObjectPool for allocations built by _build_scanner_context().
+    // Prefer HiveDataSource::_pool (shorter lifetime); fall back to
+    // runtime_state->obj_pool() in tests and non-connector paths.
+    ObjectPool* obj_pool = nullptr;
+
+    // Embedded value structs — no pointers, no pool allocation.
+    // Since ctx is pointer-passed (never copied), unique_ptr members work naturally.
+
+    struct SplitState {
+        std::vector<HdfsSplitContextPtr> split_tasks;
+        bool has_split_tasks = false;
+        size_t estimated_mem_usage_per_split_task = 0;
+    } split;
+
+    // Destruction order within predicates matters (C++ reverse declaration):
+    //   runtime_filter_scan_range_pruner (refs into conjuncts_manager) → destroyed 1st
+    //   predicate_tree / predicate_parser (raw ptrs into predicate_free_pool)
+    //   predicate_free_pool (owns ColumnPredicates)
+    //   conjuncts_manager → destroyed last
+    struct PredicateState {
+        std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
+        PredicateTree predicate_tree;
+        std::unique_ptr<ConnectorPredicateParser> predicate_parser;
+        std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
+        std::unique_ptr<ScanConjunctsManager> conjuncts_manager;
+    } predicates;
+
+    // ===== methods =====
+    bool is_lazy_materialization_slot(SlotId slot_id) const;
+
+    std::string formatted_name(const std::string& name) const {
+        return options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    }
+
     bool can_use_count_optimization() const;
 
     bool can_use_min_max_optimization() const;
-
-    // update none_existed_slot
-    // update conjunct
+    
     void update_with_none_existed_slot(SlotDescriptor* slot);
-
     void update_return_count_columns();
     void update_min_max_columns();
 
@@ -415,41 +452,10 @@ struct HdfsScannerContext {
 
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
-    std::vector<SlotDescriptor*> not_existed_slots;
-    // for iceberg reserved fields
-    std::vector<SlotDescriptor*> reserved_field_slots;
-    std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
-
-    // ObjectPool for allocations built by _build_scanner_context().
-    // Prefer HiveDataSource::_pool (shorter lifetime); fall back to
-    // runtime_state->obj_pool() in tests and non-connector paths.
-    ObjectPool* obj_pool = nullptr;
-
-    // Embedded value structs — no pointers, no pool allocation.
-    // Since ctx is pointer-passed (never copied), unique_ptr members work naturally.
-
-    struct SplitState {
-        std::vector<HdfsSplitContextPtr> split_tasks;
-        bool has_split_tasks = false;
-        size_t estimated_mem_usage_per_split_task = 0;
-    } split;
-
-    // Destruction order within predicates matters (C++ reverse declaration):
-    //   runtime_filter_scan_range_pruner (refs into conjuncts_manager) → destroyed 1st
-    //   predicate_tree / predicate_parser (raw ptrs into predicate_free_pool)
-    //   predicate_free_pool (owns ColumnPredicates)
-    //   conjuncts_manager → destroyed last
-    struct PredicateState {
-        std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
-        PredicateTree predicate_tree;
-        std::unique_ptr<ConnectorPredicateParser> predicate_parser;
-        std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
-        std::unique_ptr<ScanConjunctsManager> conjuncts_manager;
-    } predicates;
 
     void merge_split_tasks();
 };
