@@ -450,16 +450,16 @@ CONF_mDouble(sdcg_dense_threshold, "0.3");
 // sdcg_dense_threshold (large K makes per-ordinal random seeks costlier than a full
 // sequential scan; lake/object-storage favors the conservative cap).
 CONF_mInt64(sdcg_sparse_max_rows, "50000");
-// In-place promotion (convergence) hard cap on sparse overlay depth. Before writing a new sparse
-// `.spcols` for a (column-batch, rssid), the writer counts the existing sparse files that cover any of
-// the batch's columns (chain_len). When chain_len + 1 would exceed this value, the writer forces the
-// dense path instead, which materializes the whole chain (read through the overlay) and lets the dense
-// supersede orphan every older sparse layer -- convergence without a background compaction worker.
-CONF_mInt32(sdcg_promotion_hard_count, "16");
-// In-place promotion threshold as a fraction of the base segment row count M. When the accumulated
-// touched rows across the existing sparse chain plus this batch (cum_K + K) reach
-// sdcg_promotion_threshold * M, the writer forces the dense path (a full rewrite is then no costlier to
-// read than walking the chain).
+// SAFETY-VALVE cap on sparse overlay-chain depth. Convergence of the chain is normally done by
+// BACKGROUND lake PK compaction (it reads input segments through the DCG overlay and emits fresh dense
+// segments, dropping the sparse chain). Only if a chain reaches this HIGH cap before compaction
+// converges it does the writer fall back to a synchronous in-place dense rewrite -- a rare safety net,
+// no longer a per-batch convergence mechanism, so it does not inflate publish-time p95. (Was 16, which
+// fired a depth-16 dense rewrite on the load's critical path every ~16 partial-update batches.)
+CONF_mInt32(sdcg_promotion_hard_count, "256");
+// DEPRECATED (no longer drives the write path): the old in-place-promotion threshold as a fraction of
+// the base segment row count M. Kept for config compatibility only; convergence is now
+// background-compaction-driven, not cum_K/M-threshold-driven.
 CONF_mDouble(sdcg_promotion_threshold, "0.3");
 // Per-column segment-level zone-map gate refinement. Historically, when a segment has ANY delta
 // column group, segment-level zone-map pruning is disabled for ALL non-key columns, because a DCG

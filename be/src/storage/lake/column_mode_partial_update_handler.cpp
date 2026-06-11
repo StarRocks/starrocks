@@ -1196,35 +1196,38 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     take_sparse = true;
                 }
 
-                // SDCG convergence (in-place promotion): even when the density decision favors a new sparse
-                // layer, force the dense path when the EXISTING sparse chain for this rssid's batch columns
-                // is already deep. Two independent triggers:
-                //   (a) chain_len + 1 > sdcg_promotion_hard_count  -- a hard cap on overlay depth, and
-                //   (b) cum_K + K >= sdcg_promotion_threshold * M  -- the accumulated touched rows across
-                //       the chain plus this batch reach a fraction of the segment, at which point a full
-                //       rewrite is no costlier to read than walking the chain.
-                // The dense rewrite reads the source THROUGH the overlay readers, materializing the whole
-                // chain, and append_dcg's dense-supersede then orphans every superseded sparse layer --
-                // convergence without any background compaction worker.
-                // Skip in-place promotion for flexible: it would flip take_sparse back to false and
-                // route the apply onto the flexible-unaware dense path (corrupting omitted columns).
-                // Flexible chains converge via compaction, not the promotion dense-rewrite.
+                // SDCG convergence SAFETY VALVE: convergence of the sparse overlay chain is normally
+                // done by BACKGROUND lake PK compaction (it reads input segments through the DCG overlay
+                // and emits fresh dense segments, dropping the chain). Only as a last resort, if a chain
+                // somehow reaches the HIGH sdcg_promotion_hard_count cap before compaction converges it,
+                // do we fall back to a synchronous in-place dense rewrite here. The old per-batch cum_K/M
+                // (sdcg_promotion_threshold) trigger has been removed -- it forced a depth-16 dense
+                // rewrite on the load's publish critical path roughly every 16 partial-update batches,
+                // which was the column-scaling p95 spike. Skip even the safety valve for flexible: it
+                // would flip take_sparse back to false and route the apply onto the flexible-unaware
+                // dense path (corrupting omitted columns); flexible chains converge via compaction only.
                 if (take_sparse && !flexible_mode) {
+                    // Convergence of the sparse overlay chain is handled by BACKGROUND compaction: a
+                    // normal lake PK compaction reads input segments THROUGH the DCG overlay (the
+                    // dcg_loader wired at rowset.cpp for primary keys) and emits fresh DENSE segments,
+                    // and apply_opcompaction drops the old sparse-chain DCG entries (orphaning the
+                    // .spcols files for GC). The synchronous in-place dense rewrite below is therefore
+                    // demoted to a rare SAFETY VALVE that fires only if a chain reaches a HIGH hard cap
+                    // before compaction catches it -- it is no longer a per-batch convergence mechanism.
+                    // The old cum_K/M (sdcg_promotion_threshold) trigger is removed: a moderately-covered
+                    // segment no longer pays a publish-time dense rewrite, which was the column-scaling
+                    // p95 cost (a depth-16 promotion fired on the load's critical path). Chain depth is
+                    // bounded proactively by the DCG-depth-aware compaction score (compaction_policy).
                     int32_t chain_len = 0;
                     int64_t cum_k = 0;
                     inspect_existing_sparse_chain(params.metadata, rssid, selective_unique_update_column_ids,
                                                   &chain_len, &cum_k);
-                    const bool hit_hard_count = (chain_len + 1) > config::sdcg_promotion_hard_count;
-                    const bool hit_threshold = source_num_rows > 0 && (static_cast<double>(cum_k + K) >=
-                                                                       config::sdcg_promotion_threshold *
-                                                                               static_cast<double>(source_num_rows));
-                    if (hit_hard_count || hit_threshold) {
+                    if ((chain_len + 1) > config::sdcg_promotion_hard_count) {
                         take_sparse = false;
                         LOG(INFO) << fmt::format(
-                                "SDCG promotion: forcing dense rewrite to converge sparse chain, tablet_id: {} "
-                                "txn_id: {} rssid: {} chain_len: {} cum_K: {} K: {} M: {} trigger: {}",
-                                params.tablet->id(), _txn_id, rssid, chain_len, cum_k, K, source_num_rows,
-                                hit_hard_count ? "hard_count" : "threshold");
+                                "SDCG safety-valve dense rewrite at chain cap, tablet_id: {} txn_id: {} "
+                                "rssid: {} chain_len: {} cum_K: {} K: {} M: {}",
+                                params.tablet->id(), _txn_id, rssid, chain_len, cum_k, K, source_num_rows);
                     }
                 }
 
