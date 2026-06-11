@@ -1,0 +1,109 @@
+name: MANUAL DEPLOY (debug-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      FE_OUTPUT_TAR:
+        description: "FE tar OSS path (e.g. oss://celerdata-ci-release/.../fe/xxx.tar.gz)"
+        required: true
+        type: string
+      BE_OUTPUT_TAR:
+        description: "BE tar OSS path (e.g. oss://celerdata-ci-release/.../be/xxx.tar.gz)"
+        required: true
+        type: string
+      BRANCH:
+        description: "Branch"
+        required: true
+        default: main
+        type: string
+      BUILD_TYPE:
+        description: "Build type"
+        required: true
+        default: Release
+        type: choice
+        options: [Release, ASAN]
+      LINUX_DISTRO:
+        description: "Linux distro"
+        required: true
+        default: ubuntu
+        type: choice
+        options: [ubuntu, centos7]
+      KEEP_HOURS:
+        description: "Extra hours to keep the cluster alive after deploy (0 = no renew)"
+        required: false
+        default: "6"
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  BRANCH: ${{ inputs.BRANCH }}
+  BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
+  LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
+  CLUSTER_NAME: ci-admit
+  FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR }}
+  BE_OUTPUT_TAR: ${{ inputs.BE_OUTPUT_TAR }}
+  PR_NUMBER: manual-${{ github.run_id }}
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, normal]
+    name: DEPLOY ONLY
+    timeout-minutes: 60
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Apply ECS cluster
+        id: apply
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-cluster.sh --template "${CLUSTER_NAME}" --linuxdistro "${LINUX_DISTRO}"
+          {
+            echo "## ECS cluster"
+            echo '```ini'
+            cat conf/starrocks_deploy.conf
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Deploy SR
+        if: steps.apply.outcome == 'success'
+        run: |
+          cd ci-tool && source lib/init.sh
+          echo "##### FE: ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          echo "##### BE: ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          ./bin/deploy-cluster.sh -c "${CLUSTER_NAME}" --with-coverage
+
+      - name: Renew cluster lease
+        if: success() && inputs.KEEP_HOURS != '0' && inputs.KEEP_HOURS != ''
+        run: |
+          cd ci-tool && source lib/init.sh
+          python3 lib/ecs_lib.py renew cluster all "${{ inputs.KEEP_HOURS }}" || true
+
+      - name: Print debug info
+        if: always() && steps.apply.outcome == 'success'
+        run: |
+          cd ci-tool
+          fe=$(grep '^fe =' conf/starrocks_deploy.conf | awk '{print $3}')
+          be_list=$(grep '^be_list =' conf/starrocks_deploy.conf | awk '{print $3}')
+          fe_port=$(grep query_port conf/cluster_conf/${CLUSTER_NAME}/fe/conf/fe.conf | awk -F'= ' '{print $2}')
+          {
+            echo "## How to debug"
+            echo '```bash'
+            echo "# SSH (user=sr / password=sr@test / install path=/home/disk1/sr)"
+            echo "sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no sr@${fe}"
+            echo ""
+            echo "# MySQL into FE"
+            echo "mysql -h${fe} -P${fe_port:-9030} -uroot"
+            echo ""
+            echo "# BE nodes"
+            echo "# ${be_list}"
+            echo ""
+            echo "# Delete cluster when done (ECS billed hourly)"
+            echo "cd /var/lib/ci-tool && source lib/init.sh && PR_NUMBER=${PR_NUMBER} ./bin/elastic-cluster.sh --delete"
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+          echo "::warning::Cluster is RETAINED. Remember to delete after debugging."
