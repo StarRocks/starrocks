@@ -470,8 +470,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 chunk_source = _chunk_sources[chunk_source_index];
             }
             if (chunk_source == nullptr) {
-                // Slot was already closed before the IO task started: nothing
-                // to do; let the deferred notify wake up the driver.
                 return;
             }
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
