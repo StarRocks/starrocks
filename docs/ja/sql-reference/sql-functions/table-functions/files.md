@@ -2,7 +2,6 @@
 displayed_sidebar: docs
 description: "リモートストレージ内のデータファイルを定義し、データロードとアンロードに使用します。"
 toc_max_heading_level: 5
-description: "リモートストレージ内のデータファイルを定義し、データのロードおよびアンロードに使用します。"
 ---
 
 # `FILES`
