@@ -78,6 +78,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | refresh_policy             | 人間が読めるリフレッシュポリシー。有効な値: `NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`、または `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` のようなスケジュール (`START` 句は開始時刻が定義されている場合にのみ含まれます)。 |
 | resource_group             | マテリアライズドビューのリフレッシュタスクに使用されるリソースグループ (マテリアライズドビューの `resource_group` プロパティから)。設定されていない場合は `default_mv_wg` がデフォルトです。 |
 | query_rewrite_status_reason | `query_rewrite_status` の理由。有効な値: `OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION`、`UNKNOWN`。 |
+| last_freshness_confirmed_at | 最後に成功した更新の開始時刻。更新全体（そのすべてのタスク実行）が完了した時点で記録されます。ベーステーブルに変更がなく更新不要と確認された場合も新鮮さが確認されます。マテリアライズドビューはこの時点のベーステーブルのデータを反映します。`last_refresh_time`（ベーステーブルのデータバージョン時刻）とは異なり、これは実時刻です。最初の更新が成功するまで、および同期マテリアライズドビューの場合は空です。パーティション範囲を指定した REFRESH（部分更新）では値は進みません。 |
 
 ## 例
 

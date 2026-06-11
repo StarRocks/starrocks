@@ -884,6 +884,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .column("refresh_policy", TypeFactory.createVarcharType(256))
                 .column("resource_group", TypeFactory.createVarcharType(128))
                 .column("query_rewrite_status_reason", TypeFactory.createVarcharType(32))
+                .column("last_freshness_confirmed_at", DATETIME)
                 .build();
     }
 
