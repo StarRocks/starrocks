@@ -148,7 +148,10 @@ public class DeriveGuardPredicateRuleTest {
 
     @Test
     public void testThreeBranches() {
-        // Three OR branches, all have l_shipdate comparisons + payload
+        // Three OR branches, all have l_shipdate (GE+LE) + l_discount (EQ on INT).
+        // Both columns get guards:
+        //   guard_shipdate: OR over shipdate ranges
+        //   guard_discount:  OR over discount EQ values (INT type, valid candidate)
         ColumnRefOperator shipdate = colInt(1, "l_shipdate");
         ColumnRefOperator discount = colInt(2, "l_discount");
 
@@ -167,12 +170,64 @@ public class DeriveGuardPredicateRuleTest {
         ScalarOperator derived = DeriveGuardPredicateRule.tryDeriveGuard(
                 (CompoundPredicateOperator) orExpr);
 
-        ScalarOperator expectedGuard = or(
+        ScalarOperator guardShipdate = or(
                 and(ge(shipdate, ConstantOperator.createInt(1)), le(shipdate, ConstantOperator.createInt(10))),
                 and(ge(shipdate, ConstantOperator.createInt(20)), le(shipdate, ConstantOperator.createInt(30))),
                 and(ge(shipdate, ConstantOperator.createInt(40)), le(shipdate, ConstantOperator.createInt(50)))
         );
-        ScalarOperator expected = and(expectedGuard, orExpr);
+        ScalarOperator guardDiscount = or(
+                eq(discount, ConstantOperator.createInt(5)),
+                eq(discount, ConstantOperator.createInt(6)),
+                eq(discount, ConstantOperator.createInt(7))
+        );
+        ScalarOperator expected = and(guardShipdate, guardDiscount, orExpr);
         assertEquals(expected, derived);
+    }
+
+    @Test
+    public void testEQOnNumericColumn() {
+        // EQ on INT columns should produce guards.
+        // Both l_shipdate (INT) and l_discount (INT) are valid candidates.
+        ColumnRefOperator shipdate = colInt(1, "l_shipdate");
+        ColumnRefOperator discount = colInt(2, "l_discount");
+
+        ScalarOperator orExpr = or(
+                and(eq(shipdate, ConstantOperator.createInt(1)),
+                    eq(discount, ConstantOperator.createInt(5))),
+                and(eq(shipdate, ConstantOperator.createInt(15)),
+                    eq(discount, ConstantOperator.createInt(6)))
+        );
+
+        ScalarOperator derived = DeriveGuardPredicateRule.tryDeriveGuard(
+                (CompoundPredicateOperator) orExpr);
+
+        // Guards for both columns
+        ScalarOperator guardShipdate = or(
+                eq(shipdate, ConstantOperator.createInt(1)),
+                eq(shipdate, ConstantOperator.createInt(15))
+        );
+        ScalarOperator guardDiscount = or(
+                eq(discount, ConstantOperator.createInt(5)),
+                eq(discount, ConstantOperator.createInt(6))
+        );
+        ScalarOperator expected = and(guardShipdate, guardDiscount, orExpr);
+        assertEquals(expected, derived);
+    }
+
+    @Test
+    public void testEQOnVarcharColumn() {
+        // EQ on varchar column should NOT produce guard (low cardinality risk)
+        // (l_returnflag = 'R') OR (l_returnflag = 'A')
+        ColumnRefOperator returnflag = colVarchar(1, "l_returnflag");
+
+        ScalarOperator orExpr = or(
+                eq(returnflag, ConstantOperator.createVarchar("R")),
+                eq(returnflag, ConstantOperator.createVarchar("A"))
+        );
+
+        ScalarOperator derived = DeriveGuardPredicateRule.tryDeriveGuard(
+                (CompoundPredicateOperator) orExpr);
+        // No guard expected: EQ on VARCHAR is skipped
+        assertEquals(orExpr, derived);
     }
 }
