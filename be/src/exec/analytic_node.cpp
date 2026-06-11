@@ -36,7 +36,6 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : PipelineNode(pool, tnode, descs),
           _tnode(tnode),
@@ -76,10 +75,21 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
     ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     bool is_skewed = _tnode.analytic_node.__isset.is_skewed && _tnode.analytic_node.is_skewed;
+    bool force_merge_sort = _tnode.analytic_node.__isset.force_merge_sort && _tnode.analytic_node.force_merge_sort;
 
     if (_tnode.analytic_node.partition_exprs.empty()) {
         // analytic's dop must be 1 if with no partition clause
         ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink);
+    } else if (force_merge_sort) {
+        // Force merge sort assumes a single ordered input stream.
+        // The upstream SortNode must have analytic_need_merge=true so that it produces single merged output.
+        // If the upstream source has DOP > 1 at this point, it means the SortNode used partitioned-sort
+        // instead of merge-sort, which is a bug.
+        DCHECK_EQ(upstream_source_op->degree_of_parallelism(), 1)
+                << "force_merge_sort requires a single ordered input stream from upstream SortNode, "
+                << "but got DOP=" << upstream_source_op->degree_of_parallelism();
+        ops_with_sink = context->maybe_interpolate_local_ordered_partition_exchange(runtime_state(), id(),
+                                                                                    ops_with_sink, _partition_exprs);
     } else if (_use_hash_based_partition) {
         bool has_outer_join_child =
                 _tnode.analytic_node.__isset.has_outer_join_child && _tnode.analytic_node.has_outer_join_child;
@@ -135,5 +145,4 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
 
     return ops_with_source;
 }
-
 } // namespace starrocks

@@ -976,6 +976,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED =
             "enable_force_group_by_skew_eliminate_when_skewed";
     public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
+    public static final String ENABLE_WINDOW_SKEW_MERGE_SORT = "enable_window_skew_merge_sort";
+    public static final String FORCE_WINDOW_MERGE_SORT = "force_window_merge_sort";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
@@ -3038,6 +3040,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
     private boolean enableSplitWindowSkewToUnion = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_WINDOW_SKEW_MERGE_SORT, flag = VariableMgr.INVISIBLE)
+    private boolean enableWindowSkewMergeSort = false;
+
+    @VariableMgr.VarAttr(name = FORCE_WINDOW_MERGE_SORT, flag = VariableMgr.INVISIBLE)
+    private boolean forceWindowMergeSort = false;
+
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
@@ -3649,6 +3657,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSplitWindowSkewToUnion(boolean enableSplitWindowSkewToUnion) {
         this.enableSplitWindowSkewToUnion = enableSplitWindowSkewToUnion;
+    }
+
+    public boolean isEnableWindowSkewMergeSort() {
+        return enableWindowSkewMergeSort;
+    }
+
+    public void setEnableWindowSkewMergeSort(boolean enableWindowSkewMergeSort) {
+        this.enableWindowSkewMergeSort = enableWindowSkewMergeSort;
+    }
+
+    public boolean isForceWindowMergeSort() {
+        return forceWindowMergeSort;
+    }
+
+    public void setForceWindowMergeSort(boolean forceWindowMergeSort) {
+        this.forceWindowMergeSort = forceWindowMergeSort;
     }
 
     public boolean getHudiMORForceJNIReader() {
