@@ -323,6 +323,7 @@ void FragmentContext::set_final_status(const Status& status) {
 void FragmentContext::set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines) {
     for (auto& group : exec_groups) {
         if (!group->is_empty()) {
+            group->attach_fragment_lifecycle(this);
             _execution_groups.emplace_back(std::move(group));
         }
     }
