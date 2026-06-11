@@ -333,7 +333,7 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(ObjectPool*
     return c;
 }
 
-static HdfsScanStats g_hdfs_scan_stats;
+static HdfsScannerStats g_hdfs_stats;
 GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c1 =
             _create_group_reader_param_of_column(&_pool, 0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);
@@ -349,10 +349,8 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
             _create_group_reader_param_of_column(&_pool, 5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
 
     // Minimal scanner context so GroupReader::_create_column_readers() can
-    // dereference scanner_ctx->params->options without crashing.
-    auto* hdfs_params = _pool.add(new HdfsScannerParams());
+    // dereference scanner_ctx->options without crashing.
     auto* scanner_ctx = _pool.add(new HdfsScannerContext());
-    scanner_ctx->params = hdfs_params;
 
     auto* param = _pool.add(new GroupReaderParam());
     param->read_cols.emplace_back(c1);
@@ -361,7 +359,7 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     param->read_cols.emplace_back(c4);
     param->read_cols.emplace_back(c5);
     param->read_cols.emplace_back(c6);
-    param->stats = &g_hdfs_scan_stats;
+    param->stats = &g_hdfs_stats;
     param->scanner_ctx = scanner_ctx;
     return param;
 }

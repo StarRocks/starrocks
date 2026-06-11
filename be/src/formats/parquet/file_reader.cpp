@@ -54,7 +54,7 @@ FileReader::~FileReader() = default;
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-    if (ctx->params->options.use_file_metacache) {
+    if (ctx->options.use_file_metacache) {
         _cache = DataCache::GetInstance()->page_cache();
     }
 
@@ -72,30 +72,30 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_build_split_tasks());
-    if (_scanner_ctx->split_tasks.size() > 0) {
-        _scanner_ctx->has_split_tasks = true;
+    if (_scanner_ctx->split.split_tasks.size() > 0) {
+        _scanner_ctx->split.has_split_tasks = true;
         _is_file_filtered = true;
         return Status::OK();
     }
 
-    if (_scanner_ctx->runtime_filter_scan_range_pruner != nullptr) {
+    if (_scanner_ctx->predicates.runtime_filter_scan_range_pruner != nullptr) {
         _runtime_filter_scan_range_pruner =
-                std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->runtime_filter_scan_range_pruner);
+                std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->predicates.runtime_filter_scan_range_pruner);
     }
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
 }
 
 std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-    if (_scanner_ctx->params->table_specific.iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
+    if (_scanner_ctx->table_specific.iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // Use LakeMetaHelper only when both an Iceberg/Paimon lake schema is present AND
         // the parquet file carries field ids.  Without field ids, the lake schema cannot
         // be matched reliably and we fall back to ParquetMetaHelper which handles
         // col_unique_id / col_physical_name / name lookup chains correctly.
-        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options.case_sensitive,
-                                                _scanner_ctx->params->table_specific.iceberg_schema);
+        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->options.case_sensitive,
+                                                _scanner_ctx->table_specific.iceberg_schema);
     } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->params->options.case_sensitive);
+        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->options.case_sensitive);
     }
 }
 
@@ -116,7 +116,7 @@ Status FileReader::_build_split_tasks() {
     // don't do split in following cases:
     // 1. this feature is not enabled
     // 2. we have already done split before (that's why `split_context` is nullptr)
-    if (!_scanner_ctx->params->options.enable_split_tasks || _scanner_ctx->params->split_context != nullptr) {
+    if (!_scanner_ctx->options.enable_split_tasks || _scanner_ctx->split_context != nullptr) {
         return Status::OK();
     }
 
@@ -146,21 +146,21 @@ Status FileReader::_build_split_tasks() {
         split_ctx->split_end = end_offset;
         split_ctx->file_metadata = _file_metadata;
         split_ctx->skip_rows_ctx = _skip_rows_ctx;
-        _scanner_ctx->split_tasks.emplace_back(std::move(split_ctx));
+        _scanner_ctx->split.split_tasks.emplace_back(std::move(split_ctx));
     }
     _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split_tasks.size() <= 1) {
-        _scanner_ctx->split_tasks.clear();
+    if (_scanner_ctx->split.split_tasks.size() <= 1) {
+        _scanner_ctx->split.split_tasks.clear();
     }
 
     if (VLOG_OPERATOR_IS_ON) {
         std::stringstream ss;
-        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->split_tasks) {
+        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->split.split_tasks) {
             ss << "[" << ctx->split_start << "," << ctx->split_end << "]";
         }
         VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                      << ", split_tasks.size = " << _scanner_ctx->split_tasks.size() << ", range = " << ss.str();
+                      << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size() << ", range = " << ss.str();
     }
     return Status::OK();
 }
@@ -170,10 +170,10 @@ Status FileReader::_build_split_tasks() {
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     bool& filtered = group_reader->get_is_group_filtered();
     filtered = false;
-    auto visitor = PredicateFilterEvaluator{_scanner_ctx->predicate_tree, group_reader.get(),
-                                            _scanner_ctx->params->options.parquet_page_index_enable,
-                                            _scanner_ctx->params->options.parquet_bloom_filter_enable};
-    auto sparse_range = _scanner_ctx->predicate_tree.visit(visitor);
+    auto visitor = PredicateFilterEvaluator{_scanner_ctx->predicates.predicate_tree, group_reader.get(),
+                                            _scanner_ctx->options.parquet_page_index_enable,
+                                            _scanner_ctx->options.parquet_bloom_filter_enable};
+    auto sparse_range = _scanner_ctx->predicates.predicate_tree.visit(visitor);
     _group_reader_param.stats->bloom_filter_tried_counter += visitor.counter.bloom_filter_tried_counter;
     _group_reader_param.stats->bloom_filter_success_counter += visitor.counter.bloom_filter_success_counter;
     _group_reader_param.stats->statistics_tried_counter += visitor.counter.statistics_tried_counter;
@@ -199,7 +199,7 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     bool filter = false;
     if (_runtime_filter_scan_range_pruner != nullptr) {
         RETURN_IF_ERROR(_runtime_filter_scan_range_pruner->update_range_if_arrived(
-                _scanner_ctx->params->global_dictmaps,
+                _scanner_ctx->global_dictmaps,
                 [this, &filter, &group_reader](auto cid, const PredicateList& predicates) {
                     PredicateCompoundNode<CompoundNodeType::AND> pred_tree;
                     for (const auto& pred : predicates) {
@@ -241,7 +241,7 @@ void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     size_t row_group_start = ParquetUtils::get_row_group_start_offset(row_group);
-    const auto* scan_range = _scanner_ctx->params->scan_range;
+    const auto* scan_range = _scanner_ctx->scan_range;
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
     if (row_group_start >= scan_start && row_group_start < scan_end) {
@@ -256,10 +256,10 @@ Status FileReader::_collect_row_group_io(std::shared_ptr<GroupReader>& group_rea
         std::vector<io::SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         ColumnIOTypeFlags flags = 0;
-        if (_scanner_ctx->params->options.parquet_page_index_enable) {
+        if (_scanner_ctx->options.parquet_page_index_enable) {
             flags |= ColumnIOType::PAGE_INDEX;
         }
-        if (_scanner_ctx->params->options.parquet_bloom_filter_enable) {
+        if (_scanner_ctx->options.parquet_bloom_filter_enable) {
             flags |= ColumnIOType::BLOOM_FILTER;
         }
         group_reader->collect_io_ranges(&ranges, &end_offset, flags);
@@ -283,14 +283,14 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
-    _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.params->lazy_column_coalesce_counter;
+    _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;
-    _group_reader_param.scan_range_id = fd_scanner_ctx.params->scan_range_id;
-    _group_reader_param.scan_range = fd_scanner_ctx.params->scan_range;
+    _group_reader_param.scan_range_id = fd_scanner_ctx.scan_range_id;
+    _group_reader_param.scan_range = fd_scanner_ctx.scan_range;
 
-    int64_t row_group_first_row_id = _scanner_ctx->params->scan_range->first_row_id;
+    int64_t row_group_first_row_id = _scanner_ctx->scan_range->first_row_id;
     int64_t row_group_first_row = 0;
     // select and create row group readers.
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
@@ -411,7 +411,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = 0;
-        if (_scanner_ctx->params->options.use_count_opt) {
+        if (_scanner_ctx->options.use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
             _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
             _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
