@@ -474,51 +474,66 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         if (table == null) {
             return;
         }
-        if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN
-                || jobState == JobState.RUNNING) {
-            table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        } else if (jobState == JobState.FINISHED_REWRITING) {
-            table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-            // The live runRunningJob bumped each partition's nextVersion to
-            // commitVersion+1 at the FINISHED_REWRITING transition (see
-            // updateNextVersion). The edit log persists the job's state but
-            // NOT that in-memory catalog bump, so a cold-started or
-            // leader-switched FE must redo it here. Without this the
-            // partition's nextVersion stays one behind the version reserved
-            // here, and the next operation that asserts
-            // nextVersion == its own reserved commitVersion -- e.g. a
-            // following LakeTableSchemaChangeJob.replay() -> updateNextVersion
-            // -- fails its Preconditions.checkState and aborts journal replay,
-            // leaving the FE unable to start.
-            replayUpdateNextVersion(table);
-        } else if (jobState == JobState.FINISHED) {
-            // Reapply catalog mutation at replay so a cold-started FE sees
-            // the post-alter table state. The mutation is idempotent by
-            // design (add checks presence, drop is no-op on missing).
-            //
-            // Also re-bump each partition's nextVersion and visibleVersion:
-            // the live FE captured both in memory only, and the next image may
-            // have been taken before the bump landed (or before the
-            // FINISHED_REWRITING journal that carries the nextVersion bump).
-            // Both bumps are idempotent: skip a partition that already
-            // advanced past the target (replay-after-checkpoint, or a later
-            // op that moved the version on).
-            replayUpdateNextVersion(table);
-            for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
-                PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
-                if (pp != null && pp.getVisibleVersion() < e.getValue()) {
-                    pp.setVisibleVersion(e.getValue(), finishedTimeMs);
+        // Replay runs on followers/observers that serve reads concurrently
+        // with journal apply (and off the image on a cold-started or
+        // leader-switched FE). The per-partition version writes
+        // (replayUpdateNextVersion / setVisibleVersion) and the index-list
+        // mutation (applyCatalogMutation) touch shared OlapTable state, so
+        // they must be done under the table WRITE lock -- exactly as the live
+        // path (runRunningJob / runFinishedRewritingJob) and the sibling
+        // LakeTableAlterMetaJobBase.replay() already do. Acquire the lock
+        // before the try so a failed lock() does not run unLock() in finally.
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+        try {
+            if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN
+                    || jobState == JobState.RUNNING) {
+                table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            } else if (jobState == JobState.FINISHED_REWRITING) {
+                table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+                // The live runRunningJob bumped each partition's nextVersion to
+                // commitVersion+1 at the FINISHED_REWRITING transition (see
+                // updateNextVersion). The edit log persists the job's state but
+                // NOT that in-memory catalog bump, so a cold-started or
+                // leader-switched FE must redo it here. Without this the
+                // partition's nextVersion stays one behind the version reserved
+                // here, and the next operation that asserts
+                // nextVersion == its own reserved commitVersion -- e.g. a
+                // following LakeTableSchemaChangeJob.replay() -> updateNextVersion
+                // -- fails its Preconditions.checkState and aborts journal replay,
+                // leaving the FE unable to start.
+                replayUpdateNextVersion(table);
+            } else if (jobState == JobState.FINISHED) {
+                // Reapply catalog mutation at replay so a cold-started FE sees
+                // the post-alter table state. The mutation is idempotent by
+                // design (add checks presence, drop is no-op on missing).
+                //
+                // Also re-bump each partition's nextVersion and visibleVersion:
+                // the live FE captured both in memory only, and the next image may
+                // have been taken before the bump landed (or before the
+                // FINISHED_REWRITING journal that carries the nextVersion bump).
+                // Both bumps are idempotent: skip a partition that already
+                // advanced past the target (replay-after-checkpoint, or a later
+                // op that moved the version on).
+                replayUpdateNextVersion(table);
+                for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
+                    PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
+                    if (pp != null && pp.getVisibleVersion() < e.getValue()) {
+                        pp.setVisibleVersion(e.getValue(), finishedTimeMs);
+                    }
                 }
+                applyCatalogMutation(table);
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            } else if (jobState == JobState.CANCELLED) {
+                // A job force-cancelled out of FINISHED_REWRITING has already
+                // reserved a commitVersion and bumped nextVersion on the live FE;
+                // reproduce that bump on replay too (no-op when the job was
+                // cancelled before reserving, since commitVersionMap is empty).
+                replayUpdateNextVersion(table);
+                table.setState(OlapTable.OlapTableState.NORMAL);
             }
-            applyCatalogMutation(table);
-            table.setState(OlapTable.OlapTableState.NORMAL);
-        } else if (jobState == JobState.CANCELLED) {
-            // A job force-cancelled out of FINISHED_REWRITING has already
-            // reserved a commitVersion and bumped nextVersion on the live FE;
-            // reproduce that bump on replay too (no-op when the job was
-            // cancelled before reserving, since commitVersionMap is empty).
-            replayUpdateNextVersion(table);
-            table.setState(OlapTable.OlapTableState.NORMAL);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
     }
 
