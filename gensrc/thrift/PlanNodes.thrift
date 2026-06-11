@@ -199,6 +199,9 @@ struct TBrokerRangeDesc {
     15: optional TEnvelopeType envelope
     // last modification time of the file in milliseconds (epoch), for rejected-record anchors
     16: optional i64 modification_time
+    // If true, the file path will be exposed as an additional column
+    // The path column comes after columns_from_path in the schema
+    17: optional bool include_file_path_column
 }
 
 enum TObjectStoreType {

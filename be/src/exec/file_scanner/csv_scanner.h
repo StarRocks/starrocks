@@ -102,6 +102,10 @@ private:
     // It's mainly for optimizing the performance where get_next() returns Status::Timeout
     // frequently by avoiding creating a chunk in each call
     ChunkPtr _reusable_empty_chunk = nullptr;
+
+    // When no file columns are materialized (only path_column or columns_from_path),
+    // we need to track row count separately since chunk->num_rows() returns 0 for empty chunks
+    size_t _parsed_rows_for_path_columns = 0;
 };
 
 } // namespace starrocks
