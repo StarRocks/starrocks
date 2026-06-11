@@ -50,7 +50,7 @@ SpillableMultiCastLocalExchanger::SpillableMultiCastLocalExchanger(RuntimeState*
         opts.memory_limit = std::numeric_limits<size_t>::max();
     }
     opts.plan_node_id = plan_node_id;
-    opts.block_manager = runtime_state->query_ctx()->spill_manager()->block_manager();
+    opts.block_manager = runtime_state->query_runtime_state()->query_spill_manager()->block_manager();
     opts.encode_level = runtime_state->spill_encode_level();
 
     _queue = std::make_shared<MemLimitedChunkQueue>(runtime_state, consumer_number, opts);

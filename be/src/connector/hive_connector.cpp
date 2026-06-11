@@ -248,10 +248,11 @@ void HiveDataSource::_init_global_late_materialization_context(RuntimeState* sta
 
     if (will_be_lazy_read) {
         int64_t scan_id = _provider->_plan_node_id;
-        auto glm_ctx_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
+        auto glm_ctx_mgr = state->query_runtime_state()->global_late_materialization_ctx_mgr();
         IcebergGlobalLateMaterilizationContext* glm_ctx =
                 static_cast<IcebergGlobalLateMaterilizationContext*>(glm_ctx_mgr->get_or_create_ctx(scan_id, [&]() {
-                    auto ctx = state->query_ctx()->object_pool()->add(new IcebergGlobalLateMaterilizationContext());
+                    auto ctx = state->query_runtime_state()->object_pool()->add(
+                            new IcebergGlobalLateMaterilizationContext());
                     ctx->hdfs_scan_node = hdfs_scan_node;
                     return ctx;
                 }));

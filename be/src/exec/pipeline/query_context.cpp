@@ -51,6 +51,7 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+    _query_runtime_state.set_object_pool(&_object_pool);
     _lifetime_sw.start();
 }
 
@@ -109,8 +110,7 @@ void QueryContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
     auto lifetime = weak_from_this();
     DCHECK(!lifetime.expired());
-    state->set_query_ctx(this);
-    state->set_query_runtime_state(&query_runtime_state());
+    state->set_query_ctx(this, &query_runtime_state());
     state->set_query_ctx_lifetime(std::move(lifetime));
 }
 
@@ -170,6 +170,10 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (runtime_state != nullptr && runtime_state->enable_global_late_materialization()) {
             _global_late_materialization_ctx_mgr = _object_pool.add(new GlobalLateMaterilizationContextMgr());
         }
+        _query_runtime_state.set_static_query_mem_limit(_static_query_mem_limit);
+        _query_runtime_state.set_connector_scan_operator_mem_share_arbitrator(
+                _connector_scan_operator_mem_share_arbitrator);
+        _query_runtime_state.set_global_late_materialization_ctx_mgr(_global_late_materialization_ctx_mgr);
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -183,6 +187,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             _connector_scan_mem_tracker = std::make_shared<MemTracker>(
                     MemTrackerType::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
                     _profile->name() + "/connector_scan", connector_scan_parent);
+            _query_runtime_state.set_connector_scan_mem_tracker(_connector_scan_mem_tracker.get());
         }
     });
 }

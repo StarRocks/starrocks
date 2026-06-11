@@ -474,8 +474,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
                       thrift_lake_scan_node.enable_global_late_materialization;
     if (enable_glm) {
         int32_t scan_node_id = _provider->_scan_node->id();
-        auto* glm_mgr = runtime_state->query_ctx()->global_late_materialization_ctx_mgr();
-        auto* obj_pool = runtime_state->query_ctx()->object_pool();
+        auto* glm_mgr = runtime_state->query_runtime_state()->global_late_materialization_ctx_mgr();
+        auto* obj_pool = runtime_state->query_runtime_state()->object_pool();
         auto creator = [&]() {
             auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
             return ctx;

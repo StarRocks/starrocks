@@ -17,6 +17,7 @@
 #include <chrono>
 #include <thread>
 
+#include "common/object_pool.h"
 #include "exec/runtime/query_runtime_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
@@ -57,6 +58,37 @@ TEST(QueryRuntimeStateTest, StoresQueryMemTrackerReference) {
     EXPECT_EQ(&tracker, state.query_mem_tracker());
     const auto& const_state = state;
     EXPECT_EQ(&tracker, const_state.query_mem_tracker());
+}
+
+TEST(QueryRuntimeStateTest, QueryScopedServicesDefaultToUnset) {
+    QueryRuntimeState state;
+
+    EXPECT_EQ(nullptr, state.object_pool());
+    EXPECT_EQ(nullptr, state.connector_scan_mem_tracker());
+    EXPECT_EQ(nullptr, state.connector_scan_operator_mem_share_arbitrator());
+    EXPECT_EQ(nullptr, state.global_late_materialization_ctx_mgr());
+    EXPECT_EQ(0, state.static_query_mem_limit());
+}
+
+TEST(QueryRuntimeStateTest, StoresQueryScopedServiceReferences) {
+    QueryRuntimeState state;
+    ObjectPool pool;
+    MemTracker connector_scan_tracker(-1);
+    // Opaque to ExecRuntime: only the pointer round-trip is observable here.
+    auto* arbitrator = reinterpret_cast<ConnectorScanOperatorMemShareArbitrator*>(0x10);
+    auto* glm_ctx_mgr = reinterpret_cast<GlobalLateMaterilizationContextMgr*>(0x20);
+
+    state.set_object_pool(&pool);
+    state.set_connector_scan_mem_tracker(&connector_scan_tracker);
+    state.set_connector_scan_operator_mem_share_arbitrator(arbitrator);
+    state.set_global_late_materialization_ctx_mgr(glm_ctx_mgr);
+    state.set_static_query_mem_limit(1024);
+
+    EXPECT_EQ(&pool, state.object_pool());
+    EXPECT_EQ(&connector_scan_tracker, state.connector_scan_mem_tracker());
+    EXPECT_EQ(arbitrator, state.connector_scan_operator_mem_share_arbitrator());
+    EXPECT_EQ(glm_ctx_mgr, state.global_late_materialization_ctx_mgr());
+    EXPECT_EQ(1024, state.static_query_mem_limit());
 }
 
 TEST(QueryRuntimeStateTest, TracksQueryAndDeliveryExpiry) {
