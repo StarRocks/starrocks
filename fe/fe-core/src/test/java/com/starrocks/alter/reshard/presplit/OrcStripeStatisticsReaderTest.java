@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
@@ -24,6 +25,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -235,6 +237,109 @@ class OrcStripeStatisticsReaderTest {
                 statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
 
         Assertions.assertTrue(stripeStatistics.isEmpty());
+    }
+
+    @Test
+    void readsDateStatistics() throws Exception {
+        // ORC DATE is stored in a LongColumnVector as day-of-epoch. Day 0 = 1970-01-01.
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 5,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = rowIndex);
+
+        List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
+                statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stripeStatistics.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stripeStatistics) {
+            Assertions.assertFalse(stripe.isTruncated());
+            String minValue = stripe.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = stripe.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(5L, totalRowCount);
+        Assertions.assertEquals("1970-01-01", globalMin);
+        Assertions.assertEquals("1970-01-05", globalMax);
+    }
+
+    @Test
+    void dateColumnIntoNonDateSortKeyFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = rowIndex);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        statusOf(orcPath), new Configuration(),
+                        new Column("event_day", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void allNullDateStripeReportsAbsentStatistics() throws Exception {
+        // ORC DATE column written with only nulls → DateColumnStatistics.getNumberOfValues() == 0,
+        // so the stripe reports absent min/max (same contract as the integer all-null path).
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    batch.cols[0].noNulls = false;
+                    batch.cols[0].isNull[batchRow] = true;
+                });
+
+        List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
+                statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stripeStatistics.isEmpty());
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stripeStatistics) {
+            Assertions.assertNull(stripe.getMinTuple());
+            Assertions.assertNull(stripe.getMaxTuple());
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(3L, totalRowCount);
+    }
+
+    @Test
+    void pre1970DateStripeFallsBackToDataTier() throws Exception {
+        // day-of-epoch -1 = 1969-12-31 < 1970-01-01: outside the safe window → data tier.
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = -1 - rowIndex);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        statusOf(orcPath), new Configuration(),
+                        new Column("event_day", DateType.DATE)));
+    }
+
+    @Test
+    void timestampColumnStillFallsBackToDataTier() throws Exception {
+        // ORC TIMESTAMP stats carry reader-local-tz semantics that need separate
+        // alignment work; deferred. Falls back to data tier (NOT a load failure).
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.time[batchRow] = rowIndex * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
     }
 
     private Path writeOrc(

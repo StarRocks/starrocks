@@ -18,10 +18,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.PrimitiveType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.orc.ColumnStatistics;
+import org.apache.orc.DateColumnStatistics;
 import org.apache.orc.IntegerColumnStatistics;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
@@ -30,6 +32,7 @@ import org.apache.orc.StripeStatistics;
 import org.apache.orc.TypeDescription;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -138,6 +141,8 @@ public final class OrcStripeStatisticsReader {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (orcCategory) {
             case BYTE, SHORT, INT, LONG -> starRocksPrimitive.isIntegerType();
+            // ORC DATE is day-of-epoch (no timezone) → StarRocks DATE only.
+            case DATE -> starRocksPrimitive == PrimitiveType.DATE;
             default -> false;
         };
         if (!compatible) {
@@ -154,14 +159,22 @@ public final class OrcStripeStatisticsReader {
         ColumnStatistics[] columnStatistics = stripeStatistics.getColumnStatistics();
         ColumnStatistics sortKeyStatistics =
                 location.columnId < columnStatistics.length ? columnStatistics[location.columnId] : null;
-        // ORC integer stats expose no presence flag (getMinimum() returns a default
-        // when the stripe has no values), so we must treat absent / all-null stats
-        // as missing explicitly rather than emit a bogus min/max. The instanceof
-        // pattern also absorbs the out-of-bounds (null) case above.
-        if (!(sortKeyStatistics instanceof IntegerColumnStatistics integerStatistics)
-                || integerStatistics.getNumberOfValues() == 0) {
-            return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+        if (sortKeyStatistics instanceof IntegerColumnStatistics integerStatistics
+                && integerStatistics.getNumberOfValues() > 0) {
+            return integerStripe(integerStatistics, rowCount, location);
         }
+        if (sortKeyStatistics instanceof DateColumnStatistics dateStatistics
+                && dateStatistics.getNumberOfValues() > 0) {
+            return dateStripe(dateStatistics, rowCount, location);
+        }
+        // Absent / all-null stats (no presence flag on ORC numeric/date stats, so an
+        // empty stripe is detected via getNumberOfValues() == 0) → missing min/max.
+        return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics integerStripe(
+            IntegerColumnStatistics integerStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
         Variant minVariant;
         Variant maxVariant;
         try {
@@ -178,10 +191,47 @@ public final class OrcStripeStatisticsReader {
         }
         // ORC integer statistics are always exact (no truncation like Parquet binary).
         return new RowGroupStatistics(
-                new Tuple(List.of(minVariant)),
-                new Tuple(List.of(maxVariant)),
-                rowCount,
-                /*truncated=*/ false);
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    // v1 safe window — identical rationale to the Parquet reader: year 0/BCE mis-renders, pre-1970
+    // (negative epoch) has unverified BE parity, and pre-1582 raises calendar parity questions.
+    private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1970, 1, 1);
+    private static final int MAX_SUPPORTED_YEAR = 9999;
+
+    private static RowGroupStatistics dateStripe(
+            DateColumnStatistics dateStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        LocalDate minDate;
+        LocalDate maxDate;
+        try {
+            // getMinimumDayOfEpoch() is day-of-epoch (timezone-free).
+            minDate = LocalDate.ofEpochDay(dateStatistics.getMinimumDayOfEpoch());
+            maxDate = LocalDate.ofEpochDay(dateStatistics.getMaximumDayOfEpoch());
+        } catch (RuntimeException conversionFailure) {
+            // Mirror integerStripe: an absurd ORC day-count (DateTimeException from ofEpochDay)
+            // becomes a meta-tier fallback signal, not a hard sampling error that skips pre-split.
+            throw new MetaTierUnavailableException(String.format(
+                    "ORC date stats value not representable for sort-key column \"%s\": %s",
+                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
+        }
+        // Throws MetaTierUnavailableException (checked) directly — propagates past the catch above.
+        rejectUnsafeTemporalDate(minDate);
+        rejectUnsafeTemporalDate(maxDate);
+        return new RowGroupStatistics(
+                new Tuple(List.of(Variant.of(location.starRocksColumn.getType(),
+                        minDate.format(DateUtils.DATE_FORMATTER)))),
+                new Tuple(List.of(Variant.of(location.starRocksColumn.getType(),
+                        maxDate.format(DateUtils.DATE_FORMATTER)))),
+                rowCount, /*truncated=*/ false);
+    }
+
+    private static void rejectUnsafeTemporalDate(LocalDate date) throws MetaTierUnavailableException {
+        if (date.isBefore(MIN_SUPPORTED_DATE) || date.getYear() > MAX_SUPPORTED_YEAR) {
+            throw new MetaTierUnavailableException(
+                    "DATE meta tier supports [1970-01-01, 9999-12-31] only; value "
+                            + date + " is outside that window");
+        }
     }
 
     private record SortKeyLocation(int columnId, Column starRocksColumn) {
