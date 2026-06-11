@@ -78,10 +78,9 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         return Status::OK();
     }
 
-    if (_scanner_ctx->state != nullptr &&
-        _scanner_ctx->state->runtime_filter_scan_range_pruner != nullptr) {
-        _runtime_filter_scan_range_pruner = std::make_shared<RuntimeScanRangePruner>(
-                *_scanner_ctx->state->runtime_filter_scan_range_pruner);
+    if (_scanner_ctx->state != nullptr && _scanner_ctx->state->runtime_filter_scan_range_pruner != nullptr) {
+        _runtime_filter_scan_range_pruner =
+                std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->state->runtime_filter_scan_range_pruner);
     }
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();

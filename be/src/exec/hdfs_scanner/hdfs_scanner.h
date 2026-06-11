@@ -302,7 +302,6 @@ struct HdfsScannerState {
 // Non-copyable scanner state (predicates, split tasks) lives in HdfsScannerState,
 // which is obj_pool-allocated; ctx holds only a raw non-owning pointer (state).
 struct HdfsScannerContext {
-
     struct ColumnInfo {
         int idx_in_chunk;
         SlotDescriptor* slot_desc;
