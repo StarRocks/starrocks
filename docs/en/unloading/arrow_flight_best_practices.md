@@ -5,7 +5,7 @@ keywords: ['arrow flight sql', 'performance', 'best practices', 'optimization', 
 
 # Arrow Flight SQL Best Practices
 
-Arrow Flight SQL is the fastest way to pull large result sets out of StarRocks. Against the MySQL protocol, on the same hardware and against the same cluster, Arrow Flight is consistently faster: **4×–12×** faster at the raw protocol fetch, and **22×–172×** faster end-to-end to a pandas DataFrame. The exact factor depends on row count, column shape, and which MySQL client you compare against. But the speedup is not automatic: how the client code reads the result has a large effect on the end-to-end time, and a few simple mistakes can give back most of it.
+Arrow Flight SQL is the fastest way to pull large result sets out of StarRocks. Against the MySQL protocol, on the same hardware and against the same cluster, Arrow Flight is consistently faster: **3×–9×** faster at the raw protocol fetch, and **19×–97×** faster end-to-end to a pandas DataFrame. The exact factor depends on row count, column shape, and which MySQL client you compare against. But the speedup is not automatic: how the client code reads the result has a large effect on the end-to-end time, and a few simple mistakes can give back most of it.
 
 This page shows the overall numbers you can expect, summarises the aspects that affect them, and then describes each aspect with the code change and the measured impact.
 
@@ -17,29 +17,38 @@ Two comparisons follow. The first measures only the **protocol fetch** — how l
 
 `fetch_arrow_table()` drains the network into Arrow buffers without converting cells into Python objects. `mysql --quick` drains the MySQL wire protocol with a streaming C client that parses rows. Both are protocol-only — neither pays for language-native object materialization.
 
-| Workload | Rows | MySQL protocol (`mysql --quick`) | Arrow Flight (`fetch_arrow_table`) | Speedup |
+| Workload | Rows | MySQL protocol<br>(`mysql --quick`) | Arrow Flight<br>(`fetch_arrow_table`) | Speedup |
 | --- | --- | --- | --- | --- |
-| Single numeric column (`SELECT id`) | 5 M | 1,650 ms | 164 ms | **10.1×** |
-| Single numeric column (`SELECT id`) | 10 M | 3,120 ms | 250 ms | **12.5×** |
-| 20 numeric columns (`SELECT *`) | 5 M | 8,990 ms | 1,252 ms | **7.2×** |
-| 20 numeric columns (`SELECT *`) | 10 M | 18,370 ms | 2,449 ms | **7.5×** |
-| 20 VARCHAR columns (`SELECT *`) | 5 M | 25,820 ms | 5,615 ms | **4.6×** |
-| 20 VARCHAR columns (`SELECT *`) | 10 M | 44,570 ms | 11,059 ms | **4.0×** |
-
-Even with no per-row object cost on either side, Arrow Flight is **4×–12.5×** faster than the MySQL protocol because columnar Arrow buffers travel as fixed-width arrays plus offset buffers, while MySQL wire packets encode each value individually with type-prefix framing. Narrow numeric queries hit the largest ratios because the MySQL protocol's per-value framing overhead dominates when each value is small.
+| Single numeric column (`SELECT id`) | 1 M | 831 ms | 215 ms | **3.9×** |
+| Single numeric column (`SELECT id`) | 5 M | 2,216 ms | 456 ms | **4.9×** |
+| Single numeric column (`SELECT id`) | 10 M | 4,166 ms | 1,163 ms | **3.6×** |
+| Single numeric column (`SELECT id`) | 100 M | 35,629 ms | 6,737 ms | **5.3×** |
+| 20 numeric columns (`SELECT *`) | 1 M | 1,994 ms | 370 ms | **5.4×** |
+| 20 numeric columns (`SELECT *`) | 5 M | 9,665 ms | 1,251 ms | **7.7×** |
+| 20 numeric columns (`SELECT *`) | 10 M | 18,461 ms | 2,577 ms | **7.2×** |
+| 20 numeric columns (`SELECT *`) | 100 M | 178,416 ms | 19,047 ms | **9.4×** |
+| 20 VARCHAR columns (`SELECT *`) | 1 M | 4,549 ms | 1,294 ms | **3.5×** |
+| 20 VARCHAR columns (`SELECT *`) | 5 M | 19,077 ms | 5,959 ms | **3.2×** |
+| 20 VARCHAR columns (`SELECT *`) | 10 M | 36,079 ms | 11,499 ms | **3.1×** |
+| 20 VARCHAR columns (`SELECT *`) | 100 M | 370,858 ms | 164,508 ms (chunked) | **2.3×** |
 
 ### Real-world Python application — `pd.read_sql` with ADBC vs PyMySQL
 
 The canonical Python pipeline is `pd.read_sql(sql, conn) → pandas.DataFrame`. The connection object you hand it is the entire migration: pass a PyMySQL `Connection` and pandas calls `cursor.fetchall()` + `pd.DataFrame(rows)`, walking every row to build the DataFrame. Pass an ADBC Flight SQL connection and pandas uses ADBC's native Arrow fetch + near-zero-copy DataFrame conversion.
 
-| Workload | Rows | `pd.read_sql(sql, adbc_conn)` (fetch + `to_pandas`) | `pd.read_sql(sql, pymysql_conn)` (fetch + DataFrame) | Speedup |
+| Workload | Rows | `pd.read_sql(sql,`<br>`adbc_conn)` | `pd.read_sql(sql,`<br>`pymysql_conn)` | Speedup |
 | --- | --- | --- | --- | --- |
-| Single numeric column (`SELECT id`) | 5 M | 164 + 22 = **186 ms** | 23,025 + 1,763 = **24,788 ms** | **133.3×** |
-| Single numeric column (`SELECT id`) | 10 M | 250 + 46 = **296 ms** | 47,281 + 3,656 = **50,937 ms** | **172.1×** |
-| 20 numeric columns (`SELECT *`) | 5 M | 1,252 + 95 = **1,347 ms** | 103,670 + 34,378 = **138,048 ms** | **102.5×** |
-| 20 numeric columns (`SELECT *`) | 10 M | 2,449 + 113 = **2,562 ms** | 183,242 + 66,739 = **249,981 ms** | **97.6×** |
-| 20 VARCHAR columns (`SELECT *`) | 5 M | 5,615 + 985 = **6,600 ms** | 105,364 + 39,684 = **145,048 ms** | **22.0×** |
-| 20 VARCHAR columns (`SELECT *`) | 10 M | 11,059 + 2,063 = **13,122 ms** | 211,867 + 83,079 = **294,946 ms** | **22.5×** |
+| Single numeric column (`SELECT id`) | 1 M | 320 ms | 6,185 ms | **19.3×** |
+| Single numeric column (`SELECT id`) | 5 M | 421 ms | 30,751 ms | **73.0×** |
+| Single numeric column (`SELECT id`) | 10 M | 970 ms | 61,524 ms | **63.4×** |
+| Single numeric column (`SELECT id`) | 100 M | 6,024 ms | 585,556 ms | **97.2×** |
+| 20 numeric columns (`SELECT *`) | 1 M | 522 ms | 27,521 ms | **52.7×** |
+| 20 numeric columns (`SELECT *`) | 5 M | 1,530 ms | 141,500 ms | **92.5×** |
+| 20 numeric columns (`SELECT *`) | 10 M | 2,689 ms | 255,408 ms | **95.0×** |
+| 20 numeric columns (`SELECT *`) | 100 M | 24,568 ms | OOM | — |
+| 20 VARCHAR columns (`SELECT *`) | 1 M | 1,560 ms | 31,407 ms | **20.1×** |
+| 20 VARCHAR columns (`SELECT *`) | 5 M | 6,937 ms | 154,560 ms | **22.3×** |
+| 20 VARCHAR columns (`SELECT *`) | 10 M | 13,260 ms | 304,647 ms | **23.0×** |
 
 Each cell is *fetch* + *convert* = *total*; the speedup is total vs total. Narrow numeric queries hit the largest ratio because the PyMySQL side allocates a Python `int` per cell during fetch and pandas then walks the tuple list during conversion — the ADBC side skips both costs. Arrow's columnar memory format wins twice: it skips per-cell Python object allocation during fetch, and makes the DataFrame conversion almost free afterwards.
 
@@ -67,14 +76,14 @@ with fl.connect(
 | Cluster | 3 FE + 2 BE on `m6g.xlarge`; Arrow Flight on `grpcs://…:443`, MySQL on `:9030`                                                               |
 | Java stack | OpenJDK 17, `jdbc:arrow-flight-sql`, `arrow-jdbc`, `parquet-hadoop`                                                                          |
 | Python stack | `python` 3.12, `pyarrow` 24.0, `adbc-driver-flightsql` 1.11, `PyMySQL` 1.2                                                                   |
-| Workload | Two 20-column tables — one VARCHAR-heavy, one all-integer — plus single-column projections; row counts of 5 M and 10 M via `SELECT … LIMIT N` |
+| Workload | Two 20-column tables — one VARCHAR-heavy, one all-integer — plus single-column projections; row counts of 1 M, 5 M, 10 M, and 100 M via `SELECT … LIMIT N` |
 | MySQL drain mode | `cursor.fetchall()` buffered for all measurements                                                                                            |
 
 ## Choosing a Client
 
 Before any code-level tuning, the biggest single decision is which client API you read results through. [Interact with StarRocks via Arrow Flight SQL](./arrow_flight.md) covers the full setup for Python ADBC, the Arrow Flight JDBC driver, the Java ADBC driver, and the native `FlightClient`. For performance, those collapse into two paths:
 
-- **Raw Arrow batches via `FlightSqlClient` or ADBC (recommended).** This is the columnar end-to-end path the Flight SQL protocol is designed for: your code receives `VectorSchemaRoot` batches and reads them with primitive-returning vector accessors, with no per-row object allocation. End-to-end (drain + typed conversion), this path is about **10×** faster than Java MySQL JDBC on 10 M numeric rows, and **up to 172×** faster than PyMySQL on narrow numeric queries delivered as a pandas DataFrame. Use it whenever your downstream code can consume columnar data (Pandas, Arrow, ML pipelines, Parquet writers, custom analytics).
+- **Raw Arrow batches via `FlightSqlClient` or ADBC (recommended).** This is the columnar end-to-end path the Flight SQL protocol is designed for: your code receives `VectorSchemaRoot` batches and reads them with primitive-returning vector accessors, with no per-row object allocation. End-to-end (drain + typed conversion), this path is about **10×** faster than Java MySQL JDBC on 10 M numeric rows, and **up to 97×** faster than PyMySQL on 100 M narrow numeric queries delivered as a pandas DataFrame. Use it whenever your downstream code can consume columnar data (Pandas, Arrow, ML pipelines, Parquet writers, custom analytics).
 - **Arrow Flight JDBC driver (`jdbc:arrow-flight-sql`).** Use this when you need a drop-in `ResultSet` for an existing JDBC code path, or for BI tools like Tableau, Power BI, and DBeaver where the JDBC interface is required. JDBC's API forces the driver to return a boxed `Object` for every cell, so this path cannot reach the performance of raw Arrow batches. The JDBC driver is still substantially faster than MySQL JDBC; it is the right tool when JDBC compatibility is the requirement.
 
 The per-aspect tables further down switch baselines: they compare the Java Arrow Flight JDBC driver against Java MySQL JDBC, not against PyMySQL. The Java MySQL JDBC connector is much faster at row materialization than PyMySQL — for example the same 5 M VARCHAR `SELECT *` takes ~22 s through Java MySQL JDBC versus ~105 s through PyMySQL — so the Java ratios you'll see are smaller than the Python numbers in Overall Performance. Java MySQL JDBC is the right baseline when you are choosing between Java drivers.
