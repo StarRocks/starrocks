@@ -359,6 +359,60 @@ public class TaskManagerTest {
     }
 
     @Test
+    public void testTaskRunMergePreservesOldSubmitUser() {
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+
+        long taskId = 1;
+        long now = System.currentTimeMillis();
+
+        TaskRun oldTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        oldTaskRun.initStatus("1", now);
+        oldTaskRun.getStatus().setSubmitUser("alice");
+
+        TaskRun newTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        newTaskRun.initStatus("2", now + 10);
+
+        taskRunManager.arrangeTaskRun(oldTaskRun);
+        taskRunManager.arrangeTaskRun(newTaskRun);
+
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+        Assertions.assertTrue(taskRuns != null);
+        assertEquals(1, taskRuns.size());
+        assertEquals(now, taskRuns.get(0).getStatus().getCreateTime());
+        assertEquals("alice", taskRuns.get(0).getStatus().getSubmitUser());
+    }
+
+    @Test
+    public void testTaskRunMergeKeepsFallbackWhenOldSubmitUserAbsent() {
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+
+        long taskId = 1;
+        long now = System.currentTimeMillis();
+
+        TaskRun oldTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        oldTaskRun.initStatus("1", now);
+        oldTaskRun.getStatus().setSubmitUser(null);
+
+        TaskRun newTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        newTaskRun.initStatus("2", now + 10);
+
+        taskRunManager.arrangeTaskRun(oldTaskRun);
+        taskRunManager.arrangeTaskRun(newTaskRun);
+
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+        Assertions.assertTrue(taskRuns != null);
+        assertEquals(1, taskRuns.size());
+        assertEquals(now, taskRuns.get(0).getStatus().getCreateTime());
+        assertEquals(TaskRun.SUBMIT_USER_SYSTEM, taskRuns.get(0).getStatus().getSubmitUser());
+    }
+
+    @Test
     public void testTaskRunNotMerge() {
 
         TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
