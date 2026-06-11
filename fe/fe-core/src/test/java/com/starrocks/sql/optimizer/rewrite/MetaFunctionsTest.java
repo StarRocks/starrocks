@@ -40,6 +40,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -134,22 +135,30 @@ public class MetaFunctionsTest extends MVTestBase {
 
     @Test
     public void testInspectTableAccessDeniedException() {
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
         assertThrows(ErrorReportException.class, () -> {
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
             connectContext.setThreadLocalInfo();
             MetaFunctions.inspectTable(new TableName("test", "tbl1"));
         });
+        connectContext.setCurrentUserIdentity(currentUserIdentity);
+        connectContext.setCurrentRoleIds(currentRoleIds);
     }
 
     @Test
     public void testInspectExternalTableAccessDeniedException() {
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
         assertThrows(ErrorReportException.class, () -> {
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
             connectContext.setThreadLocalInfo();
             MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
         });
+        connectContext.setCurrentUserIdentity(currentUserIdentity);
+        connectContext.setCurrentRoleIds(currentRoleIds);
     }
 
     private String lookupString(String tableName, String key, String column) {
@@ -591,5 +600,128 @@ public class MetaFunctionsTest extends MVTestBase {
             connectContext.setCurrentRoleIds(UserIdentity.ROOT);
             connectContext.setThreadLocalInfo();
         }
+    }
+
+    @Test
+    public void testInvalidateGlobalDict() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateGlobalDict(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateGlobalDict(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Whether tbl1.k1 currently has a global dict depends on cache state left by earlier tests,
+        // so accept either valid outcome -- both mean invalidate_global_dict behaved correctly.
+        ConstantOperator result = MetaFunctions.invalidateGlobalDict(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertNotNull(result);
+        String msg = result.getVarchar();
+        Assertions.assertTrue(
+                msg.equals("invalidated column dict")
+                        || msg.equals("No global dictionary found for column: k1"), msg);
+        // After invalidation any dict is gone, so a second call deterministically reports none found.
+        ConstantOperator second = MetaFunctions.invalidateGlobalDict(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertEquals("No global dictionary found for column: k1", second.getVarchar());
+    }
+
+    @Test
+    public void testInvalidateMinMax() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateMinMax(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateMinMax(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with valid table and column
+        ConstantOperator result = MetaFunctions.invalidateMinMax(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertTrue(result.getVarchar().contains("invalidated column minmax"), result.getVarchar());
+    }
+
+    @Test
+    public void testInspectMinMax() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectMinMax(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectMinMax(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with valid table and column (should return null since no MinMax stats exist)
+        ConstantOperator result = MetaFunctions.inspectMinMax(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.isNull());
+    }
+
+    @Test
+    public void testInspectGlobalDict() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectGlobalDict(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectGlobalDict(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with valid table and column (should return null since no global dict exists)
+        ConstantOperator result = MetaFunctions.inspectGlobalDict(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.isNull());
+    }
+
+    @Test
+    public void testInspectMinMaxRequiresTablePrivilege() {
+        // inspect_minmax must enforce table privileges so it cannot disclose min/max for a table
+        // the caller has no access to.
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        assertThrows(ErrorReportException.class, () -> {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            MetaFunctions.inspectMinMax(
+                    ConstantOperator.createVarchar("test.tbl1"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+        connectContext.setCurrentUserIdentity(currentUserIdentity);
+        connectContext.setCurrentRoleIds(currentRoleIds);
+        connectContext.setThreadLocalInfo();
     }
 }
