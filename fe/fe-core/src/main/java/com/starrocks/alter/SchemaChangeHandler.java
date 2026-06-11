@@ -3173,8 +3173,18 @@ public class SchemaChangeHandler extends AlterHandler {
         // createReplicaLatch before entering the synchronized block — applying
         // it to a PENDING shared-nothing alter would hang until task timeout.
         // Reject up front rather than silently degrade.
+        //
+        // LakeTableIndexFastPathJobBase (lake ADD/DROP INDEX fast path) is the
+        // third lake alter family with a FINISHED_REWRITING publish-stuck mode:
+        // it reserves a commit version and bumps nextVersion at that transition,
+        // so a stuck publish leaves the same version-chain hole the other two
+        // heal on force-cancel. It extends AlterJobV2 directly (not the two bases
+        // above) and has no createReplicaLatch pre-work, so routing it through
+        // the two-arg cancel path is safe. Without it in this allowlist the
+        // fast-path job's force-cancel heal path is unreachable from SQL.
         if (force && !(schemaChangeJobV2 instanceof LakeTableSchemaChangeJobBase
-                || schemaChangeJobV2 instanceof LakeTableAlterMetaJobBase)) {
+                || schemaChangeJobV2 instanceof LakeTableAlterMetaJobBase
+                || schemaChangeJobV2 instanceof LakeTableIndexFastPathJobBase)) {
             throw new DdlException(
                     "CANCEL ALTER TABLE ... FORCE is only supported on shared-data (lake) tables. "
                             + "For shared-nothing tables, use the regular CANCEL ALTER TABLE syntax.");
