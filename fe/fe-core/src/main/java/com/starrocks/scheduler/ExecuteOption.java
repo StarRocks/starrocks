@@ -45,6 +45,10 @@ public class ExecuteOption {
     @SerializedName("isReplay")
     private boolean isReplay = false;
 
+    // Set internally only (batch spawn), never from user-settable task properties, so the recorded
+    // submitter cannot be spoofed. Transient: persistence lives on TaskRunStatus.submitUser.
+    private transient String submitUser;
+
     public ExecuteOption(Task task) {
         this(Constants.TaskRunPriority.LOWEST.value(), task.getSource().isMergeable(), task.getProperties());
     }
@@ -106,6 +110,14 @@ public class ExecuteOption {
 
     public void setReplay(boolean replay) {
         isReplay = replay;
+    }
+
+    public String getSubmitUser() {
+        return submitUser;
+    }
+
+    public void setSubmitUser(String submitUser) {
+        this.submitUser = submitUser;
     }
 
     /**
