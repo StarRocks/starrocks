@@ -65,7 +65,9 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
@@ -686,7 +688,12 @@ public class IcebergApiConverter {
 
     public static List<ManifestFile> filterManifests(List<ManifestFile> manifests,
                                                org.apache.iceberg.Table table, Expression filter) {
-        Map<Integer, ManifestEvaluator> evalCache = specCache(table, filter);
+        return filterManifests(manifests, table.specs(), filter);
+    }
+
+    public static List<ManifestFile> filterManifests(List<ManifestFile> manifests,
+                                               Map<Integer, PartitionSpec> specsById, Expression filter) {
+        Map<Integer, ManifestEvaluator> evalCache = specCache(specsById, filter);
 
         return manifests.stream()
                 .filter(manifest -> manifest.hasAddedFiles() || manifest.hasExistingFiles())
@@ -694,15 +701,21 @@ public class IcebergApiConverter {
                 .collect(Collectors.toList());
     }
 
-    private static Map<Integer, ManifestEvaluator> specCache(org.apache.iceberg.Table table, Expression filter) {
+    private static Map<Integer, ManifestEvaluator> specCache(Map<Integer, PartitionSpec> specsById, Expression filter) {
         Map<Integer, ManifestEvaluator> cache = new ConcurrentHashMap<>();
 
-        for (Map.Entry<Integer, PartitionSpec> entry : table.specs().entrySet()) {
+        for (Map.Entry<Integer, PartitionSpec> entry : specsById.entrySet()) {
             Integer spedId = entry.getKey();
             PartitionSpec spec = entry.getValue();
 
-            Expression projection = Projections.inclusive(spec, false).project(filter);
-            ManifestEvaluator evaluator = ManifestEvaluator.forPartitionFilter(projection, spec, false);
+            ManifestEvaluator evaluator;
+            try {
+                Expression projection = Projections.inclusive(spec, false).project(filter);
+                evaluator = ManifestEvaluator.forPartitionFilter(projection, spec, false);
+            } catch (ValidationException e) {
+                // Cannot evaluate the filter against this spec's schema; skip manifest pruning for it.
+                evaluator = ManifestEvaluator.forPartitionFilter(Expressions.alwaysTrue(), spec, false);
+            }
 
             cache.put(spedId, evaluator);
         }
@@ -730,8 +743,15 @@ public class IcebergApiConverter {
     }
 
     public static List<String> toPartitionFields(PartitionSpec spec, Boolean withTransfomPrefix) {
+        return toPartitionFields(spec, spec.schema(), withTransfomPrefix);
+    }
+
+    // Resolve partition source column names against the given schema instead of the spec's
+    // bound (current) schema. Time-travel reads pass the snapshot schema here so that the
+    // generated expressions reference the same column names as the rest of the query.
+    public static List<String> toPartitionFields(PartitionSpec spec, Schema schema, Boolean withTransfomPrefix) {
         return spec.fields().stream()
-                .map(field -> toPartitionField(spec, field, withTransfomPrefix))
+                .map(field -> toPartitionField(schema, field, withTransfomPrefix))
                 .collect(toImmutableList());
     }
 
@@ -793,7 +813,11 @@ public class IcebergApiConverter {
     }
 
     public static String toPartitionField(PartitionSpec spec, PartitionField field, Boolean withTransfomPrefix) {
-        String name = spec.schema().findColumnName(field.sourceId());
+        return toPartitionField(spec.schema(), field, withTransfomPrefix);
+    }
+
+    public static String toPartitionField(Schema schema, PartitionField field, Boolean withTransfomPrefix) {
+        String name = schema.findColumnName(field.sourceId());
         String escapedName =  "`" + name + "`";
         String transform = field.transform().toString();
         String prefix = withTransfomPrefix ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX : "";

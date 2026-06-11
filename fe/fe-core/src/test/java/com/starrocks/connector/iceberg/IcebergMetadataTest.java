@@ -74,6 +74,7 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -91,8 +92,12 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ReplacePartitionColumnClause;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -3956,5 +3961,180 @@ public class IcebergMetadataTest extends TableTestBase {
         assertTrue(exception.getMessage().contains("Starting snapshot (exclusive)"));
         assertTrue(exception.getMessage().contains(String.valueOf(snap1.snapshotId())));
         assertTrue(exception.getMessage().contains(String.valueOf(snap3.snapshotId())));
+    }
+
+    @Test
+    public void testTimeTravelHonorsSnapshotSchema() {
+        // S1 committed under the original schema (k1, k2); then k2 is renamed; then S2 is
+        // committed under the new schema (k1, k2_renamed). A time-travel read of S1 must honor
+        // S1's schema (k2), not the latest table schema (k2_renamed). See POST-1557.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+        int s1SchemaId = mockedNativeTableB.currentSnapshot().schemaId();
+
+        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        // The current (latest) schema carries the renamed column.
+        Assertions.assertNotEquals(s1SchemaId, mockedNativeTableB.schema().schemaId());
+        Assertions.assertNotNull(mockedNativeTableB.schema().findField("k2_renamed"));
+        Assertions.assertNull(mockedNativeTableB.schema().findField("k2"));
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableB.schema(), mockedNativeTableB),
+                mockedNativeTableB, Maps.newHashMap());
+        Assertions.assertNotNull(icebergTable.getColumn("k2_renamed"));
+        Assertions.assertNull(icebergTable.getColumn("k2"));
+
+        // getSnapshotSchema resolves the schema bound to the targeted snapshot.
+        Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(mockedNativeTableB, s1);
+        Assertions.assertNotNull(snapshotSchema);
+        Assertions.assertEquals(s1SchemaId, snapshotSchema.schemaId());
+        Assertions.assertNotNull(snapshotSchema.findField("k2"));
+        Assertions.assertNull(snapshotSchema.findField("k2_renamed"));
+
+        // Rebinding the table to the snapshot schema must flip both the StarRocks-side full
+        // schema (column resolution / result-set metadata) and the schema fed to the BE.
+        icebergTable = icebergTable.withReadSchema(snapshotSchema);
+        Assertions.assertNotNull(icebergTable.getColumn("k2"));
+        Assertions.assertNull(icebergTable.getColumn("k2_renamed"));
+        Assertions.assertNotNull(icebergTable.getEffectiveIcebergSchema().findField("k2"));
+        Assertions.assertNull(icebergTable.getEffectiveIcebergSchema().findField("k2_renamed"));
+
+        // The table is partitioned by identity(k2): partition columns must resolve through the
+        // snapshot schema (old name) instead of going null on the renamed current name.
+        List<Column> partitionColumns = icebergTable.getPartitionColumns();
+        Assertions.assertEquals(1, partitionColumns.size());
+        Assertions.assertNotNull(partitionColumns.get(0));
+        Assertions.assertEquals("k2", partitionColumns.get(0).getName());
+
+        // The BE descriptor must also build its partition info from the snapshot schema:
+        // expressions and source column names reference the old name, matching fullSchema.
+        TTableDescriptor tableDescriptor = icebergTable.toThrift(Lists.newArrayList());
+        TIcebergTable tIcebergTable = tableDescriptor.getIcebergTable();
+        Assertions.assertEquals("k2", tIcebergTable.getPartition_info().get(0).getSource_column_name());
+        Assertions.assertEquals("k2", tIcebergTable.getIceberg_schema().getFields().get(1).getName());
+
+        // Scan planning converts predicates against the snapshot schema, so filtering on the
+        // old column name must plan files of the targeted snapshot instead of failing.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(s1)))
+                        .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
+        Assertions.assertEquals(3, res.stream()
+                .map(f -> (IcebergRemoteFileInfo) f)
+                .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
+    }
+
+    @Test
+    public void testTimeTravelSnapshotSchemaThroughAnalyzer() throws Exception {
+        // End-to-end through QueryAnalyzer: SELECT * VERSION AS OF <old snapshot> must expose the
+        // old column name, and the analyzer must pin the resolved version range on the relation
+        // so the transformer does not resolve the query period a second time.
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        String createCatalog = "CREATE EXTERNAL CATALOG iceberg_tt_catalog PROPERTIES(\"type\"=\"iceberg\", " +
+                "\"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        StarRocksAssert starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withCatalog(createCatalog);
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+        // TestTables snapshot ids are small integers whose SQL literals don't parse as BIGINT,
+        // so target the snapshot through a tag (the VARCHAR version path).
+        mockedNativeTableB.manageSnapshots().createTag("tag_s1", s1).commit();
+        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+        };
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        String sql = "SELECT * FROM iceberg_tt_catalog.db.tb VERSION AS OF 'tag_s1'";
+        QueryStatement stmt = (QueryStatement) AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertEquals(List.of("k1", "k2"), stmt.getQueryRelation().getColumnOutputNames());
+
+        TableRelation tableRelation =
+                (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
+        Assertions.assertNotNull(tableRelation.getTvrVersionRange());
+        Assertions.assertEquals(Optional.of(s1), tableRelation.getTvrVersionRange().end());
+
+        // The latest schema keeps working without a query period.
+        QueryStatement latestStmt =
+                (QueryStatement) AnalyzeTestUtil.analyzeSuccess("SELECT * FROM iceberg_tt_catalog.db.tb");
+        Assertions.assertEquals(List.of("k1", "k2_renamed"), latestStmt.getQueryRelation().getColumnOutputNames());
+    }
+
+    @Test
+    public void testTimeTravelSnapshotSchemaThroughExternalTablePreparse() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        String createCatalog = "CREATE EXTERNAL CATALOG iceberg_tt_catalog_preparse PROPERTIES(\"type\"=\"iceberg\", " +
+                "\"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        new StarRocksAssert().withCatalog(createCatalog);
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+        mockedNativeTableB.manageSnapshots().createTag("tag_s1", s1).commit();
+        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+        };
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        StatementBase statement =
+                AnalyzeTestUtil.parseSql("SELECT * FROM iceberg_tt_catalog_preparse.db.tb VERSION AS OF 'tag_s1'");
+        QueryAnalyzer queryAnalyzer = new QueryAnalyzer(AnalyzeTestUtil.getConnectContext());
+        queryAnalyzer.analyzeExternalTablesOnly(statement);
+        queryAnalyzer.analyze(statement);
+
+        QueryStatement stmt = (QueryStatement) statement;
+        Assertions.assertEquals(List.of("k1", "k2"), stmt.getQueryRelation().getColumnOutputNames());
+
+        TableRelation tableRelation =
+                (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
+        Assertions.assertNotNull(tableRelation.getTvrVersionRange());
+        Assertions.assertEquals(Optional.of(s1), tableRelation.getTvrVersionRange().end());
     }
 }

@@ -758,6 +758,19 @@ public class IcebergMetadata implements ConnectorMetadata {
         return snapshotId;
     }
 
+    // Resolve the schema bound to the given snapshot. A time-travel read must honor the
+    // schema attached to the targeted snapshot rather than the latest table schema.
+    // Returns null when the snapshot or its schema cannot be resolved (e.g. legacy
+    // metadata without per-snapshot schema id), in which case callers keep the current schema.
+    public static Schema getSnapshotSchema(org.apache.iceberg.Table table, long snapshotId) {
+        Snapshot snapshot = table.snapshot(snapshotId);
+        if (snapshot == null || snapshot.schemaId() == null) {
+            return null;
+        }
+        return table.schemas().get(snapshot.schemaId());
+    }
+
+
     private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         try {
             if (version.getType() != DateType.DATETIME &&
@@ -1130,11 +1143,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = icebergTable.getCatalogTableName();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
-        Types.StructType schema = nativeTbl.schema().asStruct();
-
-        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        Expression icebergPredicate = convertPredicate(icebergTable, params.getPredicate());
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
@@ -1195,10 +1204,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (splitTasks.containsKey(predicateSearchKey)) {
             baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
-            List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
-            ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
-                    icebergTable.getNativeTable().schema().asStruct());
-            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+            Expression icebergPredicate = convertPredicate(icebergTable, params.getPredicate());
             baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
         }
 
@@ -1586,10 +1592,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
         org.apache.iceberg.Table table = icebergTable.getNativeTable();
-        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
-                table.schema().asStruct());
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        Expression icebergPredicate = convertPredicate(icebergTable, predicate);
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
                 catalogName, dbName, tableName, PlanMode.LOCAL, ConnectContext.get());
@@ -1604,6 +1607,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         return ((StarRocksIcebergTableScan) scan).getDeleteFiles(content);
+    }
+
+    private Expression convertPredicate(IcebergTable icebergTable, ScalarOperator predicate) {
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
+                icebergTable.getEffectiveIcebergSchema().asStruct());
+        return new ScalarOperatorToIcebergExpr().convert(Utils.extractConjuncts(predicate), icebergContext);
     }
 
     /**
