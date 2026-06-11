@@ -85,3 +85,33 @@ restores legacy behavior everywhere.
   (an FE UT would race the alter-scheduler daemon).
 - Docs: config entry in `docs/{en,zh}/.../FE_parameters/stats_storage.md`; FAQ narrowed in
   `docs/{en,zh,ja}/faq/Others.md`.
+
+## Acceptance Criteria
+
+- With a lake ADD/DROP INDEX fast-path job in PENDING/WAITING_TXN/RUNNING/FINISHED_REWRITING:
+  manual `ALTER TABLE ... ADD PARTITION` succeeds, automatic partition creation during load
+  succeeds without cancelling the job, and the job subsequently finishes and applies its catalog
+  mutation.
+- A partition created mid-job is fully usable (load + query) after the job FINISHED and after it is
+  CANCELLED.
+- FSE V2 add/drop column racing `ADD PARTITION` during `UPDATING_META`: neither statement fails.
+- All non-safe alter jobs (full schema change, rollup, `OPTIMIZE`) and all non-`ADD PARTITION` DDL
+  keep the legacy rejection / cancellation behavior; `enable_concurrent_add_partition_during_alter=false`
+  restores legacy behavior everywhere.
+- FE unit tests pass and `mvn checkstyle:check` is clean. Shared-data cluster A/B validation shows the
+  ADD INDEX job FINISHES (feature on) vs is CANCELLED by a concurrent load (feature off).
+
+## Decision Log
+
+- 2026-06-10: Scope fixed to shared-data + ADD PARTITION only; Path 1 (FSE V2 sync column changes) and
+  Path 2 (lake index fast path) in scope; `LakeTableAlterMetaJobBase` deferred as follow-up; DROP
+  PARTITION explicitly out.
+- 2026-06-10: Chose a per-job capability method (`allowConcurrentPartitionCreation`) over state-enum
+  changes — `SCHEMA_CHANGE` cannot distinguish safe from unsafe jobs, and new enum values would leak
+  into persisted state and external tooling.
+- 2026-06-10: Empty unfinished-job list with non-NORMAL state treated as NOT tolerable (conservative
+  anomaly handling). Config default true with a mutable kill switch.
+- 2026-06-11: Found via e2e test that `LocalMetastore.addPartitions` enforces `checkTableState` at
+  both the pre-lock entry and the under-lock re-check (the original note assumed it did not). Added
+  `checkTableForAddPartitions` to relax it for the tolerable states — the linchpin all three guards
+  converge on.
