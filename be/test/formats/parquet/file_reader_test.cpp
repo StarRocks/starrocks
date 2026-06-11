@@ -831,8 +831,8 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     rf_list->driver_sequence = 1;
     rf_list->unarrived_runtime_filters.emplace_back(rf_desc);
     rf_list->slot_descs.emplace_back(ctx->slot_descs[0]);
-    auto* s = _pool.add(new HdfsScannerPredicateState());
-    ctx->predicate_state = s;
+    auto* s = _pool.add(new HdfsScannerState());
+    ctx->state = s;
     s->runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>(pred_parser, *rf_list);
 
     return ctx;
@@ -1775,7 +1775,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
 
     Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {"c2", c2}, {""}};
     auto ctx = _create_scan_context(slot_descs, _file4_path);
-    _scanner_ctx.options.case_sensitive = true;
+    ctx->options.case_sensitive = true;
     // --------------finish init context---------------
 
     ASSERT_OK(file_reader->init(ctx));
@@ -2875,7 +2875,7 @@ TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     // RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
     ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[3], nullptr, tuple_desc, _runtime_state, ctx);
-    for (const auto& [cid, col_children] : ctx->predicate_state->predicate_tree.root().col_children_map()) {
+    for (const auto& [cid, col_children] : ctx->state->predicate_tree.root().col_children_map()) {
         for (const auto& child : col_children) {
             std::cout << "pred type" << child.col_pred()->type() << "pred" << child.debug_string() << std::endl;
         }
@@ -3111,7 +3111,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop2) {
     }
 
     bloom_filter.init(buffer.data(), header.numBytes + 1, Hasher::HashStrategy::XXHASH64, 0);
-    for (const auto& [cid, col_children] : ctx->predicate_state->predicate_tree.root().col_children_map()) {
+    for (const auto& [cid, col_children] : ctx->state->predicate_tree.root().col_children_map()) {
         for (const auto& child : col_children) {
             std::cout << "pred" << child.debug_string() << std::endl;
             ASSERT_TRUE(child.col_pred()->support_original_bloom_filter());
@@ -3195,7 +3195,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop3) {
 
     bloom_filter.init(buffer.data(), header.numBytes + 1, Hasher::HashStrategy::XXHASH64, 0);
 
-    for (const auto& [cid, col_children] : ctx->predicate_state->predicate_tree.root().col_children_map()) {
+    for (const auto& [cid, col_children] : ctx->state->predicate_tree.root().col_children_map()) {
         for (const auto& child : col_children) {
             std::cout << "pred" << child.debug_string() << std::endl;
             ASSERT_TRUE(child.col_pred()->support_original_bloom_filter());
@@ -3296,7 +3296,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop4) {
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     // _create_int_conjunct_ctxs(TExprOpcode::EQ, 2, 6, &ctx->conjunct_ctxs_by_slot[1]);
     ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[3], nullptr, tuple_desc, _runtime_state, ctx);
-    for (const auto& [cid, col_children] : ctx->predicate_state->predicate_tree.root().col_children_map()) {
+    for (const auto& [cid, col_children] : ctx->state->predicate_tree.root().col_children_map()) {
         for (const auto& child : col_children) {
             std::cout << "pred type" << child.col_pred()->type() << "pred" << child.debug_string() << std::endl;
         }
@@ -4529,7 +4529,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths) {
     profile->children().emplace_back(std::move(salary_or).value());
     root->children().emplace_back(std::move(profile));
     column_access_paths.emplace_back(std::move(root));
-    _scanner_ctx.column_access_paths = &column_access_paths;
+    ctx->column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
@@ -4590,7 +4590,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths_nulls) {
     profile->children().emplace_back(std::move(salary_or).value());
     root->children().emplace_back(std::move(profile));
     column_access_paths.emplace_back(std::move(root));
-    _scanner_ctx.column_access_paths = &column_access_paths;
+    ctx->column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();
@@ -4644,7 +4644,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path) {
     ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
     root->children().emplace_back(std::move(profile_or).value());
     column_access_paths.emplace_back(std::move(root));
-    _scanner_ctx.column_access_paths = &column_access_paths;
+    ctx->column_access_paths = &column_access_paths;
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok()) << status.message();

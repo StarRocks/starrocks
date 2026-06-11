@@ -269,8 +269,8 @@ void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts
     opts.is_olap_scan = false;
     opts.pred_tree_params = {true, true};
     params->obj_pool = runtime_state->obj_pool();
-    auto* s = params->obj_pool->add(new HdfsScannerPredicateState());
-    params->predicate_state = s;
+    auto* s = params->obj_pool->add(new HdfsScannerState());
+    params->state = s;
     s->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
     ASSERT_TRUE(s->conjuncts_manager->parse_conjuncts().ok());
     ConnectorPredicateParser predicate_parser{&tuple_desc->decoded_slots()};

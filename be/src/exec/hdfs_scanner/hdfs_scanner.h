@@ -264,48 +264,44 @@ struct TableSpecificData {
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file;
 };
 
-// Owns all predicate state built by HdfsScanner::_build_scanner_context().
-// An instance is allocated in HdfsScannerContext::obj_pool so its lifetime is
-// tied to the RuntimeState fragment pool.  HdfsScannerContext holds only a raw
-// non-owning pointer (predicate_state) so the context remains copyable.
+// Owns all non-copyable scanner state built by HdfsScanner::_build_scanner_context().
+// Allocated in HdfsScannerContext::obj_pool (lifetime tied to RuntimeState fragment pool).
+// HdfsScannerContext holds only a raw non-owning pointer so the context stays copyable.
 //
-// Member declaration order is significant: C++ destroys members in reverse
-// declaration order, giving the required sequence:
-//   runtime_filter_scan_range_pruner (holds ref into conjuncts_manager → dies first)
+// Predicate member declaration order is significant (C++ destroys in reverse order):
+//   split_tasks (independent, destroyed first)
+//   → runtime_filter_scan_range_pruner (holds ref into conjuncts_manager)
 //   → predicate_tree  (holds ColumnPredicate* into predicate_free_pool)
 //   → predicate_parser
 //   → predicate_free_pool
 //   → conjuncts_manager (dies last)
-struct HdfsScannerPredicateState {
+struct HdfsScannerState {
+    // --- predicate state ---
     std::unique_ptr<ScanConjunctsManager> conjuncts_manager;
     std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
     std::unique_ptr<ConnectorPredicateParser> predicate_parser;
     PredicateTree predicate_tree;
     std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
+
+    // --- split task state (destroyed before predicate state; independent) ---
+    std::vector<HdfsSplitContextPtr> split_tasks;
+    bool has_split_tasks = false;
+    size_t estimated_mem_usage_per_split_task = 0;
 };
 
 // HdfsScannerContext carries all state needed by an HdfsScanner from creation
 // through close().  It was formed by merging the former HdfsScannerParams (the
 // immutable input struct filled by HiveDataSource) with the former working-state
 // struct (which held a back-pointer to params).  The merge eliminates the
-// ctx.params->field double-indirection that made every callsite noisy, and
-// removes the need for the scanner to hold two separate objects with identical
-// lifetimes.
+// ctx.params->field double-indirection that made every callsite noisy.
 //
-// Copy semantics: the struct is intentionally copyable.  HiveDataSource keeps a
-// "shared template" (_scanner_ctx) that holds query-level fields common to all
-// scan ranges.  _init_scanner() copies it with a plain `= _scanner_ctx` and
+// Copy semantics: all fields are POD or trivially copyable; the default copy
+// constructor and assignment work correctly.  HiveDataSource keeps a shared
+// template (_scanner_ctx) and _init_scanner() copies it with a plain `= _scanner_ctx`,
 // then overwrites only the per-range fields (scan_range, file_path, etc.).
-// The predicate fields (obj_pool / predicate_state) are null in the template
-// and are populated by HdfsScanner::_build_scanner_context() during open().
+// Non-copyable scanner state (predicates, split tasks) lives in HdfsScannerState,
+// which is obj_pool-allocated; ctx holds only a raw non-owning pointer (state).
 struct HdfsScannerContext {
-    HdfsScannerContext() = default;
-    // Copies all fields except split_tasks (non-copyable unique_ptr vector).
-    // split_tasks is always empty in the template context at copy time.
-    HdfsScannerContext(const HdfsScannerContext&);
-    HdfsScannerContext& operator=(const HdfsScannerContext&);
-    HdfsScannerContext(HdfsScannerContext&&) = default;
-    HdfsScannerContext& operator=(HdfsScannerContext&&) = default;
 
     struct ColumnInfo {
         int idx_in_chunk;
@@ -397,10 +393,6 @@ struct HdfsScannerContext {
     // Evaluated extended column values.
     Columns extended_values;
 
-    std::vector<HdfsSplitContextPtr> split_tasks;
-    bool has_split_tasks = false;
-    size_t estimated_mem_usage_per_split_task = 0;
-
     bool is_first_split = false;
     bool can_use_file_record_count = false;
 
@@ -414,9 +406,9 @@ struct HdfsScannerContext {
     HdfsScannerStats* stats = nullptr;
 
     // Both set by HdfsScanner::_build_scanner_context() during open(); null until then.
-    // predicate_state is allocated from obj_pool so they share the same lifetime.
+    // state is allocated from obj_pool so they share the same lifetime.
     ObjectPool* obj_pool = nullptr;
-    HdfsScannerPredicateState* predicate_state = nullptr;
+    HdfsScannerState* state = nullptr;
 
     bool can_use_count_optimization() const;
 
@@ -521,7 +513,7 @@ public:
     // once it can interleave predicate evaluation with column loading.
     virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
-    bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
+    bool has_split_tasks() const { return _scanner_ctx.state != nullptr && _scanner_ctx.state->has_split_tasks; }
 
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
@@ -543,7 +535,6 @@ private:
 
 protected:
     HdfsScannerContext _scanner_ctx;
-
     RuntimeState* _runtime_state = nullptr;
     HdfsScannerStats _app_stats;
     HdfsScannerStats _fs_stats;

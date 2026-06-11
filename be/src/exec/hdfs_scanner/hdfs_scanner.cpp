@@ -121,70 +121,6 @@ bool HdfsScannerContext::is_lazy_materialization_slot(SlotId slot_id) const {
     return true;
 }
 
-// Copies all fields except split_tasks (non-copyable unique_ptr vector).
-// split_tasks is never populated in the template context; leaving it empty
-// is semantically correct — each scanner instance builds its own split_tasks.
-#define HDFS_CTX_COPY_FIELDS(dst, src)                                                                   \
-    (dst).scan_range = (src).scan_range;                                                                 \
-    (dst).scan_range_id = (src).scan_range_id;                                                           \
-    (dst).fs = (src).fs;                                                                                 \
-    (dst).file_path = (src).file_path;                                                                   \
-    (dst).file_size = (src).file_size;                                                                   \
-    (dst).table_location = (src).table_location;                                                         \
-    (dst).split_context = (src).split_context;                                                           \
-    (dst).datacache_options = (src).datacache_options;                                                   \
-    (dst).table_specific = (src).table_specific;                                                         \
-    (dst).runtime_filter_collector = (src).runtime_filter_collector;                                     \
-    (dst).conjuncts = (src).conjuncts;                                                                   \
-    (dst).options = (src).options;                                                                       \
-    (dst).profile = (src).profile;                                                                       \
-    (dst).materialize_slots = (src).materialize_slots;                                                   \
-    (dst).materialize_index_in_chunk = (src).materialize_index_in_chunk;                                 \
-    (dst).materialize_slot_default_values = (src).materialize_slot_default_values;                       \
-    (dst).partition_slots = (src).partition_slots;                                                       \
-    (dst).partition_index_in_chunk = (src).partition_index_in_chunk;                                     \
-    (dst)._partition_index_in_hdfs_partition_columns = (src)._partition_index_in_hdfs_partition_columns; \
-    (dst).extended_col_slots = (src).extended_col_slots;                                                 \
-    (dst).extended_col_index_in_chunk = (src).extended_col_index_in_chunk;                               \
-    (dst).index_in_extended_columns = (src).index_in_extended_columns;                                   \
-    (dst).tuple_desc = (src).tuple_desc;                                                                 \
-    (dst).min_max_tuple_desc = (src).min_max_tuple_desc;                                                 \
-    (dst).hive_column_names = (src).hive_column_names;                                                   \
-    (dst).avro_schema_json = (src).avro_schema_json;                                                     \
-    (dst).column_access_paths = (src).column_access_paths;                                               \
-    (dst).lazy_column_coalesce_counter = (src).lazy_column_coalesce_counter;                             \
-    (dst).global_dictmaps = (src).global_dictmaps;                                                       \
-    (dst).slot_descs = (src).slot_descs;                                                                 \
-    (dst).conjunct_ctxs_by_slot = (src).conjunct_ctxs_by_slot;                                           \
-    (dst).materialized_columns = (src).materialized_columns;                                             \
-    (dst).partition_columns = (src).partition_columns;                                                   \
-    (dst).partition_expr_ctxs = (src).partition_expr_ctxs;                                               \
-    (dst).partition_values = (src).partition_values;                                                     \
-    (dst).extended_columns = (src).extended_columns;                                                     \
-    (dst).extended_col_expr_ctxs = (src).extended_col_expr_ctxs;                                         \
-    (dst).extended_values = (src).extended_values;                                                       \
-    (dst).estimated_mem_usage_per_split_task = (src).estimated_mem_usage_per_split_task;                 \
-    (dst).is_first_split = (src).is_first_split;                                                         \
-    (dst).can_use_file_record_count = (src).can_use_file_record_count;                                   \
-    (dst).no_more_chunks = (src).no_more_chunks;                                                         \
-    (dst).timezone = (src).timezone;                                                                     \
-    (dst).stats = (src).stats;                                                                           \
-    (dst).obj_pool = (src).obj_pool;                                                                     \
-    (dst).predicate_state = (src).predicate_state;                                                       \
-    (dst).not_existed_slots = (src).not_existed_slots;                                                   \
-    (dst).reserved_field_slots = (src).reserved_field_slots;                                             \
-    (dst).conjunct_ctxs_of_non_existed_slots = (src).conjunct_ctxs_of_non_existed_slots;
-
-HdfsScannerContext::HdfsScannerContext(const HdfsScannerContext& o) {
-    HDFS_CTX_COPY_FIELDS(*this, o);
-}
-
-HdfsScannerContext& HdfsScannerContext::operator=(const HdfsScannerContext& o) {
-    HDFS_CTX_COPY_FIELDS(*this, o);
-    return *this;
-}
-
-#undef HDFS_CTX_COPY_FIELDS
 
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
     SCOPED_RAW_TIMER(&_total_running_time);
@@ -271,7 +207,7 @@ Status HdfsScanner::_build_scanner_context() {
     opts.is_olap_scan = false;
     opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
 
-    auto* s = ctx.obj_pool->add(new HdfsScannerPredicateState());
+    auto* s = ctx.obj_pool->add(new HdfsScannerState());
     s->conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     RETURN_IF_ERROR(s->conjuncts_manager->parse_conjuncts());
     s->predicate_parser = std::make_unique<ConnectorPredicateParser>(&_scanner_ctx.tuple_desc->decoded_slots());
@@ -279,7 +215,7 @@ Status HdfsScanner::_build_scanner_context() {
                      s->conjuncts_manager->get_predicate_tree(s->predicate_parser.get(), s->predicate_free_pool));
     s->runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>(
             s->predicate_parser.get(), s->conjuncts_manager->unarrived_runtime_filters());
-    ctx.predicate_state = s;
+    ctx.state = s;
 
     ctx.update_return_count_columns();
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
@@ -530,8 +466,8 @@ void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* paren
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
-    if (_scanner_ctx.estimated_mem_usage_per_split_task != 0) {
-        return _scanner_ctx.estimated_mem_usage_per_split_task;
+    if (_scanner_ctx.state != nullptr && _scanner_ctx.state->estimated_mem_usage_per_split_task != 0) {
+        return _scanner_ctx.state->estimated_mem_usage_per_split_task;
     }
     if (_shared_buffered_input_stream != nullptr) {
         return _shared_buffered_input_stream->estimated_mem_usage();
@@ -983,6 +919,8 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
 }
 
 void HdfsScannerContext::merge_split_tasks() {
+    DCHECK(state != nullptr);
+    auto& split_tasks = state->split_tasks;
     if (split_tasks.size() < 2) return;
 
     // NOTE: the prerequisites of `split_tasks` are
@@ -1035,15 +973,17 @@ void HdfsScannerContext::merge_split_tasks() {
 
     split_tasks.swap(new_split_tasks);
 }
+
 void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    if (_scanner_ctx.state == nullptr) return;
     size_t max_split_size = 0;
-    for (auto& t : _scanner_ctx.split_tasks) {
+    for (auto& t : _scanner_ctx.state->split_tasks) {
         size_t size = (t->split_end - t->split_start);
         max_split_size = std::max(max_split_size, size);
         split_tasks->emplace_back(std::move(t));
     }
     if (split_tasks->size() > 0) {
-        _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
+        _scanner_ctx.state->estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
 }
 

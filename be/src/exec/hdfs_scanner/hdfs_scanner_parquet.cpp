@@ -225,10 +225,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
     COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
-    if (_scanner_ctx.predicate_state != nullptr &&
+    if (_scanner_ctx.state != nullptr &&
         _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter",
-                              _scanner_ctx.predicate_state->predicate_tree.root().debug_string());
+                              _scanner_ctx.state->predicate_tree.root().debug_string());
     }
 
     // Global-dict opt visibility for Hive/Iceberg/Hudi/Paimon Parquet workloads.

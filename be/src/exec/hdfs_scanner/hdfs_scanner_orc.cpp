@@ -457,15 +457,15 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
         ctx->footer = footer;
         ctx->split_start = info.offset();
         ctx->split_end = info.offset() + info.length();
-        _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
+        _scanner_ctx.state->split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx.merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx.split_tasks.size() <= 1) {
-        _scanner_ctx.split_tasks.clear();
+    if (_scanner_ctx.state->split_tasks.size() <= 1) {
+        _scanner_ctx.state->split_tasks.clear();
     }
     VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                  << ", split_tasks.size = " << _scanner_ctx.split_tasks.size();
+                  << ", split_tasks.size = " << _scanner_ctx.state->split_tasks.size();
 
     return Status::OK();
 }
@@ -507,8 +507,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
-    if (_scanner_ctx.split_tasks.size() > 0) {
-        _scanner_ctx.has_split_tasks = true;
+    if (_scanner_ctx.state->split_tasks.size() > 0) {
+        _scanner_ctx.state->has_split_tasks = true;
         _should_skip_file = true;
         return Status::OK();
     }
