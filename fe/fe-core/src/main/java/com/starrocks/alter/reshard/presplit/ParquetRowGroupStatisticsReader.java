@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.PrimitiveType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -30,11 +31,13 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.StringLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -119,17 +122,18 @@ public final class ParquetRowGroupStatisticsReader {
         LogicalTypeAnnotation logicalAnnotation = fieldType.getLogicalTypeAnnotation();
         rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, sortKeyColumn);
         return new SortKeyLocation(
-                ColumnPath.get(schema.getFieldName(fieldIndex)), parquetTypeName, sortKeyColumn);
+                ColumnPath.get(schema.getFieldName(fieldIndex)),
+                parquetTypeName, logicalAnnotation, sortKeyColumn);
     }
 
     /**
      * Reject Parquet/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating row groups. Anything outside the window means
-     * "fall back to data tier", not "fail the load". Logical annotations
-     * (DATE, DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, ...) change the
-     * value's meaning and ordering and are deferred to a future commit; the
-     * supported window here is the unannotated subset plus the UTF8 string
-     * annotation for character columns.
+     * "fall back to data tier", not "fail the load". The supported window here is
+     * the unannotated integer/boolean subset, the UTF8 string annotation for
+     * character columns, and INT32 with the DATE annotation → StarRocks DATE.
+     * Other logical annotations (DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, ...)
+     * change the value's meaning and ordering and are deferred to a future commit.
      */
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
@@ -137,7 +141,19 @@ public final class ParquetRowGroupStatisticsReader {
             Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
-            case INT32, INT64 -> logicalAnnotation == null
+            case INT32 -> {
+                if (logicalAnnotation == null) {
+                    yield starRocksPrimitive == PrimitiveType.TINYINT
+                            || starRocksPrimitive == PrimitiveType.SMALLINT
+                            || starRocksPrimitive == PrimitiveType.INT
+                            || starRocksPrimitive == PrimitiveType.BIGINT;
+                }
+                // INT32+DATE is days-since-epoch; only a StarRocks DATE sort key
+                // gives those day counts their intended calendar meaning.
+                yield logicalAnnotation instanceof DateLogicalTypeAnnotation
+                        && starRocksPrimitive == PrimitiveType.DATE;
+            }
+            case INT64 -> logicalAnnotation == null
                     && (starRocksPrimitive == PrimitiveType.TINYINT
                         || starRocksPrimitive == PrimitiveType.SMALLINT
                         || starRocksPrimitive == PrimitiveType.INT
@@ -198,11 +214,34 @@ public final class ParquetRowGroupStatisticsReader {
                 truncated);
     }
 
-    private static Variant toVariant(Object parquetValue, SortKeyLocation location) {
+    // v1 safe window: render is unambiguous and FE/BE agree on the value. Below 1970-01-01 the BE
+    // timestamp conversion uses signed C++ division whose (seconds, nanos) split differs from
+    // floorDiv/floorMod, and pre-1582 dates raise proleptic-vs-hybrid calendar parity questions;
+    // year 0/BCE mis-renders through the yyyy formatters; above year 9999 leaves the DATE/DATETIME
+    // domain. Everything outside the window falls back to data tier.
+    private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1970, 1, 1);
+    private static final int MAX_SUPPORTED_YEAR = 9999;
+
+    private static Variant toVariant(Object parquetValue, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        if (location.logicalAnnotation instanceof DateLogicalTypeAnnotation) {
+            // INT32 days since 1970-01-01 → canonical "yyyy-MM-dd".
+            LocalDate date = LocalDate.ofEpochDay(((Number) parquetValue).longValue());
+            rejectUnsafeTemporalDate(date);
+            return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER));
+        }
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
         return Variant.of(location.starRocksColumn.getType(), rendered);
+    }
+
+    private static void rejectUnsafeTemporalDate(LocalDate date) throws MetaTierUnavailableException {
+        if (date.isBefore(MIN_SUPPORTED_DATE) || date.getYear() > MAX_SUPPORTED_YEAR) {
+            throw new MetaTierUnavailableException(
+                    "DATE/DATETIME meta tier supports [1970-01-01, 9999-12-31] only; value "
+                            + date + " is outside that window");
+        }
     }
 
     private static ColumnChunkMetaData findColumnChunk(BlockMetaData block, ColumnPath path) {
@@ -214,6 +253,8 @@ public final class ParquetRowGroupStatisticsReader {
         return null;
     }
 
-    private record SortKeyLocation(ColumnPath path, PrimitiveTypeName parquetTypeName, Column starRocksColumn) {
+    private record SortKeyLocation(
+            ColumnPath path, PrimitiveTypeName parquetTypeName,
+            LogicalTypeAnnotation logicalAnnotation, Column starRocksColumn) {
     }
 }

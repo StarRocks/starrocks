@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
@@ -251,6 +252,87 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertEquals(3L, only.getRowCount());
         Assertions.assertNull(only.getMinTuple());
         Assertions.assertNull(only.getMaxTuple());
+    }
+
+    @Test
+    void readsDateStatisticsForInt32DateColumn() throws Exception {
+        // INT32+DATE is days-since-epoch. Day 0 = 1970-01-01 (canonical anchor,
+        // hand-verifiable). With a StarRocks DATE sort key the reader renders
+        // canonical "yyyy-MM-dd" boundary text.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("event_day", rowIndex));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertFalse(rowGroupStatistics.get(0).isTruncated());
+        Assertions.assertEquals("1970-01-01",
+                rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("1970-01-05",
+                rowGroupStatistics.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void dateAnnotatedColumnIntoNonDateSortKeyFallsBackToDataTier() throws Exception {
+        // INT32+DATE only maps to a StarRocks DATE column; routing it into a BIGINT
+        // sort key would publish day-counts as integer boundaries — reject.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("event_day", rowIndex));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        statusOf(parquetPath), new Configuration(),
+                        new Column("event_day", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void pre1970DateFallsBackToDataTier() throws Exception {
+        // epochDay -1 = 1969-12-31 < 1970-01-01: outside the safe window (pre-1970 +
+        // pre-1582 + year-0 parity traps). Meta tier must defer to data tier.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("event_day", -1 - rowIndex));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        statusOf(parquetPath), new Configuration(),
+                        new Column("event_day", DateType.DATE)));
+    }
+
+    @Test
+    void maxSupportedDateIsAccepted() throws Exception {
+        // epochDay 2932896 = 9999-12-31, the upper edge of the safe window — accepted.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", 2932896));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("9999-12-31",
+                rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void postYear9999DateFallsBackToDataTier() throws Exception {
+        // epochDay 2932897 = 10000-01-01, year > 9999: above the safe window → data tier.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", 2932897));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        statusOf(parquetPath), new Configuration(),
+                        new Column("event_day", DateType.DATE)));
     }
 
     private Path writeParquet(
