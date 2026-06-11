@@ -148,11 +148,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_put_txn_log_timeout_guard_ms
 
-- 默认值：4000
+- 默认值：-1
 - 类型：Int64
 - 单位：毫秒
 - 是否动态：是
-- 描述：存算分离集群下，向对象存储写入事务日志（`put_txn_log` 和 `put_combined_txn_log` 路径）的超时守护阈值。如果写入一条事务日志的耗时超过该值，StarRocks 会将慢线程的堆栈打印到 BE 日志，以便诊断对象存储写入慢的问题。设为小于或等于 `0` 的值可关闭该守护。
+- 描述：存算分离集群下，向对象存储写入事务日志（`put_txn_log` 和 `put_combined_txn_log` 路径）的超时守护阈值。如果写入一条事务日志的耗时超过该值，StarRocks 会将慢线程的堆栈打印到 BE 日志，以便诊断对象存储写入慢的问题。默认关闭（小于或等于 `0` 表示关闭该守护）；如需开启，可将其设置为正值，例如 `4000`（4 秒）。
 - 引入版本：-
 
 ### lake_rows_mapper_read_parallelism
