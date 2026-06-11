@@ -41,7 +41,7 @@ public:
     ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers);
 
     ReadRangePlanner* read_range_planner() const { return _read_range_planner.get(); }
-    HdfsScanStats* stats() const { return _param.stats; }
+    HdfsScannerStats* stats() const { return _param.stats; }
 
     void clear_classification();
     void add_active_column(int col_idx);
