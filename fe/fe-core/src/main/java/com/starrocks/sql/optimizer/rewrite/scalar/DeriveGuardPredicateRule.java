@@ -56,6 +56,19 @@ import java.util.Set;
  */
 public class DeriveGuardPredicateRule extends BaseScalarOperatorRewriteRule {
 
+    /**
+     * Track OR nodes that have already been wrapped with a guard,
+     * to prevent infinite rewrite loops across fixpoint iterations.
+     * After wrapping, the original OR remains in the tree as a child
+     * of AND(guard, OR) and would be re-processed on the next iteration.
+     * Keyed by System.identityHashCode.
+     * <p>
+     * Cleared at the start of each ScalarOperatorRewriter.rewrite() call
+     * (when context.changeNum() == 0, indicating context.reset() was just called).
+     */
+    private final Set<Integer> wrappedOrIdentities = new HashSet<>();
+    private int clearEpoch = 0;
+
     @Override
     public boolean isOnlyOnce() {
         return true;
@@ -63,6 +76,13 @@ public class DeriveGuardPredicateRule extends BaseScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context) {
+        // Clear the seen set at the start of a new rewrite pass
+        if (context.changeNum() == 0 && clearEpoch != 0) {
+            wrappedOrIdentities.clear();
+            clearEpoch = 0;
+        }
+        clearEpoch = context.changeNum();
+
         // Flatten the root AND to find all top-level OR conjuncts.
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(root);
         boolean changed = false;
@@ -70,9 +90,14 @@ public class DeriveGuardPredicateRule extends BaseScalarOperatorRewriteRule {
             ScalarOperator conjunct = conjuncts.get(i);
             if (conjunct instanceof CompoundPredicateOperator
                     && ((CompoundPredicateOperator) conjunct).isOr()) {
+                // Skip ORs already wrapped in a previous iteration
+                if (wrappedOrIdentities.contains(System.identityHashCode(conjunct))) {
+                    continue;
+                }
                 ScalarOperator wrapped = tryDeriveGuard((CompoundPredicateOperator) conjunct);
                 if (wrapped != conjunct) {
                     conjuncts.set(i, wrapped);
+                    wrappedOrIdentities.add(System.identityHashCode(conjunct));
                     context.change();
                     changed = true;
                 }
