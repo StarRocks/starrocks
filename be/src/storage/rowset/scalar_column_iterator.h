@@ -43,6 +43,8 @@
 
 namespace starrocks {
 
+class Datum;
+
 // TODO: rename to ScalarColumnIterator
 class ScalarColumnIterator final : public ColumnIterator {
 public:
@@ -86,6 +88,8 @@ public:
     Status fetch_all_dict_words(std::vector<Slice>* words) const override;
 
     int dict_lookup(const Slice& word) override;
+
+    void dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) override;
 
     Status next_dict_codes(size_t* n, Column* dst) override;
 
@@ -133,6 +137,9 @@ private:
 
     template <LogicalType Type>
     int _do_dict_lookup(const Slice& word);
+
+    template <LogicalType Type>
+    void _do_dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes);
 
     template <LogicalType Type>
     Status _do_next_dict_codes(size_t* n, Column* dst);

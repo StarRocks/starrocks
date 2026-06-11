@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 
@@ -956,6 +957,466 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
         ASSERT_EQ(0, stats.segment_stats_filtered);
         ASSERT_EQ(0, stats.rows_stats_filtered);
     }
+}
+
+// Tests for dict_lookup_batch optimization: large IN predicate on dict-encoded VARCHAR column.
+// The hash-based batch lookup (kDictLookupHashThreshold=100) is exercised when either
+// dict_size >= 100 or the IN list has >= 100 values.
+
+// Helper to extract the integer suffix from a formatted test value like "value_042" or "v_042".
+static int _extract_idx(Slice s, size_t prefix_len) {
+    return std::stoi(std::string(s.data + prefix_len, s.size - prefix_len));
+}
+
+// IN predicate with large value list on dict-encoded VARCHAR column.
+// dict_size=128 >= 100 and IN list=150 >= 100, triggering the hash-based batch lookup.
+TEST_F(SegmentIteratorTest, TestDictLookupBatchInListLarge) {
+    using namespace starrocks::test;
+
+    const int num_distinct = 128;
+    const int num_in_dict = 80;
+    const int num_not_in_dict = 70;
+    const size_t num_rows = 10000;
+
+    std::vector<std::string> values(num_distinct);
+    for (int i = 0; i < num_distinct; ++i) {
+        values[i] = fmt::format("value_{:03d}", i);
+    }
+    auto slice_provider = [&](int32_t i) { return Slice(values[i % num_distinct]); };
+
+    std::string file_name = kSegmentDir + "/dict_lookup_batch_inlist_large";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR).set_length(32).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, slice_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    std::vector<std::string> in_values;
+    for (int i = 0; i < num_in_dict; ++i) {
+        in_values.push_back(values[i]); // "value_000" to "value_079"
+    }
+    for (int i = 0; i < num_not_in_dict; ++i) {
+        in_values.push_back(fmt::format("not_in_dict_{:03d}", i));
+    }
+
+    auto* predicate = pool.add(new_column_in_predicate(get_type_info(TYPE_VARCHAR), 0, in_values));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    size_t total = 0;
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        size_t n = res_chunk->num_rows();
+        total += n;
+        auto* col = down_cast<const BinaryColumn*>(res_chunk->get_column_raw_ptr_by_index(0));
+        for (size_t i = 0; i < n; ++i) {
+            Slice s = col->get_slice(i);
+            ASSERT_TRUE(s.starts_with(Slice("value_"))) << "Unexpected value: " << s.to_string();
+            int idx = _extract_idx(s, 6);
+            ASSERT_LT(idx, num_in_dict) << "v=" << s.to_string() << " idx=" << idx;
+        }
+    }
+
+    // Distribution of 10000 rows / 128 distinct: first 16 values appear 79 times, rest 78.
+    // Matching values 0-79: 16*79 + 64*78 = 1264 + 4992 = 6256
+    ASSERT_EQ(total, 6256);
+}
+
+// NOT IN predicate with large value list on dict-encoded VARCHAR column.
+TEST_F(SegmentIteratorTest, TestDictLookupBatchNotInListLarge) {
+    using namespace starrocks::test;
+
+    const int num_distinct = 128;
+    const int num_excluded = 80;
+    const size_t num_rows = 10000;
+
+    std::vector<std::string> values(num_distinct);
+    for (int i = 0; i < num_distinct; ++i) {
+        values[i] = fmt::format("value_{:03d}", i);
+    }
+    auto slice_provider = [&](int32_t i) { return Slice(values[i % num_distinct]); };
+
+    std::string file_name = kSegmentDir + "/dict_lookup_batch_notinlist_large";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR).set_length(32).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, slice_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    std::vector<std::string> not_in_values;
+    for (int i = 0; i < num_excluded; ++i) {
+        not_in_values.push_back(values[i]);
+    }
+    for (int i = 0; i < 70; ++i) {
+        not_in_values.push_back(fmt::format("not_in_dict_{:03d}", i));
+    }
+
+    auto* predicate = pool.add(new_column_not_in_predicate(get_type_info(TYPE_VARCHAR), 0, not_in_values));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    size_t total = 0;
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        size_t n = res_chunk->num_rows();
+        total += n;
+        auto* col = down_cast<const BinaryColumn*>(res_chunk->get_column_raw_ptr_by_index(0));
+        for (size_t i = 0; i < n; ++i) {
+            Slice s = col->get_slice(i);
+            ASSERT_TRUE(s.starts_with(Slice("value_"))) << "Unexpected value: " << s.to_string();
+            int idx = _extract_idx(s, 6);
+            ASSERT_GE(idx, num_excluded) << "v=" << s.to_string() << " idx=" << idx << " should be excluded by NOT IN";
+        }
+    }
+    // Excluded values 0-79: 16*79 + 64*78 = 6256 excluded. Remaining: 10000-6256 = 3744
+    ASSERT_EQ(total, 3744);
+}
+
+// Small IN list below the batch threshold (max(64,10) < 100): falls back to per-element dict_lookup.
+TEST_F(SegmentIteratorTest, TestDictLookupBatchInListSmall) {
+    using namespace starrocks::test;
+
+    const int num_distinct = 64;
+    const int num_in_dict = 8;
+    const size_t num_rows = 5000;
+
+    std::vector<std::string> values(num_distinct);
+    for (int i = 0; i < num_distinct; ++i) {
+        values[i] = fmt::format("v_{:03d}", i);
+    }
+    auto slice_provider = [&](int32_t i) { return Slice(values[i % num_distinct]); };
+
+    std::string file_name = kSegmentDir + "/dict_lookup_batch_inlist_small";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR).set_length(32).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, slice_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    std::vector<std::string> in_values;
+    for (int i = 0; i < num_in_dict; ++i) {
+        in_values.push_back(values[i]);
+    }
+    in_values.push_back("not_in_dict_a");
+    in_values.push_back("not_in_dict_b");
+
+    auto* predicate = pool.add(new_column_in_predicate(get_type_info(TYPE_VARCHAR), 0, in_values));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    size_t total = 0;
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        size_t n = res_chunk->num_rows();
+        total += n;
+        auto* col = down_cast<const BinaryColumn*>(res_chunk->get_column_raw_ptr_by_index(0));
+        for (size_t i = 0; i < n; ++i) {
+            int idx = _extract_idx(col->get_slice(i), 2);
+            ASSERT_LT(idx, num_in_dict) << "Unexpected v=" << col->get_slice(i).to_string();
+        }
+    }
+    // 5000/64 = 78 rem 8. Values 0-7 each appear 79 times. 8*79 = 632
+    ASSERT_EQ(total, 632);
+}
+
+// IN predicate where no values match the dictionary -> ALWAYS_FALSE.
+TEST_F(SegmentIteratorTest, TestDictLookupBatchInListAlwaysFalse) {
+    using namespace starrocks::test;
+
+    const int num_distinct = 20;
+    const size_t num_rows = 1000;
+
+    std::vector<std::string> values(num_distinct);
+    for (int i = 0; i < num_distinct; ++i) {
+        values[i] = fmt::format("v_{:03d}", i);
+    }
+    auto slice_provider = [&](int32_t i) { return Slice(values[i % num_distinct]); };
+
+    std::string file_name = kSegmentDir + "/dict_lookup_batch_inlist_false";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR).set_length(32).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, slice_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    std::vector<std::string> in_values;
+    for (int i = 0; i < 150; ++i) {
+        in_values.push_back(fmt::format("not_found_{:03d}", i));
+    }
+
+    auto* predicate = pool.add(new_column_in_predicate(get_type_info(TYPE_VARCHAR), 0, in_values));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto st = chunk_iter->get_next(res_chunk.get());
+    ASSERT_TRUE(st.is_end_of_file());
+    ASSERT_EQ(res_chunk->num_rows(), 0);
+}
+
+// NOT IN predicate where no values match dictionary (non-nullable column) -> ALWAYS_TRUE.
+TEST_F(SegmentIteratorTest, TestDictLookupBatchNotInListAlwaysTrue) {
+    using namespace starrocks::test;
+
+    const int num_distinct = 20;
+    const size_t num_rows = 1000;
+
+    std::vector<std::string> values(num_distinct);
+    for (int i = 0; i < num_distinct; ++i) {
+        values[i] = fmt::format("v_{:03d}", i);
+    }
+    auto slice_provider = [&](int32_t i) { return Slice(values[i % num_distinct]); };
+
+    std::string file_name = kSegmentDir + "/dict_lookup_batch_notinlist_true";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR).set_length(32).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, slice_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    std::vector<std::string> not_in_values;
+    for (int i = 0; i < 150; ++i) {
+        not_in_values.push_back(fmt::format("not_found_{:03d}", i));
+    }
+
+    auto* predicate = pool.add(new_column_not_in_predicate(get_type_info(TYPE_VARCHAR), 0, not_in_values));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    size_t total = 0;
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        total += res_chunk->num_rows();
+    }
+    ASSERT_EQ(total, num_rows);
+}
+
+// Duplicate values in IN list should be handled correctly (dedup by dict code).
+TEST_F(SegmentIteratorTest, TestDictLookupBatchDuplicateValues) {
+    using namespace starrocks::test;
+
+    const int num_distinct = 50;
+    const size_t num_rows = 2000;
+
+    std::vector<std::string> values(num_distinct);
+    for (int i = 0; i < num_distinct; ++i) {
+        values[i] = fmt::format("v_{:03d}", i);
+    }
+    auto slice_provider = [&](int32_t i) { return Slice(values[i % num_distinct]); };
+
+    std::string file_name = kSegmentDir + "/dict_lookup_batch_duplicates";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR).set_length(32).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, slice_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    // Duplicates: v_000 appears 5 times, v_001 appears 3 times
+    std::vector<std::string> in_values;
+    for (int i = 0; i < 5; ++i) in_values.push_back(values[0]);
+    for (int i = 0; i < 3; ++i) in_values.push_back(values[1]);
+    for (int i = 2; i < 10; ++i) in_values.push_back(values[i]);
+    for (int i = 0; i < 100; ++i) in_values.push_back(fmt::format("nf_{:03d}", i));
+
+    auto* predicate = pool.add(new_column_in_predicate(get_type_info(TYPE_VARCHAR), 0, in_values));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    size_t total = 0;
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        size_t n = res_chunk->num_rows();
+        total += n;
+        auto* col = down_cast<const BinaryColumn*>(res_chunk->get_column_raw_ptr_by_index(0));
+        for (size_t i = 0; i < n; ++i) {
+            int idx = _extract_idx(col->get_slice(i), 2);
+            ASSERT_LT(idx, 10) << "Unexpected v=" << col->get_slice(i).to_string();
+        }
+    }
+    // 2000/50 = 40 each. 10 matching values -> 400
+    ASSERT_EQ(total, 400);
 }
 
 } // namespace starrocks
