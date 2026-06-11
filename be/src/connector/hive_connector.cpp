@@ -806,6 +806,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     // Reset per-range table-specific state before populating.
     _scanner_ctx.table_specific = {};
+    _scanner_ctx.split = {};
     for (const auto& delete_file : scan_range.delete_files) {
         _scanner_ctx.table_specific.iceberg_delete_files.emplace_back(&delete_file);
     }
