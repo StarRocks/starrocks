@@ -159,6 +159,61 @@ CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 
+// Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
+// below). Enabled by default: low-value sparse mid-tier picks are skipped per the
+// thresholds below. Set to false to turn off the entire gate in one step — every picked
+// level then compacts unconditionally (the pre-gate behavior) and the individual
+// threshold configs below have no effect.
+CONF_mBool(enable_lake_pk_compaction_score_gate, "true");
+
+// Skip compaction when the size-tiered selector picks a level whose total score is below
+// this threshold and none of the overrides below fire.
+//
+// Score formula (per rowset): io_count * 1MB / read_bytes  (sum across rowsets in level)
+// - Many small/overlapped rowsets => high score => compact (useful work)
+// - Few large non-overlapped rowsets => low score => skip (would just rewrite base)
+//
+// Suppresses sparse mid-tier base merges that re-write GBs of data with low file-count
+// reduction on large PK tables. Levels with overlapped rowsets always compact; the bcr,
+// size_overflow, and emergency overrides below additionally let delete-heavy,
+// overflowing, or read-pressured levels through. Lower toward 0 to skip less aggressively
+// (0 makes the gate a no-op since a level's score is always >= 0).
+CONF_mDouble(lake_pk_compaction_min_level_score, "2.0");
+
+// Minimum benefit/cost ratio (segments-saved per MB rewritten) for accepting a
+// sparse-mid-tier compaction pick. Together with the read-pressure emergency override
+// below, this turns the binary `min_level_score` gate into a graduated decision:
+// low-pressure partitions skip uneconomical rewrites, high-pressure ones bypass the
+// gate to keep up. Set to 0 to disable this override (only `min_level_score` applies).
+CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.005");
+
+// Read-pressure emergency override. When the partition's read_pressure_score
+// (segment count) exceeds this threshold, the gate auto-relaxes proportionally so that
+// hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
+// disable the override (gate always applies).
+CONF_mDouble(lake_pk_compaction_emergency_score, "50.0");
+
+// Weight that converts a level's delete pressure into segment-equivalent benefit units,
+// folded into the bcr numerator:
+//   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
+// Intuition: one rowset that is 100% deleted is "worth w segments saved" from the
+// reader's perspective (i.e., cleaning it has the same benefit as eliminating w
+// hypothetical segments). For a sparse mid-tier with 8 input rowsets at 20% level-wide
+// delete_ratio, w=12 contributes 0.20 * 8 * 12 = 19.2 segment-equivalents on top of
+// the segment-count benefit. Tune up (e.g., 20) to be more aggressive against delete
+// accumulation; tune down (e.g., 4) to favor write amplification. Set to 0 to disable
+// the delete contribution (bcr falls back to segment-only benefit).
+CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "12.0");
+
+// Size accumulation upper-bound. When the picked level's total bytes exceed
+// alpha * max_rowset_bytes * size_tiered_level_multiple (i.e., alpha * next-tier-target),
+// force compaction regardless of min_level_score/bcr. alpha=2 caps long-tail
+// accumulation at 2x the natural size-tiered promotion target, preventing unbounded
+// mid-tier growth. Note: uses max_rowset_bytes from the actual picked rowsets, not the
+// level's compact_level which can be stale after pick_max_level merges levels.
+// Set to 0 to disable the override (no size cap).
+CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
+
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
