@@ -4107,6 +4107,49 @@ TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
     ASSERT_TRUE(duplicate);
 }
 
+TEST_F(LakeServiceTest, test_vacuum_task_deadline_exceeded) {
+    // Make every deadline check observe a clock far past the deadline. The callback only
+    // fires when the handler threads a positive deadline into the vacuum task, so this also
+    // guards against regressions where the handler stops passing the deadline down.
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline",
+                                          [](void* arg) { *(int64_t*)arg = int64_t{1} << 62; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        // A request carrying timeout_ms aborts with TIMEOUT once the deadline passes.
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        request.set_timeout_ms(60 * 60 * 1000L);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().status_code();
+    }
+
+    {
+        // A request without timeout_ms (older FE versions) carries no deadline: even with the
+        // mocked clock the task runs to completion as before.
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.status().status_code()) << response.status().status_code();
+    }
+}
+
 TEST_F(LakeServiceTest, test_lock_and_unlock_tablet_metadata) {
     {
         LockTabletMetadataRequest request;
