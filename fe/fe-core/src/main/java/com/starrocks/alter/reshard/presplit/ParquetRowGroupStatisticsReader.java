@@ -143,8 +143,9 @@ public final class ParquetRowGroupStatisticsReader {
      * "fall back to data tier", not "fail the load". The supported window here is
      * the unannotated integer/boolean subset, the UTF8 string annotation for
      * character columns, and INT32 with the DATE annotation → StarRocks DATE.
-     * Other logical annotations (DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, ...)
-     * change the value's meaning and ordering and are deferred to a future commit.
+     * Other logical annotations (DECIMAL, UINT_*, UTC-adjusted TIMESTAMP, JSON, BSON,
+     * UUID, ...) change the value's meaning and ordering and are deferred (fall back to
+     * data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
@@ -152,32 +153,22 @@ public final class ParquetRowGroupStatisticsReader {
             Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
-            case INT32 -> {
-                if (logicalAnnotation == null) {
-                    yield starRocksPrimitive == PrimitiveType.TINYINT
-                            || starRocksPrimitive == PrimitiveType.SMALLINT
-                            || starRocksPrimitive == PrimitiveType.INT
-                            || starRocksPrimitive == PrimitiveType.BIGINT;
-                }
-                // INT32+DATE is days-since-epoch; only a StarRocks DATE sort key
-                // gives those day counts their intended calendar meaning.
-                yield logicalAnnotation instanceof DateLogicalTypeAnnotation
-                        && starRocksPrimitive == PrimitiveType.DATE;
-            }
-            case INT64 -> {
-                if (logicalAnnotation == null) {
-                    yield starRocksPrimitive == PrimitiveType.TINYINT
-                            || starRocksPrimitive == PrimitiveType.SMALLINT
-                            || starRocksPrimitive == PrimitiveType.INT
-                            || starRocksPrimitive == PrimitiveType.BIGINT;
-                }
-                // Only local (non-UTC-adjusted) timestamps: the load stores those ticks
-                // verbatim as the DATETIME wall clock, so the FE-rendered boundary matches.
-                // UTC-adjusted timestamps get a session-tz offset at load time → data tier.
-                yield logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation
-                        && !timestampAnnotation.isAdjustedToUTC()
-                        && starRocksPrimitive == PrimitiveType.DATETIME;
-            }
+            // isIntegerType() is exactly {TINYINT, SMALLINT, INT, BIGINT} — the unannotated
+            // integer window; LARGEINT is intentionally excluded.
+            case INT32 -> logicalAnnotation == null
+                    ? starRocksPrimitive.isIntegerType()
+                    // INT32+DATE is days-since-epoch; only a StarRocks DATE sort key
+                    // gives those day counts their intended calendar meaning.
+                    : logicalAnnotation instanceof DateLogicalTypeAnnotation
+                            && starRocksPrimitive == PrimitiveType.DATE;
+            case INT64 -> logicalAnnotation == null
+                    ? starRocksPrimitive.isIntegerType()
+                    // Only local (non-UTC-adjusted) timestamps: the load stores those ticks
+                    // verbatim as the DATETIME wall clock, so the FE-rendered boundary matches.
+                    // UTC-adjusted timestamps get a session-tz offset at load time → data tier.
+                    : logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation
+                            && !timestampAnnotation.isAdjustedToUTC()
+                            && starRocksPrimitive == PrimitiveType.DATETIME;
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> logicalAnnotation instanceof StringLogicalTypeAnnotation
                     && (starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR);
@@ -214,7 +205,10 @@ public final class ParquetRowGroupStatisticsReader {
             // (e.g. unsupported type) or RuntimeException (e.g. BoolVariant on a
             // malformed literal) when a stat value cannot be represented. Translate
             // to a meta-tier fallback signal so the pipeline retries with data tier rather
-            // than aborting the load.
+            // than aborting the load. NOTE: toVariant's date/datetime path also throws the
+            // checked MetaTierUnavailableException (out-of-window rejection); that is not a
+            // RuntimeException and intentionally propagates past this catch with its own
+            // message — do not widen this to catch (Exception).
             throw new MetaTierUnavailableException(String.format(
                     "Parquet stats value not representable for sort-key column \"%s\": %s",
                     location.starRocksColumn.getName(), conversionFailure.getMessage()));
@@ -234,43 +228,27 @@ public final class ParquetRowGroupStatisticsReader {
                 truncated);
     }
 
-    // v1 safe window: render is unambiguous and FE/BE agree on the value. Below 1970-01-01 the BE
-    // timestamp conversion uses signed C++ division whose (seconds, nanos) split differs from
-    // floorDiv/floorMod, and pre-1582 dates raise proleptic-vs-hybrid calendar parity questions;
-    // year 0/BCE mis-renders through the yyyy formatters; above year 9999 leaves the DATE/DATETIME
-    // domain. Everything outside the window falls back to data tier.
-    private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1970, 1, 1);
-    private static final int MAX_SUPPORTED_YEAR = 9999;
-
     private static Variant toVariant(Object parquetValue, SortKeyLocation location)
             throws MetaTierUnavailableException {
         if (location.logicalAnnotation instanceof DateLogicalTypeAnnotation) {
             // INT32 days since 1970-01-01 → canonical "yyyy-MM-dd".
             LocalDate date = LocalDate.ofEpochDay(((Number) parquetValue).longValue());
-            rejectUnsafeTemporalDate(date);
+            MetaTierTemporalWindow.rejectDateOutsideWindow(date);
             return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER));
         }
         if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
             long ticks = ((Number) parquetValue).longValue();
             LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
-            // Same safe window as DATE. A negative (pre-1970) tick lands on a date before
-            // MIN_SUPPORTED_DATE and is rejected here, which also keeps the floorDiv/floorMod
-            // conversion above in the range where it is provably identical to BE's signed division.
-            rejectUnsafeTemporalDate(dateTime.toLocalDate());
+            // A negative (pre-1970) tick lands on a date before the window's lower bound and is
+            // rejected here, which also keeps the floorDiv/floorMod conversion above in the range
+            // where it is provably identical to BE's signed division.
+            MetaTierTemporalWindow.rejectDateOutsideWindow(dateTime.toLocalDate());
             return Variant.of(location.starRocksColumn.getType(), renderDateTime(dateTime));
         }
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
         return Variant.of(location.starRocksColumn.getType(), rendered);
-    }
-
-    private static void rejectUnsafeTemporalDate(LocalDate date) throws MetaTierUnavailableException {
-        if (date.isBefore(MIN_SUPPORTED_DATE) || date.getYear() > MAX_SUPPORTED_YEAR) {
-            throw new MetaTierUnavailableException(
-                    "DATE/DATETIME meta tier supports [1970-01-01, 9999-12-31] only; value "
-                            + date + " is outside that window");
-        }
     }
 
     private static LocalDateTime epochTicksToUtcDateTime(long ticks, LogicalTypeAnnotation.TimeUnit unit) {

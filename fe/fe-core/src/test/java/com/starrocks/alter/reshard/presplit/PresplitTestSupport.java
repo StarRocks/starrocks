@@ -25,6 +25,8 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.orc.OrcFile;
@@ -212,6 +214,17 @@ final class PresplitTestSupport {
             }
         }
         return outputPath;
+    }
+
+    /**
+     * Resolve a local-filesystem {@link FileStatus} for a fixture {@link Path}. The footer readers
+     * take a {@code FileStatus} (the load snapshots one), so reader tests pass their written fixture
+     * through here.
+     */
+    static FileStatus statusOf(Path path) throws IOException {
+        LocalFileSystem fileSystem = new LocalFileSystem();
+        fileSystem.initialize(path.toUri(), new Configuration());
+        return fileSystem.getFileStatus(path);
     }
 
     /** Fills column values for one row into an ORC {@link VectorizedRowBatch}. */

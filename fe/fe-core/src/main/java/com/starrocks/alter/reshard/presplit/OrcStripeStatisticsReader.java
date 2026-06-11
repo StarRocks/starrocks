@@ -134,9 +134,10 @@ public final class OrcStripeStatisticsReader {
     /**
      * Reject ORC/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating stripes. Anything outside the window means "fall
-     * back to data tier", not "fail the load". Only the unannotated integer
-     * categories are admitted in v1; string, boolean, floating-point, and the
-     * logical date/decimal/timestamp categories are deferred.
+     * back to data tier", not "fail the load". The supported window is the unannotated
+     * integer categories plus ORC DATE → StarRocks DATE. String, boolean, floating-point,
+     * TIMESTAMP/TIMESTAMP_INSTANT, decimal, and complex types are deferred (fall back to
+     * data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             TypeDescription.Category orcCategory, Column sortKeyColumn) throws MetaTierUnavailableException {
@@ -155,26 +156,26 @@ public final class OrcStripeStatisticsReader {
     }
 
     private static RowGroupStatistics convertStripe(
-            StripeStatistics stripeStatistics, StripeInformation stripeInfo, SortKeyLocation location)
+            StripeStatistics stripeStatistics, StripeInformation stripeInformation, SortKeyLocation location)
             throws MetaTierUnavailableException {
-        long rowCount = stripeInfo.getNumberOfRows();
+        long rowCount = stripeInformation.getNumberOfRows();
         ColumnStatistics[] columnStatistics = stripeStatistics.getColumnStatistics();
         ColumnStatistics sortKeyStatistics =
                 location.columnId < columnStatistics.length ? columnStatistics[location.columnId] : null;
         if (sortKeyStatistics instanceof IntegerColumnStatistics integerStatistics
                 && integerStatistics.getNumberOfValues() > 0) {
-            return integerStripe(integerStatistics, rowCount, location);
+            return convertIntegerStripe(integerStatistics, rowCount, location);
         }
         if (sortKeyStatistics instanceof DateColumnStatistics dateStatistics
                 && dateStatistics.getNumberOfValues() > 0) {
-            return dateStripe(dateStatistics, rowCount, location);
+            return convertDateStripe(dateStatistics, rowCount, location);
         }
         // Absent / all-null stats (no presence flag on ORC numeric/date stats, so an
         // empty stripe is detected via getNumberOfValues() == 0) → missing min/max.
         return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
     }
 
-    private static RowGroupStatistics integerStripe(
+    private static RowGroupStatistics convertIntegerStripe(
             IntegerColumnStatistics integerStatistics, long rowCount, SortKeyLocation location)
             throws MetaTierUnavailableException {
         Variant minVariant;
@@ -196,44 +197,32 @@ public final class OrcStripeStatisticsReader {
                 new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
     }
 
-    // v1 safe window — identical rationale to the Parquet reader: year 0/BCE mis-renders, pre-1970
-    // (negative epoch) has unverified BE parity, and pre-1582 raises calendar parity questions.
-    private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1970, 1, 1);
-    private static final int MAX_SUPPORTED_YEAR = 9999;
-
-    private static RowGroupStatistics dateStripe(
+    private static RowGroupStatistics convertDateStripe(
             DateColumnStatistics dateStatistics, long rowCount, SortKeyLocation location)
             throws MetaTierUnavailableException {
-        LocalDate minDate;
-        LocalDate maxDate;
+        Variant minVariant;
+        Variant maxVariant;
         try {
             // getMinimumDayOfEpoch() is day-of-epoch (timezone-free).
-            minDate = LocalDate.ofEpochDay(dateStatistics.getMinimumDayOfEpoch());
-            maxDate = LocalDate.ofEpochDay(dateStatistics.getMaximumDayOfEpoch());
+            LocalDate minDate = LocalDate.ofEpochDay(dateStatistics.getMinimumDayOfEpoch());
+            LocalDate maxDate = LocalDate.ofEpochDay(dateStatistics.getMaximumDayOfEpoch());
+            // rejectDateOutsideWindow throws a checked MetaTierUnavailableException (not a
+            // RuntimeException), so a window rejection propagates past the catch below keeping its
+            // own message. ofEpochDay and Variant.of RuntimeExceptions are wrapped as a meta-tier
+            // fallback signal — mirroring convertIntegerStripe — so any unrepresentable value falls
+            // back to data tier instead of escaping read() (which only catches IOException) as an
+            // uncaught exception that would skip pre-split entirely.
+            MetaTierTemporalWindow.rejectDateOutsideWindow(minDate);
+            MetaTierTemporalWindow.rejectDateOutsideWindow(maxDate);
+            minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER));
         } catch (RuntimeException conversionFailure) {
-            // Mirror integerStripe: an absurd ORC day-count (DateTimeException from ofEpochDay)
-            // becomes a meta-tier fallback signal, not a hard sampling error that skips pre-split.
             throw new MetaTierUnavailableException(String.format(
                     "ORC date stats value not representable for sort-key column \"%s\": %s",
                     location.starRocksColumn.getName(), conversionFailure.getMessage()));
         }
-        // Throws MetaTierUnavailableException (checked) directly — propagates past the catch above.
-        rejectUnsafeTemporalDate(minDate);
-        rejectUnsafeTemporalDate(maxDate);
         return new RowGroupStatistics(
-                new Tuple(List.of(Variant.of(location.starRocksColumn.getType(),
-                        minDate.format(DateUtils.DATE_FORMATTER)))),
-                new Tuple(List.of(Variant.of(location.starRocksColumn.getType(),
-                        maxDate.format(DateUtils.DATE_FORMATTER)))),
-                rowCount, /*truncated=*/ false);
-    }
-
-    private static void rejectUnsafeTemporalDate(LocalDate date) throws MetaTierUnavailableException {
-        if (date.isBefore(MIN_SUPPORTED_DATE) || date.getYear() > MAX_SUPPORTED_YEAR) {
-            throw new MetaTierUnavailableException(
-                    "DATE meta tier supports [1970-01-01, 9999-12-31] only; value "
-                            + date + " is outside that window");
-        }
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
     }
 
     private record SortKeyLocation(int columnId, Column starRocksColumn) {
