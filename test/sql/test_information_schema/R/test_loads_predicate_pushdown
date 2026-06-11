@@ -162,7 +162,7 @@ select count(1) from information_schema.loads where db_name='db_${uuid0}' and us
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and state='FINISHED';
 -- result:
-3
+4
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and state='__NO_SUCH_STATE__';
 -- result:
@@ -206,7 +206,7 @@ select count(1) from information_schema.loads where db_name='db_${uuid0}' and lo
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_finish_time >= date_sub(now(), interval 1 hour) and load_finish_time <= date_add(now(), interval 1 hour);
 -- result:
-3
+4
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_finish_time > date_add(now(), interval 1 hour);
 -- result:
