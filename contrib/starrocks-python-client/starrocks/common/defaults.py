@@ -46,6 +46,12 @@ class ReflectionTableDefaults(ReflectionDefaults):
 
         # for following properties, they won't explicitly set in the 'properties' field of the table.
         'enable_persistent_index': 'true',
+        # StarRocks only records `enable_statistic_collect_on_first_load` in
+        # information_schema.tables_config when it is set to a falsy value. A truthy (or unset)
+        # value is never reported, so an absent value must be treated as 'true' to avoid a
+        # spurious diff when the metadata sets it to true. See _compare_table_properties_impl,
+        # which compares effective (value-or-default) values.
+        'enable_statistic_collect_on_first_load': 'true',
         # 'bloom_filter_columns': None,
         # 'colocate_with': None,
     }
@@ -56,6 +62,17 @@ class ReflectionTableDefaults(ReflectionDefaults):
     _DEFAULT_PROPERTIES_SHARED_DATA = {**{
         'replication_num': '1',  # Different for shared-data
     }, **_DEFAULT_PROPERTIES}
+
+    # Properties that must NOT be implicitly reset to their default when they are absent from
+    # the metadata. For most properties, an absent-from-metadata property with a non-default
+    # database value triggers an implicit "reset to default" ALTER. That behavior is wrong for
+    # properties like `enable_statistic_collect_on_first_load`: StarRocks only reports it in
+    # information_schema.tables_config when it is falsy, so it has a meaningful database value
+    # only when explicitly set false. When the user does not manage it in their model, we must
+    # leave the database value untouched rather than generate a spurious reset to 'true'.
+    _SKIP_IMPLICIT_RESET_PROPERTIES = {
+        'enable_statistic_collect_on_first_load',
+    }
 
     # Default table options
     # engine -> key -> comment -> partition -> distribution -> order by -> properties
@@ -120,6 +137,13 @@ class ReflectionTableDefaults(ReflectionDefaults):
             return cls._DEFAULT_PROPERTIES_SHARED_DATA
         else:
             return cls._DEFAULT_PROPERTIES_SHARED_NOTHING
+
+    @classmethod
+    def skip_implicit_reset_properties(cls) -> set:
+        """Property names (lowercase) that must never be implicitly reset to their default
+        when absent from the metadata. See ``_SKIP_IMPLICIT_RESET_PROPERTIES``.
+        """
+        return cls._SKIP_IMPLICIT_RESET_PROPERTIES
 
 
 class ReflectionViewDefaults(ReflectionTableDefaults):

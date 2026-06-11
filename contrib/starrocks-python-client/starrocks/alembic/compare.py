@@ -1797,6 +1797,16 @@ def _compare_table_properties_impl(
 
         logger.debug("Property changes. key: %s, effective_conn_str: %s, effective_meta_str: %s", key, effective_conn_str, effective_meta_str)
         if meta_value is None:
+            if key in default_cls.skip_implicit_reset_properties():
+                # This property must not be implicitly reset to its default when it is absent
+                # from the metadata. Leave the database value untouched. See
+                # ReflectionTableDefaults._SKIP_IMPLICIT_RESET_PROPERTIES.
+                logger.debug(
+                    "Property %r is not specified in metadata for %r; leaving the database "
+                    "value %r unchanged (implicit reset is disabled for this property).",
+                    key, full_name, conn_value,
+                )
+                continue
             if default_value is None:
                 # Scenario 1: Implicit deletion of a property with no default.
                 if conn_value is not None:

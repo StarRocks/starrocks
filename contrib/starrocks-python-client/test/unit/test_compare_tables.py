@@ -1468,6 +1468,94 @@ class TestPropertiesChanges:
         assert result[0].properties == wapped_meta_props
 
 
+class TestEnableStatisticCollectOnFirstLoad:
+    """Tests for the `enable_statistic_collect_on_first_load` property.
+
+    StarRocks only records this property in information_schema.tables_config when it is set
+    to a falsy value; a truthy (or unset) value is never reported. The reflected (conn) side
+    is therefore absent when the value is true, so an absent value must be treated as 'true'
+    to avoid a spurious diff. This is implemented via a default of 'true' for the property.
+    """
+
+    PROP = "enable_statistic_collect_on_first_load"
+
+    def _run(self, conn_props, meta_props):
+        autogen_context = Mock(spec=AutogenContext)
+        autogen_context.dialect.name = DialectName
+
+        conn_kwargs = {TableInfoKeyWithPrefix.PROPERTIES: conn_props} if conn_props is not None else {}
+        meta_kwargs = {TableInfoKeyWithPrefix.PROPERTIES: meta_props} if meta_props is not None else {}
+        conn_table = Mock(kwargs=conn_kwargs)
+        conn_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(conn_table.kwargs)}
+        meta_table = Mock(kwargs=meta_kwargs)
+        meta_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(meta_table.kwargs)}
+
+        upgrade_ops = UpgradeOps([])
+        compare_starrocks_table(
+            autogen_context, upgrade_ops, "test_table", "test_db", conn_table, meta_table
+        )
+        return upgrade_ops.ops
+
+    def test_meta_true_db_absent_no_change(self):
+        """The reported bug: metadata sets true, DB does not report it -> no spurious diff."""
+        result = self._run(conn_props={}, meta_props={self.PROP: "true"})
+        assert len(result) == 0
+
+    def test_both_absent_no_change(self):
+        """Neither side specifies it -> both default to true -> no change."""
+        result = self._run(conn_props={}, meta_props={})
+        assert len(result) == 0
+
+    def test_both_false_no_change(self):
+        """Both sides explicitly false (DB reports false) -> no change."""
+        result = self._run(conn_props={self.PROP: "false"}, meta_props={self.PROP: "false"})
+        assert len(result) == 0
+
+    def test_meta_true_db_false_detects_change(self):
+        """Metadata true while DB reports false -> a real change must be detected."""
+        result = self._run(conn_props={self.PROP: "false"}, meta_props={self.PROP: "true"})
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        assert result[0].properties.get(self.PROP) == "true"
+
+    def test_meta_false_db_absent_detects_change(self):
+        """Metadata false while DB is absent (effectively true) -> change to set false."""
+        result = self._run(conn_props={}, meta_props={self.PROP: "false"})
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        assert result[0].properties.get(self.PROP) == "false"
+
+    def test_meta_absent_db_false_no_implicit_reset(self):
+        """DB has it false but the model does not manage it -> NO spurious reset to default.
+
+        This property is exempt from implicit reset-to-default: when it is not specified in
+        the metadata, the database value is left untouched regardless of the default.
+        """
+        result = self._run(conn_props={self.PROP: "false"}, meta_props={})
+        assert len(result) == 0
+
+    def test_meta_absent_db_false_other_props_unaffected(self):
+        """The implicit-reset exemption is scoped to this property only.
+
+        A different non-default property absent from metadata still triggers a reset, while
+        the exempt property is left alone.
+        """
+        result = self._run(
+            conn_props={self.PROP: "false", "replication_num": "2"},
+            meta_props={},
+        )
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        # Only replication_num is reset (wrapped as a future-partition property);
+        # the exempt property is not in the op.
+        prop_keys = set(result[0].properties)
+        assert any("replication_num" in k for k in prop_keys)
+        assert not any(self.PROP in k for k in prop_keys)
+
+
 class TestORMTableObjects:
     """Tests using real SQLAlchemy ORM Table objects with __table_args__."""
 

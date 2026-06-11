@@ -131,7 +131,7 @@ class TestNormalizeSQL:
     def test_whitespace_normalization(self):
         """Test whitespace collapse and trimming."""
         sql = "  SELECT   `id`  ,  `name`   FROM   `users`  "
-        expected = "select id , name from users"
+        expected = "select id, name from users"
         result = TableAttributeNormalizer.normalize_sql(sql)
         assert result == expected
 
@@ -245,7 +245,7 @@ class TestRealCases():
     def test_real_case_5_with_qualifiers(self):
         """Test real case 5 with special char in backticks."""
         sql = "select orders_part_expr.user_id, orders_part_expr.order_date, count(*) as cnt from test_sqla.orders_part_expr group by orders_part_expr.user_id, orders_part_expr.order_date"
-        expected = "select user_id, order_date, count(*) as cnt from orders_part_expr group by user_id, order_date"
+        expected = "select user_id, order_date, count(*) cnt from orders_part_expr group by user_id, order_date"
         result = TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True)
         assert result == expected
 
@@ -254,6 +254,142 @@ class TestRealCases():
         sql = """SELECT `orders_part_expr`.`user_id`, `orders_part_expr`.`order_date`, count(*) AS `cnt`
             FROM `test_sqla`.`orders_part_expr`
             GROUP BY `orders_part_expr`.`user_id`, `orders_part_expr`.`order_date`"""
-        expected = "select user_id, order_date, count(*) as cnt from orders_part_expr group by user_id, order_date"
+        expected = "select user_id, order_date, count(*) cnt from orders_part_expr group by user_id, order_date"
         result = TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True)
         assert result == expected
+
+
+class TestStarRocksCanonicalization:
+    """Tests for canonicalizing StarRocks' own rewrites of view/MV definitions.
+
+    On clusters older than 4.0.6, StarRocks stores a view definition in a canonical
+    form that is semantically equal but syntactically different from the user-written
+    SQL. normalize_sql must reconcile both into a common form so equivalent definitions
+    compare equal. Each test asserts the *model* SQL normalizes to the same string as
+    the *stored* SQL.
+    """
+
+    def _assert_equivalent(self, model_sql: str, stored_sql: str) -> None:
+        model = TableAttributeNormalizer.normalize_sql(model_sql, remove_qualifiers=True)
+        stored = TableAttributeNormalizer.normalize_sql(stored_sql, remove_qualifiers=True)
+        assert model == stored, f"\n  model : {model}\n  stored: {stored}"
+
+    def test_full_repro_unnest_table_alias(self):
+        """The exact reproduction from the bug report (unnest + table alias + comma)."""
+        model = (
+            "SELECT `tenant_id`, `id` AS `ibg_id`, `ks_id` AS `keyword_set_id`\n"
+            "FROM `tenant`.`ideal_buying_group`,\n"
+            "unnest(`keyword_set_ids`) AS k(`ks_id`)"
+        )
+        stored = (
+            "SELECT `tenant`.`ideal_buying_group`.`tenant_id`, "
+            "`tenant`.`ideal_buying_group`.`id` AS `ibg_id`, "
+            "`k`.`ks_id` AS `keyword_set_id` "
+            "FROM `tenant`.`ideal_buying_group` , "
+            "unnest(`tenant`.`ideal_buying_group`.`keyword_set_ids`) k(`ks_id`) ;"
+        )
+        self._assert_equivalent(model, stored)
+
+    def test_inner_join_added(self):
+        """StarRocks rewrites 'JOIN' to 'INNER JOIN'."""
+        self._assert_equivalent(
+            "select a, b from t join u on t.id = u.id",
+            "select a, b from t inner join u on t.id = u.id",
+        )
+
+    def test_outer_join_added(self):
+        """StarRocks rewrites 'LEFT JOIN' to 'LEFT OUTER JOIN'."""
+        self._assert_equivalent(
+            "select a from t left join u on t.id = u.id",
+            "select a from t left outer join u on t.id = u.id",
+        )
+
+    def test_lateral_added_before_unnest(self):
+        """StarRocks may add LATERAL and drop the table-function alias AS."""
+        self._assert_equivalent(
+            "select x from t, unnest(arr) as u(v)",
+            "select x from t, lateral unnest(arr) u(v)",
+        )
+
+    def test_case_when_predicate_parenthesized(self):
+        """StarRocks wraps the CASE WHEN predicate in redundant parentheses."""
+        self._assert_equivalent(
+            "select case when x > 100 then 1 else 0 end as c from t",
+            "select case when (x > 100) then 1 else 0 end as c from t",
+        )
+
+    def test_where_predicate_parenthesized(self):
+        """Redundant parentheses around a WHERE comparison are removed."""
+        self._assert_equivalent(
+            "select x from t where status = 'active'",
+            "select x from t where (status = 'active')",
+        )
+
+    def test_multiple_predicate_parens(self):
+        """Each flat comparison's redundant parentheses are removed independently."""
+        self._assert_equivalent(
+            "select x from t where a > 1 and b < 2",
+            "select x from t where (a > 1) and (b < 2)",
+        )
+
+    def test_cte_column_list_injected(self):
+        """StarRocks injects a CTE column list after the CTE name."""
+        self._assert_equivalent(
+            "with cat as (select category, c from t) select category from cat",
+            "with cat (category, c) as (select category, c from t) select category from cat",
+        )
+
+    def test_comma_spacing_normalized(self):
+        """Comma spacing differences are normalized."""
+        self._assert_equivalent(
+            "select a,b,c from t",
+            "select a , b , c from t",
+        )
+
+    def test_newline_differences_normalized(self):
+        """Literal '\\n' and actual newlines normalize identically."""
+        self._assert_equivalent(
+            "select a,\nb from t",
+            "select a,\\nb from t",
+        )
+
+    # --- Safety guards: real differences must still be detected ------------------
+
+    def test_real_column_change_still_detected(self):
+        model = TableAttributeNormalizer.normalize_sql("select a from t", remove_qualifiers=True)
+        stored = TableAttributeNormalizer.normalize_sql("select b from t", remove_qualifiers=True)
+        assert model != stored
+
+    def test_grouping_parens_not_erased(self):
+        """Parentheses that change AND/OR grouping must be preserved."""
+        model = TableAttributeNormalizer.normalize_sql(
+            "select x from t where (a = 1 or b = 2) and c = 3", remove_qualifiers=True)
+        stored = TableAttributeNormalizer.normalize_sql(
+            "select x from t where a = 1 or b = 2 and c = 3", remove_qualifiers=True)
+        assert model != stored
+
+    def test_alias_as_dropped_symmetrically(self):
+        """The AS keyword is dropped uniformly; with-AS and without-AS forms compare equal."""
+        self._assert_equivalent(
+            "select x y, t.* from src t",
+            "select x as y, t.* from src as t",
+        )
+
+    def test_table_alias_as_added_by_starrocks(self):
+        """StarRocks 3.5.x stores table aliases with AS ('src AS a'); the model omits it."""
+        self._assert_equivalent(
+            "select a.id from src a join src b on a.id = b.id",
+            "select a.id from src as a inner join src as b on a.id = b.id",
+        )
+
+    def test_cast_as_normalized_symmetrically(self):
+        """CAST(... AS type) loses its AS too, but symmetrically, so it stays comparable."""
+        self._assert_equivalent(
+            "select cast(x as int) y from t",
+            "select cast(x as int) as y from t",
+        )
+
+    def test_function_call_parens_preserved(self):
+        """Parentheses of a function call must not be stripped even with '=' inside."""
+        result = TableAttributeNormalizer.normalize_sql("select array_map(x -> x = 1, arr) from t")
+        assert "array_map(x -> x = 1, arr)" in result

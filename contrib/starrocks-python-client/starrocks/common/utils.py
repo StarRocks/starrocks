@@ -134,6 +134,32 @@ class TableAttributeNormalizer:
     _CLOSE_PAREN_SPACE_PATTERN = re.compile(r'\s*(\)\s?)\s*')
     _COMMA_SPACE_PATTERN = re.compile(r'\s*,\s*')
 
+    # ---------------------------------------------------------------------------
+    # Patterns to canonicalize StarRocks' own rewrites of view / materialized-view
+    # definitions. On clusters older than 4.0.6, StarRocks stores a view definition
+    # in a canonical form that differs syntactically (but not semantically) from the
+    # SQL the user wrote. These patterns reconcile both sides so that equivalent
+    # definitions compare equal. See ``_canonicalize_statement``.
+    # ---------------------------------------------------------------------------
+    # "JOIN" is stored as "INNER JOIN"; collapse it back to a bare "JOIN".
+    _INNER_JOIN_PATTERN = re.compile(r'\binner\s+join\b', re.IGNORECASE)
+    # "<x> OUTER JOIN" is equivalent to "<x> JOIN"; drop the redundant OUTER.
+    _OUTER_JOIN_PATTERN = re.compile(r'\b(left|right|full)\s+outer\s+join\b', re.IGNORECASE)
+    # StarRocks may add or drop LATERAL before unnest / table functions.
+    _LATERAL_PATTERN = re.compile(r'\blateral\s+', re.IGNORECASE)
+    # The optional AS keyword (column alias "x AS y", table alias "t AS a", CAST(x AS int),
+    # "WITH cte AS (...)") is removed entirely. StarRocks is inconsistent about emitting it
+    # (e.g. on 3.5.x it stores "src AS a" but "unnest(x) k(c)"), and AS is never semantically
+    # meaningful, so dropping it symmetrically on both sides reconciles the difference without
+    # ever hiding a real change. Must run AFTER the CTE column-list rewrite below, which needs AS.
+    _ALIAS_AS_PATTERN = re.compile(r'\s+as\s+', re.IGNORECASE)
+    # StarRocks injects a CTE column list: "WITH cat (category, c) AS (" -> "WITH cat AS (".
+    _CTE_COLUMN_LIST_PATTERN = re.compile(r'\b(\w+)\s*\([^()]*\)\s+as\s*\(', re.IGNORECASE)
+    # StarRocks wraps simple predicates in redundant parentheses: "(x > 100)" -> "x > 100".
+    # Restricted to a single flat comparison (no nested parens, no commas, no AND/OR) so the
+    # removed parentheses are guaranteed redundant and grouping is never altered.
+    _REDUNDANT_PREDICATE_PAREN_PATTERN = re.compile(r'\(\s*([^(),]*?(?:>=|<=|<>|!=|=|>|<)[^(),]*?)\s*\)')
+
     @staticmethod
     def strip_identifier_backticks(sql: str) -> str:
         """Remove MySQL-style identifier quotes (`) while preserving string literals."""
@@ -188,8 +214,13 @@ class TableAttributeNormalizer:
         - Converts to lowercase
         - Removes leading/trailing whitespace
         - Replaces multiple spaces with a single space
+        - Standardizes comma spacing (``a , b`` / ``a,b`` -> ``a, b``)
         - Removes trailing semicolons
         - Removes all qualifiers (e.g., ``schema.table.``) from identifiers.
+        - Canonicalizes StarRocks' own view/MV definition rewrites (INNER/OUTER JOIN,
+          LATERAL, the optional AS keyword, CTE column lists, redundant predicate
+          parentheses) so that semantically equivalent definitions compare equal. See
+          ``_canonicalize_statement``.
 
         Args:
             sql: The SQL string to normalize.
@@ -217,8 +248,64 @@ class TableAttributeNormalizer:
         sql = TableAttributeNormalizer.strip_identifier_backticks(sql)
 
         sql = re.sub(r"\s+", " ", sql).strip()
-        sql = sql.rstrip(";")
+        sql = TableAttributeNormalizer._canonicalize_statement(sql)
+        # Strip trailing semicolons together with any surrounding whitespace.
+        sql = sql.rstrip(" ;").rstrip(";")
         return sql
+
+    @staticmethod
+    def _canonicalize_statement(sql: str) -> str:
+        """Reconcile StarRocks' canonical view/MV definition form with user-written SQL.
+
+        On clusters older than 4.0.6 StarRocks stores view definitions in a canonical form
+        that is semantically identical but syntactically different from the SQL the user wrote.
+        This step rewrites both the stored and the model definition into a common form so that
+        equivalent definitions compare equal during Alembic autogeneration. It is applied
+        symmetrically to both sides, so it can only ever erase a *syntactic* difference, never
+        a real schema change.
+
+        Operates on already lower-cased, backtick-stripped, single-spaced SQL.
+        """
+        if not sql:
+            return sql
+        # Standardize comma spacing: "a , b" / "a,b" -> "a, b".
+        sql = TableAttributeNormalizer._COMMA_SPACE_PATTERN.sub(', ', sql)
+        # "INNER JOIN" -> "JOIN"; "<x> OUTER JOIN" -> "<x> JOIN".
+        sql = TableAttributeNormalizer._INNER_JOIN_PATTERN.sub('join', sql)
+        sql = TableAttributeNormalizer._OUTER_JOIN_PATTERN.sub(r'\1 join', sql)
+        # Drop LATERAL before unnest / table functions.
+        sql = TableAttributeNormalizer._LATERAL_PATTERN.sub('', sql)
+        # Remove injected CTE column lists: "with cat (category, c) as (" -> "with cat as (".
+        # Runs before AS removal because the pattern relies on the AS keyword.
+        sql = TableAttributeNormalizer._CTE_COLUMN_LIST_PATTERN.sub(r'\1 as (', sql)
+        # Drop the optional AS keyword for all aliases (column, table, CAST, CTE).
+        sql = TableAttributeNormalizer._ALIAS_AS_PATTERN.sub(' ', sql)
+        # Remove redundant parentheses around simple predicates: "(x > 100)" -> "x > 100".
+        sql = TableAttributeNormalizer._strip_redundant_predicate_parens(sql)
+        return sql
+
+    @staticmethod
+    def _strip_redundant_predicate_parens(sql: str) -> str:
+        """Remove parentheses that merely wrap a single flat comparison predicate.
+
+        A parenthesized group is stripped only when it contains exactly one comparison and no
+        nested parentheses, commas, or AND/OR — so the parentheses are unambiguously redundant
+        and removing them cannot change operator grouping. Parentheses that belong to a function
+        call (``foo(x = y)``) are left untouched by requiring that the ``(`` is not preceded by
+        an identifier character.
+        """
+        def _replace(match: 're.Match[str]') -> str:
+            inner = match.group(1)
+            lowered = inner.lower()
+            if ' and ' in lowered or ' or ' in lowered:
+                return match.group(0)
+            start = match.start()
+            if start > 0 and (sql[start - 1].isalnum() or sql[start - 1] == '_'):
+                # Preceded by an identifier char -> this is a function call, keep the parens.
+                return match.group(0)
+            return inner
+
+        return TableAttributeNormalizer._REDUNDANT_PREDICATE_PAREN_PATTERN.sub(_replace, sql)
 
     @staticmethod
     def _simple_normalize(value: str) -> str:

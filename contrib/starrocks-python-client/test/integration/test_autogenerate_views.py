@@ -1293,3 +1293,105 @@ class TestFilters(TestAutogenerateBase):
             finally:
                 for vname in view_names:
                     conn.execute(text(f"DROP VIEW IF EXISTS {vname}"))
+
+
+class TestCanonicalizationNoPhantomDiff(TestAutogenerateBase):
+    """Regression tests for StarRocks view-definition canonicalization (pre-4.0.6).
+
+    On clusters older than 4.0.6, StarRocks rewrites a view definition into its own
+    canonical form when it is stored, so the SQL the user wrote in their model differs
+    syntactically from what is reflected back. Each test creates the view in the database
+    using the *model* SQL, declares the identical view in the metadata, and asserts that
+    autogenerate detects NO change (no phantom migration).
+
+    See starrocks.common.utils.TableAttributeNormalizer._canonicalize_statement.
+    """
+
+    def _assert_no_phantom_diff(self, view_name: str, model_template: str) -> None:
+        """Create a view from ``model_template`` and assert autogenerate finds no change.
+
+        ``model_template`` may reference the per-test base table via ``{src}``. A unique base
+        table name is used so tests running in parallel cannot clobber each other.
+        """
+        engine = self.engine
+        base_table = f"{view_name}_src"
+        model_definition = model_template.format(src=base_table)
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS {base_table}"))
+            conn.execute(text(
+                f"CREATE TABLE {base_table} "
+                f"(id INT, val INT, cat VARCHAR(20), tags ARRAY<INT>) "
+                f"PROPERTIES ('replication_num'='1')"
+            ))
+            conn.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
+            # Create the view in the DB exactly as the user wrote it in their model.
+            conn.execute(text(f"CREATE VIEW {view_name} AS {model_definition}"))
+            try:
+                target_metadata = MetaData()
+                View(view_name, target_metadata, definition=model_definition)
+                mc = create_migration_context(conn, target_metadata)
+                migration_script = api.produce_migrations(mc, target_metadata)
+                # Scope to ops for THIS view only, so unrelated objects left in the test
+                # schema cannot affect the result.
+                view_ops = [
+                    op for op in migration_script.upgrade_ops.ops
+                    if isinstance(op, (AlterViewOp, CreateViewOp, DropViewOp))
+                    and getattr(op, "view_name", None) == view_name
+                ]
+                assert len(view_ops) == 0, (
+                    f"Phantom diff detected for {view_name!r}.\n"
+                    f"Model definition: {model_definition}\n"
+                    f"Generated ops: {view_ops}"
+                )
+            finally:
+                conn.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
+                conn.execute(text(f"DROP TABLE IF EXISTS {base_table}"))
+
+    def test_plain_join_becomes_inner_join(self) -> None:
+        """A plain JOIN is stored as INNER JOIN with 'AS' table aliases."""
+        self._assert_no_phantom_diff(
+            "canon_join",
+            "SELECT a.id, b.val FROM {src} a JOIN {src} b ON a.id = b.id",
+        )
+
+    def test_left_join_becomes_left_outer_join(self) -> None:
+        """A LEFT JOIN is stored as LEFT OUTER JOIN."""
+        self._assert_no_phantom_diff(
+            "canon_ljoin",
+            "SELECT a.id, b.val FROM {src} a LEFT JOIN {src} b ON a.id = b.id",
+        )
+
+    def test_table_alias_without_as(self) -> None:
+        """A table alias written without AS is stored as 'src AS a'."""
+        self._assert_no_phantom_diff(
+            "canon_alias",
+            "SELECT s.id, s.val FROM {src} s WHERE s.val > 10",
+        )
+
+    def test_case_when_predicate_parenthesized(self) -> None:
+        """StarRocks wraps the CASE WHEN predicate in redundant parentheses."""
+        self._assert_no_phantom_diff(
+            "canon_case",
+            "SELECT id, CASE WHEN val > 100 THEN 1 ELSE 0 END AS flag FROM {src}",
+        )
+
+    def test_where_predicate(self) -> None:
+        """A WHERE comparison may be stored parenthesized."""
+        self._assert_no_phantom_diff(
+            "canon_where",
+            "SELECT id FROM {src} WHERE val > 100",
+        )
+
+    def test_cte_column_list_injected(self) -> None:
+        """StarRocks injects a CTE column list after the CTE name."""
+        self._assert_no_phantom_diff(
+            "canon_cte",
+            "SELECT cat, n FROM (SELECT cat, count(*) AS n FROM {src} GROUP BY cat) t",
+        )
+
+    def test_unnest_with_lateral_and_table_function_alias(self) -> None:
+        """The exact bug-report shape: unnest + table-function alias (stored with LATERAL)."""
+        self._assert_no_phantom_diff(
+            "canon_unnest",
+            "SELECT id, t FROM {src}, unnest(tags) AS k(t)",
+        )
