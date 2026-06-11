@@ -137,8 +137,12 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.partition_values.clear();
     ctx.extended_values.clear();
     ctx.materialized_columns.clear();
+    ctx.partition_columns.clear();
+    ctx.extended_columns.clear();
     ctx.reserved_field_slots.clear();
     ctx.conjunct_ctxs_by_slot.clear();
+    ctx.can_use_file_record_count = false;
+    ctx.is_first_split = false;
 
     Columns& partition_values = ctx.partition_values;
 

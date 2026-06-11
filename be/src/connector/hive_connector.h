@@ -111,11 +111,13 @@ private:
     Status _check_all_slots_nullable();
 
     // =====================================
+    // _scanner_ctx must outlive _pool: pooled JNI scanners may dereference
+    // _scanner_ctx during destruction (JniScanner::~JniScanner → close()).
+    HdfsScannerContext _scanner_ctx;
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
 
     HdfsScanner* _scanner = nullptr;
-    HdfsScannerContext _scanner_ctx;
 
     // Partition-level predicate evaluation — not passed to scanners.
     struct PartitionFilter {

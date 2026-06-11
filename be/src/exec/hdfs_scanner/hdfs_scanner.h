@@ -382,7 +382,7 @@ struct HdfsScannerContext {
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // TODO: probably should be removed in later version.
-    std::atomic<int32_t>* lazy_column_coalesce_counter;
+    std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 
     // ===== infrastructure =====
