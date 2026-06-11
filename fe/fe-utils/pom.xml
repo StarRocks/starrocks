@@ -24,7 +24,7 @@
     <parent>
         <artifactId>starrocks-fe</artifactId>
         <groupId>com.starrocks</groupId>
-        <version>4.1</version>
+        <version>4.1.2</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
