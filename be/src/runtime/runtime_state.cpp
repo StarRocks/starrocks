@@ -145,6 +145,11 @@ void RuntimeState::init_fragment_mem_pool() {
     }
 }
 
+void RuntimeState::set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state) {
+    _query_ctx = query_ctx;
+    _query_runtime_state = query_runtime_state;
+}
+
 void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx,
                                     pipeline::FragmentRuntimeState* fragment_runtime_state) {
     _fragment_ctx = fragment_ctx;

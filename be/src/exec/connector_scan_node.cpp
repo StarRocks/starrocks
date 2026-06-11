@@ -72,8 +72,8 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         mem_ratio = query_options.connector_scan_use_query_mem_ratio;
     }
 
-    if (runtime_state()->query_ctx() != nullptr) {
-        _mem_share_arb = runtime_state()->query_ctx()->connector_scan_operator_mem_share_arbitrator();
+    if (runtime_state()->query_runtime_state() != nullptr) {
+        _mem_share_arb = runtime_state()->query_runtime_state()->connector_scan_operator_mem_share_arbitrator();
     }
     if (_mem_share_arb != nullptr) {
         _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);

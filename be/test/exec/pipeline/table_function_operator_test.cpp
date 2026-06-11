@@ -86,7 +86,7 @@ private:
 };
 
 void TableFunctionOperatorTest::SetUp() {
-    _runtime_state.set_query_ctx(_query_ctx.get());
+    _runtime_state.set_query_ctx(_query_ctx.get(), &_query_ctx->query_runtime_state());
 
     TTableDescriptor t_table_desc;
     t_table_desc.id = 0;
