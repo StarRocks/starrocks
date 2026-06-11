@@ -98,9 +98,6 @@ public class TaskRunStatusTest {
         taskRunStatus.getMvTaskRunExtraMessage().setNextPartitionStart("2023-01-01");
         Assertions.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testSourceIsUnknownWhenAbsentFromPersistedJson() {
@@ -119,4 +116,3 @@ public class TaskRunStatusTest {
         Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getLastRefreshState());
     }
 }
->>>>>>> e86e6a5f374... [Enhancement] Add TASK_SOURCE column to information_schema.task_runs (#74487)
