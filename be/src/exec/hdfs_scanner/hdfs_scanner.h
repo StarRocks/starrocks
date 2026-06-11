@@ -476,7 +476,7 @@ public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
-    Status init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx);
+    Status init(RuntimeState* runtime_state, HdfsScannerContext* scanner_ctx);
     Status open(RuntimeState* runtime_state);
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     void close() noexcept;
@@ -513,7 +513,9 @@ public:
     // once it can interleave predicate evaluation with column loading.
     virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
-    bool has_split_tasks() const { return _scanner_ctx.state != nullptr && _scanner_ctx.state->has_split_tasks; }
+    bool has_split_tasks() const {
+        return _scanner_ctx != nullptr && _scanner_ctx->state != nullptr && _scanner_ctx->state->has_split_tasks;
+    }
 
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
@@ -534,7 +536,7 @@ private:
     void update_hdfs_counter(HdfsScannerProfile* profile);
 
 protected:
-    HdfsScannerContext _scanner_ctx;
+    HdfsScannerContext* _scanner_ctx = nullptr;
     RuntimeState* _runtime_state = nullptr;
     HdfsScannerStats _app_stats;
     HdfsScannerStats _fs_stats;

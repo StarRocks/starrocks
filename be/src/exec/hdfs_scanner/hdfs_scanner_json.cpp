@@ -177,7 +177,7 @@ Status HdfsJsonReader::_construct_column(simdjson::ondemand::value& value, Colum
 }
 
 Status HdfsJsonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
-    const auto& text_file_desc = _scanner_ctx.scan_range->text_file_desc;
+    const auto& text_file_desc = _scanner_ctx->scan_range->text_file_desc;
     return _setup_compression_type(text_file_desc);
 }
 
@@ -188,7 +188,7 @@ Status HdfsJsonScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
 
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    _reader = std::make_unique<HdfsJsonReader>(_file.get(), _scanner_ctx.slot_descs);
+    _reader = std::make_unique<HdfsJsonReader>(_file.get(), _scanner_ctx->slot_descs);
     RETURN_IF_ERROR(_reader->init());
 
     return Status::OK();
@@ -218,8 +218,8 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 
     if ((*chunk)->num_rows() > 0) {
         size_t rows_read = (*chunk)->num_rows();
-        RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
-        _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+        RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
+        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, rows_read);
 
         // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
     }
@@ -235,7 +235,7 @@ Status HdfsJsonScanner::_setup_compression_type(const TTextFileDesc& text_file_d
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     } else {
         // if FE does not specify a compress type, we choose it by looking at the filename.
-        compression_type = get_compression_type_from_path(_scanner_ctx.file_path);
+        compression_type = get_compression_type_from_path(_scanner_ctx->file_path);
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;

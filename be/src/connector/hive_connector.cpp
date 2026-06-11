@@ -798,42 +798,42 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         _scanner_ctx.column_access_paths = &_column_access_paths;
     }
 
-    // Copy all shared fields from the datasource-level template context, then
-    // override the per-range fields below.
-    HdfsScannerContext scanner_ctx = _scanner_ctx;
-    scanner_ctx.obj_pool = &_pool;
-    scanner_ctx.partition_expr_ctxs = _partition_filter.values;
-    scanner_ctx.extended_col_expr_ctxs = _extended_column_expr_ctxs;
+    // Set per-range fields directly on the datasource-level context (no copy).
+    _scanner_ctx.obj_pool = &_pool;
+    _scanner_ctx.partition_expr_ctxs = _partition_filter.values;
+    _scanner_ctx.extended_col_expr_ctxs = _extended_column_expr_ctxs;
 
-    scanner_ctx.scan_range = &scan_range;
-    scanner_ctx.scan_range_id = _scan_range_id;
-    scanner_ctx.fs = _pool.add(fs.release());
-    scanner_ctx.file_path = native_file_path;
-    scanner_ctx.file_size = _scan_range.file_length;
-    scanner_ctx.table_location = _hive_table->get_base_path();
-    scanner_ctx.split_context = down_cast<HdfsSplitContext*>(_split_context);
+    _scanner_ctx.scan_range = &scan_range;
+    _scanner_ctx.scan_range_id = _scan_range_id;
+    _scanner_ctx.fs = _pool.add(fs.release());
+    _scanner_ctx.file_path = native_file_path;
+    _scanner_ctx.file_size = _scan_range.file_length;
+    _scanner_ctx.table_location = _hive_table->get_base_path();
+    _scanner_ctx.split_context = down_cast<HdfsSplitContext*>(_split_context);
 
+    // Reset per-range table-specific state before populating.
+    _scanner_ctx.table_specific = {};
     for (const auto& delete_file : scan_range.delete_files) {
-        scanner_ctx.table_specific.iceberg_delete_files.emplace_back(&delete_file);
+        _scanner_ctx.table_specific.iceberg_delete_files.emplace_back(&delete_file);
     }
 
     if (scan_range.__isset.deletion_vector_descriptor) {
-        scanner_ctx.table_specific.deletion_vector_descriptor =
+        _scanner_ctx.table_specific.deletion_vector_descriptor =
                 std::make_shared<TDeletionVectorDescriptor>(scan_range.deletion_vector_descriptor);
     }
 
     if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
-        scanner_ctx.table_specific.iceberg_schema = tbl->get_iceberg_schema();
+        _scanner_ctx.table_specific.iceberg_schema = tbl->get_iceberg_schema();
     }
 
     if (dynamic_cast<const PaimonTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
-        scanner_ctx.table_specific.iceberg_schema = tbl->get_paimon_schema();
+        _scanner_ctx.table_specific.iceberg_schema = tbl->get_paimon_schema();
     }
 
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
-        scanner_ctx.table_specific.paimon_deletion_file =
+        _scanner_ctx.table_specific.paimon_deletion_file =
                 std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
     }
 
@@ -872,9 +872,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                                                             .hive_table = _hive_table,
                                                             .scan_range = &scan_range,
                                                             .scan_node = &hdfs_scan_node};
-    if (scanner_ctx.datacache_options.enable_cache_select) {
+    if (_scanner_ctx.datacache_options.enable_cache_select) {
         scanner = new CacheSelectScanner();
-    } else if (scanner_ctx.options.use_partition_column_value_only) {
+    } else if (_scanner_ctx.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
@@ -887,12 +887,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
-        scanner_ctx.options.parquet_page_index_enable =
+        _scanner_ctx.options.parquet_page_index_enable =
                 config::parquet_page_index_enable ? state->query_options().__isset.enable_parquet_reader_page_index
                                                             ? state->query_options().enable_parquet_reader_page_index
                                                             : true
                                                   : false;
-        scanner_ctx.options.parquet_bloom_filter_enable =
+        _scanner_ctx.options.parquet_bloom_filter_enable =
                 config::parquet_reader_bloom_filter_enable
                         ? state->query_options().__isset.enable_parquet_reader_bloom_filter
                                   ? state->query_options().enable_parquet_reader_bloom_filter
@@ -900,7 +900,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                         : false;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
-        scanner_ctx.options.orc_use_column_names = state->query_options().orc_use_column_names;
+        _scanner_ctx.options.orc_use_column_names = state->query_options().orc_use_column_names;
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
         const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
@@ -944,7 +944,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     _pool.add(scanner);
 
-    RETURN_IF_ERROR(scanner->init(state, scanner_ctx));
+    RETURN_IF_ERROR(scanner->init(state, &_scanner_ctx));
     Status st = scanner->open(state);
     if (!st.ok()) {
         return scanner->reinterpret_status(st);

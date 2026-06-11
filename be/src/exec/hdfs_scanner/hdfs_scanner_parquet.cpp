@@ -28,17 +28,17 @@ namespace starrocks {
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
-    if (_scanner_ctx.split_context != nullptr) {
-        auto split_ctx = down_cast<const parquet::SplitContext*>(_scanner_ctx.split_context);
+    if (_scanner_ctx->split_context != nullptr) {
+        auto split_ctx = down_cast<const parquet::SplitContext*>(_scanner_ctx->split_context);
         _skip_rows_ctx = split_ctx->skip_rows_ctx;
         return Status::OK();
     }
 
-    if (!_scanner_ctx.table_specific.iceberg_delete_files.empty()) {
+    if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         auto iceberg_delete_builder =
-                std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, _scanner_ctx);
-        for (const auto& delete_file : _scanner_ctx.table_specific.iceberg_delete_files) {
+                std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, *_scanner_ctx);
+        for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
                 RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));
             } else {
@@ -48,14 +48,14 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 return Status::InternalError(s);
             }
         }
-        _app_stats.iceberg_delete_files_per_scan += _scanner_ctx.table_specific.iceberg_delete_files.size();
-    } else if (_scanner_ctx.table_specific.paimon_deletion_file != nullptr) {
+        _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
+    } else if (_scanner_ctx->table_specific.paimon_deletion_file != nullptr) {
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
-                new PaimonDeleteFileBuilder(_scanner_ctx.fs, _skip_rows_ctx));
-        RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_ctx.table_specific.paimon_deletion_file.get()));
-    } else if (_scanner_ctx.table_specific.deletion_vector_descriptor != nullptr) {
+                new PaimonDeleteFileBuilder(_scanner_ctx->fs, _skip_rows_ctx));
+        RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_ctx->table_specific.paimon_deletion_file.get()));
+    } else if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
-        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(_scanner_ctx);
+        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(*_scanner_ctx);
         RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
         _app_stats.deletion_vector_build_count += 1;
     }
@@ -225,10 +225,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
     COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
-    if (_scanner_ctx.state != nullptr &&
-        _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
-        root->add_info_string("ParquetPredicateTreeFilter",
-                              _scanner_ctx.state->predicate_tree.root().debug_string());
+    if (_scanner_ctx->state != nullptr && _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx->state->predicate_tree.root().debug_string());
     }
 
     // Global-dict opt visibility for Hive/Iceberg/Hudi/Paimon Parquet workloads.
@@ -258,10 +256,10 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
-                                                    _scanner_ctx.datacache_options, _shared_buffered_input_stream.get(),
-                                                    _skip_rows_ctx);
+                                                    _scanner_ctx->datacache_options,
+                                                    _shared_buffered_input_stream.get(), _skip_rows_ctx);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
+    RETURN_IF_ERROR(_reader->init(_scanner_ctx));
     return Status::OK();
 }
 
@@ -272,9 +270,9 @@ Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     // This pass is the correctness guarantee; statistics-based skipping inside
     // FileReader is approximate.  In the future, expression-driven lazy
     // materialisation will replace this with interleaved column-load/evaluate.
-    if ((*chunk)->num_rows() > 0 && !_scanner_ctx.conjuncts.scanner_ctxs.empty()) {
+    if ((*chunk)->num_rows() > 0 && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx.conjuncts.scanner_ctxs, chunk->get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, chunk->get()));
     }
     return Status::OK();
 }

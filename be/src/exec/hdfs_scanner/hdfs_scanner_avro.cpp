@@ -38,7 +38,7 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     // _scanner_ctx is populated by _build_scanner_context() before do_open() is called,
     // so materialized_columns is available here (not in do_init).
     //
-    // NOTE: unlike ORC/Text scanners we do NOT call _scanner_ctx.update_materialized_columns()
+    // NOTE: unlike ORC/Text scanners we do NOT call _scanner_ctx->update_materialized_columns()
     // here because the Avro writer schema is not yet available at this point — the file must
     // be opened first to read its embedded schema.  Consequences:
     //   1. Columns absent from the Avro file are handled by AvroReader (col_not_found_as_null=true),
@@ -48,9 +48,9 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     //      the configured default value.
     //   3. should_skip_by_evaluating_not_existed_slots() short-circuit is not applied.
     // TODO: open the file, extract the writer schema field-name set, then call
-    // _scanner_ctx.update_materialized_columns() before building _column_readers to fully
+    // _scanner_ctx->update_materialized_columns() before building _column_readers to fully
     // support schema evolution defaults and not-existed-slot predicate short-circuiting.
-    for (const auto& col : _scanner_ctx.materialized_columns) {
+    for (const auto& col : _scanner_ctx->materialized_columns) {
         _materialize_slot_descs.push_back(col.slot_desc);
         _column_readers.push_back(avrocpp::ColumnReader::get_nullable_column_reader(
                 col.slot_desc->col_name(), col.slot_desc->type(), _timezone, /*null_as_error=*/false));
@@ -65,17 +65,17 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     // scanner would read the whole file and produce duplicated rows.
     int64_t split_offset = 0;
     int64_t split_length = 0;
-    if (_scanner_ctx.scan_range != nullptr) {
-        split_offset = _scanner_ctx.scan_range->offset;
-        split_length = _scanner_ctx.scan_range->length;
+    if (_scanner_ctx->scan_range != nullptr) {
+        split_offset = _scanner_ctx->scan_range->offset;
+        split_length = _scanner_ctx->scan_range->length;
     }
 
     _avro_reader = std::make_unique<AvroReader>();
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    return _avro_reader->init(std::move(input_stream), _scanner_ctx.file_path, state, &_scanner_counter,
+    return _avro_reader->init(std::move(input_stream), _scanner_ctx->file_path, state, &_scanner_counter,
                               &_materialize_slot_descs, &_column_readers,
                               /*col_not_found_as_null=*/true, _file.get(), config::avro_reader_buffer_size_bytes,
-                              split_offset, split_length, _scanner_ctx.avro_schema_json,
+                              split_offset, split_length, _scanner_ctx->avro_schema_json,
                               /*invalid_as_null=*/false, /*allow_direct_path=*/true);
 }
 
@@ -85,8 +85,8 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
 
     // Build a temporary chunk with only the materialized (Avro) columns.
     auto avro_chunk = std::make_shared<Chunk>();
-    for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
-        const auto& col_info = _scanner_ctx.materialized_columns[i];
+    for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
+        const auto& col_info = _scanner_ctx->materialized_columns[i];
         auto column = ColumnHelper::create_column(col_info.slot_desc->type(), true, false, 0, true);
         avro_chunk->append_column(std::move(column), col_info.slot_desc->id());
     }
@@ -112,8 +112,8 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
         {
             SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
             _materialize_nullable_columns(avro_chunk);
-            for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
-                const auto& col_info = _scanner_ctx.materialized_columns[i];
+            for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
+                const auto& col_info = _scanner_ctx->materialized_columns[i];
                 ck->append_or_update_column(std::move(avro_chunk->get_column_by_slot_id(col_info.slot_desc->id())),
                                             col_info.slot_desc->id());
             }
@@ -121,11 +121,11 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
     }
     // Fill not-existed slots: fills the ___count___ column (count queries) and any
     // schema-evolution columns absent from this file. Also calls ck->set_num_rows().
-    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(&ck, row_count));
+    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(&ck, row_count));
 
     // Fill partition and extended constant columns.
-    _scanner_ctx.append_or_update_partition_column_to_chunk(&ck, row_count);
-    _scanner_ctx.append_or_update_extended_column_to_chunk(&ck, row_count);
+    _scanner_ctx->append_or_update_partition_column_to_chunk(&ck, row_count);
+    _scanner_ctx->append_or_update_extended_column_to_chunk(&ck, row_count);
 
     // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
 
