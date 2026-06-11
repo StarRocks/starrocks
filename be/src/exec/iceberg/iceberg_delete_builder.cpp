@@ -138,6 +138,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     scanner_ctx->fs = _ctx.fs;
     scanner_ctx->datacache_options = _ctx.datacache_options;
     scanner_ctx->options = _ctx.options;
+    scanner_ctx->options.enable_split_tasks = false;
     scanner_ctx->table_specific.iceberg_schema = &iceberg_schema;
     scanner_ctx->scan_range = &scan_range;
     scanner_ctx->lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
