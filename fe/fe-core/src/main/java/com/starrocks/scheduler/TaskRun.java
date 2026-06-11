@@ -78,6 +78,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
     // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
     public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
+    public static final String SUBMIT_USER_SYSTEM = "system";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
@@ -565,6 +566,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setCreateTime(created);
         status.setUser(task.getCreateUser());
         status.setUserIdentity(task.getUserIdentity());
+        status.setSubmitUser(resolveSubmitUser());
         status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
@@ -582,6 +584,23 @@ public class TaskRun implements Comparable<TaskRun> {
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
         this.status = status;
         return status;
+    }
+
+    // Batch follow-up runs inherit the leader's submitter through ExecuteOption (internal-only, unspoofable).
+    // Only a manual submission attributes to the session user: automatic refreshes (scheduled, or
+    // on-base-table-change which runs on the triggering DML's thread with a live ConnectContext) are the
+    // scheduler, so they must record "system" rather than the incidental session user.
+    private String resolveSubmitUser() {
+        if (executeOption != null && !Strings.isNullOrEmpty(executeOption.getSubmitUser())) {
+            return executeOption.getSubmitUser();
+        }
+        if (executeOption != null && executeOption.isManual()) {
+            ConnectContext context = ConnectContext.get();
+            if (context != null && !Strings.isNullOrEmpty(context.getQualifiedUser())) {
+                return context.getQualifiedUser();
+            }
+        }
+        return SUBMIT_USER_SYSTEM;
     }
 
     @Override
