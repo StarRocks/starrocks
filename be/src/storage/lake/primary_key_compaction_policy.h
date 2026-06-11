@@ -23,6 +23,47 @@
 
 namespace starrocks::lake {
 
+// SDCG background convergence trigger.
+//
+// A column-mode partial update appends a sparse `.spcols` overlay layer (or an inline patch) on top
+// of the base segment it touches; reading a column then walks the whole overlay chain. To keep that
+// chain bounded WITHOUT a synchronous in-place rewrite on the publish critical path (the p95 spike we
+// removed in the phase-1 commit), we let normal background lake PK compaction converge it: compaction
+// reads each input rowset THROUGH the delta-column-group overlay (see Rowset::dcg_loader), emits a
+// fresh dense segment, and apply_opcompaction drops the old DCG entries + orphans the `.spcols` files.
+// All that is missing is a SCORE/selection signal so compaction actually fires on a deep chain -- this
+// constant set provides it.
+//
+// A chain of depth D adds ~D extra file reads per row access, i.e. read amplification comparable to D
+// extra overlapped segments, so we model each layer as SCORE_PER_LAYER units of compaction score. With
+// SCORE_PER_LAYER == 1.0 a depth-TRIGGER chain contributes exactly TRIGGER to the tablet compaction
+// score; TRIGGER == 10 is chosen to coincide with the FE default lake_compaction_score_selector_min_score
+// (10.0) so a single over-deep chain crosses the FE scheduling threshold on its own. This is far below
+// the synchronous safety valve (config::sdcg_promotion_hard_count, 256), so in steady state chains
+// converge in the background around depth ~10-15 and the safety valve effectively never fires.
+inline constexpr int64_t SDCG_COMPACTION_TRIGGER_DEPTH = 10;
+inline constexpr double SDCG_COMPACTION_SCORE_PER_LAYER = 1.0;
+
+// Compaction-score contribution of a sparse overlay chain of the given depth. Returns 0 below the
+// trigger (shallow chains are cheap and must not perturb normal compaction scheduling) and the full
+// depth (un-normalized score units) at/above it.
+inline double sdcg_chain_score_contribution(int64_t chain_depth) {
+    if (chain_depth < SDCG_COMPACTION_TRIGGER_DEPTH) {
+        return 0.0;
+    }
+    return static_cast<double>(chain_depth) * SDCG_COMPACTION_SCORE_PER_LAYER;
+}
+
+// Measure the deepest SDCG sparse-overlay chain across all segments of |rowset|, using the
+// delta-column-group metadata |dcg_meta| from the same tablet metadata. The depth of one segment's
+// chain is the number of SPARSE_PERCOL `.spcols` files plus inline patches recorded for that segment's
+// rssid; DENSE_COLS entries do not count (a dense layer is row-complete and supersedes older sparse
+// layers of its columns). Unlike inspect_existing_sparse_chain() on the write path -- which is scoped
+// to a single column batch -- this is column-agnostic: compaction rewrites the whole segment, so the
+// total layer count is the read-amplification measure that matters. Returns 0 for rowsets with no DCG.
+int64_t max_sparse_chain_depth_for_rowset(const RowsetMetadataPB& rowset,
+                                          const DeltaColumnGroupMetadataPB& dcg_meta);
+
 struct RowsetStat {
     size_t num_rows = 0;
     size_t num_dels = 0;
@@ -31,8 +72,8 @@ struct RowsetStat {
 
 class RowsetCandidate {
 public:
-    RowsetCandidate(const RowsetMetadataPB* rp, const RowsetStat& rs, int index)
-            : rowset_meta_ptr(rp), stat(rs), rowset_index(index) {
+    RowsetCandidate(const RowsetMetadataPB* rp, const RowsetStat& rs, int index, int64_t chain_depth = 0)
+            : rowset_meta_ptr(rp), stat(rs), rowset_index(index), sparse_chain_depth(chain_depth) {
         calculate_score();
     }
     // The goal of lake primary table compaction is to reduce the overhead of reading data.
@@ -65,6 +106,9 @@ public:
     const RowsetMetadataPB* rowset_meta_ptr;
     RowsetStat stat;
     int rowset_index;
+    // Deepest SDCG sparse-overlay chain across this rowset's segments (0 if none / non-SDCG tablet).
+    // Folded into io_count() so an over-deep chain raises the rowset's compaction priority.
+    int64_t sparse_chain_depth = 0;
     double score;
 };
 
