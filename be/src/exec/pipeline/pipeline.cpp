@@ -36,7 +36,7 @@ void Pipeline::on_driver_finished(RuntimeState* state) {
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
         _pipeline_event->finish(state);
-        _group->count_down_pipeline(state);
+        _group->count_down_pipeline();
     }
 }
 

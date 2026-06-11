@@ -45,7 +45,7 @@ public:
 
 protected:
     void _create_runtime_state(const std::string& timezone);
-    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
+    HdfsScannerContext* _create_ctx(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length,
                                        const THdfsFileFormat::type& type);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -66,7 +66,7 @@ void CacheSelectScannerTest::_create_runtime_state(const std::string& timezone) 
     _runtime_state->init_instance_mem_tracker();
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
-    _runtime_state->set_fragment_ctx(fragment_context);
+    _runtime_state->set_fragment_ctx(fragment_context, &fragment_context->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(fragment_context->dict_state());
 }
 
@@ -82,16 +82,16 @@ THdfsScanRange* CacheSelectScannerTest::_create_scan_range(const std::string& fi
     return scan_range;
 }
 
-HdfsScannerParams* CacheSelectScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
-                                                         TupleDescriptor* tuple_desc) {
-    auto* param = _pool.add(new HdfsScannerParams());
+HdfsScannerContext* CacheSelectScannerTest::_create_ctx(const std::string& file, THdfsScanRange* range,
+                                                        TupleDescriptor* tuple_desc) {
+    auto* ctx = _pool.add(new HdfsScannerContext());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-    param->fs = FileSystem::Default();
-    param->file_path = file;
-    param->file_size = range->file_length;
-    param->scan_range = range;
-    param->tuple_desc = tuple_desc;
-    param->runtime_filter_collector = _pool.add(new RuntimeFilterProbeCollector());
+    ctx->fs = FileSystem::Default();
+    ctx->file_path = file;
+    ctx->file_size = range->file_length;
+    ctx->scan_range = range;
+    ctx->tuple_desc = tuple_desc;
+    ctx->runtime_filter_collector = _pool.add(new RuntimeFilterProbeCollector());
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
     std::vector<SlotDescriptor*> mat_slots;
@@ -108,12 +108,12 @@ HdfsScannerParams* CacheSelectScannerTest::_create_param(const std::string& file
         }
     }
 
-    param->partition_index_in_chunk = partition_index_in_chunk;
-    param->materialize_index_in_chunk = materialize_index_in_chunk;
-    param->materialize_slots = mat_slots;
-    param->partition_slots = part_slots;
-    param->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
-    return param;
+    ctx->partition_index_in_chunk = partition_index_in_chunk;
+    ctx->materialize_index_in_chunk = materialize_index_in_chunk;
+    ctx->materialize_slots = mat_slots;
+    ctx->partition_slots = part_slots;
+    ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    return ctx;
 }
 
 TupleDescriptor* CacheSelectScannerTest::_create_tuple_desc(SlotDesc* descs) {
@@ -142,9 +142,9 @@ TEST_F(CacheSelectScannerTest, TestUnknowFormat) {
     auto scanner = std::make_shared<CacheSelectScanner>();
     auto* range = _create_scan_range("jni_scan_range", 0, 0, THdfsFileFormat::UNKNOWN);
     auto* tuple_desc = _create_tuple_desc(slot_desc);
-    auto* param = _create_param("fake_file", range, tuple_desc);
+    auto* ctx = _create_ctx("fake_file", range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);

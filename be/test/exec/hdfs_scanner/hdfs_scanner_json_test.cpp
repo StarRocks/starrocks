@@ -37,8 +37,8 @@ public:
 protected:
     std::shared_ptr<FileSystem> _fs;
     OpenFileOptions _opts;
-    HdfsScanStats _app_stats;
-    HdfsScanStats _fs_stats;
+    HdfsScannerStats _app_stats;
+    HdfsScannerStats _fs_stats;
     RuntimeState _runtime_state;
     ObjectPool _pool;
 

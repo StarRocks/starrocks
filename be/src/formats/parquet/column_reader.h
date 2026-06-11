@@ -45,7 +45,7 @@ class RowGroup;
 
 namespace starrocks {
 class RandomAccessFile;
-struct HdfsScanStats;
+struct HdfsScannerStats;
 class ColumnPredicate;
 class ExprContext;
 class NullableColumn;
@@ -77,7 +77,7 @@ struct ColumnReaderOptions {
     bool case_sensitive = false;
     bool use_file_pagecache = false;
     int chunk_size = 0;
-    HdfsScanStats* stats = nullptr;
+    HdfsScannerStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;

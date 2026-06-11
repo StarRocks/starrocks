@@ -16,20 +16,13 @@
 
 namespace starrocks::pipeline {
 
-// Narrow contract a Pipeline needs from its owning execution group, so the
-// Pipeline depends on this abstraction instead of the concrete ExecutionGroup
-// (which already owns its pipelines). Keep this operation-focused.
-class PipelineGroup {
+// Narrow owner callback used when an execution group finishes. Keep lifecycle
+// orchestration in the fragment owner instead of reaching upward through RuntimeState.
+class FragmentLifecycle {
 public:
-    virtual ~PipelineGroup() = default;
+    virtual ~FragmentLifecycle() = default;
 
-    // Called when all of a pipeline's drivers have finished.
-    virtual void count_down_pipeline() = 0;
-
-    // Whether this group runs as a group execution; drives the IsGroupExecution profile flag.
-    virtual bool is_group_execution() const = 0;
+    virtual void on_execution_group_finished() = 0;
 };
-
-using PipelineGroupRawPtr = PipelineGroup*;
 
 } // namespace starrocks::pipeline
