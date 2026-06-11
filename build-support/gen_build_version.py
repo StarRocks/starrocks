@@ -56,12 +56,13 @@ def get_hostname():
     if os.path.exists('/.dockerenv'):
         return "docker"
     try:
+        # use universal_newlines instead of text for python3.6 compatibility
         res = subprocess.run(
             ["hostname", "-f"],
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            text=True)
+            universal_newlines=True)
     except FileNotFoundError:
         return platform.node() or "unknown"
 
