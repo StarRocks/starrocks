@@ -76,6 +76,8 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
     // Set on pinned-PCT batches only; value is the pinning job's START_TASK_RUN_ID.
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
+    // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
+    public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 

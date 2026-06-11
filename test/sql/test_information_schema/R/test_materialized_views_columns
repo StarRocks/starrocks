@@ -35,6 +35,77 @@ mv_manual	ASYNC	PCT	MANUAL	MANUAL	default_mv_wg
 mv_onchange	ASYNC	PCT	ON_BASE_TABLE_CHANGE	ON_BASE_TABLE_CHANGE	default_mv_wg	
 mv_sched	ASYNC	PCT	SCHEDULED	START("2024-01-01 00:00:00") EVERY(INTERVAL 1 HOUR)	default_mv_wg	
 -- !result
+select if(LAST_FRESHNESS_CONFIRMED_AT is null, 'OK', concat('FAILED: ', LAST_FRESHNESS_CONFIRMED_AT))
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+-- result:
+OK
+-- !result
+refresh materialized view mv_manual with sync mode;
+select if(LAST_FRESHNESS_CONFIRMED_AT is not null, 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+-- result:
+OK
+-- !result
+[UC]t1=select LAST_FRESHNESS_CONFIRMED_AT from information_schema.materialized_views where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+-- result:
+2026-06-10 00:00:00
+-- !result
+select sleep(2);
+-- result:
+1
+-- !result
+refresh materialized view mv_manual with sync mode;
+select if(LAST_FRESHNESS_CONFIRMED_AT > '${t1}', 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+-- result:
+OK
+-- !result
+show materialized views where name = 'mv_manual';
+-- result:
+[REGEX]^\d+\tdb_\w+\tmv_manual\tASYNC\ttrue\t[\s\S]*\t\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$
+-- !result
+set enable_evaluate_schema_scan_rule=true;
+-- result:
+-- !result
+select if(LAST_FRESHNESS_CONFIRMED_AT is not null, 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_manual';
+-- result:
+OK
+-- !result
+set enable_evaluate_schema_scan_rule=false;
+-- result:
+-- !result
+create table pt (dt date, v int) duplicate key(dt)
+partition by range(dt) (partition p1 values [('2024-01-01'),('2024-01-02')), partition p2 values [('2024-01-02'),('2024-01-03')))
+distributed by hash(dt) buckets 2 properties('replication_num'='1');
+-- result:
+-- !result
+insert into pt values ('2024-01-01',1),('2024-01-02',2);
+-- result:
+-- !result
+create materialized view mv_part partition by dt distributed by hash(dt)
+refresh deferred manual
+as select dt, sum(v) sv from pt group by dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_part PARTITION START ("2024-01-01") END ("2024-01-02") WITH SYNC MODE;
+select if(LAST_FRESHNESS_CONFIRMED_AT is null, 'OK', concat('FAILED: ', LAST_FRESHNESS_CONFIRMED_AT))
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_part';
+-- result:
+OK
+-- !result
+refresh materialized view mv_part with sync mode;
+select if(LAST_FRESHNESS_CONFIRMED_AT is not null, 'OK', 'FAILED')
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_part';
+-- result:
+OK
+-- !result
 create resource group rg_${uuid0} to (user = 'rguser_${uuid0}') with ('cpu_core_limit' = '1', 'mem_limit' = '10%');
 -- result:
 -- !result

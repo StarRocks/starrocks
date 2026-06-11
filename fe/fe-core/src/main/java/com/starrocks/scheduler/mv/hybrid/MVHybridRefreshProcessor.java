@@ -150,4 +150,9 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         getCurrentProcessor().generateNextTaskRunIfNeeded();
     }
 
+    @Override
+    public boolean hasNextBatchRun() {
+        return getCurrentProcessor().hasNextBatchRun();
+    }
+
 }
