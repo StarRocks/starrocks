@@ -30,17 +30,24 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
     } else if (is_inline()) {
         return deserialized_inline_dv(_deletion_vector_descriptor->pathOrInlineDv, skip_rows_ctx);
     } else {
+<<<<<<< HEAD
         std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
         std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
         HdfsScanStats app_scan_stats;
         HdfsScanStats fs_scan_stats;
+=======
+        std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
+        std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
+        HdfsScannerStats app_stats;
+        HdfsScannerStats fs_stats;
+>>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
 
-        ASSIGN_OR_RETURN(auto path, get_absolute_path(_params.table_location));
+        ASSIGN_OR_RETURN(auto path, get_absolute_path(_ctx.table_location));
         int64_t offset = _deletion_vector_descriptor->offset;
         int64_t length = _deletion_vector_descriptor->sizeInBytes;
 
-        ASSIGN_OR_RETURN(auto dv_file, open_random_access_file(path, fs_scan_stats, app_scan_stats,
-                                                               shared_buffered_input_stream, cache_input_stream));
+        ASSIGN_OR_RETURN(auto dv_file, open_random_access_file(path, fs_stats, app_stats, shared_buffered_input_stream,
+                                                               cache_input_stream));
         // Check the dv size
         uint32_t size_from_deletion_vector_file;
         RETURN_IF_ERROR(dv_file->read_at_fully(offset, &size_from_deletion_vector_file, DV_SIZE_LENGTH));
@@ -69,7 +76,7 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
         std::vector<char> deletion_vector(serialized_bitmap_length);
         RETURN_IF_ERROR(dv_file->read_at_fully(offset, deletion_vector.data(), serialized_bitmap_length));
 
-        update_dv_file_io_counter(_params.profile.runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
+        update_dv_file_io_counter(_ctx.profile.runtime_profile, app_stats, fs_stats, cache_input_stream,
                                   shared_buffered_input_stream);
         return deserialized_deletion_vector(magic_number_from_deletion_vector_file, deletion_vector,
                                             serialized_bitmap_length, skip_rows_ctx);
@@ -77,14 +84,21 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_file(
+<<<<<<< HEAD
         const std::string& file_path, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
         std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<io::CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _params.fs,
+=======
+        const std::string& file_path, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
+        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
+    const OpenFileOptions options{.fs = _ctx.fs,
+>>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
                                   .file_path = file_path,
-                                  .fs_stats = &fs_scan_stats,
-                                  .app_stats = &app_scan_stats,
-                                  .datacache_options = _params.datacache_options};
+                                  .fs_stats = &fs_stats,
+                                  .app_stats = &app_stats,
+                                  .datacache_options = _ctx.datacache_options};
     ASSIGN_OR_RETURN(auto file,
                      HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
     std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
@@ -133,7 +147,7 @@ Status DeletionVector::deserialized_deletion_vector(uint32_t magic_number, std::
         skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
     }
 #ifndef BE_TEST
-    update_dv_build_counter(_params.profile.runtime_profile, _build_stats);
+    update_dv_build_counter(_ctx.profile.runtime_profile, _build_stats);
 #endif
     return Status::OK();
 }
@@ -171,9 +185,15 @@ std::string DeletionVector::assemble_deletion_vector_path(const string& table_lo
 }
 
 void DeletionVector::update_dv_file_io_counter(
+<<<<<<< HEAD
         RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
         const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
         const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream) {
+=======
+        RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
+        const std::shared_ptr<CacheInputStream>& cache_input_stream,
+        const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
+>>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
     const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
     {

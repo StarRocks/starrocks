@@ -357,8 +357,8 @@ Status GroupReader::_create_column_readers() {
         return Status::InternalError("GroupReader: scanner_ctx must not be null");
     }
     opts.timezone = _param.scanner_ctx->timezone;
-    opts.case_sensitive = _param.scanner_ctx->params->options.case_sensitive;
-    opts.use_file_pagecache = _param.scanner_ctx->params->options.use_file_pagecache;
+    opts.case_sensitive = _param.scanner_ctx->options.case_sensitive;
+    opts.use_file_pagecache = _param.scanner_ctx->options.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
@@ -448,7 +448,19 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
+<<<<<<< HEAD
         if (column.t_lake_schema_field == nullptr) {
+=======
+        if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
+            schema_node->type == ColumnType::STRUCT) {
+            // Physical VARIANT columns use _get_variant_shredded_hints; this path
+            // is for non-virtual VARIANT columns that appear directly in the SELECT list.
+            VariantShreddedReadHints hints = build_variant_shredded_hints(&_param.scanner_ctx->column_access_paths,
+                                                                          column.slot_desc->col_name());
+            ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
+                                                                                              schema_node, hints));
+        } else if (column.t_lake_schema_field == nullptr) {
+>>>>>>> ca7d8bc71b ([Refactor] Consolidate HdfsScannerParams into HdfsScannerContext, pass by pointer, and eliminate HdfsScannerState (#74643))
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
@@ -456,7 +468,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));
         }
-        auto* global_dictmaps = _param.scanner_ctx->params->global_dictmaps;
+        auto* global_dictmaps = _param.scanner_ctx->global_dictmaps;
         if (global_dictmaps->contains(column.slot_id())) {
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create(
                                                     std::move(column_reader), global_dictmaps->at(column.slot_id()),
