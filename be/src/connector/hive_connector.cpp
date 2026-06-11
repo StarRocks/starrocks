@@ -317,8 +317,8 @@ Status HiveDataSource::_init_partition_values() {
     // must live and close within the fragment scope — they cannot be shared from the
     // (query-scoped) HdfsPartitionDescriptor.
     const auto& thrift_partition_key_exprs = partition_desc->thrift_partition_key_exprs();
-    RETURN_IF_ERROR(
-            Expr::create_expr_trees(&_pool, thrift_partition_key_exprs, &_scanner_ctx.partition_expr_ctxs, _runtime_state));
+    RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, thrift_partition_key_exprs, &_scanner_ctx.partition_expr_ctxs,
+                                            _runtime_state));
     RETURN_IF_ERROR(Expr::prepare(_scanner_ctx.partition_expr_ctxs, _runtime_state));
     RETURN_IF_ERROR(Expr::open(_scanner_ctx.partition_expr_ctxs, _runtime_state));
 
