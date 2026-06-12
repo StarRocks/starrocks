@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.proto.PTypeNode;
@@ -1317,5 +1318,22 @@ public class VariantTest {
         Variant scaled = Variant.of(type, "12.3400");
         Assertions.assertNotEquals(a, scaled);
         Assertions.assertEquals(0, a.compareTo(scaled));
+    }
+
+    @Test
+    public void testDecimalVariantGsonRoundTrip() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant original = Variant.of(type, "1234.56");
+
+        String json = GsonUtils.GSON.toJson(original, Variant.class);
+        Variant restored = GsonUtils.GSON.fromJson(json, Variant.class);
+
+        Assertions.assertTrue(restored instanceof DecimalVariant);
+        Assertions.assertEquals("1234.56", restored.getStringValue());
+        ScalarType restoredType = (ScalarType) restored.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMAL64, restoredType.getPrimitiveType());
+        Assertions.assertEquals(18, restoredType.getScalarPrecision());
+        Assertions.assertEquals(2, restoredType.getScalarScale());
+        Assertions.assertEquals(0, original.compareTo(restored));
     }
 }
