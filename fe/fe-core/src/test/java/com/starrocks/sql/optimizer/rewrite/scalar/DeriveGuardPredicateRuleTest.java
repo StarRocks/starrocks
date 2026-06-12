@@ -146,9 +146,8 @@ public class DeriveGuardPredicateRuleTest {
     @Test
     public void testThreeBranches() {
         // Three OR branches, all have l_shipdate (GE+LE) + l_discount (EQ on INT).
-        // Both columns get guards:
-        //   guard_shipdate: OR over shipdate ranges
-        //   guard_discount:  OR over discount EQ values (INT type, valid candidate)
+        // Only shipdate gets a guard — range predicates are the primary target.
+        // discount EQ-only guard is skipped (ScalarRangePredicateExtractor handles it).
         ColumnRefOperator shipdate = colInt(1, "l_shipdate");
         ColumnRefOperator discount = colInt(2, "l_discount");
 
@@ -172,19 +171,15 @@ public class DeriveGuardPredicateRuleTest {
                 and(ge(shipdate, ConstantOperator.createInt(20)), le(shipdate, ConstantOperator.createInt(30))),
                 and(ge(shipdate, ConstantOperator.createInt(40)), le(shipdate, ConstantOperator.createInt(50)))
         );
-        ScalarOperator guardDiscount = or(
-                eq(discount, ConstantOperator.createInt(5)),
-                eq(discount, ConstantOperator.createInt(6)),
-                eq(discount, ConstantOperator.createInt(7))
-        );
-        ScalarOperator expected = and(guardShipdate, guardDiscount, orExpr);
+        ScalarOperator expected = and(guardShipdate, orExpr);
         assertEquals(expected, derived);
     }
 
     @Test
     public void testEQOnNumericColumn() {
-        // EQ on INT columns should produce guards.
-        // Both l_shipdate (INT) and l_discount (INT) are valid candidates.
+        // EQ-only guards on numeric columns are skipped — the
+        // ScalarRangePredicateExtractor already produces IN lists for them.
+        // Only range predicates (GE, LE, GT, LT) trigger guard generation.
         ColumnRefOperator shipdate = colInt(1, "l_shipdate");
         ColumnRefOperator discount = colInt(2, "l_discount");
 
@@ -198,17 +193,8 @@ public class DeriveGuardPredicateRuleTest {
         ScalarOperator derived = DeriveGuardPredicateRule.tryDeriveGuard(
                 (CompoundPredicateOperator) orExpr);
 
-        // Guards for both columns
-        ScalarOperator guardShipdate = or(
-                eq(shipdate, ConstantOperator.createInt(1)),
-                eq(shipdate, ConstantOperator.createInt(15))
-        );
-        ScalarOperator guardDiscount = or(
-                eq(discount, ConstantOperator.createInt(5)),
-                eq(discount, ConstantOperator.createInt(6))
-        );
-        ScalarOperator expected = and(guardShipdate, guardDiscount, orExpr);
-        assertEquals(expected, derived);
+        // No guard — all predicates are EQ-only, which the range extractor handles.
+        assertEquals(orExpr, derived);
     }
 
     @Test
