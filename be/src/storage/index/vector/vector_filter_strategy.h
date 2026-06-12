@@ -21,40 +21,27 @@ namespace starrocks {
 // AUTO is an *input* choice only (the user/session default). The resolver
 // (resolve_ann_filter_strategy) always returns one of PRE/POST/BRUTE.
 //
-// Wire-compatible with TVectorSearchOptions.filter_strategy:
-//   0 = AUTO, 1 = PRE, 2 = POST, 3 = BRUTE.
+// Wire-compatible with TQueryOptions.ann_filter_strategy (set from the
+// ann_filter_strategy session variable): 0 = AUTO, 1 = PRE, 2 = POST, 3 = BRUTE.
 enum class AnnFilterStrategy { AUTO = 0, PRE = 1, POST = 2, BRUTE = 3 };
 
-// Bitmap-free inputs to the strategy decision (design doc §4).
+// Pure per-segment decision: how to serve an ANN top-k alongside its residual filter.
 //
-// The selectivity gate is intentionally NOT an input here: it needs the residual
-// bitmap, so it is applied later, during PRE execution (which may downgrade to BRUTE).
-struct AnnFilterResolveInputs {
-    // User/session choice from TVectorSearchOptions.filter_strategy. AUTO follows the config.
-    AnnFilterStrategy user_choice = AnnFilterStrategy::AUTO;
-    // config::enable_vector_index_residual_prefilter. When false, AUTO never scan-prefilters
-    // an un-indexed residual (kill-switch).
-    bool prefilter_enabled = true;
-    // !_opts.pred_tree.empty() -- there is a residual predicate to satisfy alongside the ANN.
-    bool has_residual = false;
-    // A predicate is evaluated *above* the segment iterator (OlapChunkSource not_push_down /
-    // _non_pushdown_pred_tree). The iterator cannot fold it into the ANN candidate, so a
-    // segment-level k-limit would under-return -> must BRUTE (completeness).
-    bool has_above_predicate = false;
-    // Every column referenced by _opts.pred_tree has a readable iterator in this segment, so the
-    // whole tree can be evaluated into an exact bitmap (exactness precondition for PRE).
-    bool exact_possible = true;
-    // ann_reader->supports_efficient_filtered_search() -- the reader can consume an IdFilter.
-    bool supports_filtered = true;
-};
-
-// Pure decision function (design doc §4). Runs per-segment at BE runtime, after FE has
-// unconditionally rewritten to an ANN plan. Returns PRE/POST/BRUTE, never AUTO.
+//   user_choice       the ann_filter_strategy session variable.
+//   prefilter_allowed PRE is executable for this segment: the residual (possibly empty) can be
+//                     folded into the search as an exact candidate set. The caller
+//                     (_init_ann_reader) computes this as
+//                         no residual at all                                  (trivially sound)
+//                         || (no predicate evaluated above the iterator      (completeness)
+//                             && the reader supports filtered search         (capability)
+//                             && enable_vector_index_residual_prefilter).    (kill-switch)
 //
-// Soundness/completeness invariant (design doc §2): PRE (segment-level k-limit) is only allowed
-// when the residual can be folded into an exact + complete bitmap the ANN reader can consume;
-// otherwise the query falls back to exact BRUTE. The selectivity downgrade (PRE -> BRUTE for very
-// selective filters) happens later, in PRE execution, and is not modeled here.
-AnnFilterStrategy resolve_ann_filter_strategy(const AnnFilterResolveInputs& in);
+// AUTO and an explicit 'pre' both map to PRE exactly when prefilter_allowed, and to exact BRUTE
+// otherwise: a user choice cannot buy out completeness, and the kill-switch binds an explicit
+// 'pre' too (an emergency switch a session variable could bypass would not be an emergency
+// switch). POST stays an explicit opt-in (approximate, may return < k); AUTO never chooses it.
+// The selectivity gates (PRE -> exact rescan over the candidates) run later, during PRE
+// execution, and are not modeled here.
+AnnFilterStrategy resolve_ann_filter_strategy(AnnFilterStrategy user_choice, bool prefilter_allowed);
 
 } // namespace starrocks

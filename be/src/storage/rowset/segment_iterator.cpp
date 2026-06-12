@@ -1156,26 +1156,27 @@ Status SegmentIterator::_init_ann_reader() {
         }
     }
 
-    // The ANN reader loaded, but the residual filter may not be safely served by a segment-level
-    // k-limit (e.g. a predicate is evaluated above the iterator). Resolve the filter strategy now --
-    // before _init_column_iterators, because routing to brute may add the embedding column to _schema
-    // (_setup_brute_force_fallback). Only the bitmap-free gates run here; the selectivity gate is
-    // applied later, during PRE execution. The refine path runs its own over-fetch + exact re-rank, so
-    // this resolver only applies when not refining.
+    // The ANN reader loaded; pick the residual-filter strategy now -- before _init_column_iterators,
+    // because routing to brute must add the embedding column to _schema (_setup_brute_force_fallback).
+    // The refine path runs its own over-fetch + exact re-rank, so the strategy machinery stays out of
+    // it. The selectivity gates need the residual bitmap and run later, during PRE execution.
     if (_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
-        AnnFilterResolveInputs in;
-        in.user_choice = static_cast<AnnFilterStrategy>(_opts.vector_search_option->filter_strategy);
-        in.prefilter_enabled = config::enable_vector_index_residual_prefilter;
-        // has_predicate_above_iterator is true when a predicate is evaluated above this iterator --
-        // either a non-pushdown conjunct on the scan, OR a row-filtering operator placed above the scan
-        // in the execution tree (e.g. a SELECT for a residual like cat + tag > 50 the optimizer could
-        // not push into the scan; set by FragmentExecutor's tree walk). Either way a segment-level
-        // k-limit would under-return, so it is both a residual and an above-iterator predicate -> BRUTE.
-        in.has_residual = !_opts.pred_tree.empty() || _opts.has_predicate_above_iterator;
-        in.has_above_predicate = _opts.has_predicate_above_iterator;
-        in.exact_possible = true; // precise per-column readability check arrives with the whole-tree bitmap
-        in.supports_filtered = _vector_index_ctx->ann_reader->supports_efficient_filtered_search();
-        _vector_index_ctx->filter_strategy = resolve_ann_filter_strategy(in);
+        // PRE folds the residual (possibly empty) into the search as an exact candidate set. With no
+        // residual at all that is a plain ANN top-k -- trivially sound. With one, it requires:
+        //  - nothing filtering rows above the iterator: neither a non-pushdown conjunct on this scan
+        //    nor a row-filtering operator above it in the execution tree (FragmentExecutor's walk
+        //    feeds both into _opts.has_predicate_above_iterator) -- a segment-level k-limit under
+        //    either would under-return (completeness);
+        //  - an ANN reader that accepts a candidate id set (filtered search);
+        //  - the residual-prefilter machinery being enabled (kill-switch; binds an explicit 'pre'
+        //    too -- see resolve_ann_filter_strategy).
+        const bool no_residual = _opts.pred_tree.empty() && !_opts.has_predicate_above_iterator;
+        const bool prefilter_allowed =
+                no_residual || (!_opts.has_predicate_above_iterator &&
+                                _vector_index_ctx->ann_reader->supports_efficient_filtered_search() &&
+                                config::enable_vector_index_residual_prefilter);
+        const auto user_choice = static_cast<AnnFilterStrategy>(_opts.vector_search_option->filter_strategy);
+        _vector_index_ctx->filter_strategy = resolve_ann_filter_strategy(user_choice, prefilter_allowed);
         if (_vector_index_ctx->filter_strategy == AnnFilterStrategy::BRUTE) {
             _setup_brute_force_fallback(*tablet_index_meta);
         }
