@@ -26,6 +26,7 @@
 namespace starrocks {
 
 class OrcRowReaderFilter;
+class StoragePageCache;
 
 class HdfsOrcScanner final : public HdfsScanner {
 public:
