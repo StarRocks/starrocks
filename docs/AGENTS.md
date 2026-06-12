@@ -28,7 +28,7 @@ docs/
 ├── zh/                    # Chinese documentation (mirrors en/)
 ├── docusaurus/            # Docusaurus build config
 │   ├── docusaurus.config.js
-│   ├── sidebars.js
+│   ├── sidebars.json
 │   └── src/
 └── _assets/               # Shared images and assets
 ```
