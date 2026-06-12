@@ -56,29 +56,22 @@ StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const 
 // ArrayColumn and corrupt memory.
 StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk, ColumnId vec_col_id);
 
-// Evaluate `pred_tree` over the rows in `candidate` by reading the predicate columns and running
-// the WHOLE tree -- AND / OR / compound / single-column expressions -- and return the matching
-// subset as an exact row bitmap. Mirrors SegmentIterator::_apply_inverted_index(), but reads +
-// evaluates instead of probing an index, so it works for predicates no index resolves. Not
-// ANN-specific (the current caller is the vector residual pre-filter); declared here so it can be
-// unit-tested directly, like resolve_brute_force_vector_column above.
+// Evaluate the WHOLE `pred_tree` (AND / OR / compound / expr) over the rows in `candidate` by
+// reading the predicate columns, returning the matching subset as an exact row bitmap. Declared
+// here so it can be unit-tested directly, like resolve_brute_force_vector_column above.
 //
-//   schema                   supplies the Field (field->id() == ColumnId) for every predicate column.
+//   schema                   supplies the Field (field->id() == ColumnId) per predicate column.
 //   column_iterators_by_cid  positioned readers indexed by ColumnId; non-predicate entries may be
-//                            null. A predicate column missing from either `schema` or the iterators
-//                            is an InternalError -- silently skipping it would widen the bitmap and
-//                            let a downstream k-limit under-return.
-//   fallback_rowids          optional. When non-null, each batch's contiguous segment rowids are
-//                            published into it (resized per batch) before evaluation, for predicates
-//                            that map chunk rows back to segment rowids (the inverted-index
-//                            fallback, e.g. a MATCH inside an OR, probes its precomputed bitmap
-//                            through this buffer).
+//                            null. A predicate column missing from either is an InternalError --
+//                            silently skipping it would widen the bitmap.
+//   fallback_rowids          optional; filled per batch with the batch's segment rowids, for
+//                            predicates that resolve chunk rows back to rowids (the inverted-index
+//                            fallback for a MATCH inside an OR).
 //
-// Reads in <= 4096-row batches (PredicateTree::evaluate takes uint16_t offsets) and seeks every
-// batch explicitly, so the iterators' prior positions do not matter and are not restored.
-StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(const PredicateTree& pred_tree, const Schema& schema,
-                                                        const std::vector<ColumnIterator*>& column_iterators_by_cid,
-                                                        std::vector<rowid_t>* fallback_rowids,
-                                                        const roaring::Roaring& candidate);
+// Reads in <= 4096-row batches and seeks every batch, so prior iterator positions do not matter.
+StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
+        const PredicateTree& pred_tree, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate);
 
 } // namespace starrocks

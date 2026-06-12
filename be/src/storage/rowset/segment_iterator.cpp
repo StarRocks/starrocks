@@ -370,6 +370,7 @@ private:
     // them. Returns the subset of `candidate` matching all such predicates, enabling a true pre-filter of
     // the ANN search. Mirrors _apply_inverted_index() but reads + evaluates instead of using an index.
     StatusOr<roaring::Roaring> _evaluate_residual_to_bitmap(const roaring::Roaring& candidate);
+    StatusOr<roaring::Roaring> _narrow_scan_range_by_residual();
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
@@ -1022,10 +1023,16 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
 #endif
 }
 
-// Resolves the metric the brute-force distance kernel must compute, from the index metadata:
-// true = cosine similarity, false = l2 distance, nullopt = missing or unsupported. The FE only
-// admits these two metrics for a vector index, so nullopt means broken metadata; the brute path
-// disables itself on it rather than silently scoring as L2.
+// Resolves the metric the exact distance kernel must compute: true = cosine similarity,
+// false = l2 distance, nullopt = missing/unsupported metadata (callers must not silently
+// fall back to L2).
+// Single home of the vector_range orientation: result_order 0 (ascending, l2) keeps distance <=
+// range; descending (cosine) keeps similarity >= range. Bounds are inclusive, matching the FE's
+// `<=` / `>=` conjunct forms.
+static inline bool within_vector_range(float d, float range, bool ascending) {
+    return ascending ? d <= range : d >= range;
+}
+
 static std::optional<bool> resolve_exact_vector_metric(const TabletIndex& index) {
     const auto& props = index.common_properties();
     auto metric_it = props.find("metric_type");
@@ -1139,35 +1146,24 @@ Status SegmentIterator::_init_ann_reader() {
     }
 
     if (_vector_index_ctx->use_vector_index) {
-        // The exact-rescan paths on the ANN route (the PRE short-circuit and the under-return count
-        // gate) share the brute-force distance kernel, which keys on is_cosine_similarity -- but that
-        // flag is otherwise initialized only by _setup_brute_force_fallback, which never runs here.
-        // Resolve the metric now so a cosine index is not silently rescanned as L2.
+        // The ANN-route exact rescans key on is_cosine_similarity, which is otherwise initialized
+        // only by _setup_brute_force_fallback; resolve it here so a cosine index is not scored as L2.
         auto metric = resolve_exact_vector_metric(*tablet_index_meta);
         if (metric.has_value()) {
             _vector_index_ctx->is_cosine_similarity = *metric;
         }
     }
 
-    // The ANN reader loaded; pick the residual-filter strategy now -- before _init_column_iterators,
-    // because routing to brute must add the embedding column to _schema (_setup_brute_force_fallback).
-    // The refine path runs its own over-fetch + exact re-rank, so the strategy machinery stays out of
-    // it. The selectivity gates need the residual bitmap and run later, during PRE execution.
+    // Pick the residual-filter strategy now: routing to brute must add the embedding column to
+    // _schema before _init_column_iterators runs. Refine re-ranks above the scan and stays out of it.
     if (_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
-        // PRE folds the residual (possibly empty) into the search as an exact candidate set. With no
-        // residual at all that is a plain ANN top-k -- trivially sound. With one, it requires:
-        //  - nothing filtering rows above the iterator: neither a non-pushdown conjunct on this scan
-        //    nor a row-filtering operator above it in the execution tree (FragmentExecutor's walk
-        //    feeds both into _opts.has_predicate_above_iterator) -- a segment-level k-limit under
-        //    either would under-return (completeness);
-        //  - an ANN reader that accepts a candidate id set (filtered search);
-        //  - the residual-prefilter machinery being enabled (kill-switch; binds an explicit 'pre'
-        //    too -- see resolve_ann_filter_strategy).
-        const bool no_residual = _opts.pred_tree.empty() && !_opts.has_predicate_above_iterator;
+        // PRE is sound only when nothing above the iterator filters rows (a segment-level k-limit
+        // would under-return); with an in-iterator residual it additionally needs filtered-search
+        // support and the kill-switch on. No residual at all is a plain top-k.
         const bool prefilter_allowed =
-                no_residual || (!_opts.has_predicate_above_iterator &&
-                                _vector_index_ctx->ann_reader->supports_efficient_filtered_search() &&
-                                config::enable_vector_index_residual_prefilter);
+                !_opts.has_predicate_above_iterator &&
+                (_opts.pred_tree.empty() || (_vector_index_ctx->ann_reader->supports_efficient_filtered_search() &&
+                                             config::enable_vector_index_residual_prefilter));
         const auto user_choice = static_cast<AnnFilterStrategy>(_opts.vector_search_option->filter_strategy);
         _vector_index_ctx->filter_strategy = resolve_ann_filter_strategy(user_choice, prefilter_allowed);
         if (_vector_index_ctx->filter_strategy == AnnFilterStrategy::BRUTE) {
@@ -1179,27 +1175,14 @@ Status SegmentIterator::_init_ann_reader() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_vector_index() {
-    // Brute pre-narrowing. A brute-force vector read keeps the residual in pred_tree, and -- with
-    // late materialization disabled for vector reads -- the read loop would fetch EVERY scan-range
-    // row's columns (including the wide embedding column) only to drop the non-matching rows after
-    // the read. Evaluate the residual into an exact bitmap first and narrow _scan_range, so the read
-    // loop touches surviving rows only. Results are unchanged: the rows cut here are exactly the
-    // rows the read-time predicates would drop. Gated on the residual-prefilter kill-switch: with it
-    // off, brute is the escape hatch that must not depend on the bitmap machinery. Outside the
-    // TenANN guard because the brute fallback is alive in non-TenANN builds too.
+    // Brute pre-narrowing: resolve the residual into an exact bitmap first, so the read loop only
+    // touches surviving rows (the embedding column is wide). Skipped when the kill-switch is off --
+    // brute must then stay independent of the bitmap machinery. Outside the TenANN guard: the brute
+    // fallback exists in non-TenANN builds too.
     if (_vector_index_ctx != nullptr && _vector_index_ctx->use_brute_force && !_opts.pred_tree.empty() &&
-        config::enable_vector_index_residual_prefilter && !_scan_range.empty()) {
+        config::enable_vector_index_residual_prefilter) {
         SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
-        ASSIGN_OR_RETURN(auto matched, _evaluate_residual_to_bitmap(range2roaring(_scan_range)));
-        const size_t prev_span = _scan_range.span_size();
-        _scan_range = roaring2range(matched);
-        _opts.stats->rows_vector_index_filtered += (prev_span - _scan_range.span_size());
-        // Every surviving row passed the WHOLE tree, so drop it: the predicate machinery downstream
-        // (_rewrite_predicates / _init_column_predicates / the read loop) runs after this point and
-        // would only re-evaluate rows that are already known to match. Predicates are owned at the
-        // reader level; this empties the per-segment view only.
-        _opts.pred_tree = PredicateTree();
-        return Status::OK();
+        return _narrow_scan_range_by_residual().status();
     }
 #ifdef WITH_TENANN
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
@@ -1209,41 +1192,28 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 
     SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
 
-    // The filter strategy was resolved in _init_ann_reader (BRUTE already left via the read-loop path).
-    // PRE: evaluate the WHOLE predicate tree into an exact candidate bitmap and narrow _scan_range before
-    // the search, so the ANN visits only matching rows (the bitmap is exact, so k is unchanged). POST
-    // (explicit opt-in): skip the bitmap -- the search over-fetches (search_k already folds in k_factor)
-    // and the read-time predicate drops non-matching rows afterwards (approximate, may return < k).
+    // PRE: evaluate the whole predicate tree into an exact bitmap and narrow _scan_range before the
+    // search (k unchanged). POST (explicit opt-in): skip the bitmap; the search over-fetches and the
+    // read-time predicate drops non-matching rows afterwards (approximate, may return < k).
     roaring::Roaring matched;
+    uint64_t matched_cardinality = 0;
     bool pre_narrowed = false;
     if (_vector_index_ctx->filter_strategy != AnnFilterStrategy::POST && !_opts.pred_tree.empty()) {
-        ASSIGN_OR_RETURN(auto matched_tmp, _evaluate_residual_to_bitmap(range2roaring(_scan_range)));
+        ASSIGN_OR_RETURN(auto matched_tmp, _narrow_scan_range_by_residual());
         matched = std::move(matched_tmp);
-        _scan_range = roaring2range(matched);
-        // The final scan range stays a subset of `matched` (the search/gates only intersect), so every
-        // row the read loop sees already passed the WHOLE tree -- drop it instead of re-evaluating it
-        // per batch. POST never reaches here: its read-time predicate IS its filtering mechanism.
-        _opts.pred_tree = PredicateTree();
+        matched_cardinality = matched.cardinality();
         RETURN_IF(_scan_range.empty(), Status::OK());
         pre_narrowed = true;
     }
 
-    // Short-circuit gate (PRE only; refine never ran the resolver so its behavior stays untouched):
-    // skip the ANN search and score the candidates exactly when the search cannot pay for itself.
-    // Covers top-k and range search alike -- the exact rescan enforces the radius itself, so both
-    // sides stay exact. Routing only: a missed route costs speed, never correctness (top-k
-    // completeness is owned by the post-search count gate below).
-    //  - cardinality <= k: the search cannot return more than the candidate set anyway; searching a
-    //    set this small is a logical no-op. Always on.
-    //  - cardinality <= threshold * segment rows: a bitmap this sparse relative to the graph makes the
-    //    HNSW traversal slow and likely to under-return, paying the exact rescan on top of the wasted
-    //    search. The denominator is the segment's total rows (the graph the traversal walks), not the
-    //    pruned scan range.
+    // Short-circuit gate (PRE only; refine excluded): skip the ANN search and score the candidates
+    // exactly when the search cannot pay for itself -- cardinality <= k (the search could not return
+    // more anyway) or sparse relative to the whole graph (a filtered HNSW walk would be slow and
+    // likely under-return). Both sides are exact, for top-k and range search alike.
     if (pre_narrowed && !_vector_index_ctx->refine_distance) {
-        const uint64_t cardinality = matched.cardinality();
         const double ratio = config::vector_index_brute_selectivity_threshold;
-        if (cardinality <= static_cast<uint64_t>(_vector_index_ctx->k) ||
-            (ratio > 0 && cardinality <= static_cast<uint64_t>(ratio * _segment->num_rows()))) {
+        if (matched_cardinality <= static_cast<uint64_t>(_vector_index_ctx->k) ||
+            (ratio > 0 && matched_cardinality <= static_cast<uint64_t>(ratio * _segment->num_rows()))) {
             return _exact_search_over_candidates(matched);
         }
     }
@@ -1288,13 +1258,12 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         id2distance_map[result_ids[i]] = result_distances[i];
     }
 
-    // Selectivity gate: an HNSW filtered search can miss scattered survivors under a selective residual
-    // (graph reachability), under-returning even though the exact pre-filter bitmap held enough rows.
-    // When it returns fewer survivors than the bitmap could supply, rescan the (small) candidate set with
-    // exact distances so the top-k stays complete. Top-k search only (range search keeps its own path).
+    // Count gate: a filtered HNSW search can under-return on scattered survivors (graph reachability).
+    // If it returned fewer than the bitmap could supply, rescan the candidates exactly. Top-k only --
+    // under a radius, returning fewer rows is legitimate.
     if (pre_narrowed && _vector_index_ctx->vector_range < 0) {
         const size_t found = id2distance_map.size();
-        const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched.cardinality()));
+        const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched_cardinality));
         if (found < want) {
             return _exact_search_over_candidates(matched);
         }
@@ -1328,10 +1297,10 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 }
 
 StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(const PredicateTree& pred_tree, const Schema& schema,
-                                                        const std::vector<ColumnIterator*>& column_iterators_by_cid,
+                                                        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
                                                         std::vector<rowid_t>* fallback_rowids,
                                                         const roaring::Roaring& candidate) {
-    if (candidate.cardinality() == 0 || pred_tree.empty()) {
+    if (candidate.isEmpty() || pred_tree.empty()) {
         return candidate;
     }
 
@@ -1406,22 +1375,28 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(const PredicateTree& pre
     return result;
 }
 
-// Thin adapter over evaluate_pred_tree_to_bitmap (declared in segment_iterator.h, independently
-// unit-tested): exposes the cid-indexed raw iterators and, when inverted-index fallback predicates
-// are present (e.g. a MATCH inside an OR), the rowid buffer they resolve chunk rows through.
-// _apply_inverted_index already ran (call order in _init_internal), so the fallback bitmaps are
-// ready by the time this is reached.
+// Adapter over evaluate_pred_tree_to_bitmap: supplies the cid-indexed iterators and, when
+// inverted-index fallback predicates are present (a MATCH inside an OR), the rowid buffer they
+// resolve chunk rows through (their bitmaps are ready -- _apply_inverted_index ran earlier).
 StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const roaring::Roaring& candidate) {
-    std::vector<ColumnIterator*> iters;
-    iters.reserve(_column_iterators.size());
-    for (const auto& it : _column_iterators) {
-        iters.push_back(it.get());
-    }
     std::vector<rowid_t>* fallback_rowids =
             _inverted_index_ctx != nullptr && _inverted_index_ctx->has_fallback_predicates
                     ? &_inverted_index_ctx->rowid_buffer
                     : nullptr;
-    return evaluate_pred_tree_to_bitmap(_opts.pred_tree, _schema, iters, fallback_rowids, candidate);
+    return evaluate_pred_tree_to_bitmap(_opts.pred_tree, _schema, _column_iterators, fallback_rowids, candidate);
+}
+
+// Narrows _scan_range to the residual survivors and drops the fully evaluated tree, so the read
+// loop neither reads nor re-evaluates rows the residual already rejected. Returns the survivor
+// bitmap for the PRE gates.
+StatusOr<roaring::Roaring> SegmentIterator::_narrow_scan_range_by_residual() {
+    ASSIGN_OR_RETURN(auto matched, _evaluate_residual_to_bitmap(range2roaring(_scan_range)));
+    const size_t prev_span = _scan_range.span_size();
+    _scan_range = roaring2range(matched);
+    _opts.stats->rows_vector_index_filtered += (prev_span - _scan_range.span_size());
+    // Every surviving row already passed the whole tree. (Predicates are owned at the reader level.)
+    _opts.pred_tree = PredicateTree();
+    return matched;
 }
 
 Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {
@@ -2671,8 +2646,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             bool ascending = (_vector_index_ctx->result_order == 0);
             Buffer<uint8_t> selection(num);
             for (size_t i = 0; i < num; i++) {
-                selection[i] =
-                        ascending ? (dist_data[i] <= static_cast<float>(vr)) : (dist_data[i] >= static_cast<float>(vr));
+                selection[i] = within_vector_range(dist_data[i], static_cast<float>(vr), ascending);
             }
             chunk->filter_range(selection, 0, num);
             if (rowid != nullptr) {
@@ -3027,10 +3001,9 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     auto field = std::make_shared<Field>(ChunkHelper::convert_field(vec_cid, tcol));
 
     _vector_index_ctx->id2distance_map.clear();
-    // A range query's radius lives ONLY in vector_range -- the FE folds the distance conjunct out of
-    // the scan predicate, so nothing downstream re-checks it. Enforce it here on the exact distances,
-    // with the same convention as the brute read path: ascending (l2) keeps distance <= range,
-    // descending (cosine) keeps similarity >= range. Out-of-radius candidates must not be published.
+    // Enforce the range-query radius here: the FE folded the distance conjunct out of the scan
+    // predicate, so nothing downstream re-checks it. Same convention as the brute read path
+    // (ascending keeps d <= range, descending keeps d >= range).
     const bool has_range = _vector_index_ctx->vector_range >= 0;
     const auto range = static_cast<float>(_vector_index_ctx->vector_range);
     const bool ascending = _vector_index_ctx->result_order == 0;
@@ -3049,14 +3022,17 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
         const uint32_t bn = r.end() - r.begin();
         for (uint32_t i = 0; i < bn; i++) {
             const float d = dvals[i];
-            if (has_range && (ascending ? d > range : d < range)) {
+            if (has_range && !within_vector_range(d, range, ascending)) {
                 continue;
             }
             _vector_index_ctx->id2distance_map[r.begin() + i] = d;
-            survivors.add(r.begin() + i);
+            if (has_range) {
+                survivors.add(r.begin() + i);
+            }
         }
     }
-    _scan_range = roaring2range(survivors);
+    // Without a radius every candidate survives; skip the bitmap rebuild.
+    _scan_range = has_range ? roaring2range(survivors) : roaring2range(candidates);
     return Status::OK();
 }
 
@@ -3479,20 +3455,10 @@ Status SegmentIterator::_init_context() {
     _late_materialization_ratio = config::late_materialization_ratio;
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
-    // Disable predicate-column late materialization for any vector-index read (ANN or brute-force).
-    // Vector reads append a synthetic distance column to the output chunk AFTER the read (see _read:
-    // append_vector_column / brute-force distance compute), and brute-force additionally appends the
-    // embedding column to _schema for the raw read. Neither is a normal output column, so predicate-
-    // column late materialization -- which assumes the last read-schema column is the rowid and that
-    // the output columns mirror the read columns -- mis-indexes. PRE and pre-narrowed brute already
-    // dropped their (fully pre-evaluated) pred_tree, so the empty-tree arm below picks the eager
-    // context for them anyway; this flag stays load-bearing for the reads that intentionally KEEP
-    // read-time predicates -- POST (the read-time residual is its filtering mechanism) and
-    // kill-switch brute (the residual is deliberately not pre-evaluated). The refine path computes
-    // its distance in the expression layer above the scan (no post-read distance column), so it
-    // keeps late materialization.
-    // (The separate crash where a residual predicate's ProjectionIterator dropped the appended
-    // distance column is fixed in ProjectionIterator::do_get_next.)
+    // Vector reads carry columns the late-materialization bookkeeping cannot account for (the
+    // post-read distance column; brute's internally added embedding column), so force the eager
+    // context. Refine has no such columns (distance is computed above the scan) and keeps late
+    // materialization.
     const bool vector_read_active = _vector_index_ctx != nullptr &&
                                     ((_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) ||
                                      _vector_index_ctx->use_brute_force);

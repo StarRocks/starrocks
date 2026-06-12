@@ -28,20 +28,13 @@ enum class AnnFilterStrategy { AUTO = 0, PRE = 1, POST = 2, BRUTE = 3 };
 // Pure per-segment decision: how to serve an ANN top-k alongside its residual filter.
 //
 //   user_choice       the ann_filter_strategy session variable.
-//   prefilter_allowed PRE is executable for this segment: the residual (possibly empty) can be
-//                     folded into the search as an exact candidate set. The caller
-//                     (_init_ann_reader) computes this as
-//                         no residual at all                                  (trivially sound)
-//                         || (no predicate evaluated above the iterator      (completeness)
-//                             && the reader supports filtered search         (capability)
-//                             && enable_vector_index_residual_prefilter).    (kill-switch)
+//   prefilter_allowed true iff the PRE path is sound and enabled for this segment (the caller
+//                     derives it from the segment facts).
 //
-// AUTO and an explicit 'pre' both map to PRE exactly when prefilter_allowed, and to exact BRUTE
-// otherwise: a user choice cannot buy out completeness, and the kill-switch binds an explicit
-// 'pre' too (an emergency switch a session variable could bypass would not be an emergency
-// switch). POST stays an explicit opt-in (approximate, may return < k); AUTO never chooses it.
-// The selectivity gates (PRE -> exact rescan over the candidates) run later, during PRE
-// execution, and are not modeled here.
+// AUTO and an explicit 'pre' map to PRE exactly when prefilter_allowed and to exact BRUTE
+// otherwise: a user choice cannot buy out completeness, and the kill-switch binds 'pre' too.
+// POST stays an explicit opt-in (approximate, may return < k). The selectivity gates run later,
+// during PRE execution.
 AnnFilterStrategy resolve_ann_filter_strategy(AnnFilterStrategy user_choice, bool prefilter_allowed);
 
 } // namespace starrocks
