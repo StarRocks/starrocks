@@ -981,6 +981,53 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.refreshScheme = refreshScheme;
     }
 
+    // Per-base-table data version time as a JSON map {catalog.db.table: datetime}, vs LAST_REFRESH_TIME which is
+    // their single MAX. External/lake base tables report the partition source modified time; OLAP base tables report
+    // the visible-version commit time. "{}" when no base table has a recorded time.
+    public String getBaseTableRefreshVersionTimesJson() {
+        MvRefreshScheme scheme = getRefreshScheme();
+        if (scheme == null || scheme.getAsyncRefreshContext() == null) {
+            return "{}";
+        }
+        AsyncRefreshContext ctx = scheme.getAsyncRefreshContext();
+        Map<String, String> result = new LinkedHashMap<>();
+        // External/lake base tables, keyed by BaseTableInfo; stored time is the connector's native unit.
+        for (Map.Entry<BaseTableInfo, Map<String, BasePartitionInfo>> entry :
+                ctx.getBaseTableInfoVisibleVersionMap().entrySet()) {
+            long maxRefreshTime = maxPartitionRefreshTime(entry.getValue());
+            if (maxRefreshTime > 0) {
+                result.put(entry.getKey().getReadableString(),
+                        TimeUtils.longToTimeString(TimeUtils.normalizeToEpochMillis(maxRefreshTime)));
+            }
+        }
+        // OLAP base tables, keyed by table id; stored time is the partition visible-version commit time (millis).
+        List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
+        if (baseTableInfos != null) {
+            Map<Long, BaseTableInfo> idToBaseTableInfo = new HashMap<>();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                idToBaseTableInfo.put(baseTableInfo.getTableId(), baseTableInfo);
+            }
+            for (Map.Entry<Long, Map<String, BasePartitionInfo>> entry :
+                    ctx.getBaseTableVisibleVersionMap().entrySet()) {
+                BaseTableInfo baseTableInfo = idToBaseTableInfo.get(entry.getKey());
+                long maxRefreshTime = maxPartitionRefreshTime(entry.getValue());
+                if (baseTableInfo != null && maxRefreshTime > 0) {
+                    result.put(baseTableInfo.getReadableString(),
+                            TimeUtils.longToTimeString(TimeUtils.normalizeToEpochMillis(maxRefreshTime)));
+                }
+            }
+        }
+        return result.isEmpty() ? "{}" : GsonUtils.GSON.toJson(result);
+    }
+
+    private static long maxPartitionRefreshTime(Map<String, BasePartitionInfo> partitionInfos) {
+        return partitionInfos.values().stream()
+                .mapToLong(BasePartitionInfo::getLastRefreshTime)
+                .filter(t -> t > 0)
+                .max()
+                .orElse(0L);
+    }
+
     public void setWarehouseId(long warehouseId) {
         this.warehouseId = warehouseId;
     }
