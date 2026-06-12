@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.persist;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
@@ -111,5 +112,37 @@ public class MVTaskRunExtraMessageTest {
         message.setBasePartitionsToRefreshMap(basePartitionsToRefreshMap);
         Assertions.assertTrue(message.getBasePartitionsToRefreshMap().size() ==
                 Config.max_mv_task_run_meta_message_values_length);
+    }
+
+    @Test
+    public void testImvSourceRangesShrunkToConfiguredSize() {
+        Map<String, Map<String, String>> versionRanges = Maps.newHashMap();
+        Map<String, Map<String, String>> timestampRanges = Maps.newHashMap();
+        for (int i = 0; i < Config.max_mv_task_run_meta_message_values_length + 10; i++) {
+            versionRanges.put("catalog.db.table" + i, ImmutableMap.of("start", "1", "end", "2"));
+            timestampRanges.put("catalog.db.table" + i, ImmutableMap.of("start", "1000", "end", "2000"));
+        }
+        MVTaskRunExtraMessage message = new MVTaskRunExtraMessage();
+        message.setImvSourceVersionRange(versionRanges);
+        message.setImvSourceTimestampRange(timestampRanges);
+        Assertions.assertEquals(Config.max_mv_task_run_meta_message_values_length,
+                message.getImvSourceVersionRange().size());
+        Assertions.assertEquals(Config.max_mv_task_run_meta_message_values_length,
+                message.getImvSourceTimestampRange().size());
+    }
+
+    @Test
+    public void testImvSourceRangesSerializedToJson() {
+        MVTaskRunExtraMessage message = new MVTaskRunExtraMessage();
+        message.setImvSourceVersionRange(
+                ImmutableMap.of("iceberg.db.tbl", ImmutableMap.of("start", "100", "end", "128")));
+        message.setImvSourceTimestampRange(
+                ImmutableMap.of("iceberg.db.tbl", ImmutableMap.of("start", "1717999999000", "end", "1718000000000")));
+        String json = message.toString();
+        Assertions.assertTrue(json.contains(
+                "\"imvSourceVersionRange\":{\"iceberg.db.tbl\":{\"start\":\"100\",\"end\":\"128\"}}"), json);
+        Assertions.assertTrue(json.contains(
+                "\"imvSourceTimestampRange\":{\"iceberg.db.tbl\":" +
+                        "{\"start\":\"1717999999000\",\"end\":\"1718000000000\"}}"), json);
     }
 }
