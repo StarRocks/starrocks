@@ -22,8 +22,10 @@ run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.numbe
 #     :release-report — invoked namespaced as /github-bugfix-versions:<cmd>, see NOTE above);
 #   - the `context-base` MCP configured with `code_kb` USAGE (read+write data) for the
 #     container's identity — USAGE alone is enough to context_upsert (no ALTER needed);
-#   - the `code_kb.versions` and `code_kb.task_summaries` collections pre-created by an admin
-#     (CREATE CONTEXT COLLECTION ...; the emitter cannot create shared-base collections).
+#   - the `code_kb.versions` (collection_type=knowledge) and `code_kb.task_summaries`
+#     (collection_type=task_summary — NOT knowledge; the task_summary family, shared with the
+#     release-bug write-back) collections pre-created by an admin (the emitter cannot create
+#     shared-base collections; MCP create_collection only targets the caller's personal base).
 # gh is NOT installed in the container, but GITHUB_TOKEN is passed in — the skill uses the
 # GitHub REST/compare API for PR/backport/tag-contains when no local clone is present.
 
