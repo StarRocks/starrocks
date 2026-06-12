@@ -215,3 +215,68 @@ jobs:
             --token "$SLACK_BOT_TOKEN" \
             --channel "$CHANNEL_ID" \
             --text "$text"
+
+  # Module-risk briefing: a read-only, history-backed review focus for the PR's changed modules,
+  # mined from merged-bugfix pathology cards in code_kb, posted as a sticky PR comment. Sibling to
+  # assign-reviewer (same PR-open trigger / container / mergify+sync exclusion). Read-only: it never
+  # writes code_kb, so per-PR concurrency (cancel-in-progress) is fine — no origin-write race here.
+  # PREREQUISITES (container, one-time): the `github-pr-module-risk` plugin installed + the
+  # `context-base` MCP with `code_kb` USAGE (read). gh is absent in the container → the skill uses
+  # the GitHub REST API (GITHUB_TOKEN injected). --comment applies a strict confidence gate and emits
+  # either a sticky-marked briefing or the sentinel "MODULE-RISK: none" (then we post nothing).
+  module-risk:
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    if: >
+      (github.event.action == 'opened' || github.event.action == 'reopened') &&
+      !startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.head_ref, '-sync-pr-')
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+    steps:
+      - name: Module-risk briefing (AI, read-only)
+        run: |
+          # Namespaced plugin command (a bare /review would NOT resolve in headless -p — it would be
+          # treated as prompt text and silently no-op). tee captures stdout for the upsert step.
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/github-pr-module-risk:review ${PR_URL} --comment" 2>&1 | tee "${RUNNER_TEMP}/module_risk.txt" || true
+
+      - name: Upsert sticky comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          out="${RUNNER_TEMP}/module_risk.txt"
+          marker="<!-- module-risk-briefing -->"
+          [ -f "$out" ] || { echo "no skill output, skip"; exit 0; }
+          # The skill emits the briefing starting at the marker line, or "MODULE-RISK: none" (no
+          # marker) when nothing clears the confidence gate. Take from the marker to EOF as the body;
+          # empty (no marker / sentinel / error) => post nothing. sed from the marker also strips any
+          # claude preamble before it.
+          body="$(sed -n "/$marker/,\$p" "$out" 2>/dev/null || true)"
+          if [ -z "$body" ]; then
+            echo "no high-confidence, diff-aligned module risk — not commenting"
+            exit 0
+          fi
+          printf '%s\n' "$body" > "${RUNNER_TEMP}/mr_body.md"
+          # Sticky: edit our existing marked comment if present, else create one. Idempotent across
+          # reopen / workflow rerun (the marker identifies our comment; gh is host-side, not in the
+          # container). PATCH body is JSON-built with jq so markdown is escaped correctly.
+          existing="$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+                        --jq ".[] | select(.body | contains(\"$marker\")) | .id" 2>/dev/null | head -1 || true)"
+          if [ -n "$existing" ]; then
+            jq -n --rawfile b "${RUNNER_TEMP}/mr_body.md" '{body:$b}' \
+              | gh api -X PATCH "repos/$REPO/issues/comments/$existing" --input - >/dev/null \
+              && echo "updated sticky comment $existing" \
+              || echo "WARN: patch comment $existing failed (permissions or transient API error)"
+          else
+            gh pr comment "$PR" -R "$REPO" --body-file "${RUNNER_TEMP}/mr_body.md" \
+              && echo "created sticky comment" \
+              || echo "WARN: create comment failed (permissions or transient API error)"
+          fi
