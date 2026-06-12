@@ -55,6 +55,7 @@
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
+#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -1166,6 +1167,245 @@ TEST(ResolveBruteForceVectorColumnTest, internal_error_when_dict_chunk_is_null) 
     auto st = resolve_brute_force_vector_column(chunk.get(), /*dict_chunk=*/nullptr, 42);
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.status().is_internal_error());
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Direct unit tests for evaluate_pred_tree_to_bitmap (segment_iterator.h). ANN-independent: no vector
+// index, no VectorSearchOption, no SegmentIterator -- a plain segment plus raw column iterators. Runs
+// without WITH_TENANN.
+//
+// The 100k-row segment is the point: the function reads + evaluates in <= 4096-row batches, so a
+// full-range candidate spans 25 batches and several data pages -- coverage the 8-row ANN fixtures
+// structurally cannot provide (their whole segment fits in one batch and one page).
+// ---------------------------------------------------------------------------------------------------
+class EvaluatePredTreeBitmapTest : public testing::Test {
+protected:
+    static constexpr uint32_t kRows = 100000;
+
+    void SetUp() override {
+        CHECK_OK(fs::remove_all(kDir));
+        CHECK_OK(fs::create_directories(kDir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(kDir));
+
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_next_column_unique_id(3);
+        auto* c0 = pb.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("id");
+        c0->set_type("BIGINT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        c0->set_length(8);
+        c0->set_index_length(8);
+        c0->set_aggregation("NONE");
+        for (int i = 1; i <= 2; i++) {
+            auto* c = pb.add_column();
+            c->set_unique_id(i);
+            c->set_name(i == 1 ? "c1" : "c2");
+            c->set_type("INT");
+            c->set_is_key(false);
+            c->set_is_nullable(false);
+            c->set_length(4);
+            c->set_index_length(4);
+            c->set_aggregation("NONE");
+        }
+        _tablet_schema = TabletSchema::create(pb);
+
+        // id = i, c1 = i (monotonic -> expected sets are exact ranges), c2 = i % 7.
+        std::string seg_file = kDir + "/seg.dat";
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(seg_file));
+        SegmentWriterOptions wopts;
+        SegmentWriter writer(std::move(wfile), 0, _tablet_schema, wopts);
+        ASSERT_OK(writer.init());
+        for (uint32_t start = 0; start < kRows; start += 4096) {
+            const uint32_t n = std::min<uint32_t>(4096, kRows - start);
+            auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(_tablet_schema), n);
+            for (uint32_t i = start; i < start + n; i++) {
+                chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i)));
+                chunk->columns()[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+                chunk->columns()[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i % 7)));
+            }
+            ASSERT_OK(writer.append_chunk(*chunk));
+        }
+        uint64_t seg_sz = 0, idx_sz = 0, footer = 0;
+        ASSERT_OK(writer.finalize(&seg_sz, &idx_sz, &footer));
+        ASSIGN_OR_ABORT(_segment, Segment::open(_fs, FileInfo{seg_file}, 0, _tablet_schema));
+        ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(seg_file));
+
+        // Raw, initialized column iterators for the two predicate columns, indexed by cid; the id
+        // column entry stays null on purpose (non-predicate columns may be null per the contract).
+        _iters_by_cid.assign(3, nullptr);
+        for (int cid = 1; cid <= 2; cid++) {
+            ASSIGN_OR_ABORT(auto it, _segment->new_column_iterator(_tablet_schema->column(cid), nullptr));
+            ColumnIteratorOptions iter_opts;
+            iter_opts.stats = &_stats;
+            iter_opts.read_file = _read_file.get();
+            iter_opts.use_page_cache = false;
+            ASSERT_OK(it->init(iter_opts));
+            _iters_by_cid[cid] = it.get();
+            _owned_iters.emplace_back(std::move(it));
+        }
+
+        // Schema holding ONLY the predicate columns (field->id() == cid) -- also verifies the
+        // function does not require non-predicate columns to be present.
+        auto f1 = std::make_shared<Field>(1, "c1", get_type_info(TYPE_INT), false);
+        f1->set_uid(1);
+        auto f2 = std::make_shared<Field>(2, "c2", get_type_info(TYPE_INT), false);
+        f2->set_uid(2);
+        _schema.append(f1);
+        _schema.append(f2);
+    }
+    void TearDown() override { (void)fs::remove_all(kDir); }
+
+    static roaring::Roaring full_range() {
+        roaring::Roaring r;
+        r.addRange(0, kRows);
+        return r;
+    }
+    static PredicateTree single_node_tree(ColumnPredicate* pred) {
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode(pred));
+        return PredicateTree::create(std::move(root));
+    }
+
+    const std::string kDir = "evaluate_pred_tree_bitmap_test";
+    std::shared_ptr<FileSystem> _fs;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Segment> _segment;
+    std::unique_ptr<RandomAccessFile> _read_file;
+    OlapReaderStatistics _stats;
+    std::vector<std::unique_ptr<ColumnIterator>> _owned_iters;
+    std::vector<ColumnIterator*> _iters_by_cid;
+    Schema _schema;
+};
+
+TEST_F(EvaluatePredTreeBitmapTest, ge_predicate_across_batches) {
+    // Full-range candidate = 25 read+evaluate batches over several data pages; the tail-of-file
+    // predicate makes any per-batch seek/bookkeeping slip shift the result set -> exact-set compare.
+    std::unique_ptr<ColumnPredicate> pred(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99000"));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
+                                                           nullptr, full_range()));
+    roaring::Roaring expect;
+    expect.addRange(99000, kRows);
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, or_tree_evaluated_whole) {
+    // An OR compound must be evaluated as a WHOLE tree (a per-column immediate map drops it). The two
+    // branches select the first and the last batch of the file.
+    std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate(get_type_info(TYPE_INT), 1, "50"));
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99950"));
+    PredicateOrNode or_node;
+    or_node.add_child(PredicateColumnNode(lt.get()));
+    or_node.add_child(PredicateColumnNode(ge.get()));
+    PredicateAndNode root;
+    root.add_child(std::move(or_node));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(PredicateTree::create(std::move(root)), _schema,
+                                                           _iters_by_cid, nullptr, full_range()));
+    roaring::Roaring expect;
+    expect.addRange(0, 50);
+    expect.addRange(99950, kRows);
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, cross_column_and) {
+    // Two predicate columns read per batch into one cid-keyed chunk: c1 >= 50000 AND c2 == 3.
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "50000"));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "3"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(ge.get()));
+    root.add_child(PredicateColumnNode(eq.get()));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(PredicateTree::create(std::move(root)), _schema,
+                                                           _iters_by_cid, nullptr, full_range()));
+    roaring::Roaring expect;
+    for (uint32_t i = 50000; i < kRows; i++) {
+        if (i % 7 == 3) {
+            expect.add(i);
+        }
+    }
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, scattered_candidate_ranges) {
+    // A discontiguous candidate becomes multiple SparseRange ranges, each with its own seek and a
+    // short (bn << 4096) read; the values straddle the batch size and page boundaries.
+    roaring::Roaring candidate;
+    for (uint32_t v : {7u, 4095u, 4096u, 4097u, 65535u, 65536u, 99999u}) {
+        candidate.add(v);
+    }
+    std::unique_ptr<ColumnPredicate> pred(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "4096"));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
+                                                           nullptr, candidate));
+    roaring::Roaring expect;
+    for (uint32_t v : {4096u, 4097u, 65535u, 65536u, 99999u}) {
+        expect.add(v);
+    }
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, empty_tree_returns_candidate) {
+    roaring::Roaring candidate;
+    for (uint32_t v : {5u, 100u, 4242u}) {
+        candidate.add(v);
+    }
+    PredicateTree empty_tree;
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(empty_tree, _schema, _iters_by_cid, nullptr, candidate));
+    EXPECT_TRUE(candidate == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, unreadable_predicate_column_is_error) {
+    // Exactness backstop: a predicate column the segment cannot read must be a hard error, never a
+    // silent skip (a skipped column widens the bitmap and a downstream k-limit under-returns).
+    // Arm 1: cid absent from BOTH the schema and the iterators.
+    std::unique_ptr<ColumnPredicate> p9(new_column_ge_predicate(get_type_info(TYPE_INT), 9, "1"));
+    auto st9 = evaluate_pred_tree_to_bitmap(single_node_tree(p9.get()), _schema, _iters_by_cid, nullptr, full_range());
+    ASSERT_FALSE(st9.ok());
+    EXPECT_TRUE(st9.status().is_internal_error());
+    EXPECT_NE(st9.status().to_string().find("not readable"), std::string::npos);
+
+    // Arm 2: cid present in the schema but with a null iterator (the id column, cid 0).
+    Schema schema_with_id = _schema;
+    auto f0 = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    f0->set_uid(0);
+    schema_with_id.append(f0);
+    std::unique_ptr<ColumnPredicate> p0(new_column_ge_predicate(get_type_info(TYPE_BIGINT), 0, "1"));
+    auto st0 = evaluate_pred_tree_to_bitmap(single_node_tree(p0.get()), schema_with_id, _iters_by_cid, nullptr,
+                                            full_range());
+    ASSERT_FALSE(st0.ok());
+    EXPECT_TRUE(st0.status().is_internal_error());
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, fallback_rowids_published_per_batch) {
+    // The buffer inverted-index fallback predicates resolve chunk rows through: resized and filled
+    // with the batch's contiguous segment rowids before every evaluate call.
+    std::unique_ptr<ColumnPredicate> pred(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+
+    // Single batch: pre-filled garbage must be fully overwritten.
+    roaring::Roaring one_batch;
+    one_batch.addRange(2000, 2100);
+    std::vector<rowid_t> buf = {999, 999};
+    ASSIGN_OR_ABORT(auto got1, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
+                                                            &buf, one_batch));
+    EXPECT_EQ(100u, got1.cardinality());
+    ASSERT_EQ(100u, buf.size());
+    EXPECT_EQ(2000u, buf.front());
+    EXPECT_EQ(2099u, buf.back());
+
+    // Two batches (4096 + 10): the buffer reflects the LAST batch afterwards -- the per-batch
+    // overwrite contract the fallback depends on.
+    roaring::Roaring two_batches;
+    two_batches.addRange(0, 4106);
+    ASSIGN_OR_ABORT(auto got2, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
+                                                            &buf, two_batches));
+    EXPECT_EQ(4106u, got2.cardinality());
+    ASSERT_EQ(10u, buf.size());
+    EXPECT_EQ(4096u, buf.front());
+    EXPECT_EQ(4105u, buf.back());
 }
 
 #ifdef WITH_TENANN
