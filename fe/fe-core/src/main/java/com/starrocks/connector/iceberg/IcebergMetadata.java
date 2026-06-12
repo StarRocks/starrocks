@@ -33,6 +33,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -1027,9 +1028,18 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                  Tracers tracers, ConnectContext connectContext) {
         if (!scannedTables.contains(key)) {
             tracers = tracers == null ? Tracers.get() : tracers;
-            try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.processSplit." + key)) {
+            // This may run in parallel for multiple tables on a shared query-level Tracers
+            // (see PrepareCollectMetaTask). The Tracers/TimeWatcher scope stack is single-threaded
+            // and unsafe for scopes that overlap across threads, so measure this table's split
+            // collection with an independent RawScopedTimer. Surface the time via count(), which
+            // accumulates the cumulative split-collection time across all parallel tables under
+            // TracerImpl's monitor (a shared accumulating stopwatch can't be used here - concurrent
+            // start() would throw "stopwatch already running").
+            RawScopedTimer timer = new RawScopedTimer();
+            try (RawScopedTimer.Guard ignored = timer.start()) {
                 collectTableStatisticsAndCacheIcebergSplit(key, table, tracers, connectContext);
             }
+            Tracers.count(tracers, EXTERNAL, "ICEBERG.processSplitMs", timer.getTotalTime());
         }
     }
 

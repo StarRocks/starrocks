@@ -15,7 +15,7 @@
 package com.starrocks.qe.scheduler.dag;
 
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.ConnectContext;
@@ -40,15 +40,15 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     private volatile boolean cancelled = false;
     private DeployScanRangesTask deployScanRangesTask = null;
 
-    class TracerContext implements AutoCloseable {
-        Tracers savedTracers;
+    // Restores the query's ConnectContext on the shared background executor thread for one deploy
+    // round. The query Tracers is intentionally NOT installed here: its TimeWatcher scope stack is
+    // single-threaded and must not be driven from this background thread concurrently with the main
+    // thread (that caused ConcurrentModificationException / "stopwatch already running"). Deploy
+    // timing is measured with an independent RawScopedTimer instead (see runOnce).
+    static class ConnectContextScope implements AutoCloseable {
         ConnectContext savedConnectContext;
 
-        TracerContext(Tracers currentTracers, ConnectContext connectContext) {
-            if (currentTracers != null) {
-                savedTracers = Tracers.get();
-                Tracers.set(currentTracers);
-            }
+        ConnectContextScope(ConnectContext connectContext) {
             if (connectContext != null) {
                 savedConnectContext = ConnectContext.get();
                 ConnectContext.set(connectContext);
@@ -57,9 +57,6 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
         @Override
         public void close() {
-            if (savedTracers != null) {
-                Tracers.set(savedTracers);
-            }
             if (savedConnectContext != null) {
                 ConnectContext.set(savedConnectContext);
             }
@@ -71,6 +68,10 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         ExecutorService executorService;
         Tracers currentTracers;
         ConnectContext currentConnectContext;
+        // Accumulates total deploy time across all rounds of this task. Rounds run sequentially
+        // (each re-submits the next only after the previous returns), so this single timer/stopwatch
+        // is never started concurrently.
+        final RawScopedTimer deployScanRangesTimer = new RawScopedTimer();
 
         DeployScanRangesTask(List<DeployState> states) {
             this.states = states;
@@ -81,7 +82,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
             if (cancelled || states.isEmpty()) {
                 return;
             }
-            try (TracerContext tracerContext = new TracerContext(currentTracers, currentConnectContext)) {
+            try (ConnectContextScope ignored = new ConnectContextScope(currentConnectContext)) {
                 runOnce();
             }
             // If run in the executor service, we need to start the next turn.
@@ -90,7 +91,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         }
 
         public void runOnce() {
-            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployScanRanges")) {
+            try (RawScopedTimer.Guard ignored = deployScanRangesTimer.start()) {
                 states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
                 if (states.isEmpty()) {
                     return;
@@ -103,6 +104,14 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                 LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
                 coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
                 throw new RuntimeException(e);
+            } finally {
+                // Surface the cumulative deploy time on the query's tracer. record() only appends to
+                // VarTracer under TracerImpl's monitor (no single-threaded scope stack), and the deploy
+                // completes before the query profile is assembled, so this is safe from this thread.
+                if (currentTracers != null) {
+                    Tracers.record(currentTracers, Tracers.Module.SCHEDULER, "DeployScanRanges",
+                            deployScanRangesTimer.getTotalTime() + "ms");
+                }
             }
         }
 

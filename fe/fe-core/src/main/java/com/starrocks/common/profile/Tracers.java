@@ -264,6 +264,10 @@ public class Tracers {
         tracers.tracer(module, Mode.VARS).count(name, count);
     }
 
+    public static void count(Tracers tracers, Module module, String name, long count) {
+        tracers.tracer(module, Mode.VARS).count(name, count);
+    }
+
     public static List<Var<?>> getAllVars() {
         Tracers tracers = THREAD_LOCAL.get();
         return tracers.allTracer[1].getAllVars();
