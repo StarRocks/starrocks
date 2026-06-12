@@ -4148,6 +4148,25 @@ TEST_F(LakeServiceTest, test_vacuum_task_deadline_exceeded) {
         EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
         ASSERT_EQ(0, response.status().status_code()) << response.status().status_code();
     }
+
+    {
+        // Setting lake_vacuum_enable_task_timeout to false disables the deadline: a request
+        // carrying timeout_ms still runs to completion.
+        bool old_value = config::lake_vacuum_enable_task_timeout;
+        config::lake_vacuum_enable_task_timeout = false;
+        DeferOp restore_config([old_value] { config::lake_vacuum_enable_task_timeout = old_value; });
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        request.set_timeout_ms(60 * 60 * 1000L);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.status().status_code()) << response.status().status_code();
+    }
 }
 
 TEST_F(LakeServiceTest, test_lock_and_unlock_tablet_metadata) {
