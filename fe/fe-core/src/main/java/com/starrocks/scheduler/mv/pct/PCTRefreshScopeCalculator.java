@@ -70,9 +70,11 @@ public class PCTRefreshScopeCalculator {
                                       boolean hasPotentialPartitions) {
         Map<BaseTableSnapshotInfo, PCellSortedSet> refTableRefreshPartitions = projectRefTableRefreshPartitions(
                 topology, snapshotBaseTables, mvPartitionsToRefresh);
+        // Key by table identifier, not name: a refresh query may reference two distinct base tables
+        // that share an unqualified name across databases, which would collide under a name key.
         PCellSetMapping refTablePartitionNames = PCellSetMapping.of(refTableRefreshPartitions.entrySet().stream()
                 .collect(Collectors.toMap(
-                        entry -> entry.getKey().getName(),
+                        entry -> entry.getKey().getBaseTable().getTableIdentifier(),
                         entry -> PCellSortedSet.of(entry.getValue()))));
         return new PCTRefreshScope(
                 mvPartitionsToRefresh,

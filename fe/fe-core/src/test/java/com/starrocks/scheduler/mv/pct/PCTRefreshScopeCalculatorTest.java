@@ -95,7 +95,7 @@ public class PCTRefreshScopeCalculatorTest {
         Table table = Mockito.mock(Table.class);
         BaseTableSnapshotInfo snapshotInfo = Mockito.mock(BaseTableSnapshotInfo.class);
         Mockito.when(snapshotInfo.getBaseTable()).thenReturn(table);
-        Mockito.when(snapshotInfo.getName()).thenReturn("table_a");
+        Mockito.when(table.getTableIdentifier()).thenReturn("table_a:uuid_a");
 
         PCellSortedSet mvPartitionsToRefresh = PCellSortedSet.of();
         mvPartitionsToRefresh.add(PCellWithName.of("mv_p1", new PCellNone()));
@@ -123,24 +123,26 @@ public class PCTRefreshScopeCalculatorTest {
         Assertions.assertTrue(scope.hasPotentialPartitions());
         Assertions.assertEquals(mvPartitionsToRefresh.getPartitionNames(), scope.getMvPartitionsToRefresh().getPartitionNames());
         Assertions.assertEquals(
-                Map.of("table_a", refPartitions.getPartitionNames()),
+                Map.of("table_a:uuid_a", refPartitions.getPartitionNames()),
                 scope.getRefTablePartitionNames().getRefTablePartitionNames());
         Assertions.assertEquals(refPartitions.getPartitionNames(),
                 scope.getRefTableRefreshPartitions().get(snapshotInfo).getPartitionNames());
     }
 
     @Test
-    public void testBuildScopeFailsWhenSnapshotTablesShareTheSameName() {
+    public void testBuildScopeWithSameNamedTablesAcrossDatabasesKeysByIdentifier() {
+        // Two distinct base tables sharing an unqualified name but living in different databases:
+        // same name, distinct identifiers. The scope must key each by identifier, not collide on name.
         Table tableA = Mockito.mock(Table.class);
         Table tableB = Mockito.mock(Table.class);
 
         BaseTableSnapshotInfo snapshotInfoA = Mockito.mock(BaseTableSnapshotInfo.class);
         Mockito.when(snapshotInfoA.getBaseTable()).thenReturn(tableA);
-        Mockito.when(snapshotInfoA.getName()).thenReturn("dup_table");
+        Mockito.when(tableA.getTableIdentifier()).thenReturn("dup_table:uuid_a");
 
         BaseTableSnapshotInfo snapshotInfoB = Mockito.mock(BaseTableSnapshotInfo.class);
         Mockito.when(snapshotInfoB.getBaseTable()).thenReturn(tableB);
-        Mockito.when(snapshotInfoB.getName()).thenReturn("dup_table");
+        Mockito.when(tableB.getTableIdentifier()).thenReturn("dup_table:uuid_b");
 
         PCellSortedSet mvPartitionsToRefresh = PCellSortedSet.of();
         mvPartitionsToRefresh.add(PCellWithName.of("mv_p1", new PCellNone()));
@@ -166,7 +168,11 @@ public class PCTRefreshScopeCalculatorTest {
         snapshotBaseTables.put(1L, snapshotInfoA);
         snapshotBaseTables.put(2L, snapshotInfoB);
 
-        Assertions.assertThrows(IllegalStateException.class,
-                () -> calculator.buildScope(topology, snapshotBaseTables, mvPartitionsToRefresh, false, false));
+        PCTRefreshScope scope = calculator.buildScope(topology, snapshotBaseTables, mvPartitionsToRefresh, false, false);
+
+        Map<String, ?> byIdentifier = scope.getRefTablePartitionNames().getRefTablePartitionNames();
+        Assertions.assertEquals(2, byIdentifier.size());
+        Assertions.assertEquals(refPartitionsA.getPartitionNames(), byIdentifier.get("dup_table:uuid_a"));
+        Assertions.assertEquals(refPartitionsB.getPartitionNames(), byIdentifier.get("dup_table:uuid_b"));
     }
 }
