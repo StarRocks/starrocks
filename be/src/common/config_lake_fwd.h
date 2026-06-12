@@ -77,6 +77,11 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 
+// Whether vacuum tasks honor the timeout carried in the request (VacuumRequest.timeout_ms)
+// and abort themselves once it elapses. Set to false to let vacuum tasks always run to
+// completion no matter how long the FE caller waits.
+CONF_mBool(lake_vacuum_enable_task_timeout, "true");
+
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 
 // Enable cleanup of orphan delvec entries during compaction.
