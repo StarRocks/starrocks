@@ -520,7 +520,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
 
         // Build HiveDataSource for this scan range
         auto glm_ctx = down_cast<IcebergGlobalLateMaterilizationContext*>(
-                state->query_ctx()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id));
+                state->query_runtime_state()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id));
         if (glm_ctx == nullptr) {
             return Status::InternalError("GlobalLateMaterilizationContext not found for scan_id: " +
                                          std::to_string(_ctx->scan_id));
@@ -828,7 +828,7 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
 
     // acquire global late materialization context
     auto scan_id = _ctx->scan_id;
-    auto glm_ctx = state->query_ctx()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id);
+    auto glm_ctx = state->query_runtime_state()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id);
     if (glm_ctx == nullptr) {
         return Status::InternalError("GlobalLateMaterilizationContext not found for scan_id: " +
                                      std::to_string(scan_id));

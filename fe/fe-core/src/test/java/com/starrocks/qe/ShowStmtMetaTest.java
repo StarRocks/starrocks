@@ -1001,7 +1001,7 @@ public class ShowStmtMetaTest {
     public void testShowMaterializedViewsStmt() {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("test_db", null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(34, metaData.getColumnCount());
+        Assertions.assertEquals(35, metaData.getColumnCount());
         Assertions.assertEquals("id", metaData.getColumn(0).getName());
         Assertions.assertEquals("database_name", metaData.getColumn(1).getName());
         Assertions.assertEquals("name", metaData.getColumn(2).getName());
@@ -1036,6 +1036,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("refresh_policy", metaData.getColumn(31).getName());
         Assertions.assertEquals("resource_group", metaData.getColumn(32).getName());
         Assertions.assertEquals("query_rewrite_status_reason", metaData.getColumn(33).getName());
+        Assertions.assertEquals("last_freshness_confirmed_at", metaData.getColumn(34).getName());
     }
 
     @Test

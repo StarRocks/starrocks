@@ -26,7 +26,7 @@
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/query_runtime_state.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/descriptors_fwd.h"

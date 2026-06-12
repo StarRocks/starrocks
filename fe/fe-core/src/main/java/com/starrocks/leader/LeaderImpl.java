@@ -780,8 +780,11 @@ public class LeaderImpl {
                 return;
             }
 
+            // Setting a single replica's path hash is table-local; scope the WRITE to that table
+            // instead of taking a full DB WRITE that would block every other table in the DB.
+            long tableId = tabletMeta.getTableId();
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             try {
                 // local migration just set path hash
                 Replica replica =
@@ -789,7 +792,7 @@ public class LeaderImpl {
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());

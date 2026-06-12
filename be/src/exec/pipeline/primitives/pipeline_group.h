@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include "runtime/runtime_state_fwd.h"
-
 namespace starrocks::pipeline {
 
 // Narrow contract a Pipeline needs from its owning execution group, so the
@@ -26,7 +24,7 @@ public:
     virtual ~PipelineGroup() = default;
 
     // Called when all of a pipeline's drivers have finished.
-    virtual void count_down_pipeline(RuntimeState* state) = 0;
+    virtual void count_down_pipeline() = 0;
 
     // Whether this group runs as a group execution; drives the IsGroupExecution profile flag.
     virtual bool is_group_execution() const = 0;

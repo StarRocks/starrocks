@@ -237,7 +237,7 @@ Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
             processor->set_ctx(lookup_task_ctx);
             COUNTER_UPDATE(_submit_io_task_counter, 1);
             workgroup::ScanTask task;
-            task.workgroup = state->fragment_ctx()->workgroup();
+            task.workgroup = state->fragment_runtime_state()->workgroup();
             task.priority = OlapScanNode::compute_priority(_submit_io_task_counter->double_value());
             task.task_group = down_cast<const LookUpOperatorFactory*>(_factory)->io_task_group();
             task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;

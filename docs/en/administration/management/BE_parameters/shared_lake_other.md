@@ -95,6 +95,60 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### enable_lake_pk_compaction_score_gate
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for the Primary Key size-tiered compaction score gate in a shared-data cluster. When enabled (the default), low-value sparse mid-tier compaction picks are skipped: a picked level whose compaction score is below `lake_pk_compaction_min_level_score`, and which trips none of the override conditions, is left uncompacted to avoid rewriting large amounts of base data for a negligible reduction in file count. Set to `false` to turn off the whole gate in one step; every picked level then compacts unconditionally (the behavior before the gate existed), and the threshold parameters below have no effect.
+- Introduced in: v4.2
+
+### lake_pk_compaction_min_level_score
+
+- Default: 2.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Score threshold of the Primary Key compaction score gate (see `enable_lake_pk_compaction_score_gate`). When the size-tiered selector picks a level whose total compaction score is below this value and no override condition fires, the compaction is skipped. The per-rowset score is `io_count * 1MB / read_bytes` summed across the level: levels with many small or overlapped rowsets score high (useful compaction), while a few large non-overlapped rowsets score low (a near-pure base rewrite). Set to `0` to make the gate a no-op, because a level's score is always greater than or equal to `0`.
+- Introduced in: v4.2
+
+### lake_pk_compaction_min_benefit_cost_ratio
+
+- Default: 0.005
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. The minimum benefit/cost ratio (segments saved per MB rewritten) at which a below-threshold level is still compacted. The benefit folds in delete-vector cleanup pressure (see `lake_pk_compaction_delvec_benefit_weight`). Set to `0` to disable this override so that only `lake_pk_compaction_min_level_score` applies.
+- Introduced in: v4.2
+
+### lake_pk_compaction_emergency_score
+
+- Default: 50.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. When the tablet-wide read-pressure score (the sum of all rowset scores) reaches this value, compaction proceeds even if the picked level is below `lake_pk_compaction_min_level_score`, so that hot tablets with heavy read amplification are not starved. Set to `0` to disable this override.
+- Introduced in: v4.2
+
+### lake_pk_compaction_delvec_benefit_weight
+
+- Default: 12.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The weight that converts a level's delete pressure into segment-equivalent benefit units in the benefit/cost ratio used by `lake_pk_compaction_min_benefit_cost_ratio`, computed as `benefit = real_benefit_segments + delete_ratio * input_segments * weight`. A higher value makes compaction more aggressive at cleaning up delete vectors; a lower value favors reducing write amplification. Set to `0` to drop the delete contribution so that the ratio reflects segment-count benefit only.
+- Introduced in: v4.2
+
+### lake_pk_compaction_size_overflow_ratio
+
+- Default: 2.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
+- Introduced in: v4.2
+
 ### lake_rows_mapper_read_parallelism
 
 - Default: 32

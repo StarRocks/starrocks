@@ -41,13 +41,13 @@ void ExecutionGroup::clear_all_drivers(Pipelines& pipelines) {
     }
 }
 
-void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
+void ExecutionGroup::count_down_pipeline() {
     // Cache the member before performing the atomic increment.
     // This ensures we won't dereference `this` after another thread may
     // have deleted the object.
     size_t num_pipelines = _num_pipelines;
     if (++_num_finished_pipelines == num_pipelines) {
-        state->fragment_ctx()->count_down_execution_group();
+        _fragment_lifecycle->on_execution_group_finished();
     }
 }
 

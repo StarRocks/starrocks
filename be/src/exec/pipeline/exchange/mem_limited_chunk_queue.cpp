@@ -487,7 +487,7 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         }
     };
 
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(flush_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_runtime_state()->workgroup(), std::move(flush_task));
     io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
@@ -563,7 +563,7 @@ Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
             _update_io_task_status(status);
         }
     };
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(load_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_runtime_state()->workgroup(), std::move(load_task));
     io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();

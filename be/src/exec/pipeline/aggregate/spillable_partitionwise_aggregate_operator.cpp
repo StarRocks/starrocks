@@ -18,6 +18,7 @@
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_skew_compactor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime/fragment_runtime_state.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -339,13 +340,13 @@ Status SpillablePartitionWiseAggregateSinkOperatorFactory::prepare(RuntimeState*
         _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     }
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
     _spill_options->splittable = false;
     _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
-    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
     if (state->enable_spill_partitionwise_agg_skew_elimination()) {
