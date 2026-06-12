@@ -1183,4 +1183,51 @@ public class LakeTableIndexFastPathJobBaseTest {
         assertNotSame(t2i, getField(copy, "tabletToIndexMetaId"));
         assertNotSame(commit, getField(copy, "commitVersionMap"));
     }
+
+    @Test
+    public void testReplay_FinishedIgnoresPartitionOutsideCommitVersionMap() throws Exception {
+        // Concurrent ADD PARTITION (now allowed while this job runs) can add a partition that is
+        // NOT in the job's commitVersionMap. Replay of FINISHED must only touch the owned
+        // (commitVersionMap) partitions and never look up / version-bump the concurrently-added one.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 5L);
+        setField(other, "commitVersionMap", commitMap);
+        setField(other, "finishedTimeMs", 12345L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        PhysicalPartition owned = mock(PhysicalPartition.class);
+        when(owned.getNextVersion()).thenReturn(5L);
+        when(owned.getVisibleVersion()).thenReturn(4L);
+        when(table.getPhysicalPartition(100L)).thenReturn(owned);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        verify(owned).setVisibleVersion(5L, 12345L);
+        // The concurrently-added partition (200) is outside commitVersionMap: replay must never touch it.
+        verify(table, never()).getPhysicalPartition(200L);
+    }
+
+    @Test
+    public void testReplay_FinishedToleratesMissingOwnedPartition() throws Exception {
+        // A commitVersionMap partition that was dropped resolves to null; replay's pp != null
+        // guards must keep journal apply from crashing.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 5L);
+        setField(other, "commitVersionMap", commitMap);
+        setField(other, "finishedTimeMs", 12345L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        when(table.getPhysicalPartition(100L)).thenReturn(null);
+
+        // Must not throw despite the missing partition.
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
+    }
 }

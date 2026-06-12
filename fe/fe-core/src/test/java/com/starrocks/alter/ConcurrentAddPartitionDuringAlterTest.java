@@ -20,9 +20,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.function.BiConsumer;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,8 +31,14 @@ import static org.mockito.Mockito.when;
  * Unit coverage for {@link AlterJobMgr#unfinishedAlterJobsAllowConcurrentPartitionCreation(long)},
  * the shared guard helper that the G1 (manual ADD PARTITION), G2 (automatic creation during load)
  * and G3 (dynamic-partition scheduler) guards consult to decide whether partition creation may run
- * concurrently with the unfinished alter jobs on a table. The end-to-end executor wiring is covered
- * by shared-data SQL integration tests.
+ * concurrently with the unfinished alter jobs on a table.
+ *
+ * <p>These tests drive the helper against the REAL {@link SchemaChangeHandler}/
+ * {@link MaterializedViewHandler} registries (constructed without {@code start()}, so no daemon
+ * runs) with real {@link AlterJobV2} instances registered via {@code addAlterJobV2}, so they
+ * exercise the actual {@code getUnfinishedAlterJobV2ByTableId} filtering (tableId match, and
+ * FINISHED/CANCELLED exclusion) rather than a mocked lookup. The end-to-end executor wiring is
+ * covered by {@link ConcurrentAddPartitionDuringAlterE2ETest} and the shared-data SQL test.
  */
 public class ConcurrentAddPartitionDuringAlterTest {
 
@@ -42,70 +46,116 @@ public class ConcurrentAddPartitionDuringAlterTest {
 
     /**
      * Wire {@code GlobalStateMgr.getCurrentState()} to a mock whose schema-change and rollup
-     * handlers return the supplied unfinished-job lists for {@link #TABLE_ID}, then run the body.
+     * handlers are REAL (un-started) handler instances, then hand them to {@code body} so the
+     * test can register real jobs before invoking the helper.
      */
-    private void runWithUnfinishedJobs(List<AlterJobV2> schemaChangeJobs, List<AlterJobV2> rollupJobs,
-                                       Runnable body) {
+    private void withRealHandlers(BiConsumer<SchemaChangeHandler, MaterializedViewHandler> body) {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             GlobalStateMgr gsm = mock(GlobalStateMgr.class);
-            SchemaChangeHandler schemaChangeHandler = mock(SchemaChangeHandler.class);
-            MaterializedViewHandler rollupHandler = mock(MaterializedViewHandler.class);
+            // The constructors do NOT start the scheduler daemon (start() is separate), so the
+            // registered jobs stay put and the test is fully deterministic.
+            SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+            MaterializedViewHandler rollupHandler = new MaterializedViewHandler();
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             when(gsm.getSchemaChangeHandler()).thenReturn(schemaChangeHandler);
             when(gsm.getRollupHandler()).thenReturn(rollupHandler);
-            when(schemaChangeHandler.getUnfinishedAlterJobV2ByTableId(TABLE_ID)).thenReturn(schemaChangeJobs);
-            when(rollupHandler.getUnfinishedAlterJobV2ByTableId(TABLE_ID)).thenReturn(rollupJobs);
-            body.run();
+            body.accept(schemaChangeHandler, rollupHandler);
         }
     }
 
-    /** A lake ADD INDEX fast-path job — declares allowConcurrentPartitionCreation() == true. */
-    private AlterJobV2 safeJob() {
-        return new LakeTableAddIndexJob(1L, 2L, TABLE_ID, "t", 60_000L, new ArrayList<>(), new ArrayList<>());
+    /** A lake ADD INDEX fast-path job for {@code tableId} — declares allowConcurrentPartitionCreation()==true. */
+    private LakeTableAddIndexJob safeJob(long jobId, long tableId) {
+        return new LakeTableAddIndexJob(jobId, 2L, tableId, "t", 60_000L, new ArrayList<>(), new ArrayList<>());
     }
 
     /** A lake full-rewrite schema-change job — does not declare the capability (false). */
-    private AlterJobV2 unsafeJob() {
-        return new LakeTableSchemaChangeJob(2L, 2L, TABLE_ID, "t", 60_000L);
+    private LakeTableSchemaChangeJob unsafeJob(long jobId, long tableId) {
+        return new LakeTableSchemaChangeJob(jobId, 2L, tableId, "t", 60_000L);
     }
 
     @Test
     public void testNoUnfinishedJobsIsNotTolerable() {
         // Anomaly conservatism: a non-NORMAL state with no unfinished job (e.g. stale state after a
         // crash) must NOT be treated as tolerable; the legacy rejection applies.
-        runWithUnfinishedJobs(new ArrayList<>(), new ArrayList<>(), () ->
+        withRealHandlers((sc, rollup) ->
                 assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID)));
     }
 
     @Test
     public void testAllSafeSchemaChangeJobsTolerable() {
-        runWithUnfinishedJobs(Collections.singletonList(safeJob()), new ArrayList<>(), () ->
-                assertTrue(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID)));
+        withRealHandlers((sc, rollup) -> {
+            sc.addAlterJobV2(safeJob(1L, TABLE_ID));
+            assertTrue(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+        });
     }
 
     @Test
     public void testUnsafeSchemaChangeJobNotTolerable() {
-        runWithUnfinishedJobs(Collections.singletonList(unsafeJob()), new ArrayList<>(), () ->
-                assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID)));
+        withRealHandlers((sc, rollup) -> {
+            sc.addAlterJobV2(unsafeJob(1L, TABLE_ID));
+            assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+        });
     }
 
     @Test
     public void testMixedSafeAndUnsafeNotTolerable() {
         // allMatch: a single unsafe job in the set forces the conservative answer.
-        runWithUnfinishedJobs(Arrays.asList(safeJob(), unsafeJob()), new ArrayList<>(), () ->
-                assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID)));
+        withRealHandlers((sc, rollup) -> {
+            sc.addAlterJobV2(safeJob(1L, TABLE_ID));
+            sc.addAlterJobV2(unsafeJob(2L, TABLE_ID));
+            assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+        });
     }
 
     @Test
     public void testUnsafeRollupJobNotTolerable() {
         // The rollup handler's jobs are included in the check; an unsafe rollup job vetoes.
-        runWithUnfinishedJobs(Collections.singletonList(safeJob()), Collections.singletonList(unsafeJob()), () ->
-                assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID)));
+        withRealHandlers((sc, rollup) -> {
+            sc.addAlterJobV2(safeJob(1L, TABLE_ID));
+            rollup.addAlterJobV2(unsafeJob(2L, TABLE_ID));
+            assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+        });
     }
 
     @Test
     public void testSafeJobsAcrossBothHandlersTolerable() {
-        runWithUnfinishedJobs(Collections.singletonList(safeJob()), Collections.singletonList(safeJob()), () ->
-                assertTrue(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID)));
+        withRealHandlers((sc, rollup) -> {
+            sc.addAlterJobV2(safeJob(1L, TABLE_ID));
+            rollup.addAlterJobV2(safeJob(2L, TABLE_ID));
+            assertTrue(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+        });
+    }
+
+    @Test
+    public void testFinishedSafeJobIsExcluded() {
+        // A FINISHED job is no longer "unfinished" -> filtered out by getUnfinishedAlterJobV2ByTableId
+        // -> the set is empty -> not tolerable (the table should already be NORMAL once it finished).
+        withRealHandlers((sc, rollup) -> {
+            LakeTableAddIndexJob job = safeJob(1L, TABLE_ID);
+            job.setJobState(AlterJobV2.JobState.FINISHED);
+            sc.addAlterJobV2(job);
+            assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+        });
+    }
+
+    @Test
+    public void testCancelledSafeJobIsExcluded() {
+        withRealHandlers((sc, rollup) -> {
+            LakeTableAddIndexJob job = safeJob(1L, TABLE_ID);
+            job.setJobState(AlterJobV2.JobState.CANCELLED);
+            sc.addAlterJobV2(job);
+            assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+        });
+    }
+
+    @Test
+    public void testJobsForOtherTableAreNotConsidered() {
+        // The check is per-table: a safe job on a DIFFERENT table must not make THIS table tolerable.
+        withRealHandlers((sc, rollup) -> {
+            long otherTableId = TABLE_ID + 1;
+            sc.addAlterJobV2(safeJob(1L, otherTableId));
+            assertFalse(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(TABLE_ID));
+            assertTrue(AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(otherTableId));
+        });
     }
 }
