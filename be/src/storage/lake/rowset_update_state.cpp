@@ -552,9 +552,17 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
 
         // Sync indexes on the *updated* columns are not rebuilt by the rewrite (their data is
         // raw-copied without a column writer); carry the src partial segment's .vi over to the
-        // dest segment name instead. Async mode never has a src .vi to carry.
+        // dest segment name instead. Async mode normally needs no carry — the rewrite records the
+        // scheduled ids itself — except on the copy-only fast path (no unmodified columns left,
+        // reachable when a schema change lands between the partial write and its publish): there
+        // the rewrite never sees a SegmentWriter, so carry the src's scheduled ids (async has no
+        // .vi file to copy) lest the metadata refresh wipe them.
         if (!defer_vector_index_build) {
             RETURN_IF_ERROR(carry_src_segment_vector_indexes(params, src_seg_meta, src_path, dest_path, &file_info));
+        } else if (unmodified_column_ids.empty()) {
+            for (int64_t index_id : src_seg_meta.vector_index_ids()) {
+                file_info.vector_index_ids.push_back(index_id);
+            }
         }
         (*replace_segments)[segment_id] = file_info;
     } else {

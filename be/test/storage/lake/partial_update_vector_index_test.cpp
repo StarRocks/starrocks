@@ -60,11 +60,13 @@ protected:
     constexpr static int32_t kKeyUid = 1;
     constexpr static int32_t kValueUid = 2;
     constexpr static int32_t kVecUid = 3;
+    constexpr static int32_t kExtraUid = 5;
 
     // PK schema: c0 INT key | c1 BIGINT (optionally auto-increment) | c2 ARRAY<FLOAT> with a
-    // vector index. index_build_mode: sync by default, async with the given threshold when
-    // |async_threshold| > 0.
-    void create_tablet(bool auto_increment, uint32_t async_threshold) {
+    // vector index | optionally c3 BIGINT (so a partial update can cover c0..c2 and a later
+    // schema drop of c3 leaves no unmodified columns). index_build_mode: sync by default, async
+    // with the given threshold when |async_threshold| > 0.
+    void create_tablet(bool auto_increment, uint32_t async_threshold, bool with_extra_column = false) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -105,6 +107,16 @@ protected:
         child->set_name("element");
         child->set_type("FLOAT");
         child->set_is_nullable(true);
+
+        if (with_extra_column) {
+            auto c3 = schema->add_column();
+            c3->set_unique_id(kExtraUid);
+            c3->set_name("c3");
+            c3->set_type("BIGINT");
+            c3->set_is_key(false);
+            c3->set_is_nullable(false);
+            c3->set_aggregation("REPLACE");
+        }
 
         auto* idx = schema->add_table_indices();
         idx->set_index_id(kIndexId);
@@ -164,8 +176,16 @@ protected:
         auto c1 = Int64Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int64_t));
-        return Chunk({std::move(c0), std::move(c1), build_vector_column(kChunkSize, /*bias=*/0.1f)},
-                     Chunk::SlotHashMap{{0, 0}, {1, 1}, {2, 2}});
+        Columns columns{std::move(c0), std::move(c1), build_vector_column(kChunkSize, /*bias=*/0.1f)};
+        Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}, {2, 2}};
+        if (_tablet_schema->num_columns() == 4) {
+            auto c3 = Int64Column::create();
+            std::vector<int64_t> v3(kChunkSize, 7);
+            c3->append_numbers(v3.data(), v3.size() * sizeof(int64_t));
+            columns.emplace_back(std::move(c3));
+            slot_map[3] = 3;
+        }
+        return Chunk(std::move(columns), slot_map);
     }
 
     int64_t write_full(int64_t version) {
@@ -189,9 +209,9 @@ protected:
         return version + 1;
     }
 
-    // Row-mode partial update through the given slots; triggers rewrite_segment at publish.
-    int64_t partial_update(int64_t version, std::vector<SlotDescriptor*>* slots, Chunk& chunk,
-                           bool miss_auto_increment) {
+    // Row-mode partial update write only (no publish); returns the txn id so a test can mutate
+    // state (e.g. drop a column from the tablet metadata) before publishing.
+    int64_t partial_update_txn(std::vector<SlotDescriptor*>* slots, Chunk& chunk, bool miss_auto_increment) {
         auto indexes = std::vector<uint32_t>(kChunkSize);
         std::iota(indexes.begin(), indexes.end(), 0);
         auto txn_id = next_id();
@@ -211,6 +231,13 @@ protected:
         CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
         CHECK_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
+        return txn_id;
+    }
+
+    // Row-mode partial update through the given slots; triggers rewrite_segment at publish.
+    int64_t partial_update(int64_t version, std::vector<SlotDescriptor*>* slots, Chunk& chunk,
+                           bool miss_auto_increment) {
+        auto txn_id = partial_update_txn(slots, chunk, miss_auto_increment);
         CHECK_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
         return version + 1;
     }
@@ -472,6 +499,55 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_auto_increment_rewrite_builds_sync
                                                                : Status::NotFound(vi_location(seg_meta.filename())));
     ASSERT_EQ(read_footer(seg_meta.filename()).vector_index_storage_type(), VECTOR_INDEX_STORAGE_STANDALONE);
     check_vector_data(version, /*bias=*/0.1f);
+}
+
+// Copy-only rewrite (async): when a schema change drops the only column the partial update left
+// unmodified between the write and its publish, rewrite_partial_update degenerates to a raw file
+// copy and records no ids itself. The src partial segment's scheduled async ids must be carried
+// onto the dest segment instead of being wiped by the metadata refresh — the FE build task and
+// vacuum key off them.
+TEST_F(LakePartialUpdateVectorIndexTest, test_async_copy_only_rewrite_keeps_scheduled_ids) {
+    create_tablet(/*auto_increment=*/false, /*async_threshold=*/1, /*with_extra_column=*/true);
+
+    auto version = write_full(1);
+
+    // Partial update covering c0..c2 (c3 stays unmodified), including the vector column, so the
+    // src partial segment records the async index id at write time (rows >= threshold).
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    TypeDescriptor array_type(LogicalType::TYPE_ARRAY);
+    array_type.children.emplace_back(LogicalType::TYPE_FLOAT);
+    slots.emplace_back(2, "c2", array_type);
+    std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1], &slots[2]};
+    std::vector<int> v0(kChunkSize);
+    std::vector<int64_t> v1(kChunkSize, 200);
+    std::iota(v0.begin(), v0.end(), 0);
+    auto c0 = Int32Column::create();
+    auto c1 = Int64Column::create();
+    c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+    c1->append_numbers(v1.data(), v1.size() * sizeof(int64_t));
+    Chunk chunk({std::move(c0), std::move(c1), build_vector_column(kChunkSize, /*bias=*/0.5f)},
+                Chunk::SlotHashMap{{0, 0}, {1, 1}, {2, 2}});
+    auto txn_id = partial_update_txn(&slot_ptrs, chunk, /*miss_auto_increment=*/false);
+
+    // Fast schema evolution drops c3 before the publish: the publish-time schema now has no
+    // column outside the update set, so unmodified_column_ids is empty and the rewrite takes the
+    // copy-only fast path.
+    {
+        auto base = _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version).value();
+        auto mutated = std::make_shared<TabletMetadata>(*base);
+        auto* schema = mutated->mutable_schema();
+        ASSERT_EQ(schema->column(3).unique_id(), kExtraUid);
+        schema->mutable_column()->RemoveLast();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*mutated));
+    }
+    CHECK_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    version = version + 1;
+
+    auto seg_meta = rewritten_segment_meta(version);
+    ASSERT_EQ(seg_meta.vector_index_ids_size(), 1);
+    ASSERT_EQ(seg_meta.vector_index_ids(0), kIndexId);
 }
 
 } // namespace starrocks::lake
