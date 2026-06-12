@@ -1314,9 +1314,11 @@ public class VariantTest {
         Assertions.assertEquals(a.hashCode(), b.hashCode());
         Assertions.assertNotEquals(a, null);
         Assertions.assertNotEquals(a, Variant.of(IntegerType.BIGINT, "12"));
-        // equals is exact (scale-sensitive); compareTo is value-ordered (scale-independent).
+        // equals is value-based and consistent with compareTo: the same value at a different
+        // scale is equal and hashes equally (so Tuple/Set dedup works for decimal boundaries).
         Variant scaled = Variant.of(type, "12.3400");
-        Assertions.assertNotEquals(a, scaled);
+        Assertions.assertEquals(a, scaled);
+        Assertions.assertEquals(a.hashCode(), scaled.hashCode());
         Assertions.assertEquals(0, a.compareTo(scaled));
     }
 

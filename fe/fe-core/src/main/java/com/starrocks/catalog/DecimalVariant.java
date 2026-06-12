@@ -86,14 +86,17 @@ public class DecimalVariant extends Variant {
         if (object == null || !(object instanceof DecimalVariant)) {
             return false;
         }
-        // Exact-value equality (BigDecimal.equals is scale-sensitive); ordering uses
-        // compareTo, which is scale-independent. Neither the planner nor the backend
-        // relies on decimal equals.
-        return this.value.equals(((DecimalVariant) object).value);
+        // Value-based equality, kept consistent with compareTo: BigDecimal.compareTo is
+        // scale-independent (1.0 == 1.00), so equals must be too. BigDecimal.equals would be
+        // scale-sensitive and break Tuple equals/hashCode-based dedup (e.g.
+        // ColocateRangeMgr.hasBoundaryAt, any Set<Tuple>) when the same boundary value is
+        // written at different scales.
+        return this.value.compareTo(((DecimalVariant) object).value) == 0;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(value);
+        // stripTrailingZeros canonicalizes scale so values equal under compareTo hash equally.
+        return value.stripTrailingZeros().hashCode();
     }
 }
