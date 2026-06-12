@@ -1309,31 +1309,33 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 #endif
 }
 
-#ifdef WITH_TENANN
-StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const roaring::Roaring& candidate) {
-    if (candidate.cardinality() == 0 || _opts.pred_tree.empty()) {
+StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(const PredicateTree& pred_tree, const Schema& schema,
+                                                        const std::vector<ColumnIterator*>& column_iterators_by_cid,
+                                                        std::vector<rowid_t>* fallback_rowids,
+                                                        const roaring::Roaring& candidate) {
+    if (candidate.cardinality() == 0 || pred_tree.empty()) {
         return candidate;
     }
 
-    // cid -> field index in _schema (same pattern as _apply_inverted_index()).
+    // cid -> field index in `schema`.
     std::unordered_map<ColumnId, size_t> cid_2_fid;
-    for (size_t i = 0; i < _schema.num_fields(); i++) {
-        cid_2_fid.emplace(_schema.field(i)->id(), i);
+    for (size_t i = 0; i < schema.num_fields(); i++) {
+        cid_2_fid.emplace(schema.field(i)->id(), i);
     }
 
-    // Collect every column referenced by the predicate tree, with its field, once. The resolver only
-    // chooses PRE when every such column is readable (exactness), so a missing iterator is a hard
-    // error rather than a silent skip -- silently skipping would make the bitmap incomplete and
-    // under-return.
+    // Collect every column referenced by the predicate tree, with its field, once. A missing
+    // iterator/field is a hard error rather than a silent skip -- silently skipping would make the
+    // bitmap incomplete (too wide) and let a downstream k-limit under-return.
     std::vector<std::pair<ColumnId, FieldPtr>> pred_columns;
     auto pred_schema = std::make_shared<Schema>();
-    for (ColumnId cid : _opts.pred_tree.column_ids()) {
+    for (ColumnId cid : pred_tree.column_ids()) {
         auto it = cid_2_fid.find(cid);
-        if (it == cid_2_fid.end() || cid >= _column_iterators.size() || _column_iterators[cid] == nullptr) {
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() ||
+            column_iterators_by_cid[cid] == nullptr) {
             return Status::InternalError(
-                    strings::Substitute("vector residual prefilter: predicate column $0 is not readable", cid));
+                    strings::Substitute("pred-tree bitmap: predicate column $0 is not readable", cid));
         }
-        const FieldPtr& field = _schema.field(it->second);
+        const FieldPtr& field = schema.field(it->second);
         pred_columns.emplace_back(cid, field);
         pred_schema->append(field);
     }
@@ -1348,39 +1350,35 @@ StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const r
         const uint32_t bn = r.end() - r.begin();
 
         // Build a chunk keyed by column id so PredicateTree::evaluate (chunk->get_column_by_id(cid))
-        // can evaluate the WHOLE tree -- AND / OR / compound / single-column expr -- not just the
-        // per-column immediate map. This is the Gap2 fix: the old immediate-map path silently dropped
-        // OR/expr residuals, leaving the bitmap too wide and under-returning.
+        // can evaluate the WHOLE tree -- AND / OR / compound / single-column expr -- not just a
+        // per-column immediate map (which silently drops OR/expr nodes and widens the result).
         Columns cols;
         cols.reserve(pred_columns.size());
         for (const auto& [cid, field] : pred_columns) {
             MutableColumnPtr col = ChunkFactory::column_from_field(*field);
             // next_batch reads from the current page and does not seek internally; position first.
-            RETURN_IF_ERROR(_column_iterators[cid]->seek_to_ordinal(r.begin()));
+            RETURN_IF_ERROR(column_iterators_by_cid[cid]->seek_to_ordinal(r.begin()));
             SparseRange<> sub;
             sub.add(r);
-            RETURN_IF_ERROR(_column_iterators[cid]->next_batch(sub, col.get()));
+            RETURN_IF_ERROR(column_iterators_by_cid[cid]->next_batch(sub, col.get()));
             cols.emplace_back(std::move(col));
         }
-        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in evaluate().
+        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in
+        // evaluate().
         Chunk chunk(std::move(cols), pred_schema);
 
-        // An inverted-index fallback predicate (e.g. a MATCH inside an OR that cannot be applied as a
-        // standalone index filter) maps chunk row i to a segment rowid via the iterator's rowid buffer
-        // and probes a precomputed bitmap. _apply_inverted_index already ran (calling order in
-        // _init_internal), so the bitmap is ready; we just publish this batch's rowids -- contiguous
-        // [r.begin, r.end) -- so the fallback resolves the right rows instead of dereferencing an empty
-        // buffer (SIGSEGV). Without this, a residual ANN query with a MATCH-in-OR residual crashes.
-        if (_inverted_index_ctx != nullptr && _inverted_index_ctx->has_fallback_predicates) {
-            auto& rowids = _inverted_index_ctx->rowid_buffer;
-            rowids.resize(bn);
+        // Publish this batch's contiguous segment rowids for predicates that resolve chunk rows back
+        // to segment rowids (e.g. the inverted-index fallback for a MATCH inside an OR). Without
+        // this, such a predicate dereferences an empty/stale buffer.
+        if (fallback_rowids != nullptr) {
+            fallback_rowids->resize(bn);
             for (uint32_t i = 0; i < bn; i++) {
-                rowids[i] = r.begin() + i;
+                (*fallback_rowids)[i] = r.begin() + i;
             }
         }
 
         selection.assign(bn, 1);
-        RETURN_IF_ERROR(_opts.pred_tree.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
+        RETURN_IF_ERROR(pred_tree.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
         for (uint32_t i = 0; i < bn; i++) {
             if (selection[i]) {
                 result.add(r.begin() + i);
@@ -1389,7 +1387,24 @@ StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const r
     }
     return result;
 }
-#endif
+
+// Thin adapter over evaluate_pred_tree_to_bitmap (declared in segment_iterator.h, independently
+// unit-tested): exposes the cid-indexed raw iterators and, when inverted-index fallback predicates
+// are present (e.g. a MATCH inside an OR), the rowid buffer they resolve chunk rows through.
+// _apply_inverted_index already ran (call order in _init_internal), so the fallback bitmaps are
+// ready by the time this is reached.
+StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const roaring::Roaring& candidate) {
+    std::vector<ColumnIterator*> iters;
+    iters.reserve(_column_iterators.size());
+    for (const auto& it : _column_iterators) {
+        iters.push_back(it.get());
+    }
+    std::vector<rowid_t>* fallback_rowids =
+            _inverted_index_ctx != nullptr && _inverted_index_ctx->has_fallback_predicates
+                    ? &_inverted_index_ctx->rowid_buffer
+                    : nullptr;
+    return evaluate_pred_tree_to_bitmap(_opts.pred_tree, _schema, iters, fallback_rowids, candidate);
+}
 
 Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {
     if (result_ids->empty()) {
