@@ -224,13 +224,24 @@ jobs:
   # `context-base` MCP with `code_kb` USAGE (read). gh is absent in the container → the skill uses
   # the GitHub REST API (GITHUB_TOKEN injected). --comment applies a strict confidence gate and emits
   # either a sticky-marked briefing or the sentinel "MODULE-RISK: none" (then we post nothing).
+  #
+  # SECURITY (pull_request_target): this job injects secrets (GITHUB_TOKEN, CLAUDE_CODE_OAUTH_TOKEN)
+  # into `claude --dangerously-skip-permissions`, which reads attacker-influenceable PR body/diff and
+  # whose output is posted back to the PR. An untrusted author could prompt-inject the model to run
+  # bash / emit secrets (e.g. after the marker) and have them published. So it is GATED to TRUSTED
+  # authors only (author_association OWNER/MEMBER/COLLABORATOR = write access); external / first-time
+  # contributors never reach the model. (assign-reviewer tolerates all authors because its host step
+  # extracts only login-shaped tokens — a strict whitelist; module-risk's output is free-form, so it
+  # needs the author gate. The marker-bounded extraction below is defense-in-depth, not the control.)
+  # For an external PR a maintainer can still run /github-pr-module-risk:review manually.
   module-risk:
     runs-on: [self-hosted, normal]
     continue-on-error: true
     if: >
       (github.event.action == 'opened' || github.event.action == 'reopened') &&
       !startsWith(github.head_ref, 'mergify/') &&
-      !contains(github.head_ref, '-sync-pr-')
+      !contains(github.head_ref, '-sync-pr-') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
