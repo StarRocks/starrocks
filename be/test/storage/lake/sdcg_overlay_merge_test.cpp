@@ -58,14 +58,12 @@ static const MergedColumnPresence* find_presence(const MergedOverlay& m, int32_t
 // Union uids first-seen: [10,20,30]; union rowids {0,5,7} -> ordinals 0,1,2.
 TEST(SdcgOverlayMergeTest, LastWriteWinsAcrossLayers) {
     std::vector<OverlaySparseLayer> layers;
-    layers.push_back(OverlaySparseLayer{
-            /*version=*/1, /*column_uids=*/{10, 20}, /*source_rowids=*/{0, 5},
-            /*values=*/{make_int32_col({100, 105}), make_int32_col({200, 205})}});
-    layers.push_back(OverlaySparseLayer{
-            /*version=*/2, /*column_uids=*/{10}, /*source_rowids=*/{5, 7},
-            /*values=*/{make_int32_col({1105, 1107})}});
-    layers.push_back(OverlaySparseLayer{
-            /*version=*/3, /*column_uids=*/{30}, /*source_rowids=*/{0}, /*values=*/{make_int32_col({300})}});
+    layers.push_back(OverlaySparseLayer{/*version=*/1, /*column_uids=*/{10, 20}, /*source_rowids=*/{0, 5},
+                                        /*values=*/{make_int32_col({100, 105}), make_int32_col({200, 205})}});
+    layers.push_back(OverlaySparseLayer{/*version=*/2, /*column_uids=*/{10}, /*source_rowids=*/{5, 7},
+                                        /*values=*/{make_int32_col({1105, 1107})}});
+    layers.push_back(OverlaySparseLayer{/*version=*/3, /*column_uids=*/{30}, /*source_rowids=*/{0},
+                                        /*values=*/{make_int32_col({300})}});
 
     auto res = merge_overlay_layers(layers);
     ASSERT_TRUE(res.ok()) << res.status();
@@ -128,9 +126,8 @@ TEST(SdcgOverlayMergeTest, LastWriteWinsAcrossLayers) {
 
 TEST(SdcgOverlayMergeTest, SingleLayerIsIdentity) {
     std::vector<OverlaySparseLayer> layers;
-    layers.push_back(OverlaySparseLayer{
-            /*version=*/7, /*column_uids=*/{42}, /*source_rowids=*/{3, 9, 11},
-            /*values=*/{make_int32_col({30, 90, 110})}});
+    layers.push_back(OverlaySparseLayer{/*version=*/7, /*column_uids=*/{42}, /*source_rowids=*/{3, 9, 11},
+                                        /*values=*/{make_int32_col({30, 90, 110})}});
     auto res = merge_overlay_layers(layers);
     ASSERT_TRUE(res.ok()) << res.status();
     const MergedOverlay& m = res.value();
@@ -152,8 +149,8 @@ TEST(SdcgOverlayMergeTest, EmptyLayersError) {
 TEST(SdcgOverlayMergeTest, SizeMismatchError) {
     std::vector<OverlaySparseLayer> layers;
     // 2 source_rowids but value column has 1 row -> inconsistent.
-    layers.push_back(OverlaySparseLayer{
-            /*version=*/1, /*column_uids=*/{10}, /*source_rowids=*/{0, 1}, /*values=*/{make_int32_col({100})}});
+    layers.push_back(OverlaySparseLayer{/*version=*/1, /*column_uids=*/{10}, /*source_rowids=*/{0, 1},
+                                        /*values=*/{make_int32_col({100})}});
     EXPECT_FALSE(merge_overlay_layers(layers).ok());
 }
 
