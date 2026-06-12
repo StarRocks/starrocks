@@ -71,6 +71,12 @@ CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 
+// Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
+// When writing a txn log takes longer than this threshold, the stack trace of the slow thread
+// is dumped to the log to help diagnose slow object-storage writes.
+// Disabled by default (<= 0); set to a positive value such as 4000 (4 seconds) to enable.
+CONF_mInt64(lake_put_txn_log_timeout_guard_ms, "-1");
+
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
