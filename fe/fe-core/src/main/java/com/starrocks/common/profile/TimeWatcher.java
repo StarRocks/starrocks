@@ -34,7 +34,7 @@ public class TimeWatcher {
     private final List<String> levels = Lists.newArrayList();
     private final Table<String, String, ScopedTimer> scopedTimers = HashBasedTable.create();
 
-    public Timer scope(long time, String name) {
+    public synchronized Timer scope(long time, String name) {
         ScopedTimer t;
         String prefix = String.join("/", levels);
         if (scopedTimers.row(name).containsKey(prefix)) {
@@ -81,8 +81,11 @@ public class TimeWatcher {
             ScopedTimer mine = this.scopedTimers.get(name, prefix);
             if (mine == null) {
                 mine = new ScopedTimer(otherTimer.firstTimePointNanoSecond, name);
-                // scopeLevel from levels.size() is wrong at merge time — use prefix depth
-                mine.scopeLevel = (int) prefix.chars().filter(c -> c == '/').count();
+                // scopeLevel from levels.size() is wrong at merge time.
+                // Prefix "A/B" has 1 '/' → scopeLevel 2 (= levels.size() when prefix was built).
+                mine.scopeLevel = prefix.isEmpty()
+                        ? 0
+                        : (int) prefix.chars().filter(c -> c == '/').count() + 1;
                 this.scopedTimers.put(name, prefix, mine);
             }
             mine.accumulateFrom(otherTimer);

@@ -201,4 +201,58 @@ public class TracerTest extends PlanTestBase {
                 "Expected forkedParallelWork[400] in output but got: " + output);
         Tracers.close();
     }
+
+    @Test
+    public void testTracerForkPrepareCollectMetaPattern() throws Exception {
+        // Replicates the exact fork/merge orchestration used by PrepareCollectMetaTask.execute():
+        // 1. outer scope on owner thread ("EXTERNAL.parallel_prepare_metadata")
+        // 2. fork per parallel task → submit to executor
+        // 3. join all futures
+        // 4. merge all forks back
+        // 5. shutdown executor in finally
+        Tracers.register(connectContext);
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.BASE, false, false);
+        Tracers owner = Tracers.get();
+
+        int numTasks = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(numTasks);
+        try {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.BASE,
+                    "BASE.parallel_prepare_metadata")) {
+                List<Tracers> forks = new ArrayList<>(numTasks);
+                Future<?>[] futures = new Future[numTasks];
+                for (int i = 0; i < numTasks; i++) {
+                    Tracers forked = owner.fork();
+                    forks.add(forked);
+                    String scopeName = "BASE.processSplit.table" + i;
+                    futures[i] = executor.submit(() -> {
+                        try (Timer t = Tracers.watchScope(forked, Tracers.Module.BASE,
+                                scopeName)) {
+                            // simulate metadata preparation work
+                        }
+                        return null;
+                    });
+                }
+                for (Future<?> f : futures) {
+                    f.get();
+                }
+                for (Tracers f : forks) {
+                    owner.mergeFrom(f);
+                }
+            }
+        } finally {
+            executor.shutdown();
+        }
+
+        String output = Tracers.printScopeTimer();
+        // Outer scope present and wrapping the parallel work
+        Assertions.assertTrue(output.contains("BASE.parallel_prepare_metadata"),
+                "Expected outer scope in output but got: " + output);
+        // Each of the 4 forks has its own per-table scope in the merged output
+        for (int i = 0; i < numTasks; i++) {
+            Assertions.assertTrue(output.contains("BASE.processSplit.table" + i),
+                    "Expected per-table scope table" + i + " in output but got: " + output);
+        }
+        Tracers.close();
+    }
 }

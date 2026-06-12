@@ -100,7 +100,7 @@ public class Tracers {
 
     /**
      * Merge timer data from a forked Tracers back into this (owner) Tracers.
-     * Must be called from the owner thread or externally synchronized.
+     * Thread-safe — may be called from a worker thread after fork completes.
      */
     public void mergeFrom(Tracers other) {
         this.allTracer[1].mergeFrom(other.allTracer[1]);
