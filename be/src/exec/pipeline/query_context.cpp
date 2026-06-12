@@ -55,6 +55,12 @@ QueryContext::QueryContext()
     _lifetime_sw.start();
 }
 
+QueryContextPtr QueryContext::create() {
+    auto query_ctx = std::make_shared<QueryContext>();
+    query_ctx->_fragment_mgr = std::make_unique<FragmentContextManager>(query_ctx);
+    return query_ctx;
+}
+
 QueryContext::~QueryContext() noexcept {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
     // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will
@@ -100,6 +106,19 @@ bool QueryContext::decrement_num_active_fragments() {
     size_t old = _num_active_fragments.fetch_sub(1);
     DCHECK_GE(old, 1);
     return old == 1;
+}
+
+void QueryContext::count_down_fragment() {
+    if (!decrement_num_active_fragments()) {
+        return;
+    }
+
+    if (auto* lifecycle = _query_lifecycle.load(); lifecycle != nullptr) {
+        // Keep manager-owned query contexts alive if removal erases the last shared_ptr.
+        [[maybe_unused]] auto self = weak_from_this().lock();
+        auto id = query_id();
+        lifecycle->on_query_releasable(id);
+    }
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {

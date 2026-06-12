@@ -95,7 +95,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _exec_env->query_context_mgr()->count_down_fragments(_query_ctx);
+    _query_ctx->count_down_fragment();
 }
 
 // Test export with header option
@@ -177,7 +177,7 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _exec_env->query_context_mgr()->count_down_fragments(_query_ctx);
+    _query_ctx->count_down_fragment();
 
     // Clean up test directory
     std::filesystem::remove_all(test_dir);

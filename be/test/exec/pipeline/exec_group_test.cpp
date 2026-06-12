@@ -26,7 +26,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/fragment_lifecycle.h"
+#include "exec/pipeline/primitives/execution_group_lifecycle.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -61,17 +61,17 @@ private:
     ColocateExecutionGroup* _group;
 };
 
-class MockFragmentLifecycle final : public FragmentLifecycle {
+class MockExecutionGroupLifecycle final : public ExecutionGroupLifecycle {
 public:
     void on_execution_group_finished() override { ++num_finished_groups; }
 
     size_t num_finished_groups = 0;
 };
 
-TEST(ExecutionGroupTest, NotifiesFragmentLifecycleOnceWhenAllPipelinesFinish) {
+TEST(ExecutionGroupTest, NotifiesExecutionGroupLifecycleOnceWhenAllPipelinesFinish) {
     NormalExecutionGroup group;
-    MockFragmentLifecycle lifecycle;
-    group.attach_fragment_lifecycle(&lifecycle);
+    MockExecutionGroupLifecycle lifecycle;
+    group.attach_execution_group_lifecycle(&lifecycle);
 
     Pipeline pipeline1(1, {}, &group);
     Pipeline pipeline2(2, {}, &group);
