@@ -271,6 +271,7 @@ set(STORAGE_FILES
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
+    lake/sdcg_overlay_merge.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
