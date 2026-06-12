@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv.ivm;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.BaseTableInfo;
@@ -50,7 +51,9 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -156,7 +159,48 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         try (Timer ignored = Tracers.watchScope("MVRefreshPrepareRefreshPlan")) {
             insertStmt = prepareRefreshPlan();
         }
+        recordImvSourceRangesOnTaskRun();
         return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
+    }
+
+    /**
+     * Record the staged TVR version range and snapshot commit times per base table on the task
+     * run's extra message, surfaced via information_schema.task_runs.EXTRA_MESSAGE.
+     * Must stay after prepareRefreshPlan(): recording earlier leaves stale ranges on the task
+     * run when the hybrid processor falls back to PCT on an IVM planning failure.
+     */
+    private void recordImvSourceRangesOnTaskRun() {
+        updateTaskRunStatus(status -> {
+            Map<String, Map<String, String>> versionRanges = Maps.newHashMap();
+            Map<String, Map<String, String>> timestampRanges = Maps.newHashMap();
+            for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+                TvrVersionRange delta = ((TvrTableSnapshotInfo) snapshotInfo).getTvrSnapshot();
+                if (delta == null) {
+                    continue;
+                }
+                BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
+                String tableFullName = baseTableInfo.getReadableString();
+                // TvrVersion.toString() renders the MIN/MAX sentinels as "MIN"/"MAX"
+                versionRanges.put(tableFullName, ImmutableMap.of(
+                        "start", delta.from().toString(),
+                        "end", delta.to().toString()));
+                timestampRanges.put(tableFullName,
+                        resolveCommitTimeRange(baseTableInfo.getDbName(), snapshotInfo.getBaseTable(), delta));
+            }
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            extraMessage.setImvSourceVersionRange(versionRanges);
+            extraMessage.setImvSourceTimestampRange(timestampRanges);
+        });
+    }
+
+    private static Map<String, String> resolveCommitTimeRange(String dbName, Table table, TvrVersionRange delta) {
+        Map<String, String> commitTimes = Maps.newLinkedHashMap();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        delta.start().flatMap(version -> metadataMgr.getVersionCommitTimeMillis(dbName, table, version))
+                .ifPresent(time -> commitTimes.put("start", String.valueOf(time)));
+        delta.end().flatMap(version -> metadataMgr.getVersionCommitTimeMillis(dbName, table, version))
+                .ifPresent(time -> commitTimes.put("end", String.valueOf(time)));
+        return commitTimes;
     }
 
     @Override
