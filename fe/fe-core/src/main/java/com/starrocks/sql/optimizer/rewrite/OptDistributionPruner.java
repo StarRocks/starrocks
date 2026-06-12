@@ -32,6 +32,7 @@ import com.starrocks.planner.RangeDistributionPruner;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,15 +45,27 @@ public class OptDistributionPruner {
 
     public static List<Long> pruneTabletIds(LogicalOlapScanOperator olapScanOperator,
                                             List<Long> selectedPartitionIds) {
-        OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+        return computeSelectedTabletIds(olapScanOperator, selectedPartitionIds,
+                olapScanOperator.getSelectedIndexMetaId());
+    }
+
+    /**
+     * Computes the selected tablet ids within {@code selectedPartitionIds} from the scan's
+     * distribution-column predicates. Typed against the base LogicalScanOperator because it reads
+     * only generic scan state (table, predicate, column filters), nothing OLAP-scan specific.
+     * {@code selectedIndexMetaId} picks the materialized index per physical partition.
+     */
+    private static List<Long> computeSelectedTabletIds(LogicalScanOperator scan,
+                                                      List<Long> selectedPartitionIds, long selectedIndexMetaId) {
+        OlapTable olapTable = (OlapTable) scan.getTable();
 
         List<Long> result = Lists.newArrayList();
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex table = physicalPartition.getLatestIndex(olapScanOperator.getSelectedIndexMetaId());
-                Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(),
-                        olapScanOperator, olapTable.getIdToColumn());
+                MaterializedIndex index = physicalPartition.getLatestIndex(selectedIndexMetaId);
+                Collection<Long> tabletIds = distributionPrune(index, partition.getDistributionInfo(),
+                        scan, olapTable.getIdToColumn());
                 result.addAll(tabletIds);
             }
         }
@@ -60,7 +73,7 @@ public class OptDistributionPruner {
     }
 
     private static Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
-                                                      LogicalOlapScanOperator operator, Map<ColumnId, Column> idToColumn) {
+                                                      LogicalScanOperator operator, Map<ColumnId, Column> idToColumn) {
         if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH ||
                 distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
             Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
