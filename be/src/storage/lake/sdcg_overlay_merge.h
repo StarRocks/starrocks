@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-#include "column/vectorized_fwd.h"
+#include "column/column.h" // ColumnPtr / MutableColumnPtr (Column::Ptr / MutablePtr) + vectorized_fwd aliases
 #include "common/statusor.h"
 
 namespace starrocks::lake {
