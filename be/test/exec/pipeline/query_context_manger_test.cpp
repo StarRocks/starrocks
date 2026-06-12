@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <chrono>
+#include <memory>
 #include <random>
 
 #include "base/testutil/assert.h"
@@ -376,6 +377,43 @@ TEST(QueryContextManagerTest, testQueryLifecycleNotifiedOnlyWhenLastFragmentFini
     ASSERT_EQ(0, ctx.num_active_fragments());
     ASSERT_EQ(1, lifecycle.num_releasable_queries);
     ASSERT_EQ(query_id, lifecycle.last_query_id);
+}
+
+class DroppingQueryLifecycle final : public QueryLifecycle {
+public:
+    explicit DroppingQueryLifecycle(QueryContextPtr* query_ctx) : _query_ctx(query_ctx) {}
+
+    void on_query_releasable(const TUniqueId& query_id) override {
+        last_query_id = query_id;
+        _query_ctx->reset();
+        query_ctx_alive_during_callback = !weak_query_ctx.expired();
+    }
+
+    QueryContextPtr* _query_ctx;
+    std::weak_ptr<QueryContext> weak_query_ctx;
+    bool query_ctx_alive_during_callback = false;
+    TUniqueId last_query_id;
+};
+
+TEST(QueryContextManagerTest, testCountDownFragmentKeepsSelfAliveDuringLifecycleCallback) {
+    auto query_ctx = QueryContext::create();
+    auto* raw_query_ctx = query_ctx.get();
+    TUniqueId query_id;
+    query_id.hi = 30;
+    query_id.lo = 40;
+    query_ctx->set_query_id(query_id);
+    query_ctx->increment_num_fragments();
+
+    DroppingQueryLifecycle lifecycle(&query_ctx);
+    lifecycle.weak_query_ctx = query_ctx;
+    query_ctx->set_query_lifecycle(&lifecycle);
+
+    raw_query_ctx->count_down_fragment();
+
+    ASSERT_EQ(query_id, lifecycle.last_query_id);
+    ASSERT_TRUE(lifecycle.query_ctx_alive_during_callback);
+    ASSERT_EQ(nullptr, query_ctx);
+    ASSERT_TRUE(lifecycle.weak_query_ctx.expired());
 }
 
 TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateExecStats) {

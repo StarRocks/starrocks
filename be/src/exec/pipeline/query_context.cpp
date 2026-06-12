@@ -114,7 +114,10 @@ void QueryContext::count_down_fragment() {
     }
 
     if (auto* lifecycle = _query_lifecycle.load(); lifecycle != nullptr) {
-        lifecycle->on_query_releasable(query_id());
+        // Keep manager-owned query contexts alive if removal erases the last shared_ptr.
+        [[maybe_unused]] auto self = weak_from_this().lock();
+        auto id = query_id();
+        lifecycle->on_query_releasable(id);
     }
 }
 
