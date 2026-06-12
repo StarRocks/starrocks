@@ -149,6 +149,15 @@ This topic introduces the following types of BE configurations:
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
 - Introduced in: v4.2
 
+### lake_put_txn_log_timeout_guard_ms
+
+- Default: -1
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout guard for writing a transaction log to object storage in a shared-data cluster (the `put_txn_log` and `put_combined_txn_log` paths). If writing a transaction log takes longer than this value, StarRocks dumps the stack trace of the slow thread to the BE log to help diagnose slow object-storage writes. Disabled by default (a value less than or equal to `0` disables the guard); set it to a positive value such as `4000` (4 seconds) to enable.
+- Introduced in: -
+
 ### lake_rows_mapper_read_parallelism
 
 - Default: 32

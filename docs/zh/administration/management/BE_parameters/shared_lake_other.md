@@ -146,6 +146,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
 - 引入版本：v4.2
 
+### lake_put_txn_log_timeout_guard_ms
+
+- 默认值：-1
+- 类型：Int64
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算分离集群下，向对象存储写入事务日志（`put_txn_log` 和 `put_combined_txn_log` 路径）的超时守护阈值。如果写入一条事务日志的耗时超过该值，StarRocks 会将慢线程的堆栈打印到 BE 日志，以便诊断对象存储写入慢的问题。默认关闭（小于或等于 `0` 表示关闭该守护）；如需开启，可将其设置为正值，例如 `4000`（4 秒）。
+- 引入版本：-
+
 ### lake_rows_mapper_read_parallelism
 
 - 默认值：32
