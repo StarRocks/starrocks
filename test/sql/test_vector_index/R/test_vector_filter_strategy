@@ -1,0 +1,255 @@
+-- name: test_vector_filter_strategy @sequential @native
+ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE vt (
+    id   bigint        NOT NULL,
+    vec  ARRAY<FLOAT>  NOT NULL,
+    cat  int           NOT NULL,   -- scalar, no index; cat = id % 10  (10 uniform buckets)
+    tag  int           NOT NULL,   -- scalar, no index; tag = id % 100 (for very-low selectivity)
+    doc  varchar(64)   NOT NULL,   -- fulltext, GIN index
+    INDEX idx_vec (vec) USING VECTOR (
+        "index_type"       = "hnsw",
+        "dim"              = "5",
+        "metric_type"      = "l2_distance",
+        "is_vector_normed" = "false",
+        "M"                = "160",
+        "efconstruction"   = "400",
+        "efsearch"         = "200"),
+    INDEX idx_doc (doc) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into vt
+select g as id,
+       [cast(g as float), cast(g % 7 as float), cast(g % 13 as float), cast(g % 5 as float), cast(g % 3 as float)] as vec,
+       g % 10  as cat,
+       g % 100 as tag,
+       concat_ws(' ', if(g % 2 = 0, 'red', 'blue'), if(g % 50 = 0, 'rare', 'common')) as doc
+from (select generate_series as g from TABLE(generate_series(0, 999))) t;
+-- result:
+-- !result
+select count(*) from vt;
+-- result:
+1000
+-- !result
+function: assert_explain_contains("select id from vt order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select id from vt where cat < 5 and doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'pre';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'brute_force';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 9 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 9 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'brute_force';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 1 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 1 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'brute_force';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where tag = 0 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where tag = 0 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where tag = 0 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where tag = 0 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'brute_force';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'brute_force';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where doc match 'rare' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'rare' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where doc match 'rare' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'rare' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 5 and doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 and doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select id from vt where cat = 0 or cat = 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat = 0 or cat = 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat = 0 or cat = 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select id from vt where cat + tag > 50 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat + tag > 50 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat + tag > 50 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'post';
+-- result:
+-- !result
+select count(*) from (select id, cat from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10) s where s.cat >= 1;
+-- result:
+0
+-- !result
+function: assert_equal_result("select id from vt where cat < 9 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 9 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE NAME = 'enable_vector_index_residual_prefilter';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE NAME = 'enable_vector_index_residual_prefilter';
+-- result:
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+DROP TABLE vt;
+-- result:
+-- !result
+CREATE TABLE vt_pk (
+    id   bigint        NOT NULL,
+    vec  ARRAY<FLOAT>  NOT NULL,
+    cat  int           NOT NULL,
+    INDEX idx_vec (vec) USING VECTOR (
+        "index_type"       = "hnsw",
+        "dim"              = "5",
+        "metric_type"      = "l2_distance",
+        "is_vector_normed" = "false",
+        "M"                = "160",
+        "efconstruction"   = "400",
+        "efsearch"         = "200")
+) ENGINE=OLAP
+PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into vt_pk
+select g as id,
+       [cast(g as float), cast(g % 7 as float), cast(g % 13 as float), cast(g % 5 as float), cast(g % 3 as float)] as vec,
+       g % 10 as cat
+from (select generate_series as g from TABLE(generate_series(0, 999))) t;
+-- result:
+-- !result
+function: assert_explain_contains("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt_pk where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'brute_force';
+-- result:
+-- !result
+function: assert_equal_result("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt_pk where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+-- result:
+None
+-- !result
+set ann_filter_strategy = 'auto';
+-- result:
+-- !result
+DROP TABLE vt_pk;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "false");
+-- result:
+-- !result

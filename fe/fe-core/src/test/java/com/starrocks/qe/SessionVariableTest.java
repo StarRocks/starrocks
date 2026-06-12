@@ -154,6 +154,27 @@ public class SessionVariableTest {
     }
 
     @Test
+    public void testAnnFilterStrategyToThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+        // default: auto -> 0 (BE resolver decides)
+        Assertions.assertEquals("auto", sessionVariable.getAnnFilterStrategy());
+        Assertions.assertEquals(0, sessionVariable.getAnnFilterStrategyValue());
+        Assertions.assertEquals(0, sessionVariable.toThrift().getAnn_filter_strategy());
+
+        // pre/post/brute_force map to the AnnFilterStrategy ordinals 1/2/3, case-insensitive.
+        sessionVariable.setAnnFilterStrategy("pre");
+        Assertions.assertEquals(1, sessionVariable.toThrift().getAnn_filter_strategy());
+        sessionVariable.setAnnFilterStrategy("POST");
+        Assertions.assertEquals(2, sessionVariable.toThrift().getAnn_filter_strategy());
+        sessionVariable.setAnnFilterStrategy("brute_force");
+        Assertions.assertEquals(3, sessionVariable.toThrift().getAnn_filter_strategy());
+
+        // unknown value falls back to AUTO (0) rather than throwing.
+        sessionVariable.setAnnFilterStrategy("nonsense");
+        Assertions.assertEquals(0, sessionVariable.getAnnFilterStrategyValue());
+    }
+
+    @Test
     public void testBinaryEncodingSettersNormalizeAndValidate() {
         SessionVariable sessionVariable = new SessionVariable();
 

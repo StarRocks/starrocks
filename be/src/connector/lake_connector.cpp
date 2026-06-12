@@ -403,6 +403,9 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
         _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
+        _params.vector_search_option->filter_strategy = _runtime_state->query_options().__isset.ann_filter_strategy
+                                                                ? _runtime_state->query_options().ann_filter_strategy
+                                                                : 0;
     }
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
@@ -442,6 +445,16 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
+
+    // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
+    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
+    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // operator placed ABOVE this scan in the execution tree (FragmentExecutor's tree walk sets it on the
+    // ConnectorScanNode). See design doc §7 (lake twin). The provider's scan node is null when the data
+    // source is built without one (UT path); no scan node means nothing sits above the iterator.
+    const auto* scan_node = _provider->_scan_node;
+    _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
+                                           (scan_node != nullptr && scan_node->is_filtered_above_iterator());
 
     // Range
     for (const auto& key_range : key_ranges) {

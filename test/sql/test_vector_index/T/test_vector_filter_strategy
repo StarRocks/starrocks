@@ -1,0 +1,195 @@
+-- name: test_vector_filter_strategy @sequential @native
+-- ===========================================================================
+-- End-to-end coverage for the vector scalar/fulltext filter strategy:
+--   FE unconditionally rewrites ORDER BY approx_*_distance(indexed_col, const)
+--   LIMIT k into an ANN plan (keeping the scalar/fulltext residual); the BE
+--   resolver then decides PRE / POST / BRUTE per segment.
+--
+-- The PRE-vs-BRUTE decision is a BE-runtime choice and is NOT visible in
+-- EXPLAIN (EXPLAIN always shows VECTORINDEX: ON). So correctness is checked by
+-- comparing the ANN result (approx_l2_distance, which the FE rewrites) against
+-- the EXACT full-scan ground truth (l2_distance, which is NOT rewritten) via
+-- assert_equal_result -- in the same session, so no per-statement session var
+-- juggling is needed. The ann_filter_strategy session variable is set before
+-- each block to force the strategy under test.
+--
+-- Matrix: {scalar, fulltext, scalar AND/OR fulltext, above-iterator} x
+--         {high/medium/low/very-low selectivity} x {auto, pre, post, brute_force}.
+-- ===========================================================================
+ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+
+CREATE TABLE vt (
+    id   bigint        NOT NULL,
+    vec  ARRAY<FLOAT>  NOT NULL,
+    cat  int           NOT NULL,   -- scalar, no index; cat = id % 10  (10 uniform buckets)
+    tag  int           NOT NULL,   -- scalar, no index; tag = id % 100 (for very-low selectivity)
+    doc  varchar(64)   NOT NULL,   -- fulltext, GIN index
+    INDEX idx_vec (vec) USING VECTOR (
+        "index_type"       = "hnsw",
+        "dim"              = "5",
+        "metric_type"      = "l2_distance",
+        "is_vector_normed" = "false",
+        "M"                = "160",
+        "efconstruction"   = "400",
+        "efsearch"         = "200"),
+    INDEX idx_doc (doc) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- 1000 rows. vec is dominated by id (so the nearest neighbours are the
+-- smallest ids) with a small perturbation so the points are not collinear.
+-- All 1000 distances to the all-zero query are pairwise distinct (over
+-- g^2+(g%7)^2+(g%13)^2+(g%5)^2+(g%3)^2), so every top-10 below is a unique set
+-- and needs NO order-by tie-breaker. Do not add one: a second order-by element
+-- makes RewriteToVectorPlanRule bail (orderByElements.size() != 1) and the
+-- query silently stops exercising the ANN path.
+-- doc: "red|blue" (50/50) + "rare"(2%)/"common"(98%).
+insert into vt
+select g as id,
+       [cast(g as float), cast(g % 7 as float), cast(g % 13 as float), cast(g % 5 as float), cast(g % 3 as float)] as vec,
+       g % 10  as cat,
+       g % 100 as tag,
+       concat_ws(' ', if(g % 2 = 0, 'red', 'blue'), if(g % 50 = 0, 'rare', 'common')) as doc
+from (select generate_series as g from TABLE(generate_series(0, 999))) t;
+
+select count(*) from vt;
+
+-- ===========================================================================
+-- A. FE ALWAYS rewrites to ANN even with a scalar / fulltext / combined residual.
+--    (EXPLAIN cannot show PRE vs BRUTE -- that is a BE-runtime decision.)
+-- ===========================================================================
+function: assert_explain_contains("select id from vt order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+function: assert_explain_contains("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+function: assert_explain_contains("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+function: assert_explain_contains("select id from vt where cat < 5 and doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+
+-- ===========================================================================
+-- B. Scalar filter -- exact strategies (auto / pre / brute_force) must all
+--    equal the full-scan ground truth, across selectivities.
+-- ===========================================================================
+-- B1. medium selectivity (cat < 5 ~ 50%): auto == pre == brute_force == exact
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+set ann_filter_strategy = 'pre';
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+set ann_filter_strategy = 'brute_force';
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- B2. high selectivity (cat < 9 ~ 90%)
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where cat < 9 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 9 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- B3. low selectivity (cat < 1 ~ 10%): brute_force is always exact; auto/pre
+--     use filtered-HNSW (high efsearch -> expected full recall on this data).
+set ann_filter_strategy = 'brute_force';
+function: assert_equal_result("select id from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 1 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 1 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- B4. very-low selectivity (tag = 0 ~ 1%): brute_force exact
+set ann_filter_strategy = 'brute_force';
+function: assert_equal_result("select id from vt where tag = 0 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where tag = 0 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where tag = 0 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where tag = 0 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- ===========================================================================
+-- C. Fulltext (GIN MATCH) residual -- same exactness contract.
+-- ===========================================================================
+-- C1. doc match 'red' (~50%)
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+set ann_filter_strategy = 'brute_force';
+function: assert_equal_result("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- C2. doc match 'rare' (~2%, very selective)
+set ann_filter_strategy = 'brute_force';
+function: assert_equal_result("select id from vt where doc match 'rare' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'rare' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where doc match 'rare' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'rare' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- ===========================================================================
+-- D. Combined / OR / above-iterator (completeness).
+-- ===========================================================================
+-- D1. scalar AND fulltext
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where cat < 5 and doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 and doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- D2. OR residual (Gap2): cat = 0 OR cat = 5 -- an OR compound that the
+--     whole-tree pred_tree.evaluate must handle (the old immediate-map path
+--     dropped it and under-returned).
+function: assert_explain_contains("select id from vt where cat = 0 or cat = 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where cat = 0 or cat = 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat = 0 or cat = 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- D3. above-iterator predicate: cat + tag > 50 is a multi-column leaf that
+--     cannot push into the scan -> has_predicate_above_iterator -> the resolver
+--     routes to exact BRUTE (completeness). Result must still equal exact.
+function: assert_explain_contains("select id from vt where cat + tag > 50 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt where cat + tag > 50 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat + tag > 50 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- ===========================================================================
+-- E. POST (explicit opt-in, approximate). Soundness always holds (every
+--    returned row satisfies the residual); recall may be < exact on selective
+--    filters. We assert soundness, and record the row count to document recall.
+-- ===========================================================================
+set ann_filter_strategy = 'post';
+-- soundness: no returned row violates the residual (count of violators = 0)
+select count(*) from (select id, cat from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10) s where s.cat >= 1;
+-- high selectivity: POST over-fetches enough to match exact
+function: assert_equal_result("select id from vt where cat < 9 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 9 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+-- ===========================================================================
+-- F. Kill-switch: enable_vector_index_residual_prefilter = false makes AUTO
+--    route residuals to exact BRUTE (Doris-equivalent). Correctness is
+--    preserved (still equals exact); only the internal path changes.
+-- ===========================================================================
+set ann_filter_strategy = 'auto';
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE NAME = 'enable_vector_index_residual_prefilter';
+function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+UPDATE information_schema.be_configs SET VALUE = 'true' WHERE NAME = 'enable_vector_index_residual_prefilter';
+
+set ann_filter_strategy = 'auto';
+DROP TABLE vt;
+
+-- ===========================================================================
+-- G. PRIMARY KEY table smoke -- the residual filter strategy must also work on
+--    a PK table (different read path), exact across auto / brute_force.
+-- ===========================================================================
+CREATE TABLE vt_pk (
+    id   bigint        NOT NULL,
+    vec  ARRAY<FLOAT>  NOT NULL,
+    cat  int           NOT NULL,
+    INDEX idx_vec (vec) USING VECTOR (
+        "index_type"       = "hnsw",
+        "dim"              = "5",
+        "metric_type"      = "l2_distance",
+        "is_vector_normed" = "false",
+        "M"                = "160",
+        "efconstruction"   = "400",
+        "efsearch"         = "200")
+) ENGINE=OLAP
+PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into vt_pk
+select g as id,
+       [cast(g as float), cast(g % 7 as float), cast(g % 13 as float), cast(g % 5 as float), cast(g % 3 as float)] as vec,
+       g % 10 as cat
+from (select generate_series as g from TABLE(generate_series(0, 999))) t;
+
+function: assert_explain_contains("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "VECTORINDEX: ON")
+set ann_filter_strategy = 'auto';
+function: assert_equal_result("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt_pk where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+set ann_filter_strategy = 'brute_force';
+function: assert_equal_result("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt_pk where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
+
+set ann_filter_strategy = 'auto';
+DROP TABLE vt_pk;
+
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
+ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "false");

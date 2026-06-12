@@ -1086,6 +1086,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
 
+    // ANN scalar-filter strategy override: auto | pre | post | brute_force.
+    public static final String ANN_FILTER_STRATEGY = "ann_filter_strategy";
+
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
      */
@@ -3181,6 +3184,35 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {
         this.enableVectorIndexRefine = enableVectorIndexRefine;
+    }
+
+    @VarAttr(name = ANN_FILTER_STRATEGY)
+    private String annFilterStrategy = "auto";
+
+    public String getAnnFilterStrategy() {
+        return annFilterStrategy;
+    }
+
+    public void setAnnFilterStrategy(String annFilterStrategy) {
+        this.annFilterStrategy = annFilterStrategy;
+    }
+
+    // Maps ann_filter_strategy to the BE AnnFilterStrategy ordinal (0=AUTO, 1=PRE, 2=POST, 3=BRUTE).
+    // Unknown values fall back to AUTO so the BE resolver decides.
+    public int getAnnFilterStrategyValue() {
+        switch (annFilterStrategy == null ? "" : annFilterStrategy.trim().toLowerCase()) {
+            case "pre":
+            case "pre_filter":
+                return 1;
+            case "post":
+            case "post_filter":
+                return 2;
+            case "brute":
+            case "brute_force":
+                return 3;
+            default:
+                return 0;
+        }
     }
 
     public int getPrepareMetadataPoolSize() {
@@ -6516,6 +6548,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setAnn_params(getAnnParams());
         tResult.setPq_refine_factor(pqRefineFactor);
         tResult.setK_factor(kFactor);
+        tResult.setAnn_filter_strategy(getAnnFilterStrategyValue());
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setExchange_hash_function_version(exchangeHashFunctionVersion);
