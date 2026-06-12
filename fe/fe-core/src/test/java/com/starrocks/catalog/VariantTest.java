@@ -28,14 +28,17 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -1226,5 +1229,93 @@ public class VariantTest {
         // In-equality between Min and Max
         Assertions.assertNotEquals(min1, max1);
         Assertions.assertTrue(min1.compareTo(max1) < 0);
+    }
+
+    // ==================== DecimalVariant Tests ====================
+
+    @Test
+    public void testDecimalVariantBasics() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant v = Variant.of(type, "1234.56");
+        Assertions.assertTrue(v instanceof DecimalVariant);
+        Assertions.assertEquals("1234.56", v.getStringValue());
+        Assertions.assertEquals(type, v.getType());
+        Assertions.assertEquals(1234L, v.getLongValue());
+    }
+
+    @Test
+    public void testDecimalVariantToPlainStringNoScientificNotation() {
+        // new BigDecimal("0.0000001").toString() would render "1E-7"; toPlainString must not.
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10);
+        Variant v = Variant.of(type, "0.0000001");
+        Assertions.assertEquals("0.0000001", v.getStringValue());
+
+        Variant negative = Variant.of(type, "-12345.6789012345");
+        Assertions.assertEquals("-12345.6789012345", negative.getStringValue());
+    }
+
+    @Test
+    public void testDecimalVariantCompareToIsValueOrdered() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
+        Variant low = Variant.of(type, "1.0000");
+        Variant high = Variant.of(type, "2.5000");
+        Variant negative = Variant.of(type, "-3.0000");
+        Assertions.assertTrue(low.compareTo(high) < 0);
+        Assertions.assertTrue(high.compareTo(low) > 0);
+        Assertions.assertTrue(negative.compareTo(low) < 0);
+        // BigDecimal.compareTo is scale-independent: 2.5 == 2.50000.
+        Assertions.assertEquals(0, high.compareTo(Variant.of(type, "2.50000")));
+    }
+
+    @Test
+    public void testDecimalVariantInvalidStringThrows() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Variant.of(type, "not-a-number"));
+    }
+
+    @Test
+    public void testDecimalV2VariantConstructs() {
+        ScalarType type = TypeFactory.createDecimalV2Type(27, 9);
+        Variant v = Variant.of(type, "123.456789");
+        Assertions.assertTrue(v instanceof DecimalVariant);
+        Assertions.assertEquals("123.456789", v.getStringValue());
+    }
+
+    @Test
+    public void testDecimalVariantRejectsNonDecimalType() {
+        // The (Type, BigDecimal) constructor is public; guard against a non-decimal type so a
+        // misuse fails loudly here instead of producing a Variant whose ScalarType cast in
+        // BoundaryPlanner.validateValueAgainstColumn would later throw a ClassCastException.
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new DecimalVariant(IntegerType.BIGINT, BigDecimal.ONE));
+    }
+
+    @Test
+    public void testDecimalVariantPreservesExactFractionalText() {
+        // FE does NOT pre-round or reject over-scale samples: it stores and sorts the exact
+        // value. The backend applies the single authoritative half-up rounding to the column
+        // scale when it parses the boundary (the same path it uses for the loaded data), so FE
+        // and BE stay consistent and an over-scale sample never yields a wrong boundary — at
+        // worst an over-precision integer part triggers the substrate's identical-fallback.
+        // Rejecting it in FE would regress a decimal load to SAMPLE_FAILED (no pre-split).
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant v = Variant.of(type, "1.239");
+        Assertions.assertEquals("1.239", v.getStringValue());
+        Assertions.assertTrue(v.compareTo(Variant.of(type, "1.24")) < 0);
+    }
+
+    @Test
+    public void testDecimalVariantEqualsAndHashCode() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant a = Variant.of(type, "12.34");
+        Variant b = Variant.of(type, "12.34");
+        Assertions.assertEquals(a, b);
+        Assertions.assertEquals(a.hashCode(), b.hashCode());
+        Assertions.assertNotEquals(a, null);
+        Assertions.assertNotEquals(a, Variant.of(IntegerType.BIGINT, "12"));
+        // equals is exact (scale-sensitive); compareTo is value-ordered (scale-independent).
+        Variant scaled = Variant.of(type, "12.3400");
+        Assertions.assertNotEquals(a, scaled);
+        Assertions.assertEquals(0, a.compareTo(scaled));
     }
 }
