@@ -99,6 +99,24 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     }
 
     @Override
+    public Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version) {
+        try {
+            CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
+            Optional<CacheValue> cacheValue = future.get();
+            if (cacheValue.isPresent()) {
+                CacheValue value = cacheValue.get();
+                if (value.version().getVersion() >= version.getVersion()) {
+                    return Optional.of(value.minMax());
+                }
+                cache.synchronous().invalidate(identifier);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public void removeStats(ColumnIdentifier identifier, StatsVersion version) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
@@ -108,10 +126,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             // If the identifier is already in the cache, we do not need to update it.
             return;
         }
-        Optional<ColumnMinMax> minMax = getStats(identifier, version);
-        if (minMax.isPresent()) {
-            cache.synchronous().invalidate(identifier);
-        }
+        cache.synchronous().invalidate(identifier);
     }
 
     @Override
