@@ -3428,6 +3428,14 @@ TEST_F(HdfsScannerTest, TestOrcFooterCache) {
     ASSERT_EQ(1, new_scanner->_app_stats.footer_cache_read_count);
     ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_count);
     ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_fail_count);
+
+    // footer cache counters should be reported into the runtime profile
+    HdfsScannerProfile profile;
+    profile.runtime_profile = _runtime_profile;
+    new_scanner->do_update_counter(&profile);
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("OrcFooterCacheReadCount"));
+    ASSERT_EQ(1, _runtime_profile->get_counter("OrcFooterCacheReadCount")->value());
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("OrcFooterCacheWriteCount"));
     new_scanner->close();
 #endif
 }
