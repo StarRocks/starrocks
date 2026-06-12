@@ -14,10 +14,9 @@
 
 #include "storage/lake/sdcg_overlay_merge.h"
 
-#include <roaring/roaring.hh>
-
 #include <algorithm>
 #include <map>
+#include <roaring/roaring.hh>
 #include <set>
 #include <unordered_map>
 
