@@ -2051,9 +2051,10 @@ CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
 CONF_mDouble(vector_adaptive_ef_cap, "8.0");
 CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 
-// Residual scalar predicate (one not exactly resolved by an index) + ANN: when true and the index
-// supports efficient filtered search, pre-filter (early-evaluate the predicate into the ANN candidate);
-// otherwise post-filter (oversample the ANN and let the read-time predicate path filter the result).
+// Kill-switch for the ANN residual pre-filter machinery (whole-tree bitmap evaluation, filtered
+// search, and the exact-rescan gates). When false, residual ANN queries -- including an explicit
+// ann_filter_strategy='pre' -- run the exact in-scan brute-force path instead. The plan shape is
+// unchanged (the FE still rewrites to ANN); only the BE execution strategy is constrained.
 CONF_mBool(enable_vector_index_residual_prefilter, "true");
 // Post-filter oversample factor: the ANN searches k * this when post-filtering a residual predicate.
 CONF_mInt32(vector_index_residual_post_filter_oversample, "3");

@@ -16,47 +16,23 @@
 
 namespace starrocks {
 
-AnnFilterStrategy resolve_ann_filter_strategy(const AnnFilterResolveInputs& in) {
-    // --- Explicit user overrides. They may relax the selectivity gate (handled later, in PRE
-    // execution), but must never bypass the soundness/completeness invariant (design doc §2). ---
-    switch (in.user_choice) {
+AnnFilterStrategy resolve_ann_filter_strategy(AnnFilterStrategy user_choice, bool prefilter_allowed) {
+    switch (user_choice) {
     case AnnFilterStrategy::POST:
-        // User opts into the approximate path (may return < k). Only reachable when explicit.
+        // Explicit opt-in to the approximate path (may return < k). Never chosen by AUTO.
         return AnnFilterStrategy::POST;
     case AnnFilterStrategy::BRUTE:
+        // Explicit exact brute-force. Honored even when PRE would be sound -- including on a query
+        // with no residual at all, where it is the ground-truth/recall-diagnostic tool.
         return AnnFilterStrategy::BRUTE;
     case AnnFilterStrategy::PRE:
-        // Explicit PRE still falls back to exact BRUTE when PRE cannot be proven sound+complete.
-        return (!in.has_above_predicate && in.exact_possible && in.supports_filtered) ? AnnFilterStrategy::PRE
-                                                                                      : AnnFilterStrategy::BRUTE;
     case AnnFilterStrategy::AUTO:
-        break;
+    default:
+        // AUTO and an explicit 'pre' coincide: PRE exactly when it is sound + enabled (see
+        // prefilter_allowed in the header), exact BRUTE otherwise. default: an out-of-range wire
+        // value degrades to the same safe pair.
+        return prefilter_allowed ? AnnFilterStrategy::PRE : AnnFilterStrategy::BRUTE;
     }
-
-    // --- AUTO ---
-    if (!in.has_residual) {
-        // No residual: this is a plain ANN top-k, exact + complete by construction.
-        return AnnFilterStrategy::PRE;
-    }
-    if (in.has_above_predicate) {
-        // A predicate is evaluated above the iterator -> a segment-level k-limit would under-return.
-        return AnnFilterStrategy::BRUTE; // completeness
-    }
-    if (!in.supports_filtered) {
-        // ANN reader cannot consume a candidate bitmap.
-        return AnnFilterStrategy::BRUTE;
-    }
-    if (!in.prefilter_enabled) {
-        // Kill-switch off: do not scan-prefilter an un-indexed residual.
-        return AnnFilterStrategy::BRUTE;
-    }
-    if (!in.exact_possible) {
-        // Residual cannot be evaluated into an exact bitmap in this segment.
-        return AnnFilterStrategy::BRUTE; // exactness
-    }
-    // Exact + complete + reader-capable. The selectivity gate (PRE -> BRUTE for very selective
-    // filters) is applied during PRE execution, not here (it needs the residual bitmap).
-    return AnnFilterStrategy::PRE;
 }
 
 } // namespace starrocks

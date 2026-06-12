@@ -62,42 +62,25 @@
 
 namespace starrocks {
 
-// Resolver truth table (design doc §4). Pure function; no tenann dependency (runs without WITH_TENANN).
+// Resolver truth table. Pure function; no tenann dependency (runs without WITH_TENANN).
+// The full table is user_choice x prefilter_allowed: the caller (_init_ann_reader) folds
+// "no residual at all" (trivially sound), completeness (no above-iterator predicate), reader
+// capability (filtered search) and the kill-switch into the single prefilter_allowed bit.
 TEST(AnnFilterResolverTest, truth_table) {
     using S = AnnFilterStrategy;
-    auto mk = [](S user_choice, bool cfg, bool resid, bool above, bool exact, bool supp) {
-        AnnFilterResolveInputs in;
-        in.user_choice = user_choice;
-        in.prefilter_enabled = cfg;
-        in.has_residual = resid;
-        in.has_above_predicate = above;
-        in.exact_possible = exact;
-        in.supports_filtered = supp;
-        return resolve_ann_filter_strategy(in);
-    };
-
-    // ---- AUTO ----
-    // no residual -> plain ANN top-k (exact + complete by construction)
-    EXPECT_EQ(S::PRE, mk(S::AUTO, true, false, false, true, true));
-    // residual + a predicate evaluated above the iterator -> BRUTE (completeness)
-    EXPECT_EQ(S::BRUTE, mk(S::AUTO, true, true, true, true, true));
-    // residual, no above-predicate, but bitmap cannot be made exact -> BRUTE (exactness)
-    EXPECT_EQ(S::BRUTE, mk(S::AUTO, true, true, false, false, true));
-    // residual, reader cannot do filtered search -> BRUTE
-    EXPECT_EQ(S::BRUTE, mk(S::AUTO, true, true, false, true, false));
-    // residual, config (kill-switch) off -> BRUTE (Doris-equivalent)
-    EXPECT_EQ(S::BRUTE, mk(S::AUTO, false, true, false, true, true));
-    // residual, exact + complete + reader-capable -> PRE (selectivity decided later, in execution)
-    EXPECT_EQ(S::PRE, mk(S::AUTO, true, true, false, true, true));
-
-    // ---- explicit PRE: may NOT bypass the completeness/exactness invariant ----
-    EXPECT_EQ(S::PRE, mk(S::PRE, true, true, false, true, true));
-    EXPECT_EQ(S::BRUTE, mk(S::PRE, true, true, true, true, true));   // above-predicate -> BRUTE
-    EXPECT_EQ(S::BRUTE, mk(S::PRE, true, true, false, false, true)); // not exact -> BRUTE
-
-    // ---- explicit POST / BRUTE (user-forced) ----
-    EXPECT_EQ(S::POST, mk(S::POST, true, true, false, true, true));
-    EXPECT_EQ(S::BRUTE, mk(S::BRUTE, true, true, false, true, true));
+    // AUTO and an explicit 'pre' coincide: PRE iff prefilter_allowed. The kill-switch is part of
+    // prefilter_allowed, so it binds an explicit 'pre' too (a session variable must not bypass an
+    // emergency switch), and neither choice can buy out completeness.
+    EXPECT_EQ(S::PRE, resolve_ann_filter_strategy(S::AUTO, true));
+    EXPECT_EQ(S::BRUTE, resolve_ann_filter_strategy(S::AUTO, false));
+    EXPECT_EQ(S::PRE, resolve_ann_filter_strategy(S::PRE, true));
+    EXPECT_EQ(S::BRUTE, resolve_ann_filter_strategy(S::PRE, false));
+    // Explicit POST (approximate, user-consented) and BRUTE (exact ground-truth tool) are honored
+    // unconditionally.
+    EXPECT_EQ(S::POST, resolve_ann_filter_strategy(S::POST, true));
+    EXPECT_EQ(S::POST, resolve_ann_filter_strategy(S::POST, false));
+    EXPECT_EQ(S::BRUTE, resolve_ann_filter_strategy(S::BRUTE, true));
+    EXPECT_EQ(S::BRUTE, resolve_ann_filter_strategy(S::BRUTE, false));
 }
 
 class VectorIndexSearchTest : public testing::Test {
