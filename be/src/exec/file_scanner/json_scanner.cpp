@@ -678,12 +678,18 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
 }
 
 Status JsonReader::_read_file_stream() {
-    // TODO: Remove the down_cast, should not rely on the specific implementation.
-    auto pipe = make_shared<StreamLoadPipeReader>(down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe());
+    // TODO: Remove the dynamic_cast, should not rely on the specific implementation.
+    // Use dynamic_cast (not down_cast) and check the result: the stream is expected to be a
+    // StreamLoadPipeInputStream here, but if it has been wrapped (e.g. in a CompressedInputStream),
+    // a blind down_cast would reinterpret the wrong type and crash on the bogus pipe pointer.
+    auto* stream = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    if (stream == nullptr) {
+        return Status::InternalError("JSON stream load expects a StreamLoadPipeInputStream");
+    }
+    auto pipe = make_shared<StreamLoadPipeReader>(stream->pipe());
     if (_range_desc.compression_type != TCompressionType::NO_COMPRESSION &&
         _range_desc.compression_type != TCompressionType::UNKNOWN_COMPRESSION) {
-        pipe = std::make_shared<CompressedStreamLoadPipeReader>(
-                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type);
+        pipe = std::make_shared<CompressedStreamLoadPipeReader>(stream->pipe(), _range_desc.compression_type);
     }
     ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
