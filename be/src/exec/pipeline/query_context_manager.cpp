@@ -145,6 +145,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
                 auto* raw_ctx_ptr = ctx.get();
+                raw_ctx_ptr->set_query_lifecycle(this);
                 sc_map.erase(sc_it);
                 auto cancel_status = [ctx]() -> Status {
                     RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
@@ -170,6 +171,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
         auto&& ctx = std::make_shared<QueryContext>();
         auto* ctx_raw_ptr = ctx.get();
         ctx_raw_ptr->set_query_id(query_id);
+        ctx_raw_ptr->set_query_lifecycle(this);
         ctx_raw_ptr->increment_num_fragments();
         context_map.emplace(query_id, std::move(ctx));
         return ctx_raw_ptr;
@@ -208,13 +210,7 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id, bool need_pr
     }
 }
 
-void QueryContextManager::count_down_fragments(QueryContext* query_ctx) {
-    DCHECK(query_ctx != nullptr);
-    if (!query_ctx->decrement_num_active_fragments()) {
-        return;
-    }
-
-    const auto query_id = query_ctx->query_id();
+void QueryContextManager::on_query_releasable(const TUniqueId& query_id) {
     remove(query_id);
 }
 
@@ -270,6 +266,16 @@ void QueryContextManager::clear() {
     locks.reserve(_mutexes.size());
     for (auto& _mutexe : _mutexes) {
         locks.emplace_back(_mutexe);
+    }
+    for (auto& context_map : _context_maps) {
+        for (auto& [_, query_ctx] : context_map) {
+            query_ctx->set_query_lifecycle(nullptr);
+        }
+    }
+    for (auto& sc_map : _second_chance_maps) {
+        for (auto& [_, query_ctx] : sc_map) {
+            query_ctx->set_query_lifecycle(nullptr);
+        }
     }
     _second_chance_maps.clear();
     _context_maps.clear();

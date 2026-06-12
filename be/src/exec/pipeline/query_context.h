@@ -26,6 +26,8 @@
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/fragment_lifecycle.h"
+#include "exec/pipeline/primitives/query_lifecycle.h"
 #include "exec/runtime/query_runtime_state.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
@@ -45,7 +47,9 @@ namespace pipeline {
 struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
-class QueryContext : public QueryContextLifetime, public std::enable_shared_from_this<QueryContext> {
+class QueryContext : public QueryContextLifetime,
+                     public FragmentLifecycle,
+                     public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext() noexcept;
@@ -59,6 +63,7 @@ public:
     const QueryRuntimeState& query_runtime_state() const { return _query_runtime_state; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
+    void set_query_lifecycle(QueryLifecycle* lifecycle) { _query_lifecycle.store(lifecycle); }
 
     void increment_num_fragments() {
         _num_fragments.fetch_add(1);
@@ -71,9 +76,10 @@ public:
     }
 
     // Decrements the query-local active fragment counter.
-    // Returns true only when the caller just finished the last active fragment; the caller owns any manager-level
-    // lifecycle transition such as removal from QueryContextManager or moving the context to second-chance storage.
+    // Returns true only when the caller just finished the last active fragment.
     bool decrement_num_active_fragments();
+    void count_down_fragment();
+    void on_fragment_finished() override { count_down_fragment(); }
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
@@ -224,6 +230,7 @@ public:
 
 private:
     const QueryExecutionServices* _query_execution_services = nullptr;
+    std::atomic<QueryLifecycle*> _query_lifecycle = nullptr;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;

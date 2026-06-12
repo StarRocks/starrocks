@@ -468,7 +468,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     // prepare_global_state is success when reach here, so we must count down once
     auto query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id);
     if (query_context != nullptr) {
-        _exec_env->query_context_mgr()->count_down_fragments(query_context.get());
+        query_context->count_down_fragment();
     }
 
     status.to_protobuf(response->mutable_status());

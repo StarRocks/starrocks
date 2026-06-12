@@ -102,6 +102,16 @@ bool QueryContext::decrement_num_active_fragments() {
     return old == 1;
 }
 
+void QueryContext::count_down_fragment() {
+    if (!decrement_num_active_fragments()) {
+        return;
+    }
+
+    if (auto* lifecycle = _query_lifecycle.load(); lifecycle != nullptr) {
+        lifecycle->on_query_releasable(query_id());
+    }
+}
+
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }

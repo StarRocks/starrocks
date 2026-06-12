@@ -40,7 +40,6 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
@@ -194,7 +193,11 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     destroy_pass_through_chunk_buffer();
 
-    runtime_services(state).query_context_mgr->count_down_fragments(query_ctx);
+    auto fragment_lifecycle = _fragment_lifecycle.lock();
+    DCHECK(fragment_lifecycle != nullptr);
+    if (fragment_lifecycle != nullptr) {
+        fragment_lifecycle->on_fragment_finished();
+    }
 }
 
 bool FragmentContext::need_report_exec_state() {
@@ -323,7 +326,7 @@ void FragmentContext::set_final_status(const Status& status) {
 void FragmentContext::set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines) {
     for (auto& group : exec_groups) {
         if (!group->is_empty()) {
-            group->attach_fragment_lifecycle(this);
+            group->attach_execution_group_lifecycle(this);
             _execution_groups.emplace_back(std::move(group));
         }
     }

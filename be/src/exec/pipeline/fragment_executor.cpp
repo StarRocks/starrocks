@@ -174,6 +174,7 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
+    _fragment_ctx->set_fragment_lifecycle(_query_ctx->get_shared_ptr());
 
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);
@@ -868,9 +869,9 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     // make sure query context can be released
     // if _prepare_query_ctx return error, query context doesn't exist
     // so it's safe to put this DeferOp below _prepare_query_ctx
-    DeferOp defer([&prepare_success, query_ctx = _query_ctx, query_ctx_mgr = _query_ctx_mgr] {
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
         if (!prepare_success) {
-            query_ctx_mgr->count_down_fragments(query_ctx);
+            query_ctx->count_down_fragment();
         }
     });
 
@@ -1034,7 +1035,7 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             _fragment_ctx.reset();
         }
         DCHECK(_query_ctx_mgr != nullptr);
-        _query_ctx_mgr->count_down_fragments(_query_ctx);
+        _query_ctx->count_down_fragment();
     }
 }
 
