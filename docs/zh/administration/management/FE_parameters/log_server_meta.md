@@ -811,8 +811,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 引入版本: v4.2.0
-- 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
-  - 公开探针 / 可观测性: `/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature`、`/metrics`、`/api/oauth2`。
+- 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。公开探针 / 可观测性端点 `/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature` 和 `/metrics` 为仅认证（AuthN-only）：当 `enable_http_auth=true` 时它们要求提供有效的 Basic 凭证，但**不**要求任何 RBAC 权限，因此任意已认证用户均可调用；当 `enable_http_auth=false` 时它们保持匿名访问。以下接口无论该开关如何设置都始终完全豁免:
+  - OAuth2 回调 `/api/oauth2`，它本身就是认证握手入口，永远不能要求 Basic Auth。
   - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
 
   特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。

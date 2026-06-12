@@ -70,12 +70,13 @@ public class BootstrapFinishAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/bootstrap", new BootstrapFinishAction(controller));
     }
 
-    // FE bootstrap probe; intentionally unauthenticated. Caller can pass the cluster
-    // token to unlock additional fields (journal id / ports / version), but the endpoint
-    // itself accepts anonymous requests for readiness checks.
+    // FE bootstrap probe. Caller can pass the cluster token to unlock additional fields
+    // (journal id / ports / version). Historically anonymous; gated for backward
+    // compatibility so it requires Basic auth (AuthN-only, no privilege check) only when
+    // the operator opts in via `enable_http_auth`.
     @Override
     public boolean needAuth() {
-        return false;
+        return Config.enable_http_auth;
     }
 
     @Override

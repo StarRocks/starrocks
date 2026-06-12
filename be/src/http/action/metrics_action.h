@@ -60,7 +60,10 @@ public:
 
     void handle(HttpRequest* req) override;
 
-    bool need_auth() const override { return false; }
+    // AuthN-only: require Basic identity when `config::enable_http_auth` is on (the
+    // injected verifier short-circuits when it is off). No extra privilege required —
+    // `required_privilege()` stays NONE.
+    bool need_auth() const override { return true; }
 
 private:
     void _collect_table_metrics(starrocks::MetricsVisitor* visitor);

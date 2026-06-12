@@ -39,9 +39,12 @@
 #include "base/metrics.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
+#include "http/action/health_action.h"
+#include "http/action/memory_metrics_action.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
+#include "runtime/env/global_env.h"
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
 #endif
@@ -150,6 +153,25 @@ TEST_F(MetricsActionTest, prometheus_no_name) {
     HttpRequest request(_evhttp_req);
     MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
+}
+
+// The public observability probes (`/metrics`, `/api/health`, `/metrics/memory`) are now
+// in the `enable_http_auth` scope at AuthN-only level: they require Basic identity (the
+// injected verifier short-circuits when the flag is off) but declare no extra privilege,
+// so identity alone is sufficient.
+TEST_F(MetricsActionTest, observability_probes_are_authn_only) {
+    ProcessMetricsRegistry registry("test");
+    MetricsAction metrics_action(&registry, &mock_send_reply);
+    EXPECT_TRUE(metrics_action.need_auth());
+    EXPECT_EQ(HttpHandler::RequiredPrivilege::NONE, metrics_action.required_privilege());
+
+    HealthAction health_action(nullptr);
+    EXPECT_TRUE(health_action.need_auth());
+    EXPECT_EQ(HttpHandler::RequiredPrivilege::NONE, health_action.required_privilege());
+
+    MemoryMetricsAction memory_action(*GlobalEnv::GetInstance());
+    EXPECT_TRUE(memory_action.need_auth());
+    EXPECT_EQ(HttpHandler::RequiredPrivilege::NONE, memory_action.required_privilege());
 }
 
 TEST_F(MetricsActionTest, prometheus_output_with_table_metrics) {
