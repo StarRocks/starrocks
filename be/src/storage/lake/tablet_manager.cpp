@@ -56,6 +56,7 @@
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/raw_container.h"
+#include "util/time_guard.h"
 #include "util/trace.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
@@ -1069,6 +1070,7 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
     if (UNLIKELY(!log->has_txn_id())) {
         return Status::InvalidArgument("txn log does not have txn id");
     }
+    DUMP_TRACE_IF_TIMEOUT(config::lake_put_txn_log_timeout_guard_ms);
     auto t0 = butil::gettimeofday_us();
 
     // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from the
@@ -1120,6 +1122,7 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
     if (UNLIKELY(logs.txn_logs_size() == 0)) {
         return Status::InvalidArgument("empty CombinedTxnLogPB");
     }
+    DUMP_TRACE_IF_TIMEOUT(config::lake_put_txn_log_timeout_guard_ms);
     std::vector<int64_t> candidate_tablet_ids;
     candidate_tablet_ids.reserve(logs.txn_logs_size());
     for (const auto& log : logs.txn_logs()) {
