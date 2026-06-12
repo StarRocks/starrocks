@@ -5,7 +5,6 @@ Use this directory for repo-local execution plans that agents can read, update, 
 ## Active Plans
 
 - [Harness Engineering Roadmap](active/2026-03-27-harness-engineering-roadmap.md)
-- [Shared-Data: Concurrent ADD PARTITION During Metadata-Only ALTER](active/2026-06-10-shared-data-concurrent-add-partition-during-alter.md)
 
 ## Templates
 
