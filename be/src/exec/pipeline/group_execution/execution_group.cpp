@@ -47,7 +47,7 @@ void ExecutionGroup::count_down_pipeline() {
     // have deleted the object.
     size_t num_pipelines = _num_pipelines;
     if (++_num_finished_pipelines == num_pipelines) {
-        _fragment_lifecycle->on_execution_group_finished();
+        _execution_group_lifecycle->on_execution_group_finished();
     }
 }
 

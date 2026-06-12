@@ -14,19 +14,17 @@
 
 #pragma once
 
-#include <memory>
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks::pipeline {
 
-// Narrow owner callback used when a fragment has finished and its owning query
-// may count down one active fragment.
-class FragmentLifecycle {
+// Narrow owner callback used when a query has no active fragments and its
+// manager may release or move it to second-chance storage.
+class QueryLifecycle {
 public:
-    virtual ~FragmentLifecycle() = default;
+    virtual ~QueryLifecycle() = default;
 
-    virtual void on_fragment_finished() = 0;
+    virtual void on_query_releasable(const TUniqueId& query_id) = 0;
 };
-
-using FragmentLifecycleWeakPtr = std::weak_ptr<FragmentLifecycle>;
 
 } // namespace starrocks::pipeline

@@ -20,6 +20,7 @@
 #include <memory>
 #include <memory_resource>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/hash/hash_std.hpp"
@@ -33,6 +34,7 @@
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/execution_group_lifecycle.h"
 #include "exec/pipeline/primitives/fragment_lifecycle.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel_queue.h"
@@ -59,7 +61,7 @@ class PassThroughChunkBufferGuard;
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
-class FragmentContext : public FragmentLifecycle {
+class FragmentContext : public ExecutionGroupLifecycle {
     friend class FragmentContextManager;
 
 public:
@@ -99,6 +101,7 @@ public:
     bool all_execution_groups_finished() const { return _num_finished_execution_groups == _execution_groups.size(); }
     void count_down_execution_group(size_t val = 1);
     void on_execution_group_finished() override { count_down_execution_group(); }
+    void set_fragment_lifecycle(FragmentLifecycleWeakPtr lifecycle) { _fragment_lifecycle = std::move(lifecycle); }
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
@@ -214,6 +217,7 @@ private:
     Pipelines _pipelines;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
+    FragmentLifecycleWeakPtr _fragment_lifecycle;
 
     std::unique_ptr<EventScheduler> _event_scheduler;
     PipelineTimerContextPtr _pipeline_timer_context = nullptr;

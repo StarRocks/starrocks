@@ -14,19 +14,15 @@
 
 #pragma once
 
-#include <memory>
-
 namespace starrocks::pipeline {
 
-// Narrow owner callback used when a fragment has finished and its owning query
-// may count down one active fragment.
-class FragmentLifecycle {
+// Narrow owner callback used when an execution group finishes. Keep lifecycle
+// orchestration in the fragment owner instead of reaching upward through RuntimeState.
+class ExecutionGroupLifecycle {
 public:
-    virtual ~FragmentLifecycle() = default;
+    virtual ~ExecutionGroupLifecycle() = default;
 
-    virtual void on_fragment_finished() = 0;
+    virtual void on_execution_group_finished() = 0;
 };
-
-using FragmentLifecycleWeakPtr = std::weak_ptr<FragmentLifecycle>;
 
 } // namespace starrocks::pipeline

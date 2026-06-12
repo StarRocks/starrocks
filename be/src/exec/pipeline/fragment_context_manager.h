@@ -22,12 +22,13 @@
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/fragment_lifecycle.h"
 
 namespace starrocks::pipeline {
 
 class FragmentContextManager {
 public:
-    FragmentContextManager() = default;
+    explicit FragmentContextManager(FragmentLifecycleWeakPtr fragment_lifecycle = {});
     ~FragmentContextManager() = default;
 
     FragmentContextManager(const FragmentContextManager&) = delete;
@@ -48,6 +49,7 @@ public:
 private:
     std::mutex _lock;
     std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;
+    FragmentLifecycleWeakPtr _fragment_lifecycle;
 };
 
 } // namespace starrocks::pipeline

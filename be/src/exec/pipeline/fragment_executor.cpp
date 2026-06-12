@@ -868,9 +868,9 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     // make sure query context can be released
     // if _prepare_query_ctx return error, query context doesn't exist
     // so it's safe to put this DeferOp below _prepare_query_ctx
-    DeferOp defer([&prepare_success, query_ctx = _query_ctx, query_ctx_mgr = _query_ctx_mgr] {
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
         if (!prepare_success) {
-            query_ctx_mgr->count_down_fragments(query_ctx);
+            query_ctx->count_down_fragment();
         }
     });
 
@@ -1034,7 +1034,7 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             _fragment_ctx.reset();
         }
         DCHECK(_query_ctx_mgr != nullptr);
-        _query_ctx_mgr->count_down_fragments(_query_ctx);
+        _query_ctx->count_down_fragment();
     }
 }
 
