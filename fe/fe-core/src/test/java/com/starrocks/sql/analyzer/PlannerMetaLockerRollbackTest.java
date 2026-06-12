@@ -31,6 +31,7 @@ import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -178,6 +179,46 @@ public class PlannerMetaLockerRollbackTest extends PlanTestBase {
             // After rollback, unlock() must still be a no-op (no frame was pushed).
             Assertions.assertDoesNotThrow(locker::unlock);
             // And the unlock() call above must not have invoked unLockTablesWithIntensiveDbLock again.
+            Mockito.verify(constructed.get(0), Mockito.times(1))
+                    .unLockTablesWithIntensiveDbLock(anyLong(), anyList(), any(LockType.class));
+        }
+    }
+
+    /**
+     * tryLock multi-db variant: when a later db cannot be acquired (tryLock returns false),
+     * tryLock's finally block must roll back the earlier db(s) it did acquire and return false,
+     * leaving no leaked locks. Mirrors {@link #lockRollsBackEarlierDbsOnLaterDbFailure} for the
+     * non-throwing tryLock path.
+     */
+    @Test
+    public void tryLockRollsBackEarlierDbsOnLaterDbFailure() throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
+                "select t0.v1 from t0 join db1.tbl1 on true", connectContext);
+
+        try (MockedConstruction<Locker> mocked = Mockito.mockConstruction(Locker.class,
+                (mock, ctx) -> {
+                    // First Locker (created in tryLock()): 1st db acquires, 2nd db times out (false).
+                    if (ctx.getCount() == 1) {
+                        Mockito.doReturn(true).doReturn(false)
+                                .when(mock)
+                                .tryLockTablesWithIntensiveDbLock(
+                                        anyLong(), anyList(), any(LockType.class), anyLong(), any(TimeUnit.class));
+                    }
+                })) {
+
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
+            boolean acquired = locker.tryLock(0, TimeUnit.MILLISECONDS);
+            Assertions.assertFalse(acquired, "tryLock must return false when a later db cannot be acquired");
+
+            // The finally rollback must release the one db that was acquired, exactly once.
+            List<Locker> constructed = mocked.constructed();
+            Assertions.assertFalse(constructed.isEmpty());
+            Mockito.verify(constructed.get(0), Mockito.times(1))
+                    .unLockTablesWithIntensiveDbLock(anyLong(), anyList(), any(LockType.class));
+
+            // A failed tryLock() pushes no frame, so a following unlock() must be a no-op and
+            // must not release anything again.
+            Assertions.assertDoesNotThrow(locker::unlock);
             Mockito.verify(constructed.get(0), Mockito.times(1))
                     .unLockTablesWithIntensiveDbLock(anyLong(), anyList(), any(LockType.class));
         }
