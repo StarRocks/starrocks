@@ -1647,11 +1647,11 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     // see DESIGN_CONFLICT_REPLAY) will plug in; it is logged distinctly so we can measure how often it
     // would fire before taking on the data-integrity-critical replay path.
     builder->apply_opcompaction_with_conflict(op_compaction);
-    LOG(INFO) << fmt::format(
-            "PK compaction conflict ({}), tablet_id: {} txn_id: {} op_compaction: {}",
-            kind == CompactionConflictKind::REPLAYABLE_DCG ? "replayable-dcg: discarded (replay not yet enabled)"
-                                                           : "must-discard",
-            metadata.id(), txn_id, op_compaction.ShortDebugString());
+    LOG(INFO) << fmt::format("PK compaction conflict ({}), tablet_id: {} txn_id: {} op_compaction: {}",
+                             kind == CompactionConflictKind::REPLAYABLE_DCG
+                                     ? "replayable-dcg: discarded (replay not yet enabled)"
+                                     : "must-discard",
+                             metadata.id(), txn_id, op_compaction.ShortDebugString());
     return true;
 }
 
