@@ -85,6 +85,28 @@ public class Tracers {
     }
 
     /**
+     * Create a lightweight fork of this Tracers for use in a parallel worker thread.
+     * The fork shares the timing stopwatch, logTracer, and reasonTracer with the owner
+     * but gets its own TimeWatcher and VarTracer (to be merged back via {@link #mergeFrom}).
+     */
+    public Tracers fork() {
+        Tracers f = new Tracers();
+        f.moduleMask = this.moduleMask;
+        f.modeMask = this.modeMask;
+        f.allTracer[0] = EMPTY_TRACER;
+        f.allTracer[1] = this.allTracer[1].fork();
+        return f;
+    }
+
+    /**
+     * Merge timer and var data from a forked Tracers back into this (owner) Tracers.
+     * Must be called from the owner thread or externally synchronized.
+     */
+    public void mergeFrom(Tracers other) {
+        this.allTracer[1].mergeFrom(other.allTracer[1]);
+    }
+
+    /**
      * Init tracer with context and mode.
      * @param context connect context
      * @param modeStr tracer mode

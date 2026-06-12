@@ -20,6 +20,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
 public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerDefault() throws Exception {
@@ -150,5 +156,46 @@ public class TracerTest extends PlanTestBase {
         System.out.println(ss);
         Assertions.assertEquals(2, StringUtils.countMatches(ss, "Parser"));
         Assertions.assertEquals(2, StringUtils.countMatches(ss, "Planner"));
+    }
+
+    @Test
+    public void testTracerForkConcurrency() throws Exception {
+        Tracers.register(connectContext);
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.BASE, false, false);
+        Tracers owner = Tracers.get();
+
+        int numThreads = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        // Run multiple iterations to expose any potential race conditions
+        for (int iter = 0; iter < 100; iter++) {
+            List<Tracers> forks = new ArrayList<>();
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < numThreads; i++) {
+                Tracers forked = owner.fork();
+                forks.add(forked);
+                futures.add(executor.submit(() -> {
+                    try (Timer ignored = Tracers.watchScope(forked, Tracers.Module.BASE,
+                            "forkedParallelWork")) {
+                        // Simulate work
+                    }
+                    return null;
+                }));
+            }
+            for (Future<?> f : futures) {
+                f.get();
+            }
+            // Merge forks back on the owner thread after all tasks complete
+            for (Tracers f : forks) {
+                owner.mergeFrom(f);
+            }
+        }
+
+        executor.shutdown();
+        String output = Tracers.printScopeTimer();
+        // Each iteration creates 4 scopes, 100 iterations = 400 total
+        int count = StringUtils.countMatches(output, "forkedParallelWork");
+        Assertions.assertTrue(count > 0, "Expected forkedParallelWork in output but got: " + output);
+        Tracers.close();
     }
 }

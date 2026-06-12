@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class TimeWatcher {
@@ -64,6 +66,27 @@ public class TimeWatcher {
                 .collect(Collectors.toList());
     }
 
+    public TimeWatcher fork() {
+        TimeWatcher f = new TimeWatcher();
+        f.levels.addAll(this.levels);
+        return f;
+    }
+
+    public synchronized void mergeFrom(TimeWatcher other) {
+        for (Table.Cell<String, String, ScopedTimer> cell : other.scopedTimers.cellSet()) {
+            String name = cell.getRowKey();
+            String prefix = cell.getColumnKey();
+            ScopedTimer otherTimer = cell.getValue();
+
+            ScopedTimer mine = this.scopedTimers.get(name, prefix);
+            if (mine == null) {
+                mine = new ScopedTimer(otherTimer.firstTimePointNanoSecond, name);
+                this.scopedTimers.put(name, prefix, mine);
+            }
+            mine.accumulateFrom(otherTimer);
+        }
+    }
+
     private class ScopedTimer extends Timer {
         private final String name;
         private final int scopeLevel;
@@ -72,6 +95,10 @@ public class TimeWatcher {
 
         private int count = 0;
         private int reentrantCount = 0;
+
+        // Accumulated from detached forks merged into this timer
+        private final AtomicLong accumulatedNanos = new AtomicLong(0);
+        private final AtomicInteger accumulatedCount = new AtomicInteger(0);
 
         public ScopedTimer(long time, String name) {
             // The reason why here we want nanosecond is to make sure
@@ -103,6 +130,13 @@ public class TimeWatcher {
             }
         }
 
+        void accumulateFrom(ScopedTimer other) {
+            long otherNanos = other.stopWatch.elapsed(TimeUnit.NANOSECONDS) + other.accumulatedNanos.get();
+            int otherCount = other.count + other.accumulatedCount.get();
+            this.accumulatedNanos.addAndGet(otherNanos);
+            this.accumulatedCount.addAndGet(otherCount);
+        }
+
         @Override
         public long getFirstTimePoint() {
             return firstTimePointNanoSecond / 1000000;
@@ -110,13 +144,15 @@ public class TimeWatcher {
 
         @Override
         public String toString() {
-            return StringUtils.repeat("    ", scopeLevel) + "-- " + name + "[" + count + "] " +
+            int totalCount = count + accumulatedCount.get();
+            return StringUtils.repeat("    ", scopeLevel) + "-- " + name + "[" + totalCount + "] " +
                     DebugUtil.getPrettyStringMs(getTotalTime());
         }
 
         @Override
         public long getTotalTime() {
-            return stopWatch.elapsed(TimeUnit.MILLISECONDS);
+            return stopWatch.elapsed(TimeUnit.MILLISECONDS)
+                    + TimeUnit.NANOSECONDS.toMillis(accumulatedNanos.get());
         }
     }
 }
