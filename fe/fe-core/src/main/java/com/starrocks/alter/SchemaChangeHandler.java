@@ -823,22 +823,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column oriColumn = schemaForFinding.get(modColIndex);
 
-        rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn,
-                "MODIFY COLUMN", newColName);
-        // A keyness flip (value -> key or key -> value) shifts the
-        // key-derived range sort key on AGG/UNIQUE tables and on tables
-        // without an explicit ORDER BY, even when the column is not
-        // currently in the sort key.
-        if (olapTable.isRangeDistribution()
-                && oriColumn.isKey() != modColumn.isKey()) {
-            throw new DdlException(
-                "MODIFY COLUMN that changes keyness is not supported " +
-                "on tables with range distribution, because adding to " +
-                "or removing from the key column set shifts the range " +
-                "sort key on AGG/UNIQUE tables and on tables without " +
-                "explicit ORDER BY. Column: " + newColName);
-        }
-
         for (Index index : olapTable.getIndexes()) {
             if (index.getIndexType() == IndexDef.IndexType.GIN) {
                 if (index.getColumns().contains(oriColumn.getColumnId()) &&
@@ -968,8 +952,8 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for handling other indices
 
         boolean isVarcharLengthIncrease = isVarcharLengthIncrease(oriColumn, modColumn);
-        boolean isOnlyDifferentFromColumnType =
-                hasOnlyTypeChangeForVarcharLengthFastPath(oriColumn, modColumn);
+        boolean isOnlyDifferentFromColumnType = hasOnlyTypeChangeForVarcharLengthFastPath(oriColumn, modColumn);
+
         boolean keyOrderChanged = false;
         if (modColumn.isKey() && oriColumn.isKey()) {
             List<String> oldKeyColumns =
@@ -980,6 +964,39 @@ public class SchemaChangeHandler extends AlterHandler {
                         map(c -> Column.removeNamePrefix(c.getName())).collect(Collectors.toList());
             keyOrderChanged = !oldKeyColumns.equals(newKeyColumns);
         } // sort key need not be considered here, because modify column can not change the order of sort key
+
+        // The fast-schema-evolution path is available when FSE is enabled for this
+        // run mode and the modify does not reorder the key columns.
+        boolean fastSchemaEvolutionEligible =
+                (fastSchemaEvolution || (!RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution()))
+                        && !keyOrderChanged;
+
+        // Range-distribution per-tablet boundaries are stored as tuples in sort-key
+        // space, so a modify that changes the bytes a sort-key column was recorded
+        // under (type change, shrink, reposition, key reorder) invalidates them.
+        // A VARCHAR widen is the exception: it keeps those bytes identical, so it is
+        // range-safe whichever job runs it -- the sync/async fast-schema-evolution
+        // job, or even the heavy createJob shadow-mirror, which copies ranges verbatim.
+        // The fast-schema-evolution conditions below therefore only scope the bypass to
+        // a fast-schema-evolution table (and keep it cheap); they are not a correctness
+        // requirement -- only !keyOrderChanged is, since a key reorder shifts the sort key.
+        if (olapTable.isRangeDistribution()) {
+            // A keyness flip (value <-> key) changes the key column set, which shifts
+            // the key-derived range sort key on AGG/UNIQUE tables and on tables without
+            // an explicit ORDER BY, even when the column itself is not in the sort key.
+            if (oriColumn.isKey() != modColumn.isKey()) {
+                throw new DdlException("MODIFY COLUMN that changes keyness is not supported on tables with " +
+                        "range distribution, because adding to or removing from the key column set shifts the " +
+                        "range sort key on AGG/UNIQUE tables and on tables without explicit ORDER BY. Column: " +
+                        newColName);
+            }
+            boolean fastPathVarcharWiden = columnPos == null
+                    && isOnlyDifferentFromColumnType && isVarcharLengthIncrease
+                    && fastSchemaEvolutionEligible;
+            if (!fastPathVarcharWiden) {
+                rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn, "MODIFY COLUMN", newColName);
+            }
+        }
 
         alterIndexMetaIdToIncrVarcharLenColNames.putIfAbsent(indexMetaIdForFindingColumn, Sets.newHashSet());
         for (long otherIndexMetaId : otherIndexMetaIds) {
@@ -993,8 +1010,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         Column.removeNamePrefix(modColumn.getName()));
             }
             // This specified modify column can be perform by fast path for share nothing mode
-            if ((fastSchemaEvolution || (!RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution())) &&
-                    !keyOrderChanged) {
+            if (fastSchemaEvolutionEligible) {
                 // In this special case, we can use fast schema evolution bypassing the key and index check.
                 return true;
             }
