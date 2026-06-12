@@ -179,6 +179,52 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         verify(table, never()).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
     }
 
+    @Test
+    public void testFastPathJobsAreInForceCancelAllowlist() throws Exception {
+        // Regression for the FORCE dispatch gap: SchemaChangeHandler.cancel()
+        // only routes CANCEL ALTER TABLE ... FORCE into cancel(reason, true)
+        // when the job is an instanceof LakeTableSchemaChangeJobBase,
+        // LakeTableAlterMetaJobBase, OR LakeTableIndexFastPathJobBase. The
+        // fast-path ADD/DROP INDEX jobs reserve a commit version at
+        // FINISHED_REWRITING and heal the version chain only on force-cancel,
+        // so they MUST match the third predicate — otherwise their heal path
+        // is unreachable from SQL and a publish-stuck job can never be cleared.
+        // Build the real jobs through the handler and assert the allowlist
+        // predicate holds for the concrete subclasses.
+        SchemaChangeHandler handler = newHandler();
+
+        OlapTable addTable = stubLakeTable("c1");
+        IndexDef addDef = new IndexDef("ix_a", Collections.singletonList("c1"),
+                IndexDef.IndexType.BITMAP, "", new HashMap<>());
+        Method addBuilder = privateMethod("tryBuildLakeAddIndexJob", Database.class, OlapTable.class, List.class);
+
+        Index existing = new Index(101L, "ix_a", Collections.singletonList(ColumnId.create("c1")),
+                IndexDef.IndexType.BITMAP, "", new HashMap<>());
+        OlapTable dropTable = stubLakeTable("c1");
+        when(dropTable.getIndexes()).thenReturn(new ArrayList<>(Collections.singletonList(existing)));
+        Method dropBuilder = privateMethod("tryBuildLakeDropIndexJob", Database.class, OlapTable.class, List.class);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
+            // Build the gsm mock fully BEFORE passing it to thenReturn: stubGsm()
+            // does its own when()/thenReturn stubbing, which must not run nested
+            // inside the outer thenReturn(...) call (Mockito UnfinishedStubbing).
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            rmStatic.when(RunMode::getCurrentRunMode).thenReturn(RunMode.SHARED_DATA);
+
+            Object addJob = invoke(addBuilder, handler, stubDb(), addTable,
+                    Collections.<AlterClause>singletonList(new CreateIndexClause(addDef)));
+            Object dropJob = invoke(dropBuilder, handler, stubDb(), dropTable,
+                    Collections.<AlterClause>singletonList(new DropIndexClause("ix_a")));
+
+            assertTrue(addJob instanceof LakeTableIndexFastPathJobBase,
+                    "ADD INDEX fast-path job must be in the FORCE-cancel allowlist family");
+            assertTrue(dropJob instanceof LakeTableIndexFastPathJobBase,
+                    "DROP INDEX fast-path job must be in the FORCE-cancel allowlist family");
+        }
+    }
+
     // ============================================================
     // tryBuildLakeDropIndexJob
     // ============================================================
