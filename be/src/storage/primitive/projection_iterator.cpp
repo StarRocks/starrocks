@@ -85,6 +85,39 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
         for (size_t i = 0; i < _index_map.size(); i++) {
             chunk->get_column_by_index(i).swap(input_columns[_index_map[i]]);
         }
+        // The child may append columns at runtime beyond its static output schema -- the
+        // vector distance column appended by SegmentIterator::_read. _index_map is built
+        // from the static schemas, so those columns are not copied above and would be lost.
+        // Re-attach them (by their slot id, falling back to field id) so downstream slot/name
+        // lookups in the scan find them.
+        const size_t static_n = _child->output_schema().num_fields();
+        for (size_t k = static_n; k < _chunk->num_columns(); k++) {
+            const FieldPtr& f = _chunk->schema()->field(k);
+            SlotId sid = -1;
+            for (const auto& [s, idx] : _chunk->get_slot_id_to_index_map()) {
+                if (idx == k) {
+                    sid = s;
+                    break;
+                }
+            }
+            if (chunk->is_cid_exist(f->id())) {
+                // Output chunk reused across calls: swap the data into the existing column.
+                // Swap (not move) leaves a valid column in _chunk for the next reset().
+                size_t existing = chunk->get_column_id_to_index_map().at(f->id());
+                chunk->get_column_by_index(existing).swap(input_columns[k]);
+            } else {
+                // Fresh output column: move the filled column in (so row counts stay
+                // consistent for check_or_die), then leave an empty clone in _chunk so the
+                // next _chunk->reset() does not dereference a moved-from (null) ColumnPtr.
+                ColumnPtr empty = input_columns[k]->clone_empty();
+                if (sid >= 0) {
+                    chunk->append_vector_column(std::move(input_columns[k]), f, sid);
+                } else {
+                    chunk->append_column(input_columns[k], f);
+                }
+                input_columns[k] = std::move(empty);
+            }
+        }
     }
 #ifndef NDEBUG
     if (st.ok()) {

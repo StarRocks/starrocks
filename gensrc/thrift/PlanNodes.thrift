@@ -626,6 +626,9 @@ struct TVectorSearchOptions {
   // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
   // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
   12: optional bool refine_distance;
+  // 13: retired (was has_complex_residual). The BE now detects a row-filtering operator placed above
+  // the ANN scan directly from the execution tree (FragmentExecutor walk -> ScanNode), instead of an
+  // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
 }
 
 enum SampleMethod {

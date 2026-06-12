@@ -1990,6 +1990,19 @@ CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
 CONF_mDouble(vector_adaptive_ef_cap, "8.0");
 CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 
+// Residual scalar predicate (one not exactly resolved by an index) + ANN: when true and the index
+// supports efficient filtered search, pre-filter (early-evaluate the predicate into the ANN candidate);
+// otherwise post-filter (oversample the ANN and let the read-time predicate path filter the result).
+CONF_mBool(enable_vector_index_residual_prefilter, "true");
+// Post-filter oversample factor: the ANN searches k * this when post-filtering a residual predicate.
+CONF_mInt32(vector_index_residual_post_filter_oversample, "3");
+// PRE short-circuit: when the residual pre-filter bitmap holds at most this fraction of the segment's
+// rows, skip the filtered ANN search and score the candidates exactly (a sparse bitmap makes the HNSW
+// traversal slow and likely to under-return, paying the exact rescan on top of the wasted search).
+// Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
+// ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
+CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
+
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat
 // build by capping data_buffer_ at |rows| × dim × 4 bytes (does NOT cap
