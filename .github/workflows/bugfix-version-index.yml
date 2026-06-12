@@ -31,8 +31,11 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch-[0-9].[0-9]'
-      - 'branch-[0-9].[0-9].[0-9]'
+      # release lines. Use [0-9]+ (one-or-more), NOT bare [0-9] (single digit) — else multi-digit
+      # versions like branch-3.12, branch-3.5.20, branch-3.12.20 silently never match the filter
+      # and their backport merges never trigger this workflow. (Mirrors the push-tag pattern below.)
+      - 'branch-[0-9]+.[0-9]+'
+      - 'branch-[0-9]+.[0-9]+.[0-9]+'
     types:
       - closed
   push:
