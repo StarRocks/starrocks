@@ -259,7 +259,7 @@ FROM <data_source>
 #### `property.kafka_partition_discovery`
 
 **必需**：否\
-**描述**：指定了 `kafka_partitions` 时，Routine Load 作业是否继续自动发现新增的 Kafka 分区。有效值：`true` 和 `false`（默认值）。默认情况下，指定 `kafka_partitions` 后作业只消费列出的分区，主题后续新增的分区不会被消费。如果此属性设置为 `true`，`kafka_partitions` 和 `kafka_offsets` 仅用于指定所列分区的起始偏移量，作业会消费主题的所有分区，包括后续新增的分区。未在 `kafka_partitions` 中列出的分区从 `property.kafka_default_offsets` 指定的偏移量开始消费；如果未指定 `property.kafka_default_offsets`，则从 `OFFSET_BEGINNING` 开始消费。此属性只能与 `kafka_partitions` 一起使用。
+**描述**：指定了 `kafka_partitions` 时，Routine Load 作业是否继续自动发现新增的 Kafka 分区。有效值：`true` 和 `false`（默认值）。默认情况下，指定 `kafka_partitions` 后作业只消费列出的分区，主题后续新增的分区不会被消费。如果此属性设置为 `true`，`kafka_partitions` 和 `kafka_offsets` 仅用于指定所列分区的起始偏移量，作业会消费主题的所有分区，包括后续新增的分区。未在 `kafka_partitions` 中列出的分区从 `property.kafka_default_offsets` 指定的偏移量开始消费；如果未指定 `property.kafka_default_offsets`，则从 `OFFSET_BEGINNING` 开始消费。如果希望未列出的分区从最新的偏移量开始消费，请显式设置 `property.kafka_default_offsets` 为 `OFFSET_END`。此属性只能与 `kafka_partitions` 一起使用。
 
 #### `confluent.schema.registry.url`
 
