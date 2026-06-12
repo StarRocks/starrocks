@@ -20,10 +20,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
@@ -32,6 +34,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -54,6 +57,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -72,6 +76,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public class ReportHandlerTest {
     private static ConnectContext connectContext;
@@ -99,7 +104,10 @@ public class ReportHandlerTest {
                                 "'primary_index_cache_expire_sec' = '3600');")
                     .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
                                 "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
-                                "'primary_index_cache_expire_sec' = '3600');");
+                                "'primary_index_cache_expire_sec' = '3600');")
+                    .withTable("CREATE TABLE test.flat_json_report_handler_test(k1 int, v1 int) " +
+                                "duplicate key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                                "'flat_json.enable' = 'true');");
     }
 
     @Test
@@ -556,6 +564,193 @@ public class ReportHandlerTest {
                 "exception message should mention stop reason, got: " + ex.getMessage());
         Assertions.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt());
         Assertions.assertEquals(0, reportHandler.getReportQueueSize());
+    }
+
+    private static OlapTable getFlatJsonTable() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "flat_json_report_handler_test");
+    }
+
+    private static List<Long> getTableTabletIds(OlapTable table) {
+        List<Long> ids = new ArrayList<>();
+        for (Partition partition : table.getPartitions()) {
+            PhysicalPartition physPartition = partition.getDefaultPhysicalPartition();
+            for (MaterializedIndex index :
+                    physPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    ids.add(tablet.getId());
+                }
+            }
+        }
+        return ids;
+    }
+
+    private static Map<Long, TTablet> buildBackendTablets(long backendId, List<Long> tabletIds,
+                                                          Consumer<TTabletInfo> setup) {
+        List<TTabletInfo> infos = Lists.newArrayList();
+        TTablet tablet = new TTablet(infos);
+        for (Long id : tabletIds) {
+            TTabletInfo info = new TTabletInfo();
+            info.setTablet_id(id);
+            info.setSchema_hash(60000);
+            setup.accept(info);
+            tablet.tablet_infos.add(info);
+        }
+        Map<Long, TTablet> backendTablets = new HashMap<>();
+        backendTablets.put(backendId, tablet);
+        return backendTablets;
+    }
+
+    private static List<AgentBatchTask> mockSubmitCapture() {
+        List<AgentBatchTask> submitted = new ArrayList<>();
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+                submitted.add(task);
+            }
+        };
+        return submitted;
+    }
+
+    @Test
+    public void testHandleSetTabletFlatJsonConfigStaleBe() {
+        List<AgentBatchTask> submitted = mockSubmitCapture();
+        List<Long> tabletIds = getTableTabletIds(getFlatJsonTable());
+        Assertions.assertFalse(tabletIds.isEmpty());
+
+        Map<Long, TTablet> backendTablets = buildBackendTablets(
+                10001L, tabletIds, info -> info.setFlat_json_config_version(-1));
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetTabletFlatJsonConfig(10001L, backendTablets);
+
+        Assertions.assertFalse(submitted.isEmpty());
+        Assertions.assertTrue(submitted.get(0).getTaskNum() > 0);
+    }
+
+    @Test
+    public void testHandleSetTabletFlatJsonConfigOrphanBe() {
+        // flat_json_config_version not reported by BE (isSet=false) is treated as 0,
+        // so a BE that never received the config is reconciled on the next heartbeat.
+        FlatJsonConfig config = getFlatJsonTable().getFlatJsonConfig();
+        config.incVersion();
+        try {
+            List<AgentBatchTask> submitted = mockSubmitCapture();
+            List<Long> tabletIds = getTableTabletIds(getFlatJsonTable());
+            Assertions.assertFalse(tabletIds.isEmpty());
+
+            Map<Long, TTablet> backendTablets = buildBackendTablets(10001L, tabletIds, info -> {});
+
+            ReportHandler handler = new ReportHandler();
+            handler.testHandleSetTabletFlatJsonConfig(10001L, backendTablets);
+
+            Assertions.assertFalse(submitted.isEmpty());
+        } finally {
+            config.setVersion(0);
+        }
+    }
+
+    @Test
+    public void testHandleSetTabletFlatJsonConfigUpToDateBe() {
+        List<AgentBatchTask> submitted = mockSubmitCapture();
+        List<Long> tabletIds = getTableTabletIds(getFlatJsonTable());
+        Assertions.assertFalse(tabletIds.isEmpty());
+
+        Map<Long, TTablet> backendTablets = buildBackendTablets(
+                10001L, tabletIds, info -> info.setFlat_json_config_version(0));
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetTabletFlatJsonConfig(10001L, backendTablets);
+
+        Assertions.assertTrue(submitted.isEmpty());
+    }
+
+    @Test
+    public void testHandleSetTabletFlatJsonConfigAheadBe() {
+        List<AgentBatchTask> submitted = mockSubmitCapture();
+        List<Long> tabletIds = getTableTabletIds(getFlatJsonTable());
+        Assertions.assertFalse(tabletIds.isEmpty());
+
+        Map<Long, TTablet> backendTablets = buildBackendTablets(
+                10001L, tabletIds, info -> info.setFlat_json_config_version(1));
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetTabletFlatJsonConfig(10001L, backendTablets);
+
+        Assertions.assertTrue(submitted.isEmpty());
+    }
+
+    @Test
+    public void testHandleSetTabletFlatJsonConfigTableWithoutFlatJson() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable nonFlatJsonTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "properties_change_test");
+        List<Long> tabletIds = getTableTabletIds(nonFlatJsonTable);
+        Assertions.assertFalse(tabletIds.isEmpty());
+
+        List<AgentBatchTask> submitted = mockSubmitCapture();
+        Map<Long, TTablet> backendTablets = buildBackendTablets(
+                10001L, tabletIds, info -> info.setFlat_json_config_version(-1));
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetTabletFlatJsonConfig(10001L, backendTablets);
+
+        Assertions.assertTrue(submitted.isEmpty());
+    }
+
+    // Concurrent ALTER race: session-2 changes a factor (validated while enabled) while session-1
+    // disables flat_json. Under the write lock the change is rebased onto the now-disabled config,
+    // and the re-validation there must reject it so no disabled-with-factor state is persisted.
+    @Test
+    public void testConcurrentDisableRacesFactorChangeViaRebase() {
+        SchemaChangeHandler sch = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = getFlatJsonTable();
+
+        // Restore the shared fixture's config afterwards.
+        long origVersion = table.getFlatJsonConfig().getVersion();
+        boolean origEnable = table.getFlatJsonConfig().getFlatJsonEnable();
+        try {
+            table.getFlatJsonConfig().setFlatJsonEnable(true);
+            double racingFactor = 0.6;
+            double defaultNullFactor = new FlatJsonConfig().getFlatJsonNullFactor();
+            Assertions.assertNotEquals(racingFactor, defaultNullFactor);
+
+            mockSubmitCapture();
+
+            // session-1 disables flat_json (and bumps the version) when session-2 takes the write lock.
+            final boolean[] injected = {false};
+            new MockUp<Locker>() {
+                @Mock
+                public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
+                    if (lockType == LockType.WRITE && !injected[0]) {
+                        injected[0] = true;
+                        FlatJsonConfig live = table.getFlatJsonConfig();
+                        live.setFlatJsonEnable(false);
+                        live.incVersion();
+                    }
+                }
+
+                @Mock
+                public void unLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
+                }
+            };
+
+            // session-2 changes null.factor, validated while flat_json was still enabled.
+            Map<String, String> props = new HashMap<>();
+            props.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, String.valueOf(racingFactor));
+            boolean ok = sch.updateFlatJsonConfigMeta(db, table.getId(), props, TTabletMetaType.FLAT_JSON_CONFIG);
+
+            Assertions.assertTrue(injected[0]);
+            FlatJsonConfig result = table.getFlatJsonConfig();
+            Assertions.assertFalse(ok, "factor change rebased onto a disabled config must be rejected");
+            Assertions.assertFalse(result.getFlatJsonEnable());
+            Assertions.assertNotEquals(racingFactor, result.getFlatJsonNullFactor());
+        } finally {
+            table.getFlatJsonConfig().setFlatJsonEnable(origEnable);
+            table.getFlatJsonConfig().setVersion(origVersion);
+        }
     }
 
     private static final long VERSION_MISS_VISIBLE = 100L;
