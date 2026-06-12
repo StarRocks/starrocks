@@ -725,7 +725,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         if (stmt.isKafkaPartitionDiscovery()) {
             // the seed partitions are never pinned into customKafkaPartitions, so the
             // prepare()-time check skips them; validate once against the broker here,
-            // otherwise a mistyped partition would silently discard its seeded offset
+            // otherwise a mistyped partition would silently discard its seeded offset.
+            // acquire the compute resource first so the validation RPC is routed to the
+            // job's warehouse instead of the default one (shared-data mode)
+            kafkaRoutineLoadJob.acquireComputeResource();
             kafkaRoutineLoadJob.checkCustomPartition(stmt.getKafkaPartitionOffsets().stream()
                     .map(p -> p.first).collect(Collectors.toList()));
         }
@@ -1002,6 +1005,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
             }
         } else {
+            // the job may not have been scheduled since this FE became leader (ALTER is only
+            // allowed on paused jobs), so the transient compute resource may still point at
+            // the default warehouse; acquire it so the broker RPC targets the job's warehouse
+            acquireComputeResource();
             // check if partition is validate
             try {
                 checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));

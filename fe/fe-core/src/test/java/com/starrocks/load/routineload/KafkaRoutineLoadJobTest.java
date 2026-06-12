@@ -54,6 +54,7 @@ import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -69,7 +70,9 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -479,6 +482,102 @@ public class KafkaRoutineLoadJobTest {
         LoadException e = Assertions.assertThrows(LoadException.class,
                 () -> KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt));
         Assertions.assertTrue(e.getMessage().contains("999"), e.getMessage());
+    }
+
+    @Test
+    public void testFromCreateStmtWithPartitionDiscoveryValidatesViaJobComputeResource(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Injectable Database database,
+            @Injectable OlapTable table) throws StarRocksException {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
+        partitionIdToOffset.add(new Pair<>(1, 10L));
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionDiscovery", true);
+
+        ComputeResource acquiredResource = WarehouseComputeResource.of(12345L);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+                table.getId();
+                minTimes = 0;
+                result = 2L;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource((CRAcquireContext) any);
+                minTimes = 0;
+                result = acquiredResource;
+            }
+        };
+
+        ComputeResource[] resourceSeenByValidation = new ComputeResource[1];
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                resourceSeenByValidation[0] = computeResource;
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+
+        // shared-data routing: the create-time seed validation must use the compute resource
+        // acquired for the job's warehouse, not the static default left in the field (the
+        // resource is otherwise only acquired at first scheduling in prepare())
+        Assertions.assertSame(acquiredResource, resourceSeenByValidation[0]);
+    }
+
+    @Test
+    public void testAlterSeedValidationUsesAcquiredComputeResource() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+
+        ComputeResource acquiredResource = WarehouseComputeResource.of(12345L);
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        new Expectations(warehouseManager) {
+            {
+                warehouseManager.acquireComputeResource((CRAcquireContext) any);
+                minTimes = 0;
+                result = acquiredResource;
+            }
+        };
+
+        ComputeResource[] resourceSeenByValidation = new ComputeResource[1];
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                resourceSeenByValidation[0] = computeResource;
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2");
+        properties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "10,20");
+        RoutineLoadDataSourceProperties dataSourceProperties = new RoutineLoadDataSourceProperties("KAFKA", properties);
+        dataSourceProperties.analyze();
+
+        routineLoadJob.checkDataSourceProperties(dataSourceProperties);
+
+        // ALTER is only allowed on paused jobs, which may not have been scheduled since this
+        // FE became leader; the broker validation must re-acquire the job's compute resource
+        // instead of trusting the transient field (default warehouse after a restart)
+        Assertions.assertSame(acquiredResource, resourceSeenByValidation[0]);
     }
 
     @Test

@@ -924,6 +924,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // call before first scheduling
     // derived class can override this.
     public void prepare() throws StarRocksException {
+        acquireComputeResource();
+    }
+
+    // acquire the compute resource of this job's warehouse. Broker-metadata RPCs that run
+    // outside the scheduling path (e.g. partition validation at CREATE or ALTER) must call
+    // this first: the field is transient and defaults to the default warehouse, so in
+    // shared-data mode the RPC would otherwise be routed there instead of the job's warehouse
+    protected void acquireComputeResource() {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
