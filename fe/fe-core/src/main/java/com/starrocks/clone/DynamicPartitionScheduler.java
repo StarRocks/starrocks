@@ -385,19 +385,21 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 return true;
             }
 
-            // Only the add half is relaxed: a metadata-only alter (UPDATING_META) or a running
-            // safe alter job (lake ADD/DROP INDEX fast path) does not block dynamic ADD PARTITION.
-            // The drop half keeps its existing state handling below.
-            boolean tolerateConcurrentAlter = Config.enable_concurrent_add_partition_during_alter
-                    && (olapTable.getState() == OlapTable.OlapTableState.UPDATING_META
-                        || AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
-                    && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD
-                    && !tolerateConcurrentAlter) {
-                String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
-                            "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
-                runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
-                skipAddPartition = true;
+                    && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
+                // Only the add half is relaxed: a metadata-only alter (UPDATING_META) or a running
+                // safe alter job (lake ADD/DROP INDEX fast path) does not block dynamic ADD PARTITION.
+                // The drop half keeps its existing state handling below. Compute the (job-map-scanning)
+                // tolerance only for non-NORMAL tables so the common NORMAL path stays scan-free.
+                boolean tolerateConcurrentAlter = Config.enable_concurrent_add_partition_during_alter
+                        && (olapTable.getState() == OlapTable.OlapTableState.UPDATING_META
+                            || AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
+                if (!tolerateConcurrentAlter) {
+                    String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
+                                "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
+                    runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
+                    skipAddPartition = true;
+                }
             }
 
             // Determine the partition column type
