@@ -64,12 +64,16 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.dump.QueryDumper;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ConstantFunction;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
+import com.starrocks.sql.optimizer.statistics.StatsVersion;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.VarcharType;
 import io.netty.buffer.ByteBuf;
@@ -796,19 +800,25 @@ public class MetaFunctions {
     }
 
     /**
+     * Resolve an OLAP table for the global-dict / min-max meta functions. Goes through
+     * {@link #inspectTable} so table-level privileges are enforced -- these functions must not
+     * disclose or mutate metadata for tables the caller has no access to.
+     */
+    private static OlapTable inspectOlapTable(ConstantOperator tableName) {
+        Table table = inspectTable(TableName.fromString(tableName.getVarchar())).getRight();
+        if (!(table instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
+        }
+        return (OlapTable) table;
+    }
+
+    /**
      * Inspect global dictionary table, and return the content in JSON format.
      */
     @ConstantFunction(name = "inspect_global_dict", argTypes = {VARCHAR,
             VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspectGlobalDict(ConstantOperator tableName, ConstantOperator columnName) {
-        TableName tableNameValue = TableName.fromString(tableName.getVarchar());
-        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(new ConnectContext(), tableNameValue);
-        maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
-        if (!(maybeTable.get() instanceof OlapTable)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
-        }
-        OlapTable table = (OlapTable) maybeTable.get();
+        OlapTable table = inspectOlapTable(tableName);
         String column = columnName.getVarchar();
 
         CacheDictManager instance = CacheDictManager.getInstance();
@@ -834,6 +844,80 @@ public class MetaFunctions {
             return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
         return ConstantOperator.createVarchar(lastQueryId.toString());
+    }
+
+    /**
+     * Invalidate global dictionary for a column, and return the result status.
+     */
+    @ConstantFunction(name = "invalidate_global_dict", argTypes = {VARCHAR,
+            VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator invalidateGlobalDict(ConstantOperator tableName, ConstantOperator columnName) {
+        authOperatorPrivilege();
+
+        OlapTable table = inspectOlapTable(tableName);
+        String column = columnName.getVarchar();
+
+        CacheDictManager instance = CacheDictManager.getInstance();
+        ColumnId columnId = ColumnId.create(column);
+
+        // Check if global dict exists before attempting to invalidate
+        if (!instance.hasGlobalDict(table.getId(), columnId)) {
+            return ConstantOperator.createVarchar("No global dictionary found for column: " + column);
+        }
+
+        try {
+            instance.removeGlobalDict(table, columnId);
+        } catch (Exception e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_ERROR,
+                    "Failed to invalidate global dictionary: " + e.getMessage());
+        }
+        return ConstantOperator.createVarchar("invalidated column dict");
+    }
+
+    /**
+     * Inspect the MinMaxStats of a column
+     */
+    @ConstantFunction(name = "inspect_minmax",
+            argTypes = {VARCHAR, VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMinMax(ConstantOperator tableName, ConstantOperator columnName) {
+        OlapTable table = inspectOlapTable(tableName);
+        ColumnId columnId = ColumnId.create(columnName.getVarchar());
+        // getTableLastUpdateTimestamp may return null (table never updated); treat as version 0 to
+        // avoid an auto-unboxing NPE when constructing StatsVersion.
+        Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
+        long version = lastUpdateTime == null ? 0L : lastUpdateTime;
+
+        Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.internalInstance()
+                .getStatsSync(new ColumnIdentifier(table.getId(), columnId),
+                        new StatsVersion(-1, version));
+
+        return minMax.map(columnMinMax -> ConstantOperator.createVarchar(columnMinMax.toString()))
+                .orElseGet(() -> ConstantOperator.createNull(VarcharType.VARCHAR));
+    }
+
+    /**
+     * Invalidate MinMax statistics for a column, and return the result status.
+     */
+    @ConstantFunction(name = "invalidate_minmax", argTypes = {VARCHAR,
+            VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator invalidateMinMax(ConstantOperator tableName, ConstantOperator columnName) {
+        authOperatorPrivilege();
+
+        OlapTable table = inspectOlapTable(tableName);
+        ColumnId columnId = ColumnId.create(columnName.getVarchar());
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(table.getId(), columnId);
+
+        // getTableLastUpdateTimestamp may return null; treat as version 0 to avoid an auto-unboxing NPE.
+        Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
+        StatsVersion version = new StatsVersion(-1, lastUpdateTime == null ? 0L : lastUpdateTime);
+
+        try {
+            IMinMaxStatsMgr.internalInstance().removeStats(columnIdentifier, version);
+        } catch (Exception e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_ERROR,
+                    "Failed to invalidate MinMax statistics: " + e.getMessage());
+        }
+        return ConstantOperator.createVarchar("invalidated column minmax");
     }
 
 }
