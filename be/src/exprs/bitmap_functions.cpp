@@ -516,7 +516,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_min(FunctionContext* context, const 
 
 StatusOr<ColumnPtr> BitmapFunctions::base64_to_bitmap(FunctionContext* context, const Columns& columns) {
     auto* state = reinterpret_cast<Base64ToBitmapState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    if (state != nullptr && state->is_constant) {
+    if (state != nullptr && state->is_constant && columns[0]->is_constant()) {
         return base64_to_bitmap_const(context, columns);
     }
     return base64_to_bitmap_general(context, columns);
