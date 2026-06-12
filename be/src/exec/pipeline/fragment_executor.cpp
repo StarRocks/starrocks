@@ -174,7 +174,6 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
-    _fragment_ctx->set_fragment_lifecycle(_query_ctx->get_shared_ptr());
 
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);

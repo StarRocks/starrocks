@@ -168,7 +168,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
         }
 
         // finally, find no query contexts, so create a new one
-        auto&& ctx = std::make_shared<QueryContext>();
+        auto&& ctx = QueryContext::create();
         auto* ctx_raw_ptr = ctx.get();
         ctx_raw_ptr->set_query_id(query_id);
         ctx_raw_ptr->set_query_lifecycle(this);

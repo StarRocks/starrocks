@@ -55,6 +55,12 @@ QueryContext::QueryContext()
     _lifetime_sw.start();
 }
 
+QueryContextPtr QueryContext::create() {
+    auto query_ctx = std::make_shared<QueryContext>();
+    query_ctx->_fragment_mgr = std::make_unique<FragmentContextManager>(query_ctx);
+    return query_ctx;
+}
+
 QueryContext::~QueryContext() noexcept {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
     // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will

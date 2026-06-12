@@ -51,6 +51,8 @@ class QueryContext : public QueryContextLifetime,
                      public FragmentLifecycle,
                      public std::enable_shared_from_this<QueryContext> {
 public:
+    static QueryContextPtr create();
+
     QueryContext();
     ~QueryContext() noexcept;
     void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
