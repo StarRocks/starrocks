@@ -112,6 +112,14 @@ public:
     // from schema.table_indices if still present.
     void apply_drop_index(const TxnLogPB_OpDropIndex& op);
 
+    // Apply an OpDcgCompaction (SDCG lightweight overlay-chain merge): for each entry, rebuild the
+    // rssid's DeltaColumnGroupVerPB -- drop the merged-away layers (version in merged_versions; orphan
+    // their .spcols files) and insert the single merged packed `.spcols` at version
+    // max(merged_versions) (<= compact_version). Layers with version > compact_version (concurrent
+    // writes that raced the merge) are PRESERVED on top, so the merge never discards newer data. No
+    // rowset / index / delvec change -- pure DCG metadata rewrite.
+    void apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op);
+
     // batch processing functions for merging multiple opwrites into one rowset
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);

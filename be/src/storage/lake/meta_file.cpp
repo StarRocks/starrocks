@@ -953,6 +953,110 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
     }
 }
 
+void MetaFileBuilder::apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op) {
+    auto* dcgs = _tablet_meta->mutable_dcg_meta()->mutable_dcgs();
+    for (const auto& entry : op.entries()) {
+        const uint32_t rssid = entry.rssid();
+        auto it = dcgs->find(rssid);
+        if (it == dcgs->end()) {
+            // The rssid's DCG entry no longer exists (e.g. a full compaction converged it first). The
+            // merge is moot; orphan the merged file we wrote so it's GC'd, then skip.
+            FileMetaPB fm;
+            fm.set_name(entry.merged_file().name());
+            if (entry.merged_file().shared()) fm.set_shared(true);
+            _tablet_meta->mutable_orphan_files()->Add(std::move(fm));
+            continue;
+        }
+        DeltaColumnGroupVerPB& old_ver = it->second;
+
+        std::unordered_set<int64_t> merged_set(entry.merged_versions().begin(), entry.merged_versions().end());
+        int64_t merged_file_version = 0;
+        for (int64_t v : entry.merged_versions()) {
+            merged_file_version = std::max(merged_file_version, v);
+        }
+
+        // Buffer every EMITTED file's fields so the parallel arrays stay strictly 1:1; the optional
+        // encryption_metas / shared_files arrays are emitted only if any entry is non-trivial (matching
+        // the reader's `j < size` prefix-guard and the all-or-nothing convention).
+        DeltaColumnGroupVerPB neo;
+        std::vector<std::string> enc_metas; // per emitted file ("" if none)
+        std::vector<bool> shareds;          // per emitted file
+        bool any_enc = false;
+        bool any_shared = false;
+
+        auto emit = [&](const std::string& file, int64_t version, const DeltaColumnGroupColumnIdsPB& cids,
+                        int64_t file_size, DeltaColumnFileKindPB kind, int64_t sparse_row_count,
+                        const SparsePresencePB& presence, const ColumnPresenceListPB& cpl,
+                        const std::string& enc, bool shared) {
+            neo.add_column_files(file);
+            neo.add_versions(version);
+            neo.add_unique_column_ids()->CopyFrom(cids);
+            neo.add_column_file_sizes(file_size);
+            neo.add_file_kinds(kind);
+            neo.add_sparse_row_counts(kind == SPARSE_PERCOL ? sparse_row_count : 0);
+            neo.add_presences()->CopyFrom(presence);
+            neo.add_column_presence_lists()->CopyFrom(cpl);
+            enc_metas.push_back(enc);
+            shareds.push_back(shared);
+            if (!enc.empty()) any_enc = true;
+            if (shared) any_shared = true;
+        };
+
+        // 1. Carry forward surviving layers (version NOT in merged_set); orphan the merged-away files.
+        for (int i = 0; i < old_ver.column_files_size(); ++i) {
+            const int64_t ver = i < old_ver.versions_size() ? old_ver.versions(i) : 0;
+            if (merged_set.count(ver) > 0) {
+                FileMetaPB fm;
+                fm.set_name(old_ver.column_files(i));
+                if (i < old_ver.shared_files_size() && old_ver.shared_files(i)) fm.set_shared(true);
+                _tablet_meta->mutable_orphan_files()->Add(std::move(fm));
+                continue;
+            }
+            const DeltaColumnFileKindPB kind = i < old_ver.file_kinds_size() ? old_ver.file_kinds(i) : DENSE_COLS;
+            emit(old_ver.column_files(i), ver, old_ver.unique_column_ids(i),
+                 i < old_ver.column_file_sizes_size() ? old_ver.column_file_sizes(i) : 0, kind,
+                 i < old_ver.sparse_row_counts_size() ? old_ver.sparse_row_counts(i) : 0,
+                 i < old_ver.presences_size() ? old_ver.presences(i) : SparsePresencePB(),
+                 i < old_ver.column_presence_lists_size() ? old_ver.column_presence_lists(i) : ColumnPresenceListPB(),
+                 i < old_ver.encryption_metas_size() ? old_ver.encryption_metas(i) : std::string(),
+                 i < old_ver.shared_files_size() ? old_ver.shared_files(i) : false);
+        }
+
+        // 2. Insert the merged packed `.spcols` at version = max(merged_versions) (<= compact_version),
+        //    so concurrent layers (version > compact_version) carried forward above stay newer.
+        DeltaColumnGroupColumnIdsPB merged_cids;
+        for (uint32_t uid : entry.column_uids()) {
+            merged_cids.add_column_ids(uid);
+        }
+        emit(entry.merged_file().name(), merged_file_version, merged_cids, entry.merged_file().size(),
+             SPARSE_PERCOL, entry.presence().row_count(), entry.presence(), entry.column_presence(),
+             entry.merged_file().encryption_meta(), entry.merged_file().shared());
+
+        // 3. Optional 1:1 arrays: emit only when any entry is non-trivial (preserve absence otherwise).
+        if (any_enc) {
+            for (auto& e : enc_metas) neo.add_encryption_metas(e);
+        }
+        if (any_shared) {
+            for (bool s : shareds) neo.add_shared_files(s);
+        }
+
+        // 4. Carry forward inline patches not folded by the merge (v1 CN excludes inline, so all survive).
+        for (const auto& ip : old_ver.inline_patches()) {
+            if (merged_set.count(ip.version()) > 0) continue;
+            neo.add_inline_patches()->CopyFrom(ip);
+        }
+
+        // 5. Base segment row count M is unchanged by the merge.
+        if (old_ver.has_source_segment_num_rows()) {
+            neo.set_source_segment_num_rows(old_ver.source_segment_num_rows());
+        } else if (entry.has_source_segment_num_rows()) {
+            neo.set_source_segment_num_rows(entry.source_segment_num_rows());
+        }
+
+        old_ver = std::move(neo);
+    }
+}
+
 Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels) {
     std::map<uint32_t, RowsetMetadataPB*> segment_id_to_rowset;
     for (int i = 0; i < _tablet_meta->rowsets_size(); i++) {
