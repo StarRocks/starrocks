@@ -55,6 +55,7 @@ under the License.
         <spark.version>3.5.7</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.16.0</parquet.version>
+        <orc.version>1.9.1</orc.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
@@ -70,7 +71,7 @@ under the License.
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.133.Final</io.netty.version>
+        <io.netty.version>4.1.135.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -906,6 +907,13 @@ under the License.
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-avro</artifactId>
                 <version>${parquet.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-core -->
+            <dependency>
+                <groupId>org.apache.orc</groupId>
+                <artifactId>orc-core</artifactId>
+                <version>${orc.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-collections/commons-collections -->

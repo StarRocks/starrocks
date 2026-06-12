@@ -30,6 +30,8 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
+    friend class SchemaPartitionsMetaScannerTest;
+
     Status get_new_table();
     Status fill_chunk(ChunkPtr* chunk);
 

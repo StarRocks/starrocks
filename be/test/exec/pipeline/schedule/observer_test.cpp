@@ -177,7 +177,7 @@ public:
         _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
         _runtime_state->_obj_pool = std::make_shared<ObjectPool>();
         _dummy_query_ctx->attach_to_runtime_state(_runtime_state.get());
-        _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get());
+        _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get(), &_dummy_fragment_ctx->fragment_runtime_state());
         _runtime_state->set_fragment_dict_state(_dummy_fragment_ctx->dict_state());
         _runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");
         _dummy_fragment_ctx->set_runtime_state(std::move(_runtime_state));
@@ -195,11 +195,15 @@ struct SimpleTestContext {
                       QueryContext* query_ctx)
             : pipeline(0, std::move(factories), exec_group) {
         auto operators = pipeline.create_operators(1, 0);
-        driver = std::make_unique<PipelineDriver>(operators, query_ctx, fragment_ctx, &pipeline, &pipeline, 1);
-        driver->assign_observer();
+        auto* query_runtime_state = query_ctx == nullptr ? nullptr : &query_ctx->query_runtime_state();
+        auto* fragment_runtime_state = fragment_ctx == nullptr ? nullptr : &fragment_ctx->fragment_runtime_state();
+        driver = std::make_unique<PipelineDriver>(operators, query_runtime_state, fragment_runtime_state,
+                                                  pipeline.pipeline_event(), &pipeline, nullptr, 1);
         driver_queue = std::make_unique<QuerySharedDriverQueue>(metrics.get_driver_queue_metrics());
         fragment_ctx->init_event_scheduler();
         fragment_ctx->event_scheduler()->attach_queue(driver_queue.get());
+        driver->set_observer(fragment_ctx->event_scheduler()->create_driver_observer(driver.get()));
+        driver->assign_observer();
     }
 
     Pipeline pipeline;

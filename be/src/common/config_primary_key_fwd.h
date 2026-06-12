@@ -202,6 +202,9 @@ CONF_mInt32(retry_apply_timeout_second, "7200");
 // The value must be power of two.
 CONF_Int32(pk_index_map_shard_size, "4096");
 
+// The chunk size for vector query engine
+CONF_Int32(vector_chunk_size, "4096");
+
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
 // requests will fail.

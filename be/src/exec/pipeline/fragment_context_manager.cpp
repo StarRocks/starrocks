@@ -17,10 +17,11 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 #include "common/logging.h"
+#include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/fragment_context.h"
-#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
@@ -39,6 +40,9 @@ const RuntimeServices& runtime_services(const RuntimeState* state) {
 
 } // namespace
 
+FragmentContextManager::FragmentContextManager(FragmentLifecycleWeakPtr fragment_lifecycle)
+        : _fragment_lifecycle(std::move(fragment_lifecycle)) {}
+
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);
@@ -47,6 +51,9 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
     } else {
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
+        if (!_fragment_lifecycle.expired()) {
+            raw_ctx->set_fragment_lifecycle(_fragment_lifecycle);
+        }
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
         raw_ctx->_set_default_workgroup();
         return raw_ctx;
@@ -71,6 +78,9 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         RETURN_IF_ERROR(runtime_services(fragment_ctx->runtime_state())
                                 .profile_report_worker->register_pipeline_load(fragment_ctx->query_id(), fragment_id));
+    }
+    if (!_fragment_lifecycle.expired()) {
+        fragment_ctx->set_fragment_lifecycle(_fragment_lifecycle);
     }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
     return Status::OK();

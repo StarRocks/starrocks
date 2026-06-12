@@ -41,13 +41,13 @@ void ExecutionGroup::clear_all_drivers(Pipelines& pipelines) {
     }
 }
 
-void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
+void ExecutionGroup::count_down_pipeline() {
     // Cache the member before performing the atomic increment.
     // This ensures we won't dereference `this` after another thread may
     // have deleted the object.
     size_t num_pipelines = _num_pipelines;
     if (++_num_finished_pipelines == num_pipelines) {
-        state->fragment_ctx()->count_down_execution_group();
+        _execution_group_lifecycle->on_execution_group_finished();
     }
 }
 
@@ -93,7 +93,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
         // since prepare is async, we must hold the runtime state ptr
-        auto runtime_state_holder = driver->fragment_ctx()->runtime_state_ptr();
+        auto runtime_state_holder = state->fragment_ctx()->runtime_state_ptr();
         bool submitted = pipeline_prepare_pool->try_offer(
                 [sync_ctx, &driver, runtime_state_holder = std::move(runtime_state_holder)]() {
                     auto runtime_state = runtime_state_holder.get();

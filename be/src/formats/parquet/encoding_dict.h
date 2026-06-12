@@ -282,7 +282,7 @@ public:
                 cnt += !is_nulls[i];
             }
         } else {
-            _temp_read_data.resize(read_count);
+            _temp_read_data.resize(read_count + 1);
             auto ret =
                     _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _temp_read_data.data(), read_count);
             if (UNLIKELY(ret <= 0)) {

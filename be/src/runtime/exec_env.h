@@ -41,9 +41,9 @@
 
 #include "common/status.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/query_cache/cache_manager_fwd.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/query_cache/cache_manager_fwd.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker_fwd.h"
 #include "runtime/service_contexts.h"
@@ -185,7 +185,7 @@ public:
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
-    ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
+    ProfileReportWorker* profile_report_worker();
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
@@ -207,7 +207,7 @@ public:
 
     AgentServer* agent_server() const { return _agent_server; }
 
-    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
+    query_cache::CacheManagerRawPtr cache_mgr() const;
 
     ThreadPool* delete_file_thread_pool();
 
@@ -256,8 +256,6 @@ private:
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
-    ProfileReportWorker* _profile_report_worker = nullptr;
-
     lake::TabletManager* _lake_tablet_manager = nullptr;
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
@@ -265,7 +263,6 @@ private:
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
 
     AgentServer* _agent_server = nullptr;
-    query_cache::CacheManagerRawPtr _cache_mgr = nullptr;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;

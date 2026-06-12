@@ -299,7 +299,7 @@ private:
         std::map<std::string, std::string> query_params;
         double vector_range = -1.0;
         int result_order = 0;
-        bool use_ivfpq = false;
+        bool refine_distance = false;
 
         // Brute-force fallback fields (when .vi file is missing)
         bool use_brute_force = false;
@@ -315,7 +315,7 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const { return use_vector_index && !refine_distance; }
     };
 
     // Inverted index related context, only created when needed
@@ -510,7 +510,6 @@ private:
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
-    Status _prepare_vector_index();
     Status _init_ann_reader();
     void _setup_brute_force_fallback(const TabletIndex& index);
     void _compute_brute_force_distances(const Column* vector_column, Chunk* chunk);
@@ -847,10 +846,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _vector_index_ctx->vector_slot_id = _opts.vector_search_option->vector_slot_id;
         _vector_index_ctx->vector_range = _opts.vector_search_option->vector_range;
         _vector_index_ctx->result_order = _opts.vector_search_option->result_order;
-        _vector_index_ctx->use_ivfpq = _opts.vector_search_option->use_ivfpq;
+        _vector_index_ctx->refine_distance = _opts.vector_search_option->refine_distance;
         _vector_index_ctx->query_params = _opts.vector_search_option->query_params;
 
-        if (_vector_index_ctx->vector_range >= 0 && _vector_index_ctx->use_ivfpq) {
+        if (_vector_index_ctx->vector_range >= 0 && _vector_index_ctx->refine_distance) {
             _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
                                    _opts.vector_search_option->k_factor;
         } else {
@@ -951,7 +950,6 @@ Status SegmentIterator::_init_internal() {
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
     _init_column_access_paths();
-    RETURN_IF_ERROR(_prepare_vector_index());
     RETURN_IF_ERROR(_init_ann_reader());
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
@@ -1041,7 +1039,7 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
 }
 
 // Sets up brute-force fallback state and ensures the vector data column is in _schema.
-// Called from _prepare_vector_index and _init_ann_reader, both before _init_column_iterators.
+// Called from _init_ann_reader, before _init_column_iterators.
 void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     int32_t vector_col_uid = index.col_unique_ids()[0];
     _vector_index_ctx->use_vector_index = false;
@@ -1101,43 +1099,16 @@ void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     _vector_index_ctx->added_vector_data_column = true;
 }
 
-// Handles the case where the segment footer explicitly marks no .vi file (skip_vector_index).
-// Adds the vector column to _schema so it's read in the same I/O pass as other columns.
-Status SegmentIterator::_prepare_vector_index() {
-    if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index || _vector_index_ctx->use_ivfpq) {
-        return Status::OK();
-    }
-
-    if (!_segment->skip_vector_index()) {
-        return Status::OK();
-    }
-
-    // Footer marks no .vi file — find the vector index and set up brute-force
-    for (const auto& index : *_segment->tablet_schema().indexes()) {
-        if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
-            _setup_brute_force_fallback(index);
-            break;
-        }
-    }
-    return Status::OK();
-}
-
-// Opens the .vi file and initializes the ANN reader.
-// If the .vi file is missing at runtime (e.g., async build not yet finished),
-// falls back to brute-force — the vector column added to _schema will be
-// initialized by the subsequent _init_column_iterators call.
+// Opens the .vi and inits the ANN reader. If the index is unusable (footer marks no .vi, or the .vi
+// is missing at runtime), turns it off and -- only for the trust path -- sets up the brute-force
+// fallback (refine recomputes above the scan). Runs before _init_column_iterators so any column the
+// fallback adds to _schema is read in the same pass.
 Status SegmentIterator::_init_ann_reader() {
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
     }
 
-    if (_segment->skip_vector_index()) {
-        // Already handled by _prepare_vector_index
-        _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
-    }
-
-    // Find vector index from tablet schema
+    // Locate the vector index (needed to open the .vi or to build a brute-force fallback).
     std::shared_ptr<TabletIndex> tablet_index_meta;
     for (const auto& index : *_segment->tablet_schema().indexes()) {
         if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
@@ -1146,11 +1117,16 @@ Status SegmentIterator::_init_ann_reader() {
         }
     }
     if (!tablet_index_meta) {
-        return Status::OK();
+        // Vector query but no VECTOR index in this segment's schema -- fail rather than deref a null reader.
+        return Status::InternalError(
+                fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
     }
 
+    if (_segment->skip_vector_index()) {
+        // Footer marks no .vi for this segment.
+        _vector_index_ctx->use_vector_index = false;
+    } else {
 #ifdef WITH_TENANN
-    {
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
             index_path =
@@ -1159,19 +1135,16 @@ Status SegmentIterator::_init_ann_reader() {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());
         }
-
         FileSystem* vi_fs = _opts.belonged_to_cloud_native ? _segment->file_system() : nullptr;
+        // Turns off use_vector_index on a runtime NotFound / not-supported.
         RETURN_IF_ERROR(_init_reader_from_file(index_path, tablet_index_meta, _vector_index_ctx->query_params, vi_fs));
-    }
 #else
-    // Without TenANN, ANN index is not available — force brute-force
-    _vector_index_ctx->use_vector_index = false;
+        _vector_index_ctx->use_vector_index = false; // no TenANN
 #endif
+    }
 
-    if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->use_ivfpq) {
-        // .vi file not found, empty reader, or no TenANN support.
-        // Set up brute-force fallback for non-IVFPQ only. IVFPQ computes distance
-        // in the expression layer, not via a BE-produced distance column.
+    if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
+        // No usable index: trust needs brute-force to produce the distance column; refine recomputes above.
         _setup_brute_force_fallback(*tablet_index_meta);
     }
 
@@ -2654,7 +2627,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk = _context->_adapt_global_dict_chunk.get();
     }
 
-    if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->use_ivfpq) {
+    if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
         DCHECK(rowid != nullptr);
         FloatColumn::MutablePtr distance_column = FloatColumn::create();
         vector<rowid_t> rowids;

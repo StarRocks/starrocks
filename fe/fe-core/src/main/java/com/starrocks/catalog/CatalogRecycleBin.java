@@ -1336,6 +1336,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         return idToPartition.get(id);
     }
 
+    public synchronized int getRecycleDatabaseNum() {
+        return idToDatabase.size();
+    }
+
+    public synchronized int getRecycleTableNum() {
+        return idToTableInfo.size();
+    }
+
+    public synchronized int getRecyclePartitionNum() {
+        return idToPartition.size();
+    }
+
     @VisibleForTesting
     synchronized RecycleTableInfo getRecycleTableInfo(long id) {
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {

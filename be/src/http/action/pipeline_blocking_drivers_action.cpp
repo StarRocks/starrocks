@@ -145,10 +145,14 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
 
         auto iterate_func_generator = [](QueryMap& query_map) {
             return [&query_map](pipeline::DriverConstRawPtr driver) {
-                TUniqueId query_id = driver->query_ctx()->query_id();
-                TUniqueId fragment_id = driver->fragment_ctx()->fragment_instance_id();
-                bool is_cancelled = driver->fragment_ctx()->is_canceled();
-                std::string status = driver->fragment_ctx()->final_status().to_string();
+                TUniqueId query_id = driver->query_runtime_state()->query_id();
+                auto* runtime_state = driver->runtime_state();
+                DCHECK(runtime_state != nullptr);
+                auto* fragment_ctx = runtime_state->fragment_ctx();
+                DCHECK(fragment_ctx != nullptr);
+                TUniqueId fragment_id = fragment_ctx->fragment_instance_id();
+                bool is_cancelled = runtime_state->is_cancelled();
+                std::string status = fragment_ctx->final_status().to_string();
                 int32_t driver_id = driver->driver_id();
                 pipeline::DriverState state = driver->driver_state();
                 std::string driver_desc = driver->to_readable_string();

@@ -56,6 +56,7 @@ Status SortedAggregateStreamingSourceOperator::set_finishing(RuntimeState* state
 }
 
 Status SortedAggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
 }
 

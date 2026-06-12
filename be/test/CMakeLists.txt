@@ -76,6 +76,7 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -86,6 +87,7 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
         ./exec/schema_scanner/schema_scanner_test.cpp
         ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
+        ./exec/schema_scanner/schema_partitions_meta_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/tablet_info_test.cpp
@@ -177,6 +179,7 @@ set(EXEC_FILES
         ./exprs/string_fn_trim_test.cpp
         ./exprs/string_fn_money_format_decimal_test.cpp
         ./exprs/string_fn_url_extract_parameter_test.cpp
+        ./exprs/string_fn_ngram_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
@@ -251,6 +254,7 @@ set(EXEC_FILES
         ./http/http_client_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
+        ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./http/action/pprof_actions_test.cpp
@@ -314,6 +318,7 @@ set(EXEC_FILES
         ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
+        ./util/time_guard_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/mem_hook_test.cpp
@@ -570,6 +575,7 @@ SET(DW_TEST_FILES
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_metrics_test.cpp
+    ./storage/storage_engine_compaction_test.cpp
     ./storage/storage_engine_test.cpp
     ./storage/table_reader_remote_test.cpp
     ./storage/table_reader_test.cpp

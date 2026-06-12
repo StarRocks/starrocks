@@ -50,10 +50,10 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
@@ -67,7 +67,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _query_ctx->attach_to_runtime_state(_runtime_state);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     TExportSink t_sink;
@@ -85,7 +85,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     int timeout_us = 5 * 1000 * 1000; // 5s
 
     Awaitility await;
-    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _fragment_ctx->is_canceled(); }));
+    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _runtime_state->is_cancelled(); }));
 
     // now cancel the operator
     export_op->set_finishing(_runtime_state);
@@ -95,7 +95,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _query_ctx->count_down_fragments();
+    _query_ctx->count_down_fragment();
 }
 
 // Test export with header option
@@ -119,10 +119,10 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
@@ -136,7 +136,7 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _query_ctx->attach_to_runtime_state(_runtime_state);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     // Configure export sink with header options
@@ -177,7 +177,7 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _query_ctx->count_down_fragments();
+    _query_ctx->count_down_fragment();
 
     // Clean up test directory
     std::filesystem::remove_all(test_dir);

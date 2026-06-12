@@ -20,28 +20,31 @@
 #include <memory>
 #include <memory_resource>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
+#include "compute_env/query_cache/cache_param.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/fragment_runtime_state.h"
+#include "exec/pipeline/primitives/execution_group_lifecycle.h"
+#include "exec/pipeline/primitives/fragment_lifecycle.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/pipeline/scan/morsel_queue.h"
-#include "exec/query_cache/cache_param.h"
+#include "exec/runtime/fragment_runtime_state.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "storage/primitive/predicate_tree_params.h"
@@ -58,7 +61,7 @@ class PassThroughChunkBufferGuard;
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
-class FragmentContext {
+class FragmentContext : public ExecutionGroupLifecycle {
     friend class FragmentContextManager;
 
 public:
@@ -79,8 +82,8 @@ public:
     }
     FragmentRuntimeState& fragment_runtime_state() { return _fragment_runtime_state; }
     const FragmentRuntimeState& fragment_runtime_state() const { return _fragment_runtime_state; }
-    void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
-    const TNetworkAddress& fe_addr() { return _fe_addr; }
+    void set_fe_addr(const TNetworkAddress& fe_addr) { _fragment_runtime_state.set_fe_addr(fe_addr); }
+    const TNetworkAddress& fe_addr() const { return _fragment_runtime_state.fe_addr(); }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
@@ -97,22 +100,19 @@ public:
 
     bool all_execution_groups_finished() const { return _num_finished_execution_groups == _execution_groups.size(); }
     void count_down_execution_group(size_t val = 1);
+    void on_execution_group_finished() override { count_down_execution_group(); }
+    void set_fragment_lifecycle(FragmentLifecycleWeakPtr lifecycle) { _fragment_lifecycle = std::move(lifecycle); }
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
 
     void set_final_status(const Status& status);
 
-    Status final_status() const {
-        auto* status = _final_status.load();
-        return status == nullptr ? Status::OK() : *status;
-    }
+    Status final_status() const { return _fragment_runtime_state.final_status(); }
 
     void cancel(const Status& status, bool cancelled_by_fe = false);
 
     void finish() { cancel(Status::OK()); }
-
-    bool is_canceled() const { return _runtime_state->is_cancelled(); }
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
@@ -120,12 +120,15 @@ public:
 
     Status prepare_all_pipelines();
 
+    void instantiate_drivers(Pipeline* pipeline);
+
     void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 
     void clear_all_drivers();
     void close_all_execution_groups();
 
-    RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
+    RuntimeFilterHub* runtime_filter_hub() { return _fragment_runtime_state.runtime_filter_hub(); }
+    const RuntimeFilterHub* runtime_filter_hub() const { return _fragment_runtime_state.runtime_filter_hub(); }
 
     RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
@@ -135,27 +138,30 @@ public:
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
     Status set_pipeline_timer(PipelineTimer* pipeline_timer);
     void clear_pipeline_timer();
+    PipelineTimerContextPtr pipeline_timer_context() const { return _pipeline_timer_context; }
 
     query_cache::CacheParam& cache_param() { return _cache_param; }
 
-    void set_enable_cache(bool flag) { _enable_cache = flag; }
+    void set_enable_cache(bool flag) { _fragment_runtime_state.set_enable_cache(flag); }
 
-    bool enable_cache() const { return _enable_cache; }
+    bool enable_cache() const { return _fragment_runtime_state.enable_cache(); }
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
-    void set_enable_adaptive_dop(bool val) { _enable_adaptive_dop = val; }
-    bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
+    void set_enable_adaptive_dop(bool val) { _fragment_runtime_state.set_enable_adaptive_dop(val); }
+    bool enable_adaptive_dop() const { return _fragment_runtime_state.enable_adaptive_dop(); }
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
-    const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
-    void set_pred_tree_params(const PredicateTreeParams& params) { _pred_tree_params = params; }
+    const PredicateTreeParams& pred_tree_params() const { return _fragment_runtime_state.pred_tree_params(); }
+    void set_pred_tree_params(const PredicateTreeParams& params) {
+        _fragment_runtime_state.set_pred_tree_params(params);
+    }
 
     size_t next_driver_id() { return _next_driver_id++; }
 
-    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
-    const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
-    bool enable_resource_group() const { return _workgroup != nullptr; }
+    void set_workgroup(workgroup::WorkGroupPtr wg) { _fragment_runtime_state.set_workgroup(std::move(wg)); }
+    const workgroup::WorkGroupPtr& workgroup() const { return _fragment_runtime_state.workgroup(); }
+    bool enable_resource_group() const { return workgroup() != nullptr; }
     TQueryType::type query_type() const;
 
     size_t expired_log_count() { return _expired_log_count; }
@@ -184,10 +190,6 @@ public:
     EventScheduler* event_scheduler() const { return _event_scheduler.get(); }
     void init_event_scheduler();
 
-    PipelineTimer* pipeline_timer() { return _pipeline_timer; }
-    void add_timer_observer(PipelineObserver* observer, uint64_t timeout);
-    Status submit_all_timer();
-
 private:
     void _set_default_workgroup();
     void _close_stream_load_contexts();
@@ -197,7 +199,6 @@ private:
     TUniqueId _query_id;
     // Id of this instance
     FragmentRuntimeState _fragment_runtime_state;
-    TNetworkAddress _fe_addr;
 
     // Hold tplan data datasink from delivery request to create driver lazily
     // after delivery request has been finished.
@@ -216,33 +217,22 @@ private:
     Pipelines _pipelines;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
+    FragmentLifecycleWeakPtr _fragment_lifecycle;
 
     std::unique_ptr<EventScheduler> _event_scheduler;
-    PipelineTimer* _pipeline_timer = nullptr;
+    PipelineTimerContextPtr _pipeline_timer_context = nullptr;
     std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
     std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
-    std::unordered_map<uint64_t, std::shared_ptr<PipelineTimerTask>> _rf_timeout_tasks;
-
-    RuntimeFilterHub _runtime_filter_hub;
 
     MorselQueueFactoryMap _morsel_queue_factories;
-    workgroup::WorkGroupPtr _workgroup = nullptr;
-
-    std::atomic<Status*> _final_status = nullptr;
-    Status _s_status;
-
     DriverLimiter::TokenPtr _driver_token = nullptr;
 
     std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
 
     query_cache::CacheParam _cache_param;
-    bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
 
-    bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
-
-    PredicateTreeParams _pred_tree_params;
 
     size_t _expired_log_count = 0;
 

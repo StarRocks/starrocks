@@ -459,6 +459,8 @@ public class FunctionSet {
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
     public static final String CRC32_HASH = "crc32_hash";
+    public static final String XX_HASH32 = "xx_hash32";
+    public static final String XX_HASH64 = "xx_hash64";
     public static final String XX_HASH3_64 = "xx_hash3_64";
     public static final String XX_HASH3_128 = "xx_hash3_128";
 

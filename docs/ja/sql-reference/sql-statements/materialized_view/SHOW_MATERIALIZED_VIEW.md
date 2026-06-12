@@ -48,7 +48,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | id                         | マテリアライズドビューのID。                             |
 | database_name              | マテリアライズドビューが存在するデータベースの名前。 |
 | name                       | マテリアライズドビューの名前。                           |
-| refresh_type               | マテリアライズドビューのリフレッシュタイプ。ROLLUP、MANUAL、ASYNC、INCREMENTAL などがあります。 |
+| refresh_type               | マテリアライズドビューのリフレッシュタイプ。有効な値: `SYNC` (同期マテリアライズドビュー) および `ASYNC` (非同期マテリアライズドビュー。リフレッシュのトリガー方法に関係なく)。 |
 | is_active                  | マテリアライズドビューの状態がアクティブかどうか。 有効な値: `true` と `false`。 |
 | partition_type             | マテリアライズドビューのパーティションタイプ。RANGE と UNPARTITIONED があります。                |
 | task_id                    | マテリアライズドビューのリフレッシュタスクのID。                  |
@@ -66,6 +66,19 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | last_refresh_error_message | マテリアライズドビューの最後のリフレッシュが失敗した理由（マテリアライズドビューの状態がアクティブでない場合）。 |
 | rows                       | マテリアライズドビューのデータ行数。            |
 | text                       | マテリアライズドビューを作成するために使用されたステートメント。          |
+| extra_message              | 最新のリフレッシュタスクに関する追加情報。                   |
+| query_rewrite_status       | マテリアライズドビューのクエリリライトステータス。           |
+| creator                    | マテリアライズドビューのリフレッシュタスクの作成者。         |
+| last_refresh_process_time  | 最新のリフレッシュタスクの処理開始時間。                     |
+| last_refresh_job_id        | 最新のリフレッシュタスクのジョブ ID。                        |
+| last_refresh_time          | ベーステーブルの更新がマテリアライズドビューに反映されている最新の時間。 |
+| warehouse                  | 非同期マテリアライズドビューがリフレッシュタスクに使用するウェアハウスの名前。ストレージ・コンピュート一体型モードの場合、または同期 (rollup) マテリアライズドビューの場合は空です。 |
+| refresh_mode               | 非同期マテリアライズドビューに設定されたリフレッシュモード。有効な値: `PCT` (パーティション変更追跡。変更されたパーティションのみをリフレッシュ)、`INCREMENTAL` (インクリメンタルビューメンテナンス)、`AUTO`。同期マテリアライズドビューの場合は空です。 |
+| refresh_trigger            | リフレッシュがトリガーされる方法。有効な値: `NONE` (同期マテリアライズドビュー)、`MANUAL` (REFRESH MATERIALIZED VIEW 経由のみ)、`SCHEDULED` (EVERY 間隔による定期実行)、`ON_BASE_TABLE_CHANGE` (ベーステーブルのロードまたは変更時に自動実行)。 |
+| refresh_policy             | 人間が読めるリフレッシュポリシー。有効な値: `NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`、または `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` のようなスケジュール (`START` 句は開始時刻が定義されている場合にのみ含まれます)。 |
+| resource_group             | マテリアライズドビューのリフレッシュタスクに使用されるリソースグループ (マテリアライズドビューの `resource_group` プロパティから)。設定されていない場合は `default_mv_wg` がデフォルトです。 |
+| query_rewrite_status_reason | `query_rewrite_status` の理由。有効な値: `OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION`、`UNKNOWN`。 |
+| last_freshness_confirmed_at | 最後に成功した更新の開始時刻。更新全体（そのすべてのタスク実行）が完了した時点で記録されます。ベーステーブルに変更がなく更新不要と確認された場合も新鮮さが確認されます。マテリアライズドビューはこの時点のベーステーブルのデータを反映します。`last_refresh_time`（ベーステーブルのデータバージョン時刻）とは異なり、これは実時刻です。最初の更新が成功するまで、および同期マテリアライズドビューの場合は空です。パーティション範囲を指定した REFRESH（部分更新）では値は進みません。 |
 
 ## 例
 
@@ -116,7 +129,7 @@ mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G
                         id: 10142
                       name: customer_mv
              database_name: test
-              refresh_type: MANUAL
+              refresh_type: ASYNC
                  is_active: true
    last_refresh_start_time: 2023-02-17 10:27:33
 last_refresh_finished_time: 2023-02-17 10:27:33
@@ -136,6 +149,11 @@ AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, 
 FROM `test`.`customer`
 GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
                       rows: 0
+                 warehouse:
+              refresh_mode: PCT
+           refresh_trigger: MANUAL
+            refresh_policy: MANUAL
+            resource_group: default_mv_wg
 1 row in set (0.11 sec)
 ```
 
@@ -147,7 +165,7 @@ mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G
                         id: 10142
                       name: customer_mv
              database_name: test
-              refresh_type: MANUAL
+              refresh_type: ASYNC
                  is_active: true
    last_refresh_start_time: 2023-02-17 10:27:33
 last_refresh_finished_time: 2023-02-17 10:27:33
@@ -167,5 +185,10 @@ AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, 
 FROM `test`.`customer`
 GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
                       rows: 0
+                 warehouse:
+              refresh_mode: PCT
+           refresh_trigger: MANUAL
+            refresh_policy: MANUAL
+            resource_group: default_mv_wg
 1 row in set (0.12 sec)
 ```

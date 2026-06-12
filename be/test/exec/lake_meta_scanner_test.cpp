@@ -105,7 +105,7 @@ public:
         fe.hostname = "127.0.0.1";
         fe.port = 9020;
         _fragment_ctx->set_fe_addr(fe);
-        _state->set_fragment_ctx(_fragment_ctx.get());
+        _state->set_fragment_ctx(_fragment_ctx.get(), &_fragment_ctx->fragment_runtime_state());
         _state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};

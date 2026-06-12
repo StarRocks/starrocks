@@ -529,6 +529,7 @@ public class AlterJobMgr {
                     MvUtils.getMaxTablePartitionInfoRefreshTime(
                             log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+            newMvRefreshScheme.setLastFreshnessConfirmedAt(log.getLastFreshnessConfirmedAt());
 
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(

@@ -936,7 +936,7 @@ static inline void receive_total_runtime_filter_pipeline(const RuntimeServices* 
         return;
     }
     // the query is already finished, so it is needless to cache rf.
-    if (query_ctx->has_no_active_instances() || query_ctx->is_query_expired()) {
+    if (query_ctx->has_no_active_instances() || query_ctx->query_runtime_state().is_query_expired()) {
         return;
     }
 
@@ -961,7 +961,7 @@ static inline void receive_total_runtime_filter_pipeline(const RuntimeServices* 
             continue;
         }
         // FragmentContext is already destructed or invalid, so do nothing.
-        if (fragment_ctx->is_canceled()) {
+        if (fragment_ctx->runtime_state()->is_cancelled()) {
             continue;
         }
         fragment_ctx->runtime_filter_port()->receive_shared_runtime_filter(params.filter_id(), shared_rf);

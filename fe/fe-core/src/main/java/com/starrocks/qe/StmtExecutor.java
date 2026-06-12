@@ -96,6 +96,7 @@ import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
@@ -318,6 +319,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
@@ -1781,35 +1783,68 @@ public class StmtExecutor {
             context.getState().setOk();
             return;
         }
-        // > 0 means it is forwarded from other fe
-        if (context.getForwardTimes() == 0) {
-            String errorMsg = null;
-            // forward to all fe
-            for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
-                LeaderOpExecutor leaderOpExecutor =
-                        new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
-                                context, redirectStatus, false);
-                try {
-                    leaderOpExecutor.execute();
-                    // if query is successfully killed by this fe, it can return now
-                    if (context.getState().getStateType() == MysqlStateType.OK) {
-                        context.getState().setOk();
-                        return;
-                    }
-                    errorMsg = context.getState().getErrorMessage();
-                } catch (TTransportException e) {
-                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
-                    LOG.warn(errorMsg, e);
-                } catch (Exception e) {
-                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort() + " due to " +
-                            e.getMessage();
-                    LOG.warn(e.getMessage(), e);
-                }
-            }
-            // if the queryId is not found in any fe, print the error message
-            context.getState().setError(errorMsg == null ? ErrorCode.ERR_UNKNOWN_ERROR.formatErrorMsg() : errorMsg);
+
+        // Try to resolve and kill the query on the local FE first. Queries running here - including
+        // coordinator-backed internal queries (statistics collection, task runs, MV refreshes) that only
+        // live in this FE's coordinator map and never had a client connection - can be killed directly.
+        // This also avoids forwarding the kill to ourselves over thrift, which the receiving FE rejects
+        // when the self-connection's source address is not in its frontend host allowlist.
+        ConnectContext killCtx = findLocalKillTarget(queryId);
+        if (killCtx != null) {
+            handleKill(killCtx, false);
             return;
         }
+
+        // A request forwarded from another FE (forwardTimes > 0) must be resolvable locally; if it is not,
+        // the query no longer exists on this FE.
+        if (context.getForwardTimes() > 0) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+            return;
+        }
+
+        // Not found locally: forward to the OTHER frontends so the FE that owns the query can kill it. Skip
+        // ourselves - the local FE was already searched above, and forwarding the kill back to this node over
+        // thrift can be rejected by the receiving FE's host allowlist in some network setups.
+        Frontend self = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+        String selfNodeName = (self == null) ? null : self.getNodeName();
+        String forwardErrorMsg = null;
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
+            if (selfNodeName != null && selfNodeName.equals(fe.getNodeName())) {
+                continue;
+            }
+            LeaderOpExecutor leaderOpExecutor =
+                    new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
+                            context, redirectStatus, false);
+            try {
+                leaderOpExecutor.execute();
+                // if query is successfully killed by that fe, it can return now
+                if (context.getState().getStateType() == MysqlStateType.OK) {
+                    context.getState().setOk();
+                    return;
+                }
+                // reached, but that fe does not own the query either; keep looking
+            } catch (TTransportException e) {
+                forwardErrorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
+                LOG.warn(forwardErrorMsg, e);
+            } catch (Exception e) {
+                forwardErrorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort() + " due to " +
+                        e.getMessage();
+                LOG.warn(e.getMessage(), e);
+            }
+        }
+        // Surface a frontend we could not reach as-is; otherwise the query was not found on any FE.
+        if (forwardErrorMsg != null) {
+            context.getState().setError(forwardErrorMsg);
+        } else {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+        }
+    }
+
+    // Resolve a query running on the local FE by id, covering both client connections (in the
+    // ConnectScheduler / proxy manager) and coordinator-backed internal queries that are only present in
+    // the coordinator map (statistics collection, task runs, MV refreshes, etc.). The privilege check in
+    // handleKill() still applies via the resolved ConnectContext's user.
+    private ConnectContext findLocalKillTarget(String queryId) {
         ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByCustomQueryId(queryId);
         if (killCtx == null) {
             killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
@@ -1818,9 +1853,9 @@ public class StmtExecutor {
             killCtx = ProxyContextManager.getInstance().getContextByQueryId(queryId);
         }
         if (killCtx == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+            killCtx = QeProcessorImpl.INSTANCE.getConnectContextByQueryId(queryId);
         }
-        handleKill(killCtx, false);
+        return killCtx;
     }
 
     // Process set statement.
@@ -3231,15 +3266,10 @@ public class StmtExecutor {
         }
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
-            try {
-                context.getGlobalStateMgr().getDeleteMgr().process((DeleteStmt) stmt);
-                context.getState().setOk();
-            } catch (QueryStateException e) {
-                if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                    LOG.warn("DDL statement({}) process failed.", getRedactedOriginStmtInString(), e);
-                }
-                context.setState(e.getQueryState());
-            }
+            context.setState(executeNonPrimaryKeyDelete(
+                    (DeleteStmt) stmt,
+                    context.getGlobalStateMgr().getDeleteMgr(),
+                    this::getRedactedOriginStmtInString));
             return;
         }
 
@@ -3814,7 +3844,12 @@ public class StmtExecutor {
 
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            // Register with the ConnectContext and SQL so that these coordinator-backed internal queries
+            // (e.g. statistics dict/sample/table-stats collection, internal SimpleExecutor and user-variable
+            // sub-queries) are visible in "SHOW PROC '/current_queries'" and '/global_current_queries',
+            // instead of being filtered out by the sql/context null check in getQueryStatistics().
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                    new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
             coord.exec();
             RowBatch batch;
@@ -3878,7 +3913,11 @@ public class StmtExecutor {
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            // Register with the ConnectContext and SQL so this coordinator-backed metadata collection query
+            // is visible in "SHOW PROC '/current_queries'" and '/global_current_queries', instead of being
+            // filtered out by the sql/context null check in getQueryStatistics().
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                    new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
             coord.exec();
             RowBatch batch;
@@ -4082,5 +4121,50 @@ public class StmtExecutor {
             }
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    // Run the non-Primary-Key DELETE path and return the resulting QueryState. Encapsulates
+    // the dual completion model of DeleteMgr.process(): a normal return (e.g. partition
+    // pruning yielded no work) is treated as success; a successful job exits via
+    // QueryStateException(OK, "{label,status,txnId}") whose state we keep and onto which
+    // we attach the non-PK DELETE notice. Non-OK QueryStateExceptions are propagated as
+    // the resulting state with the notice suppressed.
+    static QueryState executeNonPrimaryKeyDelete(DeleteStmt stmt, DeleteMgr deleteMgr,
+                                                 Supplier<String> redactedStmtSupplier) throws DdlException {
+        String okInfo = stmt.getOkInfoMessage();
+        try {
+            deleteMgr.process(stmt);
+            QueryState state = new QueryState();
+            if (okInfo != null && !okInfo.isEmpty()) {
+                state.setOk(0, 0, okInfo);
+            } else {
+                state.setOk();
+            }
+            return state;
+        } catch (QueryStateException e) {
+            if (e.getQueryState().getStateType() != MysqlStateType.OK) {
+                LOG.warn("DELETE statement({}) process failed.", redactedStmtSupplier.get(), e);
+            }
+            QueryState state = e.getQueryState();
+            attachDeleteOkInfo(state, okInfo);
+            return state;
+        }
+    }
+
+    // Append the non-Primary-Key DELETE notice on top of an existing OK QueryState.
+    // DeleteMgr signals successful DELETE via QueryStateException(OK, "{label,status,txnId}"),
+    // whose state replaces the executor's state in the catch block. To make the notice
+    // reach the client, we re-call setOk with the merged info string. No-op when the
+    // notice is empty or the state is not OK.
+    static void attachDeleteOkInfo(QueryState state, String okInfo) {
+        if (okInfo == null || okInfo.isEmpty()) {
+            return;
+        }
+        if (state.getStateType() != MysqlStateType.OK) {
+            return;
+        }
+        String existing = state.getInfoMessage();
+        String merged = (existing == null || existing.isEmpty()) ? okInfo : existing + "; " + okInfo;
+        state.setOk(state.getAffectedRows(), state.getWarningRows(), merged);
     }
 }

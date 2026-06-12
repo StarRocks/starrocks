@@ -150,6 +150,8 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             mvPctRefreshSynchronizer.updatePCTToRefreshMetas(false);
             PCTRefreshScope refreshScope = mvContext.getRefreshScope();
             if (refreshScope == null || refreshScope.isEmpty()) {
+                // An empty refresh scope means base tables were checked and the MV is already fresh.
+                confirmFreshness();
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
         }
@@ -317,6 +319,14 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                 newProperties.put(TaskRun.PINNED_REFRESH_JOB_ID, startTaskRunId);
             }
         }
+        // Seed the batch's first-run start on the leader's spawn; later runs already carry it via the property copy above.
+        // A partial-request leader seeds 0 so no run in its chain confirms whole-MV freshness.
+        if (!newProperties.containsKey(TaskRun.MV_FRESHNESS_BASELINE_TIME) && mvContext.getStatus() != null) {
+            long processStartTime = mvContext.getStatus().getProcessStartTime();
+            newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
+                    mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            ? String.valueOf(processStartTime) : "0");
+        }
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
@@ -334,6 +344,9 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         int priority = executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
                 executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        if (mvContext.getStatus() != null) {
+            option.setSubmitUser(mvContext.getStatus().getSubmitUser());
+        }
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, newProperties);
@@ -349,6 +362,11 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         } else {
             taskManager.executeTask(taskName, option);
         }
+    }
+
+    @Override
+    public boolean hasNextBatchRun() {
+        return mvContext.hasNextBatchPartition();
     }
 
     @VisibleForTesting

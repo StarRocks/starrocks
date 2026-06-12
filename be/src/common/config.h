@@ -838,6 +838,11 @@ CONF_mBool(enable_token_check, "true");
 // exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
 CONF_Bool(enable_http_auth, "false");
 
+// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
+// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
+// This config is static and requires a BE restart to take effect.
+CONF_Bool(enable_stop_be_action, "true");
+
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
@@ -1398,9 +1403,6 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
-// Config for query debug trace
-CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
-
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
 CONF_mInt32(starlet_cache_thread_num, "16");
@@ -1483,6 +1485,11 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+// Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
+// When writing a txn log takes longer than this threshold, the stack trace of the slow thread
+// is dumped to the log to help diagnose slow object-storage writes.
+// Disabled by default (<= 0); set to a positive value such as 4000 (4 seconds) to enable.
+CONF_mInt64(lake_put_txn_log_timeout_guard_ms, "-1");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
@@ -1491,6 +1498,55 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
+// below). Enabled by default: low-value sparse mid-tier picks are skipped per the
+// thresholds below. Set to false to turn off the entire gate in one step — every picked
+// level then compacts unconditionally (the pre-gate behavior) and the individual
+// threshold configs below have no effect.
+CONF_mBool(enable_lake_pk_compaction_score_gate, "true");
+// Skip compaction when the size-tiered selector picks a level whose total score is below
+// this threshold and none of the overrides below fire.
+//
+// Score formula (per rowset): io_count * 1MB / read_bytes  (sum across rowsets in level)
+// - Many small/overlapped rowsets => high score => compact (useful work)
+// - Few large non-overlapped rowsets => low score => skip (would just rewrite base)
+//
+// Suppresses sparse mid-tier base merges that re-write GBs of data with low file-count
+// reduction on large PK tables. Levels with overlapped rowsets always compact; the bcr,
+// size_overflow, and emergency overrides below additionally let delete-heavy,
+// overflowing, or read-pressured levels through. Lower toward 0 to skip less aggressively
+// (0 makes the gate a no-op since a level's score is always >= 0).
+CONF_mDouble(lake_pk_compaction_min_level_score, "2.0");
+// Minimum benefit/cost ratio (segments-saved per MB rewritten) for accepting a
+// sparse-mid-tier compaction pick. Together with the read-pressure emergency override
+// below, this turns the binary `min_level_score` gate into a graduated decision:
+// low-pressure partitions skip uneconomical rewrites, high-pressure ones bypass the
+// gate to keep up. Set to 0 to disable this override (only `min_level_score` applies).
+CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.005");
+// Read-pressure emergency override. When the partition's read_pressure_score
+// (segment count) exceeds this threshold, the gate auto-relaxes proportionally so that
+// hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
+// disable the override (gate always applies).
+CONF_mDouble(lake_pk_compaction_emergency_score, "50.0");
+// Weight that converts a level's delete pressure into segment-equivalent benefit units,
+// folded into the bcr numerator:
+//   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
+// Intuition: one rowset that is 100% deleted is "worth w segments saved" from the
+// reader's perspective (i.e., cleaning it has the same benefit as eliminating w
+// hypothetical segments). For a sparse mid-tier with 8 input rowsets at 20% level-wide
+// delete_ratio, w=12 contributes 0.20 * 8 * 12 = 19.2 segment-equivalents on top of
+// the segment-count benefit. Tune up (e.g., 20) to be more aggressive against delete
+// accumulation; tune down (e.g., 4) to favor write amplification. Set to 0 to disable
+// the delete contribution (bcr falls back to segment-only benefit).
+CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "12.0");
+// Size accumulation upper-bound. When the picked level's total bytes exceed
+// alpha * max_rowset_bytes * size_tiered_level_multiple (i.e., alpha * next-tier-target),
+// force compaction regardless of min_level_score/bcr. alpha=2 caps long-tail
+// accumulation at 2x the natural size-tiered promotion target, preventing unbounded
+// mid-tier growth. Note: uses max_rowset_bytes from the actual picked rowsets, not the
+// level's compact_level which can be stale after pick_max_level merges levels.
+// Set to 0 to disable the override (no size cap).
+CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.

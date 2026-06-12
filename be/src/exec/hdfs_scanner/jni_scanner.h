@@ -40,17 +40,18 @@ public:
     ~JniScanner() override { close(); }
 
     Status do_open(RuntimeState* runtime_state) override;
-    void do_update_counter(HdfsScanProfile* profile) override {}
+    void do_update_counter(HdfsScannerProfile* profile) override {}
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
     virtual Status update_jni_scanner_params();
     Status reinterpret_status(const Status& st) override { return st; }
 
 protected:
     StatusOr<size_t> fill_empty_chunk(ChunkPtr* chunk);
-
-    Filter _chunk_filter;
+    // Predicate evaluation/filtering is handled uniformly by HdfsScanner::get_next()
+    // via evaluate_on_conjunct_ctxs_by_slot() and ChunkPredicateEvaluator; JniScanner
+    // does not maintain its own chunk filter.
 
 private:
     struct FillColumnArgs {

@@ -17,33 +17,26 @@
 #include <atomic>
 #include <memory>
 
+#include "base/concurrency/race_detect.h"
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "compute_env/pipeline/pipeline_timer.h"
+#include "compute_env/pipeline/driver_scan_operator.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_operator.h"
-#include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "fmt/printf.h"
+#include "gutil/logging.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
-
-namespace query_cache {
-class MultilaneOperator;
-using MultilaneOperatorRawPtr = MultilaneOperator*;
-using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
-} // namespace query_cache
 
 namespace spill {
 class OperatorMemoryResourceManager;
@@ -96,22 +89,21 @@ public:
     };
 
 public:
-    PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id);
+    PipelineDriver(const Operators& operators, QueryRuntimeState* query_runtime_state,
+                   FragmentRuntimeState* fragment_runtime_state, Event* pipeline_event, DriverObserver* driver_observer,
+                   PipelineTimerContextPtr pipeline_timer_context, int32_t driver_id);
 
     PipelineDriver(const PipelineDriver& driver);
 
     virtual ~PipelineDriver() noexcept;
     void check_operator_close_states(const std::string& func_name);
 
-    QueryContext* query_ctx() { return _query_ctx; }
-    const QueryContext* query_ctx() const { return _query_ctx; }
+    RuntimeState* runtime_state() { return _runtime_state; }
+    const RuntimeState* runtime_state() const { return _runtime_state; }
     QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
     const QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
     FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
     const FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
-    FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
@@ -177,8 +169,8 @@ public:
     }
 
     Operators& operators() { return _operators; }
-    ScanOperator* source_scan_operator() {
-        return _operators.empty() ? nullptr : dynamic_cast<ScanOperator*>(_operators.front().get());
+    DriverScanOperator* source_driver_scan_operator() {
+        return _operators.empty() ? nullptr : dynamic_cast<DriverScanOperator*>(_operators.front().get());
     }
     SourceOperator* source_operator() {
         return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
@@ -363,8 +355,6 @@ public:
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
     Status check_short_circuit();
 
-    bool need_report_exec_state();
-    void report_exec_state_if_necessary();
     void runtime_report_action();
 
     std::string to_readable_string() const;
@@ -380,14 +370,14 @@ public:
 
     inline bool is_in_ready() const { return _in_ready.load(std::memory_order_acquire); }
     void set_in_ready(bool v) {
-        SCHEDULE_CHECK(!v || !is_in_ready());
+        DCHECK(!v || !is_in_ready());
         _in_ready.store(v, std::memory_order_release);
     }
 
     bool is_in_blocked() const { return _in_blocked.load(std::memory_order_acquire); }
     void set_in_blocked(bool v) {
-        SCHEDULE_CHECK(!v || !is_in_blocked());
-        SCHEDULE_CHECK(!is_in_ready());
+        DCHECK(!v || !is_in_blocked());
+        DCHECK(!is_in_ready());
         _in_blocked.store(v, std::memory_order_release);
     }
 
@@ -406,7 +396,8 @@ public:
     // Whether the query can be expirable or not.
     virtual bool is_query_never_expired() { return false; }
 
-    PipelineObserver* observer() { return &_observer; }
+    PipelineObserver* observer() { return _observer.get(); }
+    void set_observer(std::unique_ptr<PipelineObserver> observer);
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
@@ -433,6 +424,7 @@ protected:
 
     Status _prepare_operator_mem_resource_manager(size_t operator_idx, RuntimeState* state);
     spill::OperatorMemoryResourceManager* _operator_mem_resource_manager(size_t operator_idx);
+    MemTracker* _query_mem_tracker() const;
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, size_t operator_idx, OperatorPtr& op,
                               const ChunkPtr& chunk);
@@ -451,7 +443,7 @@ protected:
     std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
-    PipelineDriverObserver _observer;
+    std::unique_ptr<PipelineObserver> _observer;
     // Keep this before _operators so driver teardown destroys operators first, then their managers.
     std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;
@@ -468,12 +460,11 @@ protected:
     int64_t _global_rf_wait_timeout_ns = -1;
 
     size_t _first_unfinished{0};
-    QueryContext* _query_ctx;
     QueryRuntimeState* _query_runtime_state;
     FragmentRuntimeState* _fragment_runtime_state;
-    FragmentContext* _fragment_ctx;
-    Pipeline* _pipeline;
+    Event* _pipeline_event;
     DriverObserver* _driver_observer;
+    PipelineTimerContextPtr _pipeline_timer_context = nullptr;
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;

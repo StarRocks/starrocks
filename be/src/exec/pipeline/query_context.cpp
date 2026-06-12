@@ -26,7 +26,6 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "runtime/current_thread.h"
@@ -52,7 +51,14 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+    _query_runtime_state.set_object_pool(&_object_pool);
     _lifetime_sw.start();
+}
+
+QueryContextPtr QueryContext::create() {
+    auto query_ctx = std::make_shared<QueryContext>();
+    query_ctx->_fragment_mgr = std::make_unique<FragmentContextManager>(query_ctx);
+    return query_ctx;
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -71,8 +77,8 @@ QueryContext::~QueryContext() noexcept {
             LOG(INFO) << fmt::format(
                     "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
                     "bytes:{} cache_hit_ratio:{:.1f}%",
-                    print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes(),
-                    cache_hit_ratio);
+                    print_id(query_id()), lifetime(), _query_runtime_state.cpu_cost(), mem_cost_bytes(),
+                    _query_runtime_state.get_scan_bytes(), get_spill_bytes(), cache_hit_ratio);
         }
     }
 
@@ -96,30 +102,23 @@ QueryContext::~QueryContext() noexcept {
     }
 }
 
-void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) {
+bool QueryContext::decrement_num_active_fragments() {
     size_t old = _num_active_fragments.fetch_sub(1);
     DCHECK_GE(old, 1);
-    bool all_fragments_finished = old == 1;
-    if (!all_fragments_finished) {
+    return old == 1;
+}
+
+void QueryContext::count_down_fragment() {
+    if (!decrement_num_active_fragments()) {
         return;
     }
 
-    // Acquire the pointer to avoid be released when removing query
-    auto query_trace = shared_query_trace();
-    query_context_mgr->remove(query_id());
-    // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
-    // considering that this feature is generally used for debugging,
-    // I think it should not have a big impact now
-    if (query_trace != nullptr) {
-        (void)query_trace->dump();
+    if (auto* lifecycle = _query_lifecycle.load(); lifecycle != nullptr) {
+        // Keep manager-owned query contexts alive if removal erases the last shared_ptr.
+        [[maybe_unused]] auto self = weak_from_this().lock();
+        auto id = query_id();
+        lifecycle->on_query_releasable(id);
     }
-}
-
-void QueryContext::count_down_fragments() {
-    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
-        return this->count_down_fragments(services->query_context_mgr);
-    }
-    return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -130,8 +129,7 @@ void QueryContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
     auto lifetime = weak_from_this();
     DCHECK(!lifetime.expired());
-    state->set_query_ctx(this);
-    state->set_query_runtime_state(&query_runtime_state());
+    state->set_query_ctx(this, &query_runtime_state());
     state->set_query_ctx_lifetime(std::move(lifetime));
 }
 
@@ -177,6 +175,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                     std::make_shared<MemTracker>(MemTrackerType::QUERY, query_mem_limit, _profile->name(), parent);
             _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         }
+        _query_runtime_state.set_query_mem_tracker(_mem_tracker.get());
 
         _static_query_mem_limit = lowest_limit;
         if (query_mem_limit > 0) {
@@ -190,6 +189,10 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (runtime_state != nullptr && runtime_state->enable_global_late_materialization()) {
             _global_late_materialization_ctx_mgr = _object_pool.add(new GlobalLateMaterilizationContextMgr());
         }
+        _query_runtime_state.set_static_query_mem_limit(_static_query_mem_limit);
+        _query_runtime_state.set_connector_scan_operator_mem_share_arbitrator(
+                _connector_scan_operator_mem_share_arbitrator);
+        _query_runtime_state.set_global_late_materialization_ctx_mgr(_global_late_materialization_ctx_mgr);
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -203,6 +206,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             _connector_scan_mem_tracker = std::make_shared<MemTracker>(
                     MemTrackerType::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
                     _profile->name() + "/connector_scan", connector_scan_parent);
+            _query_runtime_state.set_connector_scan_mem_tracker(_connector_scan_mem_tracker.get());
         }
     });
 }
@@ -221,6 +225,7 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
             spill_dir_mgr = compute_env->spill_dir_mgr();
         }
         _spill_manager = std::make_unique<spill::QuerySpillManager>(query_id(), g_spill_manager, spill_dir_mgr);
+        _query_runtime_state.set_query_spill_manager(_spill_manager.get());
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;
@@ -261,10 +266,6 @@ void QueryContext::release_workgroup_token_once() {
         _wg_running_query_token_ptr.reset();
     }
 }
-void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
-    std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
-}
-
 std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
     return _sub_plan_query_statistics_recvr;
 }
@@ -276,20 +277,11 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
         return nullptr;
     }
 
-    query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
+    query_statistic->add_cpu_costs(_query_runtime_state.consume_delta_cpu_cost());
     query_statistic->add_mem_costs(mem_cost_bytes());
     query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
-    {
-        std::lock_guard l(_scan_stats_lock);
-        for (const auto& [table_id, scan_stats] : _scan_stats) {
-            QueryStatisticsItemPB stats_item;
-            stats_item.set_table_id(table_id);
-            stats_item.set_scan_rows(scan_stats->delta_scan_rows_num.exchange(0));
-            stats_item.set_scan_bytes(scan_stats->delta_scan_bytes.exchange(0));
-            query_statistic->add_stats_item(stats_item);
-        }
-    }
-    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+    _query_runtime_state.consume_delta_scan_stats(query_statistic.get());
+    for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         query_statistic->add_exec_stats_item(
                 node_id, exec_stats->push_rows.exchange(0), exec_stats->pull_rows.exchange(0),
                 exec_stats->pred_filter_rows.exchange(0), exec_stats->index_filter_rows.exchange(0),
@@ -302,24 +294,15 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
-    res->add_cpu_costs(cpu_cost());
+    res->add_cpu_costs(_query_runtime_state.cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
     res->add_spill_bytes(get_spill_bytes());
     res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
     res->add_transmitted_bytes(get_transmitted_bytes());
 
-    {
-        std::lock_guard l(_scan_stats_lock);
-        for (const auto& [table_id, scan_stats] : _scan_stats) {
-            QueryStatisticsItemPB stats_item;
-            stats_item.set_table_id(table_id);
-            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
-            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
-            res->add_stats_item(stats_item);
-        }
-    }
+    _query_runtime_state.add_total_scan_stats(res.get());
 
-    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+    for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
                                  exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
     }
@@ -330,7 +313,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
 
 std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
     auto res = std::make_shared<QueryStatistics>();
-    res->add_cpu_costs(cpu_cost());
+    res->add_cpu_costs(_query_runtime_state.cpu_cost());
     if (_mem_tracker != nullptr) {
         res->add_mem_costs(mem_cost_bytes());
     }
@@ -338,51 +321,15 @@ std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
     res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
     res->add_transmitted_bytes(get_transmitted_bytes());
 
-    {
-        std::lock_guard l(_scan_stats_lock);
-        for (const auto& [table_id, scan_stats] : _scan_stats) {
-            QueryStatisticsItemPB stats_item;
-            stats_item.set_table_id(table_id);
-            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
-            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
-            res->add_stats_item(stats_item);
-        }
-    }
+    _query_runtime_state.add_total_scan_stats(res.get());
 
-    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+    for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
                                  exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
     }
 
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
-}
-
-void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
-    ScanStats* stats = nullptr;
-    {
-        std::lock_guard l(_scan_stats_lock);
-        auto iter = _scan_stats.find(table_id);
-        if (iter == _scan_stats.end()) {
-            _scan_stats.insert({table_id, std::make_shared<ScanStats>()});
-            iter = _scan_stats.find(table_id);
-        }
-        stats = iter->second.get();
-    }
-
-    stats->total_scan_rows_num += scan_rows_num;
-    stats->delta_scan_rows_num += scan_rows_num;
-    stats->total_scan_bytes += scan_bytes;
-    stats->delta_scan_bytes += scan_bytes;
-}
-
-void QueryContext::init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids) {
-    std::call_once(_node_exec_stats_init_flag, [this, &exec_stats_node_ids]() {
-        for (int32_t node_id : exec_stats_node_ids) {
-            auto node_exec_stats = std::make_shared<NodeExecStats>();
-            _node_exec_stats[node_id] = node_exec_stats;
-        }
-    });
 }
 
 } // namespace starrocks::pipeline

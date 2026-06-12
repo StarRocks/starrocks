@@ -298,7 +298,6 @@
         "runtime/mysql_table_sink.h",
         "runtime/mysql_table_writer.h",
         "runtime/plan_fragment_executor.h",
-        "runtime/profile_report_worker.h",
         "runtime/result_buffer_mgr.h",
         "runtime/result_queue_mgr.h",
         "runtime/result_sink.h",
@@ -392,13 +391,12 @@
     {
       "id": "computeenv",
       "doc_label": "ComputeEnv",
-      "summary": "Shared compute-side BE environment boundary for process-scoped compute resources, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.",
+      "summary": "Shared compute-side BE environment boundary for process-scoped compute resources, query-cache primitives, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.",
       "owned_targets": ["ComputeEnv"],
       "owned_roots": ["be/src/compute_env"],
       "allowed_include_prefixes": [
         "compute_env/",
         "exec/runtime_filter/",
-        "exec/query_cache/ticket_checker.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
         "exec/pipeline/primitives/",
@@ -432,7 +430,7 @@
       "allowed_target_deps": ["StoragePrimitive", "ExecPrimitive", "ExprCore", "Serde", "Util", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test", "compute_env_sorting_test"],
       "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "RuntimeCore", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
+      "remediation": "Keep ComputeEnv limited to process-scoped compute resources, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
     },
     {
       "id": "exprcore",
@@ -479,20 +477,18 @@
         "be/src/exec/runtime_filter/**",
         "be/src/exec/pipeline/primitives/driver_executor.h",
         "be/src/exec/pipeline/primitives/driver_observer.h",
-        "be/src/exec/pipeline/primitives/fragment_runtime_state.h",
         "be/src/exec/pipeline/primitives/operator_exec_stats.h",
         "be/src/exec/pipeline/primitives/operator_runtime_access.h",
-        "be/src/exec/pipeline/primitives/query_runtime_state.h",
         "be/src/exec/pipeline/runtime_filter_hub.h",
         "be/src/exec/pipeline/runtime_filter_core_types.h",
         "be/src/exec/pipeline/scan/dynamic_morsel_queue_builder.h",
         "be/src/exec/pipeline/scan/fixed_morsel_queue_builder.h",
         "be/src/exec/pipeline/scan/morsel_queue_builder.h",
-        "be/src/exec/pipeline/scan/ticketed_morsel_queue.h"
+        "be/src/exec/pipeline/scan/ticketed_morsel_queue.h",
+        "be/src/exec/pipeline/scan/split_morsel_ticket_checker.h"
       ],
       "allowed_include_prefixes": [
         "exec/runtime_filter/",
-        "exec/query_cache/ticket_checker.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
         "exec/pipeline/operator_factory.h",
@@ -506,6 +502,7 @@
         "exec/pipeline/scan/fixed_morsel_queue_builder.h",
         "exec/pipeline/scan/dynamic_morsel_queue.h",
         "exec/pipeline/scan/dynamic_morsel_queue_builder.h",
+        "exec/pipeline/scan/split_morsel_ticket_checker.h",
         "exec/pipeline/scan/ticketed_morsel_queue.h",
         "exprs/",
         "runtime/",
@@ -531,6 +528,60 @@
       "allowed_test_targets": ["exec_primitive_test"],
       "allowed_test_link_deps": ["ExecPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, storage, service, and connector integration upward."
+    },
+    {
+      "id": "execruntime",
+      "doc_label": "ExecRuntime",
+      "summary": "Execution runtime driver lifecycle and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.",
+      "owned_targets": ["ExecRuntime"],
+      "additional_owned_globs": [
+        "be/src/exec/runtime/fragment_runtime_state.h",
+        "be/src/exec/runtime/query_runtime_state.h"
+      ],
+      "allowed_include_prefixes": [
+        "compute_env/",
+        "exec/runtime/",
+        "exec/pipeline/pipeline_driver.h",
+        "exec/pipeline/pipeline_fwd.h",
+        "exec/pipeline/operator.h",
+        "exec/pipeline/operator_with_dependency.h",
+        "exec/pipeline/source_operator.h",
+        "exec/pipeline/primitives/",
+        "exec/pipeline/runtime_filter_hub.h",
+        "exec/pipeline/runtime_filter_core_types.h",
+        "exec/pipeline/scan/morsel_queue.h",
+        "exec/pipeline/scan/split_morsel_ticket_checker.h",
+        "exec/pipeline/scan/ticketed_morsel_queue.h",
+        "exec/runtime_filter/",
+        "storage/primitive/",
+        "exprs/",
+        "serde/",
+        "runtime/env/",
+        "runtime/",
+        "platform/",
+        "fs/",
+        "io/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "cache/", "http/", "agent/", "util/"],
+      "forbidden_includes": [
+        "exec/pipeline/fragment_context.h",
+        "exec/pipeline/pipeline_driver_executor.h",
+        "exec/pipeline/pipeline_driver_queue.h",
+        "exec/pipeline/pipeline_driver_poller.h",
+        "exec/pipeline/query_context.h",
+        "exec/pipeline/scan/morsel.h",
+        "runtime/exec_env.h"
+      ],
+      "allowed_target_deps": ["ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["exec_runtime_test"],
+      "allowed_test_link_deps": ["ExecRuntime", "ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExecRuntime limited to driver lifecycle and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward."
     },
     {
       "id": "connectorprimitive",

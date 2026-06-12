@@ -82,9 +82,9 @@ Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (options.__isset.scan_use_query_mem_ratio) {
         mem_ratio = options.scan_use_query_mem_ratio;
     }
-    if (runtime_state()->query_ctx()) {
+    if (runtime_state()->query_runtime_state() != nullptr) {
         // Used in pipeline-engine
-        _mem_limit = state->query_ctx()->get_static_query_mem_limit() * mem_ratio;
+        _mem_limit = state->query_runtime_state()->static_query_mem_limit() * mem_ratio;
     } else if (runtime_state()->query_mem_tracker_ptr()) {
         // Fallback in non-pipeline
         _mem_limit = state->query_mem_tracker_ptr()->limit() * mem_ratio;

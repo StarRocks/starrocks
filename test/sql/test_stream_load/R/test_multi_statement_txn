@@ -309,3 +309,85 @@ select * from test3;
 3
 2
 -- !result
+-- name: test_multi_stream_load_loads_view_state
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `test1` (
+  `id` int
+)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `test2` (
+  `id` int
+)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+  "Status": "OK",
+  "Message": ""
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_00000000000000000000000000000000",
+    "TxnId": 0,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Label": "llal_00000000000000000000000000000000",
+    "TxnId": 0,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+-- result:
+0
+{
+  "Label": "llal_00000000000000000000000000000000",
+  "Status": "OK",
+  "TxnId": 0,
+  "ChannelId": 0,
+  "Message": "",
+  "Prepared Channel Num": 1
+}
+-- !result
+select * from test1;
+-- result:
+1
+-- !result
+select * from test2;
+-- result:
+2
+-- !result
+select TABLE_NAME, STATE in ('FINISHED', 'COMMITED') from information_schema.loads where DB_NAME = 'db_${uuid0}' and LABEL = 'llal_${uuid0}' order by TABLE_NAME;
+-- result:
+test1	1
+test2	1
+-- !result
