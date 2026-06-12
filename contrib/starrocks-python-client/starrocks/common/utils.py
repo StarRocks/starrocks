@@ -15,6 +15,7 @@
 import re
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple, Union
 
+import sqlparse
 from sqlalchemy import schema as sa_schema
 from sqlalchemy.exc import StatementError
 
@@ -264,7 +265,7 @@ class TableAttributeNormalizer:
         # MySQL-style escaping: 'O\'Brien' -> 'O''Brien'
         sql = sql.replace("\\'", "''")
 
-        sql = TableAttributeNormalizer._strip_line_comments(sql)
+        sql = sqlparse.format(sql, strip_comments=True)
         if lowercase:
             sql = sql.lower().strip()
 

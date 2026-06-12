@@ -5,6 +5,7 @@ Version history
 
 **1.3.4**
 
+- Preserve SQL line comment markers inside quoted string literals during SQL normalization (#74750)
 - Add `to_diff_tuple` for Alembic alter operations (#70146 by @arvindKandpal-ksolves)
 - Fix parsing of reflected nested `STRUCT` / `ARRAY` / `MAP` column types when inline field comments are present (#69817)
 - Deserialize complex types to matching Python list, dict types (#70480 by @chris-celerdata)
