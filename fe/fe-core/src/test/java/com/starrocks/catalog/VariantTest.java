@@ -1336,4 +1336,51 @@ public class VariantTest {
         Assertions.assertEquals(2, restoredType.getScalarScale());
         Assertions.assertEquals(0, original.compareTo(restored));
     }
+
+    @Test
+    public void testDecimalVariantThriftRoundTrip() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
+        Variant v = Variant.of(type, "12345.6789");
+        TVariant t = v.toThrift();
+        Assertions.assertEquals("12345.6789", t.getValue());
+
+        Variant back = Variant.fromThrift(t);
+        Assertions.assertTrue(back instanceof DecimalVariant);
+        ScalarType backType = (ScalarType) back.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMAL64, backType.getPrimitiveType());
+        Assertions.assertEquals(18, backType.getScalarPrecision());
+        Assertions.assertEquals(4, backType.getScalarScale());
+        Assertions.assertEquals(0, v.compareTo(back));
+    }
+
+    @Test
+    public void testDecimalVariantProtoRoundTrip() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10);
+        Variant v = Variant.of(type, "-0.0000000001");
+        VariantPB pb = v.toProto();
+        Assertions.assertEquals("-0.0000000001", pb.value);
+
+        Variant back = Variant.fromProto(pb);
+        Assertions.assertTrue(back instanceof DecimalVariant);
+        ScalarType backType = (ScalarType) back.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMAL128, backType.getPrimitiveType());
+        Assertions.assertEquals(38, backType.getScalarPrecision());
+        Assertions.assertEquals(10, backType.getScalarScale());
+        Assertions.assertEquals(0, v.compareTo(back));
+    }
+
+    @Test
+    public void testDecimalV2ProtoRoundTripPreservesScale() {
+        // Regression guard: TypeDeserializer.createType used precision as the DECIMALV2
+        // scale, so a round-trip silently widened scale to precision.
+        ScalarType type = TypeFactory.createDecimalV2Type(27, 9);
+        Variant v = Variant.of(type, "123.456");
+        VariantPB pb = v.toProto();
+
+        Variant back = Variant.fromProto(pb);
+        ScalarType backType = (ScalarType) back.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMALV2, backType.getPrimitiveType());
+        Assertions.assertEquals(27, backType.getScalarPrecision());
+        Assertions.assertEquals(9, backType.getScalarScale());
+    }
 }
