@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Best practices and client-side code patterns for getting the fastest large result-set reads out of StarRocks with Arrow Flight SQL."
 keywords: ['arrow flight sql', 'performance', 'best practices', 'optimization', 'parquet', 'jdbc']
 ---
 
@@ -17,7 +18,7 @@ Two comparisons follow. The first measures only the **protocol fetch** — how l
 
 `fetch_arrow_table()` drains the network into Arrow buffers without converting cells into Python objects. `mysql --quick` drains the MySQL wire protocol with a streaming C client that parses rows. Both are protocol-only — neither pays for language-native object materialization.
 
-| Workload | Rows | MySQL protocol<br>(`mysql --quick`) | Arrow Flight<br>(`fetch_arrow_table`) | Speedup |
+| Workload | Rows | MySQL protocol<br/>(`mysql --quick`) | Arrow Flight<br/>(`fetch_arrow_table`) | Speedup |
 | --- | --- | --- | --- | --- |
 | Single numeric column (`SELECT id`) | 1 M | 831 ms | 215 ms | **3.9×** |
 | Single numeric column (`SELECT id`) | 5 M | 2,216 ms | 456 ms | **4.9×** |
@@ -36,7 +37,7 @@ Two comparisons follow. The first measures only the **protocol fetch** — how l
 
 The canonical Python pipeline is `pd.read_sql(sql, conn) → pandas.DataFrame`. The connection object you hand it is the entire migration: pass a PyMySQL `Connection` and pandas calls `cursor.fetchall()` + `pd.DataFrame(rows)`, walking every row to build the DataFrame. Pass an ADBC Flight SQL connection and pandas uses ADBC's native Arrow fetch + near-zero-copy DataFrame conversion.
 
-| Workload | Rows | `pd.read_sql(sql,`<br>`adbc_conn)` | `pd.read_sql(sql,`<br>`pymysql_conn)` | Speedup |
+| Workload | Rows | `pd.read_sql(sql,`<br/>`adbc_conn)` | `pd.read_sql(sql,`<br/>`pymysql_conn)` | Speedup |
 | --- | --- | --- | --- | --- |
 | Single numeric column (`SELECT id`) | 1 M | 320 ms | 6,185 ms | **19.3×** |
 | Single numeric column (`SELECT id`) | 5 M | 421 ms | 30,751 ms | **73.0×** |
