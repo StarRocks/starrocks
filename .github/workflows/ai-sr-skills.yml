@@ -211,7 +211,11 @@ jobs:
             fi
           done <<< "$reviewers"
 
-          text="${mentions}You were assigned as reviewer for <${PR_URL}|#${PR} ${TITLE}>"
+          # Include `${REPO}` so the link text shows e.g. `StarRocks/starrocks#74725 ...`
+          # — this file is synced to both StarRocks/starrocks and
+          # CelerData/celerdata-enterprise, both notify the same Slack channel,
+          # so the repo prefix lets reviewers tell which repo the PR is in.
+          text="${mentions}You were assigned as reviewer for <${PR_URL}|${REPO}#${PR} ${TITLE}>"
 
           python3 lib/slack_notify.py \
             --mode channel \
