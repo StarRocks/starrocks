@@ -125,11 +125,11 @@ SELECT count(*) > 1 FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_
 
 -- ================================================
 -- Test 9: Duplicate-match detection with high DOP
--- Regression: each EnforceUniqueOperator driver keeps its own seen-set, so
--- correctness under pipeline_dop > 1 relies on the local column-hash shuffle
--- exchange (interpolate_local_column_hash_partition_exchange) routing equal
--- (_file, _pos) keys to the same driver. This test verifies duplicates are
--- still caught under high DOP settings.
+-- Regression: each EnforceUniqueRowLocatorOperator driver keeps its own
+-- seen-set; correctness under pipeline_dop > 1 relies on the shuffle merge
+-- join below the check (probe side locally shuffled by join key), which
+-- routes all matches of one target row to the same driver. This test
+-- verifies duplicates are still caught under high DOP settings.
 -- ================================================
 set pipeline_dop = 4;
 set pipeline_sink_dop = 4;

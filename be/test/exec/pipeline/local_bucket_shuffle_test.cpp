@@ -133,45 +133,4 @@ TEST_F(LocalBucketShuffleTest, test_local_bucket_shuffle) {
     }
 }
 
-TEST_F(LocalBucketShuffleTest, test_column_hash_partitioner_routes_equal_keys_to_same_partition) {
-    auto chunk = std::make_shared<Chunk>();
-
-    auto file_col = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
-    std::vector<Slice> files{{"file-a"}, {"file-b"}, {"file-c"}, {"file-a"}, {"file-b"}};
-    file_col->append_strings(files.data(), files.size());
-    chunk->append_column(std::move(file_col), 0);
-
-    auto pos_col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
-    pos_col->append_datum(Datum(int64_t{7}));
-    pos_col->append_datum(Datum(int64_t{9}));
-    pos_col->append_datum(Datum(int64_t{7}));
-    pos_col->append_datum(Datum(int64_t{7}));
-    pos_col->append_datum(Datum(int64_t{9}));
-    chunk->append_column(std::move(pos_col), 1);
-
-    ColumnHashPartitioner partitioner(_source_op_factory.get(), {0, 1});
-    std::vector<uint32_t> partition_indexes(chunk->num_rows());
-    ASSERT_OK(partitioner.partition_chunk(chunk, _dop, partition_indexes));
-
-    std::vector<size_t> partition_by_row(chunk->num_rows());
-    for (size_t partition_id = 0; partition_id < _dop; partition_id++) {
-        for (size_t i = partitioner.partition_begin_offset(partition_id);
-             i < partitioner.partition_end_offset(partition_id); i++) {
-            partition_by_row[partition_indexes[i]] = partition_id;
-        }
-    }
-
-    EXPECT_EQ(partition_by_row[0], partition_by_row[3]);
-    EXPECT_EQ(partition_by_row[1], partition_by_row[4]);
-}
-
-TEST_F(LocalBucketShuffleTest, test_local_exchange_source_records_column_hash_partition_keys) {
-    EXPECT_FALSE(_source_op_factory->is_column_hash_partitioned_by({0, 1}));
-
-    _source_op_factory->mark_column_hash_partitioned({0, 1});
-
-    EXPECT_TRUE(_source_op_factory->is_column_hash_partitioned_by({0, 1}));
-    EXPECT_FALSE(_source_op_factory->is_column_hash_partitioned_by({1, 0}));
-}
-
 } // namespace starrocks::pipeline

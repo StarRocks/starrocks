@@ -80,8 +80,17 @@ public class IcebergPlannerUtils {
             return new PhysicalPropertySet();
         }
 
+        return createHashShuffleProperty(partitionColumnIds);
+    }
+
+    /**
+     * Builds a required property that hash-distributes the plan output by the given
+     * optimizer column ids.
+     */
+    private static PhysicalPropertySet createHashShuffleProperty(List<Integer> columnIds) {
+        Preconditions.checkArgument(!columnIds.isEmpty(), "shuffle column ids must not be empty");
         HashDistributionDesc distributionDesc = new HashDistributionDesc(
-                partitionColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                columnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionProperty distributionProperty = DistributionProperty.createProperty(
                 DistributionSpec.createHashDistributionSpec(distributionDesc));
         return new PhysicalPropertySet(distributionProperty);

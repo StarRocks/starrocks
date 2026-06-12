@@ -14,7 +14,6 @@
 
 package com.starrocks.sql;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -23,16 +22,19 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.planner.DescriptorTable;
-import com.starrocks.planner.EnforceUniqueNode;
+import com.starrocks.planner.EnforceUniqueRowLocatorNode;
+import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.JoinNode;
+import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
-import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MergeIntoStmt;
@@ -58,10 +60,11 @@ import com.starrocks.thrift.TIcebergWriteMode;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.iceberg.expressions.Expression;
 
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Queue;
 
 public class MergeIntoPlanner {
 
@@ -83,14 +86,9 @@ public class MergeIntoPlanner {
                 "MERGE INTO query relation must be a SelectRelation");
         SelectRelation selectRelation = (SelectRelation) query;
         SelectList selectList = selectRelation.getSelectList();
-        // This mutates the analyzed AST, so it must run exactly once per statement.
-        // Guard against re-planning paths (e.g. retry loops that re-enter
-        // StatementPlanner.plan with the same parsed statement) appending a second
-        // op_code column.
-        List<SelectListItem> items = selectList.getItems();
-        Preconditions.checkState(items.isEmpty()
-                        || !OP_CODE_COLUMN_NAME.equals(items.get(items.size() - 1).getAlias()),
-                "op_code routing column has already been injected");
+        // Runs exactly once per statement: analyze + plan are not re-run on the same
+        // MergeIntoStmt (DML retries re-parse to a fresh AST, and the analyzer already
+        // mutates this AST upstream), so no double-injection guard is needed here.
         selectList.addItem(new SelectListItem(routingExpr, OP_CODE_COLUMN_NAME));
         List<Expr> extendedOutput = Lists.newArrayList(selectRelation.getOutputExpression());
         extendedOutput.add(routingExpr);
@@ -98,7 +96,7 @@ public class MergeIntoPlanner {
     }
 
     public ExecPlan plan(MergeIntoStmt mergeIntoStmt, ConnectContext session) {
-        // The BE EnforceUniqueNode is pipeline-engine-only (its non-pipeline entry
+        // The BE EnforceUniqueRowLocatorNode is pipeline-engine-only (its non-pipeline entry
         // points return NotSupported), so fail fast with a clear message instead of
         // letting the BE error out at runtime.
         if (!session.getSessionVariable().isEnablePipelineEngine()) {
@@ -130,11 +128,16 @@ public class MergeIntoPlanner {
         List<String> colNames = Lists.newArrayList(mergeIntoStmt.getOutputColumnNames());
         colNames.add(OP_CODE_COLUMN_NAME);
 
-        // Use the 3-arg overload: MERGE wraps all data columns in CASE expressions, causing
-        // ColumnRefOperator names to become "case" instead of the original column name.
-        // The 3-arg overload matches partition columns by the saved column output names.
-        PhysicalPropertySet requiredProperty = IcebergPlannerUtils.createShuffleProperty(
-                icebergTable, outputColumns, colNames);
+        // The required property only serves Iceberg WRITE CLUSTERING (partitioned
+        // targets shuffle by partition columns so each sink instance writes few
+        // partitions); it plays no role in duplicate-match correctness. The check is a
+        // LOCAL operation directly above the merge join — the join's shuffle
+        // distribution (hint set by MergeIntoAnalyzer) already co-locates all matches
+        // of one target row. (The 3-arg overload matches partition columns by the
+        // saved output names — MERGE wraps data columns in CASE exprs, so
+        // ColumnRefOperator names degrade to "case".)
+        PhysicalPropertySet requiredProperty =
+                IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns, colNames);
 
         return createMergePlan(mergeIntoStmt, session, logicalPlan.getRootBuilder().getRoot(),
                 columnRefFactory, outputColumns, colNames, icebergTable, requiredProperty);
@@ -195,170 +198,273 @@ public class MergeIntoPlanner {
         icebergSinkExtra.setOperationType(IcebergMetadata.IcebergSinkExtra.OperationType.MERGE);
         // For MERGE, the plan has source LEFT JOIN target — there may be multiple
         // IcebergScanNodes (e.g., self-merge or USING another Iceberg table).
-        // We must build the conflict filter from the TARGET scan, not the source.
-        Expression filterExpr = buildTargetIcebergFilterExpr(execPlan, icebergTable);
+        // Keep the target scan and merge join bound together so sink validation and
+        // duplicate checking never fall back to scans/joins from the source subtree.
+        MergeTargetContext mergeTargetContext = findMergeTargetContext(execPlan, icebergTable);
+        Expression filterExpr = mergeTargetContext == null
+                ? null
+                : buildTargetIcebergFilterExpr(mergeTargetContext.targetScan);
         if (filterExpr != null) {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);
+        }
+        // Freeze the validation starting point at the same target scan used for the
+        // conflict filter. A self-merge source may also scan the target table and
+        // project _file/_pos, so table id plus usedForDelete is not enough to
+        // identify the scan being modified.
+        if (mergeTargetContext != null) {
+            icebergSinkExtra.setBaseSnapshotId(mergeTargetContext.targetScan.getBaseSnapshotId().orElse(null));
         }
         dataSink.setSinkExtraInfo(icebergSinkExtra);
 
         execPlan.getFragments().get(0).setSink(dataSink);
 
-        // Insert EnforceUniqueNode to check that each target row is matched at most once.
-        // Key columns are _file and _pos — resolved against the plan root's physical
-        // output layout below, NOT hardcoded to [0, 1].
-        insertEnforceUniqueNode(execPlan);
-    }
-
-    private void insertEnforceUniqueNode(ExecPlan execPlan) {
-        PlanFragment sinkFragment = execPlan.getFragments().get(0);
-        PlanNode currentRoot = sinkFragment.getPlanRoot();
-
-        // Resolve the physical chunk positions of _file and _pos.
-        //
-        // MergeIntoAnalyzer builds the SELECT list with _file at output-position 0
-        // and _pos at position 1, so execPlan.getOutputExprs().get(0)/(1) reference
-        // those two slots.
-        //
-        // The physical chunk flowing into the EnforceUniqueOperator is emitted by
-        // the sender ProjectNode, which on the BE side orders its columns by
-        // ASCENDING slot ID (project_node.cpp init() iterates Thrift's
-        // `map<SlotId, Expr> slot_map` which in C++ is a `std::map` — keys come
-        // out sorted). That's true whether the FE root here is the ProjectNode
-        // itself (single-BE / non-partitioned) or an ExchangeNode receiver (the
-        // multi-BE partition-shuffle case — the Exchange shares the sender
-        // Project's tupleId and preserves column order over the wire).
-        //
-        // We MUST NOT call `currentRoot.getOutputSlotIds(descTbl)` here:
-        //   - ProjectNode overrides it to return slot-ID-sorted order (correct).
-        //   - ExchangeNode does NOT override it, so it falls back to
-        //     PlanNode.getOutputSlotIds, which returns tuple-descriptor
-        //     insertion order. PlanFragmentBuilder populates the ProjectNode's
-        //     tuple via iterating `Maps.newHashMap()` (node.getColumnRefMap
-        //     entries), so insertion order ≠ slot-ID order in general.
-        //
-        // Taking the plan root's tuple slots and sorting by slot-ID ourselves
-        // gives the same order the BE actually sees, for both topologies.
-        // When source-side ColumnRefOperators get smaller slot IDs than the
-        // target-side _file/_pos (which happens routinely with any non-trivial
-        // source — multi-branch UNION ALL, MATCHED+NOT MATCHED pairs,
-        // partition-transform shuffles), the _file/_pos chunk indices are NOT
-        // 0/1. A hardcoded [0, 1] points at source data columns, and the BE-side
-        // EnforceUniqueOperator does a
-        //   down_cast<const FixedLengthColumn<int64_t>*>(row_pos_col)->get_data().data()
-        // on a column that isn't that type — in RELEASE builds this silently
-        // yields a bad pointer and SIGSEGVs, or — when the column happens to be
-        // readable as binary — surfaces as a spurious "matched by at most one
-        // source row" error with a bogus file path (e.g. a STRING data column's
-        // value like 'hot').
-        List<Expr> outputExprs = execPlan.getOutputExprs();
-        Preconditions.checkArgument(outputExprs.size() >= 2,
-                "MERGE output must have at least _file and _pos; got %s", outputExprs.size());
-        SlotId fileSlotId = extractSlotId(outputExprs.get(0), "_file");
-        SlotId posSlotId = extractSlotId(outputExprs.get(1), "_pos");
-
-        List<SlotId> physicalOrder = collectSlotsSortedById(currentRoot, execPlan.getDescTbl());
-        int fileIdx = physicalOrder.indexOf(fileSlotId);
-        int posIdx = physicalOrder.indexOf(posSlotId);
-        Preconditions.checkArgument(fileIdx >= 0 && posIdx >= 0,
-                "could not locate _file(slot=%s) / _pos(slot=%s) in plan root output slots %s",
-                fileSlotId, posSlotId, physicalOrder);
-
-        PlanNodeId nodeId = execPlan.getNextNodeId();
-        EnforceUniqueNode enforceNode = new EnforceUniqueNode(
-                nodeId, currentRoot, Arrays.asList(fileIdx, posIdx));
-        sinkFragment.setPlanRoot(enforceNode);
+        // Insert EnforceUniqueRowLocatorNode to check that each target row is matched at most once.
+        // Key columns are _file and _pos, identified by SLOT ID — the BE resolves the
+        // chunk columns through the chunk's slot-id map.
+        insertEnforceUniqueRowLocatorNode(execPlan, mergeTargetContext);
     }
 
     /**
-     * Collect every slot reachable from the given plan node's output tuples and
-     * return their SlotIds in ASCENDING slot-ID order.
-     *
-     * This mirrors the BE ProjectOperator's behavior: `project_node.cpp` iterates
-     * `tnode.project_node.slot_map` (a Thrift `map<SlotId, Expr>` → C++
-     * `std::map`, which keys are sorted), producing chunk columns in slot-ID
-     * ascending order regardless of how the FE tuple was populated. Using this
-     * sorted view here keeps FE's index resolution consistent with the BE
-     * chunk layout for every topology EnforceUniqueNode can sit under — both
-     * Project-at-root and Exchange-at-root (multi-BE partition-shuffle).
-     *
-     * Only MATERIALIZED slots are included. A ProjectNode's tuple descriptor
-     * holds both materialized output slots (populated via
-     * `setIsMaterialized(true)` in PlanFragmentBuilder) and non-materialized
-     * common sub-operator slots (`setIsMaterialized(false)`). The two travel
-     * through Thrift in DIFFERENT fields: `project_node.slot_map` (materialized
-     * outputs — what ends up as chunk columns) vs `project_node.common_slot_map`
-     * (common sub-expressions — evaluated in place, not emitted). Counting the
-     * common-sub slots here would shift the physical indices of `_file` / `_pos`
-     * whenever a common-sub slot happens to have a smaller slot-ID — e.g. for
-     * the CASE WHEN `_file IS NOT NULL` pattern that MergeIntoAnalyzer emits on
-     * every MERGE output column, which the optimizer CSE's out.
+     * Place the duplicate-match check DIRECTLY ABOVE the merge join, in the join's
+     * fragment, before any write-distribution exchange. Correctness of the local
+     * per-driver check rests on the join, not on the sink distribution:
+     * <ul>
+     *   <li>cross-BE: the join is a shuffle join (hint set by MergeIntoAnalyzer,
+     *       validated below), so each target row is owned by exactly one instance and
+     *       all source rows matching it meet there;</li>
+     *   <li>within a BE: the hash join's probe side is locally shuffled by join key
+     *       across drivers, so all matches of one target row land on one driver.</li>
+     * </ul>
+     * Everything above the check (e.g. the partition-column shuffle for partitioned
+     * targets) is free to redistribute rows arbitrarily.
      */
-    @VisibleForTesting
-    static List<SlotId> collectSlotsSortedById(PlanNode node, DescriptorTable descTbl) {
-        List<SlotId> slotIds = Lists.newArrayList();
-        for (TupleId tid : node.getTupleIds()) {
-            TupleDescriptor tupleDesc = descTbl.getTupleDesc(tid);
-            if (tupleDesc == null) {
-                continue;
-            }
-            for (SlotDescriptor slot : tupleDesc.getSlots()) {
-                if (slot.isMaterialized()) {
-                    slotIds.add(slot.getId());
+    private void insertEnforceUniqueRowLocatorNode(ExecPlan execPlan, MergeTargetContext mergeTargetContext) {
+        if (mergeTargetContext == null) {
+            // Row-locator outputs are NULL projections because the target side of
+            // the MERGE join was eliminated (for example, an empty source or a
+            // constant-false ON predicate). With no matched target rows, the
+            // duplicate-match check is unnecessary. Do not fall back to joins inside
+            // the USING subquery.
+            return;
+        }
+        PlanNode joinNode = mergeTargetContext.mergeJoin;
+        validateMergeJoinKeepsTargetUnreplicated(joinNode);
+
+        PlanFragment joinFragment = joinNode.getFragment();
+        PlanNode currentRoot = joinFragment.getPlanRoot();
+        PlanNodeId nodeId = execPlan.getNextNodeId();
+        EnforceUniqueRowLocatorNode enforceNode = new EnforceUniqueRowLocatorNode(
+                nodeId, currentRoot, Arrays.asList(
+                        mergeTargetContext.rowLocatorSlotIds.fileSlotId.asInt(),
+                        mergeTargetContext.rowLocatorSlotIds.posSlotId.asInt()));
+        joinFragment.setPlanRoot(enforceNode);
+    }
+
+    /**
+     * Locate the physical MERGE join and its target scan from the row-locator slots.
+     * The analyzer emits source LEFT JOIN target, so the MERGE target lives in child
+     * 1 of that join. Source subqueries can contain their own joins and can even scan
+     * the same Iceberg table with _file/_pos projected; those must not be mistaken for
+     * the MERGE target side.
+     */
+    private static MergeTargetContext findMergeTargetContext(ExecPlan execPlan, IcebergTable targetTable) {
+        RowLocatorSlotIds rowLocatorSlotIds = tryExtractRowLocatorSlotIds(execPlan);
+        if (rowLocatorSlotIds == null) {
+            return null;
+        }
+
+        DescriptorTable descTbl = execPlan.getDescTbl();
+        PlanNode root = execPlan.getFragments().get(0).getPlanRoot();
+        Queue<PlanNode> queue = new ArrayDeque<>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanNode node = queue.poll();
+            if (node instanceof JoinNode joinNode && joinNode.getChildren().size() > 1) {
+                // MergeIntoAnalyzer constructs source LEFT JOIN target. The target
+                // side is child 1; searching there avoids picking a source-subquery
+                // self-scan as the MERGE target.
+                PlanNode targetSubtree = joinNode.getChild(1);
+                IcebergScanNode targetScan = findTargetScan(
+                        targetSubtree, targetTable, rowLocatorSlotIds, descTbl);
+                if (targetScan != null) {
+                    return new MergeTargetContext(joinNode, targetScan, rowLocatorSlotIds);
                 }
             }
+            queue.addAll(node.getChildren());
         }
-        slotIds.sort(Comparator.comparingInt(SlotId::asInt));
-        return slotIds;
+        if (!hasTargetScanProducingRowLocatorSlots(execPlan, targetTable, rowLocatorSlotIds, descTbl)) {
+            return null;
+        }
+        throw new IllegalStateException("MERGE INTO physical plan contains target row-locator slots "
+                + "but no target Iceberg scan was found on the right side of the MERGE join");
+    }
+
+    private static IcebergScanNode findTargetScan(PlanNode root, IcebergTable targetTable,
+                                                  RowLocatorSlotIds rowLocatorSlotIds,
+                                                  DescriptorTable descTbl) {
+        Queue<PlanNode> queue = new ArrayDeque<>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanNode node = queue.poll();
+            if (node instanceof IcebergScanNode scanNode
+                    && isTargetScan(scanNode, targetTable, rowLocatorSlotIds, descTbl)) {
+                return scanNode;
+            }
+            queue.addAll(node.getChildren());
+        }
+        return null;
+    }
+
+    private static boolean hasTargetScanProducingRowLocatorSlots(ExecPlan execPlan, IcebergTable targetTable,
+                                                                 RowLocatorSlotIds rowLocatorSlotIds,
+                                                                 DescriptorTable descTbl) {
+        if (execPlan.getScanNodes() == null) {
+            return false;
+        }
+        for (PlanNode node : execPlan.getScanNodes()) {
+            if (node instanceof IcebergScanNode scanNode
+                    && isTargetScan(scanNode, targetTable, rowLocatorSlotIds, descTbl)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isTargetScan(IcebergScanNode scanNode, IcebergTable targetTable,
+                                        RowLocatorSlotIds rowLocatorSlotIds, DescriptorTable descTbl) {
+        return scanNode.isUsedForDelete()
+                && scanNode.getIcebergTable().getId() == targetTable.getId()
+                && scanNode.getSlotIds(descTbl).contains(rowLocatorSlotIds.fileSlotId.asInt())
+                && scanNode.getSlotIds(descTbl).contains(rowLocatorSlotIds.posSlotId.asInt());
     }
 
     /**
-     * Extract the slot ID that the given output-expr references. MergeIntoAnalyzer
-     * emits plain SlotRefs for _file and _pos (no casts, no wrapping), so in the
-     * common path this is just a cast. Falls back to collecting all SlotRefs for
-     * robustness in case future optimizer passes rewrite the output expression
-     * into a single-slot scalar.
+     * Fail-loud guard: the local per-driver duplicate-match check is sound only when
+     * no target row can be matched by two source rows that end up on different drivers.
+     * Two plan shapes satisfy that:
+     * <ul>
+     *   <li>a shuffle/bucket/colocate hash join — the join key owns each target row
+     *       on exactly one instance AND the probe side is locally shuffled by join
+     *       key, so all source rows matching one target row land on one driver (the
+     *       analyzer's SHUFFLE hint pins this);</li>
+     *   <li>a nestloop join whose probe (source) side is a constant relation yielding
+     *       AT MOST ONE ROW (no scans, cardinality &le; 1): one source row cannot
+     *       match any target row twice, so no duplicate is possible regardless of how
+     *       the broadcast target is replicated across drivers. This shape appears when
+     *       constant folding rewrites the ON equality against a single-row literal
+     *       source (e.g. {@code USING (SELECT 1 AS id) s ON t.id = s.id} becomes a
+     *       pushed-down {@code t.id = 1}).</li>
+     * </ul>
+     * A nestloop probing a MULTI-row source is rejected: with no source-target
+     * equality the broadcast target is replicated and the multi-row probe is split
+     * across drivers under pipeline_dop &gt; 1, so two source rows matching the same
+     * target row would hit different per-driver seen-sets and the duplicate would be
+     * missed silently. Cardinality is only trusted for no-scan (constant) sources,
+     * where it is exact; a scanned source is always rejected.
      */
-    private static SlotId extractSlotId(Expr expr, String metaColName) {
+    private static void validateMergeJoinKeepsTargetUnreplicated(PlanNode joinNode) {
+        if (joinNode instanceof HashJoinNode) {
+            JoinNode.DistributionMode mode = ((HashJoinNode) joinNode).getDistrMode();
+            Preconditions.checkState(mode == JoinNode.DistributionMode.PARTITIONED
+                            || mode == JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET
+                            || mode == JoinNode.DistributionMode.COLOCATE,
+                    "MERGE join must not broadcast/replicate the target side (shuffle hint should have "
+                            + "prevented this), got distribution mode %s", mode);
+            return;
+        }
+        if (joinNode instanceof NestLoopJoinNode) {
+            PlanNode source = joinNode.getChild(0);
+            long sourceCardinality = source.getCardinality();
+            if (!subtreeHasScanNode(source) && sourceCardinality >= 0 && sourceCardinality <= 1) {
+                return;
+            }
+        }
+        throw new SemanticException("MERGE INTO requires at least one equality predicate between the "
+                + "target and the source in the ON clause");
+    }
+
+    private static boolean subtreeHasScanNode(PlanNode root) {
+        Queue<PlanNode> queue = new ArrayDeque<>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanNode node = queue.poll();
+            if (node instanceof ScanNode) {
+                return true;
+            }
+            queue.addAll(node.getChildren());
+        }
+        return false;
+    }
+
+    /**
+     * Extract the target row-locator slots from the MERGE output. MergeIntoAnalyzer
+     * emits _file at output-position 0 and _pos at position 1. When the optimizer
+     * eliminates the target side, these outputs can become NULL projections that
+     * still use slot refs, in which case there is no target row to check.
+     */
+    private static RowLocatorSlotIds tryExtractRowLocatorSlotIds(ExecPlan execPlan) {
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        if (outputExprs == null || outputExprs.size() < 2) {
+            return null;
+        }
+        SlotId fileSlotId = tryExtractSlotId(outputExprs.get(0));
+        SlotId posSlotId = tryExtractSlotId(outputExprs.get(1));
+        if (fileSlotId == null || posSlotId == null) {
+            return null;
+        }
+        return new RowLocatorSlotIds(fileSlotId, posSlotId);
+    }
+
+    private static SlotId tryExtractSlotId(Expr expr) {
         if (expr instanceof SlotRef slotRef) {
             return slotRef.getSlotId();
         }
         List<SlotRef> slotRefs = Lists.newArrayList();
         expr.collect(SlotRef.class, slotRefs);
-        Preconditions.checkArgument(slotRefs.size() == 1,
-                "MERGE output expression for %s must reference exactly one slot; got %s from %s",
-                metaColName, slotRefs.size(), expr.debugString());
-        return slotRefs.get(0).getSlotId();
+        return slotRefs.size() == 1 ? slotRefs.get(0).getSlotId() : null;
     }
 
     /**
-     * Build conflict detection filter from the TARGET table's IcebergScanNode, not the first
-     * Iceberg scan found. In MERGE, the source may also be an Iceberg table, and the generic
-     * buildIcebergFilterExpr() picks the first scan it finds — which could be the source.
-     *
-     * We identify the target scan by {@code isUsedForDelete() == true}, which is set by
-     * PlanFragmentBuilder when the output contains _file/_pos metadata columns. This works
-     * even for self-merges where both scans reference the same native table, because only
-     * the target side outputs delete-path metadata.
+     * Build conflict detection filter from the scan proven to be the MERGE target
+     * side. Do not search the global scan list here: source scans may share the same
+     * table id and usedForDelete flag in metadata self-merges.
      */
-    private static Expression buildTargetIcebergFilterExpr(ExecPlan execPlan, IcebergTable targetTable) {
-        if (execPlan == null || execPlan.getScanNodes() == null) {
+    private static Expression buildTargetIcebergFilterExpr(IcebergScanNode targetScan) {
+        if (targetScan == null) {
             return null;
         }
 
-        for (PlanNode node : execPlan.getScanNodes()) {
-            if (node instanceof IcebergScanNode scanNode && scanNode.isUsedForDelete()) {
-                var predicate = scanNode.getIcebergJobPlanningPredicate();
-                var nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
-                if (predicate == null || nativeSchema == null) {
-                    return null;
-                }
-                var icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(nativeSchema.asStruct());
-                return new ScalarOperatorToIcebergExpr()
-                        .convert(Collections.singletonList(predicate), icebergContext);
-            }
+        var predicate = targetScan.getIcebergJobPlanningPredicate();
+        var nativeSchema = targetScan.getIcebergTable().getNativeTable().schema();
+        if (predicate == null || nativeSchema == null) {
+            return null;
         }
-        return null;
+        var icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(nativeSchema.asStruct());
+        return new ScalarOperatorToIcebergExpr()
+                .convert(Collections.singletonList(predicate), icebergContext);
+    }
+
+    private static class MergeTargetContext {
+        private final JoinNode mergeJoin;
+        private final IcebergScanNode targetScan;
+        private final RowLocatorSlotIds rowLocatorSlotIds;
+
+        private MergeTargetContext(JoinNode mergeJoin, IcebergScanNode targetScan,
+                                   RowLocatorSlotIds rowLocatorSlotIds) {
+            this.mergeJoin = mergeJoin;
+            this.targetScan = targetScan;
+            this.rowLocatorSlotIds = rowLocatorSlotIds;
+        }
+    }
+
+    private static class RowLocatorSlotIds {
+        private final SlotId fileSlotId;
+        private final SlotId posSlotId;
+
+        private RowLocatorSlotIds(SlotId fileSlotId, SlotId posSlotId) {
+            this.fileSlotId = fileSlotId;
+            this.posSlotId = posSlotId;
+        }
     }
 
 }

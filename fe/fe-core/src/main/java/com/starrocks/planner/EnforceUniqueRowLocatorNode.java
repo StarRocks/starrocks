@@ -14,7 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.thrift.TEnforceUniqueNode;
+import com.starrocks.thrift.TEnforceUniqueRowLocatorNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -22,39 +22,44 @@ import com.starrocks.thrift.TPlanNodeType;
 import java.util.List;
 
 /**
- * EnforceUniqueNode passes all rows through while checking that key columns are unique.
+ * EnforceUniqueRowLocatorNode passes all rows through while checking that key columns are unique.
  * Used for Iceberg MERGE INTO to ensure that each target row (_file, _pos) is matched
  * by at most one source row. If a duplicate key is detected, execution fails with an error.
+ * <p>
+ * The key columns are identified by SLOT ID, not by physical chunk position: the BE
+ * looks the columns up through the chunk's slot-id map (the same mechanism the Iceberg
+ * sink uses to locate _file/_pos), so this node is insensitive to how the BE orders the
+ * chunk columns of the child node.
  */
-public class EnforceUniqueNode extends PlanNode {
+public class EnforceUniqueRowLocatorNode extends PlanNode {
 
-    private final List<Integer> uniqueKeyColIndices;
+    private final List<Integer> uniqueKeySlotIds;
 
-    public EnforceUniqueNode(PlanNodeId id, PlanNode child, List<Integer> uniqueKeyColIndices) {
+    public EnforceUniqueRowLocatorNode(PlanNodeId id, PlanNode child, List<Integer> uniqueKeySlotIds) {
         super(id, "ENFORCE UNIQUE");
-        this.uniqueKeyColIndices = uniqueKeyColIndices;
+        this.uniqueKeySlotIds = uniqueKeySlotIds;
         this.children.add(child);
         this.tupleIds.addAll(child.getTupleIds());
         this.nullableTupleIds.addAll(child.getNullableTupleIds());
     }
 
-    /** Physical chunk indices of the unique-key columns — exposed for unit-test inspection. */
-    public List<Integer> getUniqueKeyColIndices() {
-        return uniqueKeyColIndices;
+    /** Slot ids of the unique-key columns — exposed for unit-test inspection. */
+    public List<Integer> getUniqueKeySlotIds() {
+        return uniqueKeySlotIds;
     }
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        msg.node_type = TPlanNodeType.ENFORCE_UNIQUE_NODE;
-        TEnforceUniqueNode node = new TEnforceUniqueNode();
-        node.setUnique_key_col_indices(uniqueKeyColIndices);
-        msg.setEnforce_unique_node(node);
+        msg.node_type = TPlanNodeType.ENFORCE_UNIQUE_ROW_LOCATOR_NODE;
+        TEnforceUniqueRowLocatorNode node = new TEnforceUniqueRowLocatorNode();
+        node.setUnique_key_slot_ids(uniqueKeySlotIds);
+        msg.setEnforce_unique_row_locator_node(node);
     }
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("unique key columns: ").append(uniqueKeyColIndices).append("\n");
+        sb.append(prefix).append("unique key slots: ").append(uniqueKeySlotIds).append("\n");
         return sb.toString();
     }
 

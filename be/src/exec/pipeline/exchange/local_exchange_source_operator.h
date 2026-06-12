@@ -17,7 +17,6 @@
 #include <mutex>
 #include <queue>
 #include <utility>
-#include <vector>
 
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/source_operator.h"
@@ -153,22 +152,12 @@ public:
 
     ChunkBufferMemoryManager* memory_manager() { return _memory_manager.get(); }
 
-    void mark_column_hash_partitioned(std::vector<int32_t> column_indices) {
-        _is_column_hash_partitioned = true;
-        _column_hash_partition_indices = std::move(column_indices);
-    }
-    bool is_column_hash_partitioned_by(const std::vector<int32_t>& column_indices) const {
-        return _is_column_hash_partitioned && _column_hash_partition_indices == column_indices;
-    }
-
     std::vector<LocalExchangeSourceOperator*>& get_sources() { return _sources; }
 
 private:
     LocalExchanger* _exchanger = nullptr;
     std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
     std::vector<LocalExchangeSourceOperator*> _sources;
-    bool _is_column_hash_partitioned = false;
-    std::vector<int32_t> _column_hash_partition_indices;
 };
 
 } // namespace starrocks::pipeline

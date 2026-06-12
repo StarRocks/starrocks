@@ -90,7 +90,7 @@ enum TPlanNodeType {
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
-  ENFORCE_UNIQUE_NODE
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE
 }
 
 // phases of an execution node
@@ -1269,8 +1269,11 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
-struct TEnforceUniqueNode {
-    1: optional list<i32> unique_key_col_indices
+struct TEnforceUniqueRowLocatorNode {
+    // Slot ids of the unique-key columns. The BE resolves the actual chunk
+    // columns through the chunk's slot-id map, so the FE does not need to
+    // predict the physical column order of the BE chunk.
+    1: optional list<Types.TSlotId> unique_key_slot_ids
 }
 
 struct THdfsScanNode {
@@ -1578,7 +1581,7 @@ struct TPlanNode {
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
-  86: optional TEnforceUniqueNode enforce_unique_node
+  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

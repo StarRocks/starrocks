@@ -135,40 +135,6 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
     return Status::OK();
 }
 
-Status ColumnHashPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) {
-    size_t num_rows = chunk->num_rows();
-    if (_shuffler == nullptr) {
-        _shuffler = std::make_unique<Shuffler>(_source->runtime_state()->func_version() <= 3, false,
-                                               TPartitionType::HASH_PARTITIONED, _source->get_sources().size(), 1);
-    }
-
-    if (_exchange_hash_function_version == 1) {
-        _hash_values.assign(num_rows, HashUtil::XXH3_SEED_32);
-        for (int32_t column_index : _column_indices) {
-            if (column_index < 0 || column_index >= static_cast<int32_t>(chunk->num_columns())) {
-                return Status::InternalError(
-                        fmt::format("ColumnHashPartitioner: invalid column index {}, chunk has {} columns",
-                                    column_index, chunk->num_columns()));
-            }
-            chunk->get_column_by_index(column_index)->xxh3_hash(_hash_values.data(), 0, num_rows);
-        }
-    } else {
-        _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-        for (int32_t column_index : _column_indices) {
-            if (column_index < 0 || column_index >= static_cast<int32_t>(chunk->num_columns())) {
-                return Status::InternalError(
-                        fmt::format("ColumnHashPartitioner: invalid column index {}, chunk has {} columns",
-                                    column_index, chunk->num_columns()));
-            }
-            chunk->get_column_by_index(column_index)->fnv_hash(_hash_values.data(), 0, num_rows);
-        }
-    }
-
-    _shuffle_channel_id.resize(num_rows);
-    _shuffler->local_exchange_shuffle(_shuffle_channel_id, _hash_values, num_rows);
-    return Status::OK();
-}
-
 Status RandomPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) {
     size_t num_rows = chunk->num_rows();
     _shuffle_channel_id.resize(num_rows, 0);
@@ -236,37 +202,6 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     // The chunk and partition_row_indexes are cached in the queue of source operator,
     // and used later in pull_chunk() of source operator. If we reuse partition_row_indexes in partitioner,
     // it will be overwritten by the next time calling partitioner.partition_chunk().
-    std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
-    RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
-    return Status::OK();
-}
-
-ColumnHashPartitionExchanger::ColumnHashPartitionExchanger(
-        const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager, LocalExchangeSourceOperatorFactory* source,
-        std::vector<int32_t> column_indices)
-        : LocalExchanger("ColumnHashPartition", memory_manager, source), _column_indices(std::move(column_indices)) {}
-
-void ColumnHashPartitionExchanger::incr_sinker() {
-    LocalExchanger::incr_sinker();
-    auto partitioner = std::make_unique<ColumnHashPartitioner>(_source, _column_indices);
-    if (_source->runtime_state() != nullptr &&
-        _source->runtime_state()->query_options().__isset.exchange_hash_function_version) {
-        partitioner->set_exchange_hash_function_version(
-                _source->runtime_state()->query_options().exchange_hash_function_version);
-    }
-    _partitioners.emplace_back(std::move(partitioner));
-}
-
-Status ColumnHashPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
-    size_t num_rows = chunk->num_rows();
-    if (num_rows == 0) {
-        return Status::OK();
-    }
-
-    size_t num_partitions = _source->get_sources().size();
-    auto& partitioner = _partitioners[sink_driver_sequence];
-
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
     RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));

@@ -16,7 +16,6 @@
 
 #include <memory>
 #include <utility>
-#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
@@ -93,28 +92,6 @@ private:
     std::vector<uint32_t> _round_hashes;
     std::unique_ptr<Shuffler> _shuffler;
     // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
-    int32_t _exchange_hash_function_version = 0;
-};
-
-// Shuffle by physical column indexes in the input chunk.
-class ColumnHashPartitioner final : public Partitioner {
-public:
-    // NOTE: must not dereference source->runtime_state() here — incr_sinker constructs
-    // partitioners before checking that the runtime state is set. _hash_values is sized
-    // on first use in shuffle_channel_ids.
-    ColumnHashPartitioner(LocalExchangeSourceOperatorFactory* source, std::vector<int32_t> column_indices)
-            : Partitioner(source), _column_indices(std::move(column_indices)) {}
-
-    ~ColumnHashPartitioner() override = default;
-
-    Status shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) override;
-
-    void set_exchange_hash_function_version(int32_t version) { _exchange_hash_function_version = version; }
-
-private:
-    std::vector<int32_t> _column_indices;
-    std::vector<uint32_t> _hash_values;
-    std::unique_ptr<Shuffler> _shuffler;
     int32_t _exchange_hash_function_version = 0;
 };
 
@@ -220,23 +197,6 @@ private:
     std::vector<ExprContext*> _partition_exprs;
     std::vector<TBucketProperty> _bucket_properties;
     std::vector<std::unique_ptr<ShufflePartitioner>> _partitioners;
-};
-
-// Exchange local data by hashing physical column indexes in the input chunk.
-class ColumnHashPartitionExchanger final : public LocalExchanger {
-public:
-    ColumnHashPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
-                                 LocalExchangeSourceOperatorFactory* source, std::vector<int32_t> column_indices);
-
-    ~ColumnHashPartitionExchanger() override = default;
-
-    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
-
-    void incr_sinker() override;
-
-private:
-    std::vector<int32_t> _column_indices;
-    std::vector<std::unique_ptr<ColumnHashPartitioner>> _partitioners;
 };
 
 // The input stream is already ordered by partition columns.

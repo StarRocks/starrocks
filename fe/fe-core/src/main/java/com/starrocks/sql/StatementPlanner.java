@@ -604,7 +604,7 @@ public class StatementPlanner {
         } else if (stmt instanceof DeleteStmt) {
             label = MetaUtils.genDeleteLabel(session.getExecutionId());
         } else if (stmt instanceof MergeIntoStmt) {
-            label = MetaUtils.genUpdateLabel(session.getExecutionId());
+            label = MetaUtils.genMergeLabel(session.getExecutionId());
         } else {
             throw UnsupportedException.unsupportedException(
                     "Unsupported dml statement " + stmt.getClass().getSimpleName());

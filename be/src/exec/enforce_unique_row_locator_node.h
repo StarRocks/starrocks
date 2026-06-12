@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "common/global_types.h"
 #include "common/statusor.h"
 #include "exec/pipeline_node.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -25,10 +26,14 @@ namespace starrocks {
 // Plan node that enforces uniqueness of (file_path, row_position) keys
 // across the data stream. Used by MERGE INTO to guarantee that each target
 // row is matched by at most one source row.
-class EnforceUniqueNode final : public PipelineNode {
+//
+// The key columns are identified by SLOT ID and resolved per chunk through the
+// chunk's slot-id map, so this node is insensitive to the physical column order
+// of the child's output chunk.
+class EnforceUniqueRowLocatorNode final : public PipelineNode {
 public:
-    EnforceUniqueNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~EnforceUniqueNode() override = default;
+    EnforceUniqueRowLocatorNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~EnforceUniqueRowLocatorNode() override = default;
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     void close(RuntimeState* state) override;
@@ -36,7 +41,7 @@ public:
     StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
-    std::vector<int32_t> _unique_key_col_indices;
+    std::vector<SlotId> _unique_key_slot_ids;
 };
 
 } // namespace starrocks

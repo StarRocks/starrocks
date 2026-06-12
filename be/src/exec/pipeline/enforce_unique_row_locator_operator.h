@@ -20,29 +20,34 @@
 
 #include "base/phmap/phmap.h"
 #include "column/chunk.h"
+#include "common/global_types.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 
-// EnforceUniqueOperator verifies that the key columns (file_path, row_position)
+// EnforceUniqueRowLocatorOperator verifies that the key columns (file_path, row_position)
 // contain no duplicate values across all input chunks. If a duplicate is found,
 // push_chunk returns a RuntimeError. Otherwise, the chunk is passed through
 // unchanged. This is used by the MERGE INTO planner to ensure that each target
 // row is matched by at most one source row.
 //
+// The key columns are identified by SLOT ID and resolved per chunk through the
+// chunk's slot-id map, so the operator is insensitive to the physical column
+// order of the input chunk.
+//
 // File paths are interned to avoid per-row string copies: a side map assigns
 // a compact integer ID to each unique path, and the seen-set stores (path_id, pos)
 // pairs instead of (string, int64). This reduces memory from ~40 bytes/entry to
 // 12 bytes/entry for the common case of many rows per file.
-class EnforceUniqueOperator final : public Operator {
+class EnforceUniqueRowLocatorOperator final : public Operator {
 public:
-    EnforceUniqueOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                          const std::vector<int32_t>& unique_key_col_indices)
-            : Operator(factory, id, "enforce_unique", plan_node_id, false, driver_sequence),
-              _unique_key_col_indices(unique_key_col_indices) {}
+    EnforceUniqueRowLocatorOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                                    const std::vector<SlotId>& unique_key_slot_ids)
+            : Operator(factory, id, "enforce_unique_row_locator", plan_node_id, false, driver_sequence),
+              _unique_key_slot_ids(unique_key_slot_ids) {}
 
-    ~EnforceUniqueOperator() override = default;
+    ~EnforceUniqueRowLocatorOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -70,7 +75,7 @@ private:
     // exposed via the SeenSetMemoryUsage profile counter.
     int64_t _seen_memory_usage() const;
 
-    const std::vector<int32_t> _unique_key_col_indices;
+    const std::vector<SlotId> _unique_key_slot_ids;
     // Intern table: file path string -> compact integer ID
     phmap::flat_hash_map<std::string, int32_t> _path_ids;
     int32_t _next_path_id = 0;
@@ -82,24 +87,24 @@ private:
     RuntimeProfile::Counter* _seen_memory_counter = nullptr;
 };
 
-class EnforceUniqueOperatorFactory final : public OperatorFactory {
+class EnforceUniqueRowLocatorOperatorFactory final : public OperatorFactory {
 public:
-    EnforceUniqueOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<int32_t> unique_key_col_indices)
-            : OperatorFactory(id, "enforce_unique", plan_node_id),
-              _unique_key_col_indices(std::move(unique_key_col_indices)) {}
+    EnforceUniqueRowLocatorOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<SlotId> unique_key_slot_ids)
+            : OperatorFactory(id, "enforce_unique_row_locator", plan_node_id),
+              _unique_key_slot_ids(std::move(unique_key_slot_ids)) {}
 
-    ~EnforceUniqueOperatorFactory() override = default;
+    ~EnforceUniqueRowLocatorOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<EnforceUniqueOperator>(this, _id, _plan_node_id, driver_sequence,
-                                                       _unique_key_col_indices);
+        return std::make_shared<EnforceUniqueRowLocatorOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                                 _unique_key_slot_ids);
     }
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:
-    std::vector<int32_t> _unique_key_col_indices;
+    std::vector<SlotId> _unique_key_slot_ids;
 };
 
 } // namespace starrocks::pipeline

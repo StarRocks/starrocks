@@ -1855,16 +1855,30 @@ public class IcebergMetadata implements ConnectorMetadata {
                 }
             }
 
-            if (hasPositionDeletes && hasDataFiles) {
-                // UPDATE / MERGE: RowDelta with both delete and data files
+            // Route MERGE by its operation type, not by the emitted file mix. Routing on
+            // the file mix alone is wrong for a MERGE in two ways: (1) an INSERT-only MERGE
+            // emits data files only and would take the plain-append path, which ignores the
+            // frozen base snapshot and conflict-detection filter and so escapes SERIALIZABLE
+            // conflict detection; (2) a delete-only MERGE would take the pure-DELETE path,
+            // which records iceberg_delete_* metrics instead of the merge accounting and
+            // skips validateNoConflictingDeleteFiles. Sending every MERGE that emits files
+            // through commitRowDeltaOperation gives it uniform SERIALIZABLE validation and
+            // merge metrics; commitRowDeltaOperation handles a data-only or delete-only file
+            // set (it conditionally addRows()/addDeletes()). An empty MERGE (no files) has
+            // nothing to validate or count and falls through to the no-op append path.
+            boolean isMerge = extra instanceof IcebergSinkExtra
+                    && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
+
+            if ((hasPositionDeletes && hasDataFiles) || (isMerge && (hasDataFiles || hasPositionDeletes))) {
+                // UPDATE, or any MERGE that emitted files: RowDelta with delete and/or data files
                 commitRowDeltaOperation(transaction, nativeTbl, dataFiles, branch,
                         dbName, tableName, extra, context);
             } else if (hasPositionDeletes) {
-                // Pure DELETE (unchanged)
+                // Pure (non-MERGE) DELETE (unchanged)
                 commitDeleteOperation(transaction, nativeTbl, dataFiles, branch,
                         dbName, tableName, extra, context);
             } else {
-                // Pure INSERT/OVERWRITE (unchanged)
+                // Pure INSERT/OVERWRITE, or an empty MERGE (unchanged)
                 commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite,
                         isRewrite, extra, dbName, tableName, context);
             }
