@@ -15,9 +15,14 @@
 package com.starrocks.catalog.system.sys;
 
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
+<<<<<<< HEAD
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+=======
+import com.starrocks.catalog.InternalCatalog;
+>>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -64,7 +69,9 @@ public class SysFeMemoryUsage {
             context.setCurrentRoleIds(currentUser);
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
-            throw new TException(e.getMessage(), e);
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
 
         TFeMemoryRes response = new TFeMemoryRes();

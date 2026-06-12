@@ -14,24 +14,41 @@
 
 package com.starrocks.catalog.system.sys;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
+>>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
+<<<<<<< HEAD
 import mockit.Expectations;
 import mockit.Mocked;
+=======
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 
+<<<<<<< HEAD
 import java.lang.Thread.State;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+=======
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+>>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SysFeLocksTest {
@@ -49,6 +66,7 @@ public class SysFeLocksTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testResolveLockItem(@Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr)
             throws InterruptedException {
         Config.lock_manager_enabled = false;
@@ -141,3 +159,28 @@ public class SysFeLocksTest {
     }
 
 }
+=======
+    public void testListLocksAccessDeniedSurfacesMessage() {
+        TFeLocksReq req = new TFeLocksReq();
+        TAuthInfo auth = new TAuthInfo();
+        auth.setUser("nopriv");
+        auth.setUser_ip("127.0.0.1");
+        req.setAuth_info(auth);
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException();
+            }
+        };
+
+        Exception ex = assertThrows(Exception.class, () -> SysFeLocks.listLocks(req, true));
+        assertNotNull(ex.getMessage(), "AccessDenied message should not be null");
+        assertTrue(ex.getMessage().contains(
+                        "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation."),
+                "Should match canonical format: " + ex.getMessage());
+    }
+
+}
+>>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
