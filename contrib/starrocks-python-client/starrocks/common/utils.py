@@ -182,6 +182,36 @@ class TableAttributeNormalizer:
         return ''.join(result)
 
     @staticmethod
+    def strip_line_comments(sql: str) -> str:
+        result = []
+        in_string = False
+        quote_char = None
+
+        i = 0
+        while i < len(sql):
+            ch = sql[i]
+
+            if in_string:
+                result.append(ch)
+                if ch == quote_char and (i == 0 or sql[i - 1] != "\\"):
+                    in_string = False
+            else:
+                if ch in ("'", '"'):
+                    in_string = True
+                    quote_char = ch
+                    result.append(ch)
+                elif ch == "-" and i + 1 < len(sql) and sql[i + 1] == "-":
+                    while i < len(sql) and sql[i] != "\n":
+                        i += 1
+                    result.append(" ")
+                else:
+                    result.append(ch)
+
+            i += 1
+
+        return "".join(result)
+
+    @staticmethod
     def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False) -> Optional[str]:
         """
         Normalize an SQL string for comparison.
@@ -204,7 +234,7 @@ class TableAttributeNormalizer:
         # e.g., 'O\'Brien' becomes 'O''Brien' for standard SQL
         sql = sql.replace("\\'", "''")
 
-        sql = re.sub(r"--.*?(?:\n|$)", " ", sql)
+        sql = TableAttributeNormalizer.strip_line_comments(sql)
         if lowercase:
             sql = sql.lower().strip()
 
