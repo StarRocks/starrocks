@@ -5,16 +5,21 @@ run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.numbe
 # code_kb.task_summaries cause cache, via the github-bugfix-versions skill running in
 # the claude-cli container (same runner/container pattern as ai-sr-skills.yml). Three events:
 #
-#   ① origin bugfix PR merges to main      → /index-fix (seed versions) + /affected-versions (cache cause)
-#   ② a backport PR merges to branch-X.Y*  → /index-fix (rebuild the origin's versions record)
-#   ③ a release tag X.Y.Z is pushed        → /index-fix <tag> (resolve pending-<line> → concrete tag)
+#   ① origin bugfix PR merges to main      → /github-bugfix-versions:index-fix (seed versions) + :affected-versions (cache cause)
+#   ② a backport PR merges to branch-X.Y*  → /github-bugfix-versions:index-fix (rebuild the origin's versions record)
+#   ③ a release tag X.Y.Z is pushed        → /github-bugfix-versions:index-fix <tag> (resolve pending-<line> → concrete tag)
+#
+# NOTE: plugin commands MUST be namespaced (/github-bugfix-versions:<cmd>). A bare /index-fix
+# in headless `-p` does NOT resolve — it is silently treated as prompt text (no error, no write),
+# which combined with continue-on-error would look green while doing nothing.
 #
 # The skill computes everything (gh PR/backport data, git tag --contains / blame, the rung
 # firewall) and writes via the context-base MCP. RC stores/serves only; CI never POSTs to RC.
 # See: plugins/github-bugfix-versions (cd-claude-marketplace) and the version-index design doc.
 #
 # PREREQUISITES on the self-hosted runner's claude-cli container (one-time, infra):
-#   - the `github-bugfix-versions` plugin installed (provides /index-fix, /affected-versions);
+#   - the `github-bugfix-versions` plugin installed (provides :index-fix, :affected-versions,
+#     :release-report — invoked namespaced as /github-bugfix-versions:<cmd>, see NOTE above);
 #   - the `context-base` MCP configured with `code_kb` USAGE (read+write data) for the
 #     container's identity — USAGE alone is enough to context_upsert (no ALTER needed);
 #   - the `code_kb.versions` and `code_kb.task_summaries` collections pre-created by an admin
@@ -71,7 +76,7 @@ jobs:
             -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
             -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
             claude-cli claude --dangerously-skip-permissions \
-            -p "/index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
+            -p "/github-bugfix-versions:index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
 
       - name: affected-versions (heuristic cause → code_kb.task_summaries)
         run: |
@@ -82,7 +87,7 @@ jobs:
             -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
             -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
             claude-cli claude --dangerously-skip-permissions \
-            -p "/affected-versions ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/affected_versions.txt" || true
+            -p "/github-bugfix-versions:affected-versions ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/affected_versions.txt" || true
 
   # ② a backport PR merged to a release branch → rebuild the origin's versions record (the
   # backport_set + per-line earliest_fix_tag accrete as backports land). Idempotent rebuild.
@@ -107,7 +112,7 @@ jobs:
             -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
             -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
             claude-cli claude --dangerously-skip-permissions \
-            -p "/index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
+            -p "/github-bugfix-versions:index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
 
   # ③ release tag cut → resolve pending-<line> records on that line to the concrete tag.
   tag-cut:
@@ -126,4 +131,4 @@ jobs:
             -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
             -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
             claude-cli claude --dangerously-skip-permissions \
-            -p "/index-fix ${TAG}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
+            -p "/github-bugfix-versions:index-fix ${TAG}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
