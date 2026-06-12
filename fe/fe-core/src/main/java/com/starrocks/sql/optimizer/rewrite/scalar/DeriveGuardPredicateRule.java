@@ -25,8 +25,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,6 +70,14 @@ public class DeriveGuardPredicateRule {
             ScalarOperator conjunct = conjuncts.get(i);
             if (conjunct instanceof CompoundPredicateOperator
                     && ((CompoundPredicateOperator) conjunct).isOr()) {
+                List<ScalarOperator> disjuncts = Utils.extractDisjunctive(conjunct);
+                // Skip when the OR involves too few columns — with <= 2 columns both
+                // are already ACTIVE, so the guard's short-circuit benefit is minimal.
+                // Additionally, guard predicates added during MV refresh break MV
+                // matching because the stored plan's predicate structure changes.
+                if (countDistinctColumns(disjuncts) < MIN_DISTINCT_COLUMNS_FOR_GUARD) {
+                    continue;
+                }
                 ScalarOperator wrapped = tryDeriveGuard((CompoundPredicateOperator) conjunct);
                 if (wrapped != conjunct) {
                     conjuncts.set(i, wrapped);
@@ -103,7 +111,7 @@ public class DeriveGuardPredicateRule {
         List<Map<Integer, List<ScalarOperator>>> perDisjunctColPreds = new ArrayList<>();
         List<Integer> disjunctLeafCounts = new ArrayList<>();
         for (int di = 0; di < disjuncts.size(); di++) {
-            Map<Integer, List<ScalarOperator>> colPreds = new HashMap<>();
+            Map<Integer, List<ScalarOperator>> colPreds = new LinkedHashMap<>();
             List<ScalarOperator> conjuncts = disjunctConjuncts.get(di);
             for (ScalarOperator conjunct : conjuncts) {
                 if (isGuardCandidatePredicate(conjunct)) {
@@ -120,7 +128,7 @@ public class DeriveGuardPredicateRule {
         }
 
         // Step 2: Find columns that appear in ALL disjuncts (intersection)
-        Set<Integer> commonColIds = new HashSet<>(perDisjunctColPreds.get(0).keySet());
+        Set<Integer> commonColIds = new LinkedHashSet<>(perDisjunctColPreds.get(0).keySet());
         if (commonColIds.isEmpty()) {
             return orExpr;
         }
@@ -136,6 +144,15 @@ public class DeriveGuardPredicateRule {
         List<ScalarOperator> guards = new ArrayList<>();
         for (int colId : commonColIds) {
             if (allDisjunctsAreOnlyColumnPreds(disjunctLeafCounts, perDisjunctColPreds, colId)) {
+                continue;
+            }
+
+            // Skip if the guard for this column is purely EQ/IN predicates.
+            // The ScalarRangePredicateExtractor already handles EQ-only columns
+            // via IN lists, so a pure-EQ guard would be redundant and would
+            // unnecessarily change the plan text (breaking MV matching, test
+            // assertions, etc.).
+            if (isOnlyEqualityGuard(perDisjunctColPreds, colId)) {
                 continue;
             }
 
@@ -158,6 +175,45 @@ public class DeriveGuardPredicateRule {
     }
 
     /**
+     * Check whether every guard predicate for the given column across all disjuncts
+     * is an equality (EQ or IN) — no range predicates (GE, LE, GT, LT).
+     * <p>
+     * An EQ-only guard like {@code col = 1 OR col = 2 OR col = 3} is redundant with
+     * what {@code ScalarRangePredicateExtractor} already produces (an IN list).
+     * Skipping it avoids unnecessary plan-text changes that can break MV matching
+     * and test assertions.
+     */
+    private static boolean isOnlyEqualityGuard(
+            List<Map<Integer, List<ScalarOperator>>> perDisjunctColPreds,
+            int colId) {
+        for (Map<Integer, List<ScalarOperator>> disjunctPreds : perDisjunctColPreds) {
+            List<ScalarOperator> colPreds = disjunctPreds.get(colId);
+            if (colPreds == null) {
+                continue;
+            }
+            for (ScalarOperator pred : colPreds) {
+                if (isRangePredicate(pred)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Check whether a scalar operator is a range predicate (not EQ or IN).
+     */
+    private static boolean isRangePredicate(ScalarOperator op) {
+        if (op instanceof BinaryPredicateOperator) {
+            BinaryType type = ((BinaryPredicateOperator) op).getBinaryType();
+            return type == BinaryType.GE || type == BinaryType.LE
+                    || type == BinaryType.GT || type == BinaryType.LT;
+        }
+        // IN predicates are treated as equality (not range)
+        return false;
+    }
+
+    /**
      * Check if all leaves across all disjuncts for a given column consist only of
      * column predicates for that column. If so, the guard would be redundant.
      */
@@ -173,6 +229,25 @@ public class DeriveGuardPredicateRule {
             totalColPreds += (colPreds != null ? colPreds.size() : 0);
         }
         return totalLeaves == totalColPreds;
+    }
+
+    // Minimum number of distinct columns across OR branches required to
+    // trigger guard generation.  With <= 2 columns both are already ACTIVE,
+    // so the guard's short-circuit benefit is minimal.  Additionally, guards
+    // added during MV refresh break MV matching because the stored plan's
+    // predicate structure changes (MV matching is not guard-aware yet).
+    @VisibleForTesting
+    static final int MIN_DISTINCT_COLUMNS_FOR_GUARD = 3;
+
+    /**
+     * Count the total number of distinct columns referenced by all disjuncts.
+     */
+    private static int countDistinctColumns(List<ScalarOperator> disjuncts) {
+        ColumnRefSet allCols = new ColumnRefSet();
+        for (ScalarOperator disjunct : disjuncts) {
+            allCols.union(disjunct.getUsedColumns());
+        }
+        return allCols.cardinality();
     }
 
     /**
