@@ -1505,6 +1505,9 @@ protected:
         std::string metric = "l2_distance";
         std::vector<std::vector<float>> vecs; // empty -> default {i, 0, 0, 0}
         std::vector<float> query = {0.f, 0.f, 0.f, 0.f};
+        double vector_range = -1.0; // >= 0 makes it a range query (l2: keep dist <= range)
+        int result_order = 0;       // 0 = ascending (l2), 1 = descending (cosine)
+        int min_filter_col = 4;     // every returned row must satisfy filter_col >= this
     };
 
     // Runs the residual-predicate ANN query and asserts the top-k contains only matching rows.
@@ -1595,8 +1598,8 @@ protected:
         vs->vector_column_id = rschema->num_columns();
         vs->vector_slot_id = 100;
         vs->refine_distance = false;
-        vs->vector_range = -1.0;
-        vs->result_order = 0;
+        vs->vector_range = cfg.vector_range;
+        vs->result_order = cfg.result_order;
         vs->pq_refine_factor = 1.0;
         vs->filter_strategy = static_cast<int>(user_choice);
         seg_opts.use_vector_index = true;
@@ -1638,7 +1641,7 @@ protected:
         const auto* fcol = down_cast<const Int32Column*>(out->get_column_by_index(1).get());
         std::vector<int64_t> got;
         for (size_t i = 0; i < out->num_rows(); i++) {
-            EXPECT_GE(fcol->get_data()[i], 4) << "returned row violates residual predicate filter_col>=4";
+            EXPECT_GE(fcol->get_data()[i], cfg.min_filter_col) << "returned row violates the residual predicate";
             got.push_back(idcol->get_data()[i]);
         }
         // The ANN distance column is appended to the output chunk after the declared output columns
@@ -1847,6 +1850,113 @@ TEST_F(VectorResidualPrefilterTest, above_gate_runs_search_path) {
                       /*pred_col_late_mat=*/false, &search_ns);
     EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6}));
     EXPECT_GT(search_ns, 0) << "short-circuit gate fired above both thresholds";
+}
+
+TEST_F(VectorResidualPrefilterTest, range_short_circuit_applies_radius_cut) {
+    // Range query (l2, dist = i^2): filter_col >= 5 -> bitmap {5,6,7}, cardinality 3 <= k=3 ->
+    // short-circuit. The FE folds the radius out of the scan predicate, so the exact rescan itself
+    // must cut out-of-radius rows: vector_range=36 keeps rows 5 (25) and 6 (36 -- the bound is
+    // inclusive, matching the FE's `<=`), and must NOT publish row 7 (49). Without the cut the
+    // out-of-radius row flows straight into the result -- nothing downstream re-checks it.
+    ResidualCaseConfig cfg;
+    cfg.vector_range = 36.0;
+    std::unique_ptr<ColumnPredicate> pred;
+    std::vector<int64_t> ids;
+    int64_t search_ns = -1;
+    std::vector<float> dist;
+    run_residual_case(make_ge_tree(pred, "5"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &search_ns, &cfg, &dist);
+    EXPECT_EQ(ids, (std::vector<int64_t>{5, 6}));
+    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(dist.size(), 2u);
+    EXPECT_FLOAT_EQ(dist[0], 25.0f);
+    EXPECT_FLOAT_EQ(dist[1], 36.0f);
+}
+
+TEST_F(VectorResidualPrefilterTest, range_short_circuit_cosine_keeps_ge_threshold) {
+    // Cosine range query: the radius semantics flip (descending keeps similarity >= range). Same
+    // data as cosine_metric_survives_exact_rescan: row 6 scores 1.0, row 7 scores ~0.707. filter_col
+    // >= 6 -> bitmap {6,7} -> short-circuit; vector_range=0.9 must keep only row 6.
+    ResidualCaseConfig cfg;
+    cfg.metric = "cosine_similarity";
+    cfg.query = {1.f, 0.f, 0.f, 0.f};
+    cfg.vecs.resize(8);
+    for (int i = 0; i < 6; i++) {
+        cfg.vecs[i] = {1.f, static_cast<float>(i + 2), 0.f, 0.f};
+    }
+    cfg.vecs[6] = {100.f, 0.f, 0.f, 0.f};
+    cfg.vecs[7] = {1.f, 1.f, 0.f, 0.f};
+    cfg.vector_range = 0.9;
+    cfg.result_order = 1;
+
+    std::unique_ptr<ColumnPredicate> pred;
+    std::vector<int64_t> ids;
+    int64_t search_ns = -1;
+    std::vector<float> dist;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &search_ns, &cfg, &dist);
+    EXPECT_EQ(ids, (std::vector<int64_t>{6}));
+    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(dist.size(), 1u);
+    EXPECT_NEAR(dist[0], 1.0f, 1e-4);
+}
+
+TEST_F(VectorResidualPrefilterTest, range_short_circuit_can_cut_all_candidates) {
+    // The radius can cut the whole candidate set: filter_col >= 6 -> bitmap {6,7} (dist 36, 49),
+    // vector_range=10 -> zero survivors. The empty publication must read back as zero rows, not an
+    // error (and not the uncut candidate set).
+    ResidualCaseConfig cfg;
+    cfg.vector_range = 10.0;
+    std::unique_ptr<ColumnPredicate> pred;
+    std::vector<int64_t> ids;
+    int64_t search_ns = -1;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &search_ns, &cfg);
+    EXPECT_TRUE(ids.empty()) << "out-of-radius candidates leaked into the result";
+    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
+}
+
+TEST_F(VectorResidualPrefilterTest, range_above_gates_runs_range_search) {
+    // Anti-overfire twin for range queries: filter_col >= 4 -> cardinality 4 > k=3 and the default
+    // ratio threshold cannot fire, so the real (filtered) RangeSearch must run and enforce the
+    // radius itself: candidates {4,5,6,7} with dist {16,25,36,49}, vector_range=36 -> {4,5,6}.
+    ResidualCaseConfig cfg;
+    cfg.vector_range = 36.0;
+    std::unique_ptr<ColumnPredicate> pred;
+    std::vector<int64_t> ids;
+    int64_t search_ns = -1;
+    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &search_ns, &cfg);
+    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(search_ns, 0) << "short-circuit gate fired above both thresholds";
+}
+
+TEST_F(VectorResidualPrefilterTest, scattered_candidates_rescan_exact_distances) {
+    // The rescan reads candidates per contiguous rowid range and must seek before every batch.
+    // filter_col < 2 OR filter_col >= 7 -> three discrete ranges {0,1} and {7}, cardinality 3 <= k=3
+    // -> short-circuit. A missing/wrong seek surfaces as a wrong distance value, so assert the exact
+    // distances (0, 1, 49), not just the id set.
+    std::unique_ptr<ColumnPredicate> lt2(new_column_lt_predicate(get_type_info(TYPE_INT), 2, "2"));
+    std::unique_ptr<ColumnPredicate> ge7(new_column_ge_predicate(get_type_info(TYPE_INT), 2, "7"));
+    PredicateOrNode or_node;
+    or_node.add_child(PredicateColumnNode(lt2.get()));
+    or_node.add_child(PredicateColumnNode(ge7.get()));
+    PredicateAndNode root;
+    root.add_child(std::move(or_node));
+
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0; // rows 0 and 1 are legitimate matches of the OR residual
+    std::vector<int64_t> ids;
+    int64_t search_ns = -1;
+    std::vector<float> dist;
+    run_residual_case(PredicateTree::create(std::move(root)), /*above_predicate=*/false, &ids,
+                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, &search_ns, &cfg, &dist);
+    EXPECT_EQ(ids, (std::vector<int64_t>{0, 1, 7}));
+    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(dist.size(), 3u);
+    EXPECT_FLOAT_EQ(dist[0], 0.0f);
+    EXPECT_FLOAT_EQ(dist[1], 1.0f);
+    EXPECT_FLOAT_EQ(dist[2], 49.0f);
 }
 #endif // WITH_TENANN
 
