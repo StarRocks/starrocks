@@ -97,8 +97,12 @@ public:
         if (_tid != bthread::TimerThread::INVALID_TASK_ID) {
             auto timer_thread = bthread::get_global_timer_thread();
             int res = timer_thread->unschedule(_tid);
-            // return resource if timer not triggered
-            if (res != 0) {
+            // unschedule() returns 0 only when the task was removed before it ran, in which case
+            // dump_trace_info() never executes and never returns the resource, so the destructor
+            // must return it here. When res != 0 the task is running or already finished, and
+            // dump_trace_info() owns returning the resource; returning it here too would
+            // double-free it back to the pool.
+            if (res == 0) {
                 butil::return_resource(_trace_context_id);
             }
         }

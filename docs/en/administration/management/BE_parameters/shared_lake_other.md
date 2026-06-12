@@ -95,6 +95,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_put_txn_log_timeout_guard_ms
+
+- Default: -1
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout guard for writing a transaction log to object storage in a shared-data cluster (the `put_txn_log` and `put_combined_txn_log` paths). If writing a transaction log takes longer than this value, StarRocks dumps the stack trace of the slow thread to the BE log to help diagnose slow object-storage writes. Disabled by default (a value less than or equal to `0` disables the guard); set it to a positive value such as `4000` (4 seconds) to enable.
+- Introduced in: -
+
 ### lake_rows_mapper_read_parallelism
 
 - Default: 32
