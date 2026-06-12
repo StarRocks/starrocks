@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 
-io_netty_clean_version = "4.1.133.Final"
+io_netty_clean_version = "4.1.135.Final"
 
 fixed_poms = [
     ("com.fasterxml.jackson.core:jackson-core", "2.21.1"),
@@ -17,9 +17,12 @@ fixed_poms = [
     ("io.netty:netty-codec-http2", io_netty_clean_version),
     ("io.netty:netty-codec-http", io_netty_clean_version),
     ("io.netty:netty-codec-haproxy", io_netty_clean_version),
+    ("io.netty:netty-codec-redis", io_netty_clean_version),
     ("io.netty:netty-codec-smtp", io_netty_clean_version),
     ("io.netty:netty-common", io_netty_clean_version),
+    ("io.netty:netty-resolver-dns", io_netty_clean_version),
     ("io.netty:netty-transport-native-epoll", io_netty_clean_version),
+    ("io.netty:netty-transport-sctp", io_netty_clean_version),
     ("io.netty:netty-all", io_netty_clean_version),
     ("com.google.protobuf:protobuf-java", "3.25.5"),
     ("org.apache.avro:avro", "1.11.4"),
