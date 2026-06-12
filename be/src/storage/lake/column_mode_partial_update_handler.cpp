@@ -1555,12 +1555,35 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     return Status::OK();
 }
 
-bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                     const TabletMetadata& metadata, MetaFileBuilder* builder) {
+// A DCG version chain is replayable iff its conflicting (version > compact_version) layers are all
+// plain SPARSE_PERCOL `.spcols` overlays: their (source_rowid -> value) rows can be remapped onto the
+// compaction output via the rows mapper. Inline patches, flexible/packed presence lists, and a dense
+// conflicting layer are NOT handled by the simple rowid-remap replay and force a discard.
+static bool dcg_conflict_is_replayable(const DeltaColumnGroupVerPB& dcg, int64_t compact_version) {
+    if (dcg.inline_patches_size() > 0) {
+        return false;
+    }
+    if (dcg.column_presence_lists_size() > 0) {
+        return false; // flexible / per-row packed overlay
+    }
+    for (int i = 0; i < dcg.column_files_size(); ++i) {
+        const int64_t ver = i < dcg.versions_size() ? dcg.versions(i) : 0;
+        if (ver > compact_version) {
+            const DeltaColumnFileKindPB kind = i < dcg.file_kinds_size() ? dcg.file_kinds(i) : DENSE_COLS;
+            if (kind != SPARSE_PERCOL) {
+                return false; // dense conflicting layer
+            }
+        }
+    }
+    return true;
+}
+
+CompactionConflictKind CompactionUpdateConflictChecker::classify_conflict(const TxnLogPB_OpCompaction& op_compaction,
+                                                                          const TabletMetadata& metadata) {
     const bool has_dcg = !metadata.dcg_meta().dcgs().empty();
     const bool has_idg = metadata.has_idg_meta() && !metadata.idg_meta().idgs().empty();
     if (!has_dcg && !has_idg) {
-        return false;
+        return CompactionConflictKind::NONE;
     }
     std::unordered_set<uint32_t> input_rowsets; // all rowsets that have been compacted
     std::vector<uint32_t> input_segments;       // all segment that have been compacted
@@ -1575,44 +1598,61 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
             }
         }
     }
-    // 2. find out if these segments have been updated (DCG) or had indexes
-    //    added (IDG) since the compaction started. Either race forces the
-    //    compaction to land as an "with_conflict" no-op so the newer delta
-    //    is preserved.
+    // 2. find out if these segments have been updated (DCG) or had indexes added (IDG) since the
+    //    compaction started. An IDG race or a non-replayable DCG race => MUST_DISCARD; a race that is
+    //    only plain-sparse DCG overlays => REPLAYABLE_DCG. Scan ALL segments so the kind reflects the
+    //    worst conflict (MUST_DISCARD dominates).
+    bool found_replayable = false;
     for (uint32_t segment : input_segments) {
-        if (has_dcg) {
-            auto dcg_ver_iter = metadata.dcg_meta().dcgs().find(segment);
-            if (dcg_ver_iter != metadata.dcg_meta().dcgs().end()) {
-                for (int64_t ver : dcg_ver_iter->second.versions()) {
-                    if (ver > op_compaction.compact_version()) {
-                        builder->apply_opcompaction_with_conflict(op_compaction);
-                        LOG(INFO) << fmt::format(
-                                "PK compaction conflict with partial column update, tablet_id: {} txn_id: {} "
-                                "op_compaction: {}",
-                                metadata.id(), txn_id, op_compaction.ShortDebugString());
-                        return true;
-                    }
-                }
-            }
-        }
         if (has_idg) {
             auto idg_ver_iter = metadata.idg_meta().idgs().find(segment);
             if (idg_ver_iter != metadata.idg_meta().idgs().end()) {
                 for (const auto& entry : idg_ver_iter->second.entries()) {
                     if (entry.has_version() && entry.version() > op_compaction.compact_version()) {
-                        builder->apply_opcompaction_with_conflict(op_compaction);
-                        LOG(INFO) << fmt::format(
-                                "Compaction conflict with ADD INDEX fast path, tablet_id: {} txn_id: {} "
-                                "op_compaction: {}",
-                                metadata.id(), txn_id, op_compaction.ShortDebugString());
-                        return true;
+                        return CompactionConflictKind::MUST_DISCARD;
                     }
                 }
             }
         }
+        if (has_dcg) {
+            auto dcg_ver_iter = metadata.dcg_meta().dcgs().find(segment);
+            if (dcg_ver_iter != metadata.dcg_meta().dcgs().end()) {
+                bool conflict = false;
+                for (int64_t ver : dcg_ver_iter->second.versions()) {
+                    if (ver > op_compaction.compact_version()) {
+                        conflict = true;
+                        break;
+                    }
+                }
+                if (conflict) {
+                    if (!dcg_conflict_is_replayable(dcg_ver_iter->second, op_compaction.compact_version())) {
+                        return CompactionConflictKind::MUST_DISCARD;
+                    }
+                    found_replayable = true;
+                }
+            }
+        }
     }
+    return found_replayable ? CompactionConflictKind::REPLAYABLE_DCG : CompactionConflictKind::NONE;
+}
 
-    return false;
+bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                                     const TabletMetadata& metadata, MetaFileBuilder* builder) {
+    const CompactionConflictKind kind = classify_conflict(op_compaction, metadata);
+    if (kind == CompactionConflictKind::NONE) {
+        return false;
+    }
+    // GROUNDWORK: both REPLAYABLE_DCG and MUST_DISCARD currently DISCARD the compaction output, exactly
+    // as before. REPLAYABLE_DCG is the hook where overlay replay (rows-mapper remap + .spcols rewrite,
+    // see DESIGN_CONFLICT_REPLAY) will plug in; it is logged distinctly so we can measure how often it
+    // would fire before taking on the data-integrity-critical replay path.
+    builder->apply_opcompaction_with_conflict(op_compaction);
+    LOG(INFO) << fmt::format(
+            "PK compaction conflict ({}), tablet_id: {} txn_id: {} op_compaction: {}",
+            kind == CompactionConflictKind::REPLAYABLE_DCG ? "replayable-dcg: discarded (replay not yet enabled)"
+                                                           : "must-discard",
+            metadata.id(), txn_id, op_compaction.ShortDebugString());
+    return true;
 }
 
 } // namespace starrocks::lake

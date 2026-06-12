@@ -158,10 +158,34 @@ private:
     std::unique_ptr<Rowset> _rowset_ptr;
 };
 
+// Classification of a PK-compaction-vs-concurrent-update conflict, used to decide how the compaction
+// result is reconciled at publish:
+//   NONE           - no concurrent update raced this compaction; apply the output normally.
+//   REPLAYABLE_DCG - the only race is column-mode partial updates that appended plain SPARSE_PERCOL
+//                    `.spcols` overlays (no IDG, no inline patches, no flexible/packed) on an input
+//                    segment. Such overlays CAN be remapped onto the compaction output via the rows
+//                    mapper and replayed instead of discarding the whole compaction (see
+//                    DESIGN_CONFLICT_REPLAY). NOTE: the replay itself is not implemented yet --
+//                    groundwork only -- so this currently still falls back to discard.
+//   MUST_DISCARD   - an IDG (index) race, or a DCG race that the simple rowid-remap replay cannot
+//                    safely handle (inline patches / flexible-packed / dense conflicting layer).
+//                    The compaction output is discarded (orphaned) so the newer delta is preserved.
+enum class CompactionConflictKind { NONE, REPLAYABLE_DCG, MUST_DISCARD };
+
 class CompactionUpdateConflictChecker {
 public:
+    // Returns true if the compaction conflicts with a concurrent update and its output was discarded
+    // (orphaned) so the newer delta survives. Behaviorally unchanged: every conflict is still
+    // discarded; classify_conflict() only tags WHY (for observability + the future replay hook).
     static bool conflict_check(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                const TabletMetadata& metadata, MetaFileBuilder* builder);
+
+    // Pure (no side effects) classification of the conflict between |op_compaction| and the concurrent
+    // updates recorded in |metadata|. Detection is identical to conflict_check's (a DCG/IDG entry on an
+    // input segment with version > op_compaction.compact_version()); the kind tells the caller whether
+    // the conflict is a candidate for overlay replay or must be discarded.
+    static CompactionConflictKind classify_conflict(const TxnLogPB_OpCompaction& op_compaction,
+                                                    const TabletMetadata& metadata);
 };
 
 } // namespace starrocks::lake
