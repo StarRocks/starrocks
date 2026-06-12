@@ -81,6 +81,8 @@ public class TimeWatcher {
             ScopedTimer mine = this.scopedTimers.get(name, prefix);
             if (mine == null) {
                 mine = new ScopedTimer(otherTimer.firstTimePointNanoSecond, name);
+                // scopeLevel from levels.size() is wrong at merge time — use prefix depth
+                mine.scopeLevel = (int) prefix.chars().filter(c -> c == '/').count();
                 this.scopedTimers.put(name, prefix, mine);
             }
             mine.accumulateFrom(otherTimer);
@@ -89,7 +91,7 @@ public class TimeWatcher {
 
     private class ScopedTimer extends Timer {
         private final String name;
-        private final int scopeLevel;
+        private int scopeLevel;
         private final long firstTimePointNanoSecond;
         private final Stopwatch stopWatch = Stopwatch.createUnstarted();
 

@@ -86,8 +86,8 @@ public class Tracers {
 
     /**
      * Create a lightweight fork of this Tracers for use in a parallel worker thread.
-     * The fork shares the timing stopwatch, logTracer, and reasonTracer with the owner
-     * but gets its own TimeWatcher and VarTracer (to be merged back via {@link #mergeFrom}).
+     * The fork shares the timing stopwatch, VarTracer, logTracer, and reasonTracer with
+     * the owner but gets its own TimeWatcher (to be merged back via {@link #mergeFrom}).
      */
     public Tracers fork() {
         Tracers f = new Tracers();
@@ -99,7 +99,7 @@ public class Tracers {
     }
 
     /**
-     * Merge timer and var data from a forked Tracers back into this (owner) Tracers.
+     * Merge timer data from a forked Tracers back into this (owner) Tracers.
      * Must be called from the owner thread or externally synchronized.
      */
     public void mergeFrom(Tracers other) {

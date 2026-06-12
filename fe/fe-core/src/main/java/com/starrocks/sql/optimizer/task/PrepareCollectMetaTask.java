@@ -67,29 +67,32 @@ public class PrepareCollectMetaTask extends OptimizerTask {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Tracers ownerTracers = Tracers.get();
         ConnectContext connectContext = ConnectContext.get();
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_prepare_metadata")) {
-            // Fork tracers for each parallel task on the owner thread
-            int numTasks = scanOperators.size();
-            List<Tracers> forks = new ArrayList<>(numTasks);
-            CompletableFuture<?>[] futures = new CompletableFuture[numTasks];
-            for (int i = 0; i < numTasks; i++) {
-                LogicalScanOperator op = scanOperators.get(i);
-                Tracers forked = ownerTracers.fork();
-                forks.add(forked);
-                futures[i] = CompletableFuture.supplyAsync(() ->
-                                metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
-                                        new MetaPreparationItem(op.getTable(), op.getPredicate(),
-                                                op.getLimit(), op.getTvrVersionRange()),
-                                        forked, connectContext),
-                        executorService);
+        try {
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_prepare_metadata")) {
+                // Fork tracers for each parallel task on the owner thread
+                int numTasks = scanOperators.size();
+                List<Tracers> forks = new ArrayList<>(numTasks);
+                CompletableFuture<?>[] futures = new CompletableFuture[numTasks];
+                for (int i = 0; i < numTasks; i++) {
+                    LogicalScanOperator op = scanOperators.get(i);
+                    Tracers forked = ownerTracers.fork();
+                    forks.add(forked);
+                    futures[i] = CompletableFuture.supplyAsync(() ->
+                                    metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
+                                            new MetaPreparationItem(op.getTable(), op.getPredicate(),
+                                                    op.getLimit(), op.getTvrVersionRange()),
+                                            forked, connectContext),
+                            executorService);
+                }
+                CompletableFuture.allOf(futures).join();
+                // Merge all forks back on the owner thread (single-threaded, no race)
+                for (Tracers f : forks) {
+                    ownerTracers.mergeFrom(f);
+                }
             }
-            CompletableFuture.allOf(futures).join();
-            // Merge all forks back on the owner thread (single-threaded, no race)
-            for (Tracers f : forks) {
-                ownerTracers.mergeFrom(f);
-            }
+        } finally {
+            executorService.shutdown();
         }
-        executorService.shutdown();
     }
 
     private List<LogicalScanOperator> collectScanOperators(OptExpression tree) {

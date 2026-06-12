@@ -166,36 +166,39 @@ public class TracerTest extends PlanTestBase {
 
         int numThreads = 4;
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-
-        // Run multiple iterations to expose any potential race conditions
-        for (int iter = 0; iter < 100; iter++) {
-            List<Tracers> forks = new ArrayList<>();
-            List<Future<?>> futures = new ArrayList<>();
-            for (int i = 0; i < numThreads; i++) {
-                Tracers forked = owner.fork();
-                forks.add(forked);
-                futures.add(executor.submit(() -> {
-                    try (Timer ignored = Tracers.watchScope(forked, Tracers.Module.BASE,
-                            "forkedParallelWork")) {
-                        // Simulate work
-                    }
-                    return null;
-                }));
+        try {
+            // Run multiple iterations to expose any potential race conditions
+            for (int iter = 0; iter < 100; iter++) {
+                List<Tracers> forks = new ArrayList<>();
+                List<Future<?>> futures = new ArrayList<>();
+                for (int i = 0; i < numThreads; i++) {
+                    Tracers forked = owner.fork();
+                    forks.add(forked);
+                    futures.add(executor.submit(() -> {
+                        try (Timer ignored = Tracers.watchScope(forked, Tracers.Module.BASE,
+                                "forkedParallelWork")) {
+                            // Simulate work
+                        }
+                        return null;
+                    }));
+                }
+                for (Future<?> f : futures) {
+                    f.get();
+                }
+                // Merge forks back on the owner thread after all tasks complete
+                for (Tracers f : forks) {
+                    owner.mergeFrom(f);
+                }
             }
-            for (Future<?> f : futures) {
-                f.get();
-            }
-            // Merge forks back on the owner thread after all tasks complete
-            for (Tracers f : forks) {
-                owner.mergeFrom(f);
-            }
+        } finally {
+            executor.shutdown();
         }
 
-        executor.shutdown();
         String output = Tracers.printScopeTimer();
         // Each iteration creates 4 scopes, 100 iterations = 400 total
-        int count = StringUtils.countMatches(output, "forkedParallelWork");
-        Assertions.assertTrue(count > 0, "Expected forkedParallelWork in output but got: " + output);
+        // The toString() format includes [count], e.g. "forkedParallelWork[400]"
+        Assertions.assertTrue(output.contains("forkedParallelWork[400]"),
+                "Expected forkedParallelWork[400] in output but got: " + output);
         Tracers.close();
     }
 }
