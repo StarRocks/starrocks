@@ -1004,17 +1004,20 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
                 }
             }
-        } else {
-            // the job may not have been scheduled since this FE became leader (ALTER is only
-            // allowed on paused jobs), so the transient compute resource may still point at
-            // the default warehouse; acquire it so the broker RPC targets the job's warehouse
-            acquireComputeResource();
-            // check if partition is validate
+        } else if (!kafkaPartitionOffsets.isEmpty()) {
+            // check if partition is validate; an ALTER that touches no partition offsets has
+            // nothing to validate against the broker, so it must not require the warehouse
             try {
+                // the job may not have been scheduled since this FE became leader (ALTER is
+                // only allowed on paused jobs), so the transient compute resource may still
+                // point at the default warehouse; acquire it so the broker RPC targets the
+                // job's warehouse
+                acquireComputeResource();
                 checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
             } catch (StarRocksException e) {
-                // surface the real cause (partition not in the topic, or the broker metadata
-                // RPC failed) instead of a generic "not in the consumed partitions" wrapper
+                // surface the real cause (partition not in the topic, an unavailable
+                // warehouse, or a failed broker metadata RPC) instead of a generic
+                // "not in the consumed partitions" wrapper
                 throw new DdlException(e.getMessage(), e);
             }
         }

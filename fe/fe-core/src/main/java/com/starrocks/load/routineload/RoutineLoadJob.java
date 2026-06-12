@@ -51,7 +51,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
@@ -930,11 +932,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // acquire the compute resource of this job's warehouse. Broker-metadata RPCs that run
     // outside the scheduling path (e.g. partition validation at CREATE or ALTER) must call
     // this first: the field is transient and defaults to the default warehouse, so in
-    // shared-data mode the RPC would otherwise be routed there instead of the job's warehouse
-    protected void acquireComputeResource() {
+    // shared-data mode the RPC would otherwise be routed there instead of the job's warehouse.
+    // An unavailable warehouse is rethrown as a checked LoadException so that every caller
+    // handles it as a regular job/DDL failure; the scheduler in particular only catches
+    // StarRocksException per job, and an escaping RuntimeException would abort the whole
+    // scheduler round and stall all other routine load jobs
+    protected void acquireComputeResource() throws LoadException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        try {
+            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        } catch (ErrorReportException e) {
+            throw new LoadException(e.getMessage(), e);
+        }
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
