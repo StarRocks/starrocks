@@ -654,6 +654,38 @@ message TxnLogPB {
         optional int64 drop_version = 2;
     }
 
+    // SDCG lightweight overlay-chain merge (minor compaction): collapse a base segment's deep sparse
+    // overlay chain into ONE packed `.spcols`, WITHOUT reading the base segment and WITHOUT a rows
+    // mapper (the base rowset is untouched, so source_rowid coordinates stay valid). Emitted by the CN
+    // in place of OpCompaction when a scheduled compaction's input is a convergence-only deep-chain
+    // rowset; applied by orphaning the merged layers and appending the merged packed layer to the same
+    // rssid's DCG. Bounds read amplification off the publish critical path. (lake-only)
+    message OpDcgCompaction {
+        // Snapshot version the merge read at (mirrors OpCompaction.compact_version). A DCG layer whose
+        // version > compact_version raced the merge: it is NOT dropped (kept on top of the merged layer),
+        // so the merge never discards concurrent writes -- it just leaves the chain at depth 2.
+        optional int64 compact_version = 1;
+        message Entry {
+            // Base segment (rssid) whose overlay layers are merged.
+            optional uint32 rssid = 1;
+            // The merged packed `.spcols` (its DCG entry's file_kind == SPARSE_PERCOL).
+            optional FileMetaPB merged_file = 2;
+            // Update column uids the merged file carries (NOT the reserved source_rowid uid).
+            repeated uint32 column_uids = 3;
+            // File-level presence summary [min,max]+K of the merged file.
+            optional SparsePresencePB presence = 4;
+            // Per-column exact covered-rowid presence (roaring) for the packed merged file.
+            optional ColumnPresenceListPB column_presence = 5;
+            // Base segment row count M (fingerprint guard for the merged overlay).
+            optional int64 source_segment_num_rows = 6;
+            // Versions of the DCG layers folded into this merged file. At apply, layers on |rssid| whose
+            // version is in this set are orphaned + removed; higher-version layers (concurrent writes that
+            // raced the merge) are preserved on top.
+            repeated int64 merged_versions = 7;
+        }
+        repeated Entry entries = 2;
+    }
+
     optional int64 tablet_id = 1;
     optional int64 txn_id = 2;
     optional OpWrite op_write = 3;
@@ -668,6 +700,8 @@ message TxnLogPB {
     optional OpAddIndex op_add_index = 11;
     // DROP INDEX fast-path op (lake-only).
     optional OpDropIndex op_drop_index = 12;
+    // SDCG overlay-chain merge op (lake-only); see OpDcgCompaction.
+    optional OpDcgCompaction op_dcg_compaction = 13;
 }
 
 message CombinedTxnLogPB {
