@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -107,7 +106,6 @@ public class PlannerMetaLocker implements AutoCloseable {
         Locker locker = new Locker(queryId);
 
         boolean isLockSuccess = false;
-        List<Database> lockedDbs = Lists.newArrayList();
         List<Map.Entry<Long, Set<Long>>> lockedEntries = new ArrayList<>(tables.size());
         try {
             for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
@@ -116,7 +114,6 @@ public class PlannerMetaLocker implements AutoCloseable {
                         LockType.READ, timeout, unit)) {
                     return false;
                 }
-                lockedDbs.add(database);
                 lockedEntries.add(entry);
             }
             isLockSuccess = true;
@@ -124,9 +121,18 @@ public class PlannerMetaLocker implements AutoCloseable {
             heldStack.push(lockedEntries);
         } finally {
             if (!isLockSuccess) {
-                for (Database database : lockedDbs) {
-                    locker.unLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(tables.get(database.getId())),
-                            LockType.READ);
+                // Roll back the entries we did acquire (lockedEntries already records everything
+                // needed). Release in reverse order, exception-safe per entry so one failed
+                // release doesn't leave the remaining entries leaked.
+                for (int i = lockedEntries.size() - 1; i >= 0; i--) {
+                    Map.Entry<Long, Set<Long>> entry = lockedEntries.get(i);
+                    try {
+                        locker.unLockTablesWithIntensiveDbLock(
+                                entry.getKey(), new ArrayList<>(entry.getValue()), LockType.READ);
+                    } catch (Throwable releaseEx) {
+                        LOG.warn("PlannerMetaLocker.tryLock partial rollback: db {} release failed, continuing",
+                                entry.getKey(), releaseEx);
+                    }
                 }
             }
         }
