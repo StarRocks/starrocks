@@ -268,8 +268,15 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
                                            const TBrokerScanRangeParams& params,
                                            std::shared_ptr<SequentialFile>* file) {
     CompressionTypePB compression = CompressionTypePB::DEFAULT_COMPRESSION;
-    // Prefer explicit compression type if provided by FE
-    if (range_desc.__isset.compression_type) {
+    // JSON stream load (FILE_STREAM) decompresses internally via CompressedStreamLoadPipeReader
+    // in JsonReader::_read_file_stream(). Wrapping the pipe in a CompressedInputStream here would
+    // both double-decompress and break the down_cast<StreamLoadPipeInputStream*> in
+    // _read_file_stream() (the stream becomes a CompressedInputStream), causing a crash.
+    if (range_desc.file_type == TFileType::FILE_STREAM &&
+        range_desc.format_type == TFileFormatType::FORMAT_JSON) {
+        compression = CompressionTypePB::NO_COMPRESSION;
+    } else if (range_desc.__isset.compression_type) {
+        // Prefer explicit compression type if provided by FE
         compression = CompressionUtils::to_compression_pb(range_desc.compression_type);
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
         compression = CompressionTypePB::NO_COMPRESSION;
