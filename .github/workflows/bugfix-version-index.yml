@@ -1,0 +1,129 @@
+name: Bugfix Version Index
+run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.number || github.ref_name }}
+
+# Maintains the deterministic code_kb.versions index (fix side) + the heuristic
+# code_kb.task_summaries cause cache, via the github-bugfix-versions skill running in
+# the claude-cli container (same runner/container pattern as ai-sr-skills.yml). Three events:
+#
+#   ① origin bugfix PR merges to main      → /index-fix (seed versions) + /affected-versions (cache cause)
+#   ② a backport PR merges to branch-X.Y*  → /index-fix (rebuild the origin's versions record)
+#   ③ a release tag X.Y.Z is pushed        → /index-fix <tag> (resolve pending-<line> → concrete tag)
+#
+# The skill computes everything (gh PR/backport data, git tag --contains / blame, the rung
+# firewall) and writes via the context-base MCP. RC stores/serves only; CI never POSTs to RC.
+# See: plugins/github-bugfix-versions (cd-claude-marketplace) and the version-index design doc.
+#
+# PREREQUISITES on the self-hosted runner's claude-cli container (one-time, infra):
+#   - the `github-bugfix-versions` plugin installed (provides /index-fix, /affected-versions);
+#   - the `context-base` MCP configured with `code_kb` USAGE (read+write data) for the
+#     container's identity — USAGE alone is enough to context_upsert (no ALTER needed);
+#   - the `code_kb.versions` and `code_kb.task_summaries` collections pre-created by an admin
+#     (CREATE CONTEXT COLLECTION ...; the emitter cannot create shared-base collections).
+# gh is NOT installed in the container, but GITHUB_TOKEN is passed in — the skill uses the
+# GitHub REST/compare API for PR/backport/tag-contains when no local clone is present.
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - 'branch-[0-9].[0-9]'
+      - 'branch-[0-9].[0-9].[0-9]'
+    types:
+      - closed
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+concurrency:
+  # Per origin PR / backport PR / tag. Do NOT cancel in progress: each emit rebuilds from the
+  # GitHub source of truth and is idempotent, but a half-finished run is wasted, not harmful.
+  group: BUGFIX-VERSION-INDEX-${{ github.event.number || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # ① origin bugfix PR merged to main → seed versions (fix side) + cache cause (task_summaries).
+  # Gated to [BugFix]-titled PRs (StarRocks convention) to avoid an LLM cause analysis on every
+  # merge; broaden the title/label gate if your bugfixes are titled differently.
+  origin-merge:
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      contains(github.event.pull_request.title, '[BugFix]') &&
+      !startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.head_ref, '-sync-pr-')
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+    steps:
+      - name: index-fix (deterministic fix side → code_kb.versions)
+        run: |
+          echo "origin-merge PR #${{ github.event.number }} → ${PR_URL}"
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
+
+      - name: affected-versions (heuristic cause → code_kb.task_summaries)
+        run: |
+          # Cause is stable at origin-merge (blame over immutable pre-fix history); cache it now
+          # so the pre-release report is a fast bulk query, not dozens of live analyses. The
+          # firewall (version_emit_check / firewall_check) runs inside the skill before any write.
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/affected-versions ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/affected_versions.txt" || true
+
+  # ② a backport PR merged to a release branch → rebuild the origin's versions record (the
+  # backport_set + per-line earliest_fix_tag accrete as backports land). Idempotent rebuild.
+  backport-merge:
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.base_ref, 'branch-') &&
+      contains(github.event.pull_request.title, 'backport')
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+    steps:
+      - name: index-fix (rebuild origin N from "(backport #N)")
+        run: |
+          echo "backport-merge PR #${{ github.event.number }} (${{ github.base_ref }}) → ${PR_URL}"
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
+
+  # ③ release tag cut → resolve pending-<line> records on that line to the concrete tag.
+  tag-cut:
+    if: github.event_name == 'push'
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: "index-fix (tag-cut → concrete tag for this line)"
+        run: |
+          echo "tag-cut ${TAG}"
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/index-fix ${TAG}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
