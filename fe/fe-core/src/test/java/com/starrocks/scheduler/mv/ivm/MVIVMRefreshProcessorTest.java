@@ -14,11 +14,18 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.TableRelation;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -123,5 +130,65 @@ public class MVIVMRefreshProcessorTest {
         List<TvrTableDeltaTrait> traits = List.of(TvrTableDeltaTrait.ofRetractable(TvrTableDelta.of(11L, 12L)));
         assertThrows(SemanticException.class,
                 () -> MVIVMRefreshProcessor.computeAdaptiveDelta(TABLE, traits, TvrTableDelta.of(10L, 12L), 2, MAX_BYTES));
+    }
+
+    // Same-named base tables across databases used to collide under a name key.
+    @Test
+    public void joinOfSameNamedBaseTablesAcrossDatabasesBindsEachByIdentifier() {
+        TvrTableDelta rangeA = TvrTableDelta.of(0L, 1L);
+        TvrTableDelta rangeB = TvrTableDelta.of(0L, 2L);
+        List<BaseTableSnapshotInfo> snapshotInfos = List.of(
+                mockSnapshotInfo("tj", "tj:uuid_a", "db_a", rangeA),
+                mockSnapshotInfo("tj", "tj:uuid_b", "db_b", rangeB));
+
+        TableRelation relationA = mockRelation("tj", "tj:uuid_a");
+        TableRelation relationB = mockRelation("tj", "tj:uuid_b");
+        Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
+        tableRelations.put("tj", relationA);
+        tableRelations.put("tj", relationB);
+
+        MVIVMRefreshProcessor.bindBaseTableTvrVersionRanges(snapshotInfos, tableRelations);
+
+        Mockito.verify(relationA).setTvrVersionRange(rangeA);
+        Mockito.verify(relationB).setTvrVersionRange(rangeB);
+    }
+
+    @Test
+    public void relationWithoutMatchingChangedRangeThrows() {
+        List<BaseTableSnapshotInfo> snapshotInfos =
+                List.of(mockSnapshotInfo("tj", "tj:uuid_a", "db_a", TvrTableDelta.of(0L, 1L)));
+        Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
+        tableRelations.put("tj", mockRelation("tj", "tj:uuid_absent"));
+        assertThrows(SemanticException.class,
+                () -> MVIVMRefreshProcessor.bindBaseTableTvrVersionRanges(snapshotInfos, tableRelations));
+    }
+
+    @Test
+    public void baseTableWithoutTvrRangeThrows() {
+        List<BaseTableSnapshotInfo> snapshotInfos = List.of(mockSnapshotInfo("tj", "tj:uuid_a", "db_a", null));
+        assertThrows(SemanticException.class, () ->
+                MVIVMRefreshProcessor.bindBaseTableTvrVersionRanges(snapshotInfos, ArrayListMultimap.create()));
+    }
+
+    private static BaseTableSnapshotInfo mockSnapshotInfo(String tableName, String tableIdentifier,
+                                                          String dbName, TvrVersionRange tvrSnapshot) {
+        BaseTableInfo baseTableInfo = Mockito.mock(BaseTableInfo.class);
+        Mockito.when(baseTableInfo.getTableName()).thenReturn(tableName);
+        Mockito.when(baseTableInfo.getTableIdentifier()).thenReturn(tableIdentifier);
+        Mockito.when(baseTableInfo.getDbName()).thenReturn(dbName);
+        TvrTableSnapshotInfo snapshotInfo = Mockito.mock(TvrTableSnapshotInfo.class);
+        Mockito.when(snapshotInfo.getBaseTableInfo()).thenReturn(baseTableInfo);
+        Mockito.when(snapshotInfo.getTvrSnapshot()).thenReturn(tvrSnapshot);
+        return snapshotInfo;
+    }
+
+    private static TableRelation mockRelation(String tableName, String tableIdentifier) {
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.getName()).thenReturn(tableName);
+        Mockito.when(table.getTableIdentifier()).thenReturn(tableIdentifier);
+        TableRelation relation = Mockito.mock(TableRelation.class);
+        Mockito.when(relation.getTable()).thenReturn(table);
+        Mockito.when(relation.getName()).thenReturn(new TableName("db", tableName));
+        return relation;
     }
 }
