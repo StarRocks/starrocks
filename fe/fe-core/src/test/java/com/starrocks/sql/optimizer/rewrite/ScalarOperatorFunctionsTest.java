@@ -1154,6 +1154,17 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void xxHash64() {
+        assertEquals(-7685981735718036227L,
+                ScalarOperatorFunctions.xxHash64(ConstantOperator.createVarchar("hello")).getBigint());
+        assertEquals(7001965798170371843L,
+                ScalarOperatorFunctions.xxHash64(
+                        ConstantOperator.createVarchar("hello"),
+                        ConstantOperator.createVarchar("world")).getBigint());
+        assertTrue(ScalarOperatorFunctions.xxHash64(ConstantOperator.createNull(Type.VARCHAR)).isNull());
+    }
+
+    @Test
     public void bitandTinyInt() {
         assertEquals(10, ScalarOperatorFunctions.bitandTinyInt(O_TI_10, O_TI_10).getTinyInt());
     }
