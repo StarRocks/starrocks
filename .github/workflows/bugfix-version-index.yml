@@ -166,12 +166,13 @@ jobs:
             -p "/github-bugfix-versions:index-fix ${{ github.repository }}#${{ matrix.origin }}" 2>&1 | tee "${RUNNER_TEMP}/index_fix_${{ matrix.origin }}.txt" || true
 
   # ③ release tag cut → resolve pending-<line> records on that line to the concrete tag.
-  # RESIDUAL (accepted): a tag-cut run touches MANY origins (every record pending on the line), so
-  # it cannot share the per-origin groups above — it can still race a concurrent backport-write of
-  # one of those origins. Severity is bounded: `pending-<line>` already counts as "fixed (tag TBD)"
-  # in the gap query, so a delayed/lost resolution under-states the concrete tag, not the fix's
-  # existence; and a clobber self-heals on that origin's next event. Tags are infrequent. A fully
-  # race-free version would fan tag-cut out per pending origin (a code_kb query → matrix) — deferred.
+  # A tag-cut touches MANY origins (every record pending on the line), so it can't share the
+  # per-origin groups above and CAN start concurrently with a same-origin backport-write. The
+  # pending->concrete clobber that would cause (a late backport-write reverting this resolution) is
+  # prevented at the WRITE layer, not here: /index-fix's monotonic guard refuses to overwrite a
+  # stored concrete earliest_fix_tag with pending-* (github-bugfix-versions plugin). So a per-origin
+  # group for tag-cut is not needed for correctness; a full fan-out (per pending origin, reusing
+  # BVI-...-origin-<N>) remains an option if stricter serialization is ever wanted.
   tag-cut:
     if: github.event_name == 'push'
     concurrency:
