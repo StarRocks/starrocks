@@ -613,9 +613,18 @@ public class AnalyzeExprTest {
 
     @Test
     public void testNgramSearch() {
+        // missing gram_num argument
         analyzeFail("select ngram_search('abc', 'a')");
+        // non-string first parameter
         analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
-        analyzeFail("select ngram_search(th,th,4) from tall;");
+        // non-string haystack column (th is datetime in tall)
+        analyzeFail("select ngram_search(th, th, 4) from tall;");
+        // non-string non-constant needle must also be rejected (type check, not constant check)
+        analyzeFail("select ngram_search(ta, th, 4) from tall;");
+        // non-constant needle is now allowed
+        analyzeSuccess("select ngram_search(ta, ta, 4) from tall;");
+        // non-constant gram_num is still rejected
+        analyzeFail("select ngram_search(ta, ta, tc) from tall;");
     }
 
 }
