@@ -51,6 +51,7 @@ public:
 
     Status open();
 
+    // CI test (module-risk e2e) — no-op comment line, will be reverted; see PR description.
     void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
     void flush(Callback cb);
