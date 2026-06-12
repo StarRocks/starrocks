@@ -113,26 +113,29 @@ jobs:
               || echo "WARN: add-reviewer $r failed (permissions, already a reviewer, or transient API error)"
           }
 
-          assign_team() {
+          # Route team request through a label instead of calling
+          # gh pr edit --add-reviewer directly. label-action.yml has a
+          # `global-review:` job that watches the GLOBAL-REVIEW label and
+          # POSTs the requested_reviewers API. Keeping this on the label
+          # path means manual label toggling and AI assignment funnel
+          # through one code path; approve-checker.yml's global-review
+          # gate also keys off the same label.
+          assign_global_team() {
             local t="$1"
             if [ -z "$t" ] || [ "$t" = "none" ]; then
               return
             fi
-            # gh expects team form `org/team-slug`. If the skill already emits
-            # a qualified form, use it as-is; otherwise scope to the current
-            # repo's org. This file is synced to both StarRocks/starrocks and
-            # CelerData/celerdata-enterprise, and each org has its own
-            # `global-reviewer` team -- StarRocks/global-reviewer vs
-            # CelerData/global-reviewer. Hardcoding one org would route the
-            # wrong team in the other repo, so derive org from $REPO
-            # (`<owner>/<repo>`) at runtime.
+            # Strip optional org prefix the skill may emit
             case "$t" in
-              */*) ;;
-              *)   t="${REPO%%/*}/${t}" ;;
+              */*) t="${t#*/}" ;;
             esac
-            echo "Assigning team: $t"
-            gh pr edit "$PR" -R "$REPO" --add-reviewer "$t" \
-              || echo "WARN: add-reviewer $t failed (permissions, already a reviewer, or transient API error)"
+            if [ "$t" != "global-reviewer" ]; then
+              echo "WARN: unsupported team slug from AI: $t (only global-reviewer is supported via GLOBAL-REVIEW label routing)"
+              return
+            fi
+            echo "Adding GLOBAL-REVIEW label (label-action.yml will request the team)"
+            gh pr edit "$PR" -R "$REPO" --add-label GLOBAL-REVIEW \
+              || echo "WARN: add-label GLOBAL-REVIEW failed (permissions or transient API error)"
           }
 
           assign_user "$owner"
@@ -142,7 +145,7 @@ jobs:
             affinity=""
           fi
           assign_user "$affinity"
-          assign_team "$global"
+          assign_global_team "$global"
 
       - name: Notify Slack
         env:
