@@ -57,6 +57,7 @@ import org.wildfly.common.Assert;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
@@ -578,5 +579,24 @@ public class UnifiedMetadataTest {
 
         TvrTableSnapshot actual = unifiedMetadata.acquireTvrSnapshot("test_db", icebergTable, mvId);
         assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testGetVersionCommitTimeMillisRoutesByTableType(@Mocked IcebergTable icebergTable) {
+        Optional<Long> expected = Optional.of(1781000000000L);
+        new Expectations() {
+            {
+                icebergTable.getType();
+                result = ICEBERG;
+                minTimes = 1;
+            }
+            {
+                icebergMetadata.getVersionCommitTimeMillis("test_db", icebergTable, 42L);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        assertEquals(expected, unifiedMetadata.getVersionCommitTimeMillis("test_db", icebergTable, 42L));
     }
 }
