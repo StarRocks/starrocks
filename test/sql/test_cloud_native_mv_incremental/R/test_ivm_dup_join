@@ -586,3 +586,103 @@ ORDER BY 1, 2;
 INCREMENTAL	SUCCESS
 PCT	SUCCESS
 -- !result
+
+-- name: test_ivm_three_way_join_agg @cloud
+CREATE TABLE sales_3wa (
+    order_id BIGINT, prod_id INT, cust_id INT, amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE products_3wa (
+    prod_id INT, pname VARCHAR(16)
+) DUPLICATE KEY(prod_id) DISTRIBUTED BY HASH(prod_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE customers_3wa (
+    cust_id INT, city VARCHAR(16)
+) DUPLICATE KEY(cust_id) DISTRIBUTED BY HASH(cust_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO products_3wa VALUES (1,'widget'),(2,'gadget');
+-- result:
+-- !result
+INSERT INTO customers_3wa VALUES (10,'NYC'),(20,'LA');
+-- result:
+-- !result
+INSERT INTO sales_3wa VALUES (1001,1,10,10.00),(1002,2,20,20.00);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_3wagg
+DISTRIBUTED BY HASH(city) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT c.city, SUM(s.amount) AS tot, COUNT(*) AS cnt
+   FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id
+   GROUP BY c.city;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_3wagg WITH SYNC MODE;
+SELECT city, tot, cnt FROM mv_3wagg ORDER BY city;
+-- result:
+LA	20.00	1
+NYC	10.00	1
+-- !result
+INSERT INTO sales_3wa VALUES (1003,1,20,5.00),(1004,2,10,7.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_3wagg WITH SYNC MODE;
+SELECT city, tot, cnt FROM mv_3wagg ORDER BY city;
+-- result:
+LA	25.00	2
+NYC	17.00	2
+-- !result
+INSERT INTO customers_3wa VALUES (30,'SF');
+-- result:
+-- !result
+INSERT INTO sales_3wa VALUES (1005,1,30,9.00);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_3wagg WITH SYNC MODE;
+SELECT city, tot, cnt FROM mv_3wagg ORDER BY city;
+-- result:
+LA	25.00	2
+NYC	17.00	2
+SF	9.00	1
+-- !result
+SELECT COUNT(*) AS mv_rows FROM mv_3wagg;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT c.city FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id GROUP BY c.city
+) t;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT city, tot, cnt FROM mv_3wagg
+    EXCEPT
+    SELECT c.city, SUM(s.amount), COUNT(*) FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id GROUP BY c.city
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT c.city, SUM(s.amount), COUNT(*) FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id GROUP BY c.city
+    EXCEPT
+    SELECT city, tot, cnt FROM mv_3wagg
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_3wagg%' OR DEFINITION LIKE '%mv_3wagg%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result

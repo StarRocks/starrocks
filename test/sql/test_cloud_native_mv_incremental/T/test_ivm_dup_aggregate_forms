@@ -147,3 +147,112 @@ SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
 FROM information_schema.task_runs
 WHERE (EXTRA_MESSAGE LIKE '%mv_afd%' OR DEFINITION LIKE '%mv_afd%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
 ORDER BY 1, 2;
+
+-- name: test_ivm_agg_expr_args @cloud
+CREATE TABLE expr_args (
+    id BIGINT, grp VARCHAR(8), a BIGINT, b BIGINT
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO expr_args VALUES (1,'A',2,3),(2,'A',4,5),(3,'B',1,1);
+CREATE MATERIALIZED VIEW mv_eargs
+DISTRIBUTED BY HASH(grp) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT grp, SUM(a*b) AS sab, MAX(CASE WHEN a>1 THEN b ELSE 0 END) AS mc, COUNT(*) AS c
+   FROM expr_args GROUP BY grp;
+REFRESH MATERIALIZED VIEW mv_eargs WITH SYNC MODE;
+SELECT grp, sab, mc, c FROM mv_eargs ORDER BY grp;
+INSERT INTO expr_args VALUES (4,'B',3,3),(5,'C',2,2);
+REFRESH MATERIALIZED VIEW mv_eargs WITH SYNC MODE;
+SELECT grp, sab, mc, c FROM mv_eargs ORDER BY grp;
+INSERT INTO expr_args VALUES (6,'A',1,9),(7,'C',5,5);
+REFRESH MATERIALIZED VIEW mv_eargs WITH SYNC MODE;
+SELECT grp, sab, mc, c FROM mv_eargs ORDER BY grp;
+SELECT COUNT(*) AS mv_rows FROM mv_eargs;
+SELECT COUNT(*) AS base_rows FROM (SELECT grp FROM expr_args GROUP BY grp) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT grp, sab, mc, c FROM mv_eargs
+    EXCEPT
+    SELECT grp, SUM(a*b), MAX(CASE WHEN a>1 THEN b ELSE 0 END), COUNT(*) FROM expr_args GROUP BY grp
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT grp, SUM(a*b), MAX(CASE WHEN a>1 THEN b ELSE 0 END), COUNT(*) FROM expr_args GROUP BY grp
+    EXCEPT
+    SELECT grp, sab, mc, c FROM mv_eargs
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_eargs%' OR DEFINITION LIKE '%mv_eargs%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_groupby_no_agg @cloud
+CREATE TABLE dedup_src (
+    k INT, v BIGINT
+) DUPLICATE KEY(k, v) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO dedup_src VALUES (1,10),(1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_dedup
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM dedup_src GROUP BY k, v;
+REFRESH MATERIALIZED VIEW mv_dedup WITH SYNC MODE;
+SELECT k, v FROM mv_dedup ORDER BY k, v;
+INSERT INTO dedup_src VALUES (2,20),(3,30);
+REFRESH MATERIALIZED VIEW mv_dedup WITH SYNC MODE;
+SELECT k, v FROM mv_dedup ORDER BY k, v;
+INSERT INTO dedup_src VALUES (3,30),(1,11);
+REFRESH MATERIALIZED VIEW mv_dedup WITH SYNC MODE;
+SELECT k, v FROM mv_dedup ORDER BY k, v;
+SELECT COUNT(*) AS mv_rows FROM mv_dedup;
+SELECT COUNT(*) AS base_rows FROM (SELECT k, v FROM dedup_src GROUP BY k, v) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, v FROM mv_dedup
+    EXCEPT
+    SELECT k, v FROM dedup_src GROUP BY k, v
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, v FROM dedup_src GROUP BY k, v
+    EXCEPT
+    SELECT k, v FROM mv_dedup
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_dedup%' OR DEFINITION LIKE '%mv_dedup%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_having_on_key @cloud
+CREATE TABLE having_key (
+    k INT, v BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO having_key VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_havk
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS sv FROM having_key GROUP BY k HAVING k > 1;
+REFRESH MATERIALIZED VIEW mv_havk WITH SYNC MODE;
+SELECT k, sv FROM mv_havk ORDER BY k;
+INSERT INTO having_key VALUES (1,5),(4,40),(2,2);
+REFRESH MATERIALIZED VIEW mv_havk WITH SYNC MODE;
+SELECT k, sv FROM mv_havk ORDER BY k;
+INSERT INTO having_key VALUES (5,50),(3,3);
+REFRESH MATERIALIZED VIEW mv_havk WITH SYNC MODE;
+SELECT k, sv FROM mv_havk ORDER BY k;
+SELECT COUNT(*) AS mv_rows FROM mv_havk;
+SELECT COUNT(*) AS base_rows FROM (SELECT k FROM having_key GROUP BY k HAVING k > 1) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, sv FROM mv_havk
+    EXCEPT
+    SELECT k, SUM(v) FROM having_key GROUP BY k HAVING k > 1
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, SUM(v) FROM having_key GROUP BY k HAVING k > 1
+    EXCEPT
+    SELECT k, sv FROM mv_havk
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_havk%' OR DEFINITION LIKE '%mv_havk%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

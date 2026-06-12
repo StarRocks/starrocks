@@ -288,3 +288,54 @@ SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
 FROM information_schema.task_runs
 WHERE (EXTRA_MESSAGE LIKE '%mv_jfa%' OR DEFINITION LIKE '%mv_jfa%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
 ORDER BY 1, 2;
+
+-- name: test_ivm_three_way_join_agg @cloud
+CREATE TABLE sales_3wa (
+    order_id BIGINT, prod_id INT, cust_id INT, amount DECIMAL(10,2)
+) DUPLICATE KEY(order_id) DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+CREATE TABLE products_3wa (
+    prod_id INT, pname VARCHAR(16)
+) DUPLICATE KEY(prod_id) DISTRIBUTED BY HASH(prod_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+CREATE TABLE customers_3wa (
+    cust_id INT, city VARCHAR(16)
+) DUPLICATE KEY(cust_id) DISTRIBUTED BY HASH(cust_id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO products_3wa VALUES (1,'widget'),(2,'gadget');
+INSERT INTO customers_3wa VALUES (10,'NYC'),(20,'LA');
+INSERT INTO sales_3wa VALUES (1001,1,10,10.00),(1002,2,20,20.00);
+CREATE MATERIALIZED VIEW mv_3wagg
+DISTRIBUTED BY HASH(city) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT c.city, SUM(s.amount) AS tot, COUNT(*) AS cnt
+   FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id
+   GROUP BY c.city;
+REFRESH MATERIALIZED VIEW mv_3wagg WITH SYNC MODE;
+SELECT city, tot, cnt FROM mv_3wagg ORDER BY city;
+INSERT INTO sales_3wa VALUES (1003,1,20,5.00),(1004,2,10,7.00);
+REFRESH MATERIALIZED VIEW mv_3wagg WITH SYNC MODE;
+SELECT city, tot, cnt FROM mv_3wagg ORDER BY city;
+INSERT INTO customers_3wa VALUES (30,'SF');
+INSERT INTO sales_3wa VALUES (1005,1,30,9.00);
+REFRESH MATERIALIZED VIEW mv_3wagg WITH SYNC MODE;
+SELECT city, tot, cnt FROM mv_3wagg ORDER BY city;
+SELECT COUNT(*) AS mv_rows FROM mv_3wagg;
+SELECT COUNT(*) AS base_rows FROM (
+    SELECT c.city FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id GROUP BY c.city
+) t;
+SELECT COUNT(*) AS diff FROM (
+    SELECT city, tot, cnt FROM mv_3wagg
+    EXCEPT
+    SELECT c.city, SUM(s.amount), COUNT(*) FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id GROUP BY c.city
+) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT c.city, SUM(s.amount), COUNT(*) FROM sales_3wa s JOIN products_3wa p ON s.prod_id = p.prod_id JOIN customers_3wa c ON s.cust_id = c.cust_id GROUP BY c.city
+    EXCEPT
+    SELECT city, tot, cnt FROM mv_3wagg
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_3wagg%' OR DEFINITION LIKE '%mv_3wagg%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
