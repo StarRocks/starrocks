@@ -310,11 +310,6 @@ private:
         // Brute-force fallback fields (when .vi file is missing)
         bool use_brute_force = false;
         bool is_cosine_similarity = false; // metric type from index metadata
-        // True when the index metric resolved to one the brute distance kernel implements (l2 / cosine).
-        // Gates the exact-rescan paths on the ANN route (the PRE short-circuit and the under-return
-        // count gate): without it a cosine index would be silently scored as L2 there, because
-        // is_cosine_similarity was historically initialized only by _setup_brute_force_fallback.
-        bool exact_rescan_supported = false;
         ColumnId vector_data_column_id = 0;
         int32_t vector_data_column_uid = -1;
         bool added_vector_data_column = false; // true if we appended vector column to _schema
@@ -1028,9 +1023,9 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
 }
 
 // Resolves the metric the brute-force distance kernel must compute, from the index metadata:
-// true = cosine similarity, false = l2 distance, nullopt = missing or unsupported. Only the metrics
-// that match a planner-side approx_*_distance expression and have a straightforward local computation
-// are supported; anything else must DISABLE exact computation rather than silently fall back to L2.
+// true = cosine similarity, false = l2 distance, nullopt = missing or unsupported. The FE only
+// admits these two metrics for a vector index, so nullopt means broken metadata; the brute path
+// disables itself on it rather than silently scoring as L2.
 static std::optional<bool> resolve_exact_vector_metric(const TabletIndex& index) {
     const auto& props = index.common_properties();
     auto metric_it = props.find("metric_type");
@@ -1147,10 +1142,8 @@ Status SegmentIterator::_init_ann_reader() {
         // The exact-rescan paths on the ANN route (the PRE short-circuit and the under-return count
         // gate) share the brute-force distance kernel, which keys on is_cosine_similarity -- but that
         // flag is otherwise initialized only by _setup_brute_force_fallback, which never runs here.
-        // Resolve the metric now so a cosine index is not silently rescanned as L2; an unresolvable
-        // metric leaves exact_rescan_supported false, which disables both gates for this segment.
+        // Resolve the metric now so a cosine index is not silently rescanned as L2.
         auto metric = resolve_exact_vector_metric(*tablet_index_meta);
-        _vector_index_ctx->exact_rescan_supported = metric.has_value();
         if (metric.has_value()) {
             _vector_index_ctx->is_cosine_similarity = *metric;
         }
@@ -1209,18 +1202,18 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         pre_narrowed = true;
     }
 
-    // Short-circuit gate (top-k PRE only; range search keeps its own path, refine never ran the
-    // resolver so its behavior stays untouched): skip the filtered ANN search and score the candidates
-    // exactly when the search cannot pay for itself. Routing only -- both sides are exact, so a missed
-    // route costs speed, never correctness (completeness is owned by the post-search count gate below).
-    //  - cardinality <= k: a top-k over <= k candidates must return every candidate; the search is a
-    //    logical no-op. Always on.
+    // Short-circuit gate (PRE only; refine never ran the resolver so its behavior stays untouched):
+    // skip the ANN search and score the candidates exactly when the search cannot pay for itself.
+    // Covers top-k and range search alike -- the exact rescan enforces the radius itself, so both
+    // sides stay exact. Routing only: a missed route costs speed, never correctness (top-k
+    // completeness is owned by the post-search count gate below).
+    //  - cardinality <= k: the search cannot return more than the candidate set anyway; searching a
+    //    set this small is a logical no-op. Always on.
     //  - cardinality <= threshold * segment rows: a bitmap this sparse relative to the graph makes the
     //    HNSW traversal slow and likely to under-return, paying the exact rescan on top of the wasted
     //    search. The denominator is the segment's total rows (the graph the traversal walks), not the
     //    pruned scan range.
-    if (pre_narrowed && _vector_index_ctx->vector_range < 0 && !_vector_index_ctx->refine_distance &&
-        _vector_index_ctx->exact_rescan_supported) {
+    if (pre_narrowed && !_vector_index_ctx->refine_distance) {
         const uint64_t cardinality = matched.cardinality();
         const double ratio = config::vector_index_brute_selectivity_threshold;
         if (cardinality <= static_cast<uint64_t>(_vector_index_ctx->k) ||
@@ -1272,9 +1265,8 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
     // Selectivity gate: an HNSW filtered search can miss scattered survivors under a selective residual
     // (graph reachability), under-returning even though the exact pre-filter bitmap held enough rows.
     // When it returns fewer survivors than the bitmap could supply, rescan the (small) candidate set with
-    // exact distances so the top-k stays complete. Top-k search only (range search keeps its own path),
-    // and only when the index metric resolved to one the exact kernel implements.
-    if (pre_narrowed && _vector_index_ctx->vector_range < 0 && _vector_index_ctx->exact_rescan_supported) {
+    // exact distances so the top-k stays complete. Top-k search only (range search keeps its own path).
+    if (pre_narrowed && _vector_index_ctx->vector_range < 0) {
         const size_t found = id2distance_map.size();
         const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched.cardinality()));
         if (found < want) {
@@ -3009,6 +3001,14 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     auto field = std::make_shared<Field>(ChunkHelper::convert_field(vec_cid, tcol));
 
     _vector_index_ctx->id2distance_map.clear();
+    // A range query's radius lives ONLY in vector_range -- the FE folds the distance conjunct out of
+    // the scan predicate, so nothing downstream re-checks it. Enforce it here on the exact distances,
+    // with the same convention as the brute read path: ascending (l2) keeps distance <= range,
+    // descending (cosine) keeps similarity >= range. Out-of-radius candidates must not be published.
+    const bool has_range = _vector_index_ctx->vector_range >= 0;
+    const auto range = static_cast<float>(_vector_index_ctx->vector_range);
+    const bool ascending = _vector_index_ctx->result_order == 0;
+    roaring::Roaring survivors;
     SparseRange<> rows = roaring2range(candidates);
     for (auto it = rows.new_iterator(); it.has_more();) {
         Range<> r = it.next(4096);
@@ -3022,10 +3022,15 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
         const auto& dvals = dist->get_data();
         const uint32_t bn = r.end() - r.begin();
         for (uint32_t i = 0; i < bn; i++) {
-            _vector_index_ctx->id2distance_map[r.begin() + i] = dvals[i];
+            const float d = dvals[i];
+            if (has_range && (ascending ? d > range : d < range)) {
+                continue;
+            }
+            _vector_index_ctx->id2distance_map[r.begin() + i] = d;
+            survivors.add(r.begin() + i);
         }
     }
-    _scan_range = roaring2range(candidates);
+    _scan_range = roaring2range(survivors);
     return Status::OK();
 }
 
