@@ -64,9 +64,8 @@
 namespace starrocks {
 
 // Resolver truth table. Pure function; no tenann dependency (runs without WITH_TENANN).
-// The full table is user_choice x prefilter_allowed: the caller (_init_ann_reader) folds
-// "no residual at all" (trivially sound), completeness (no above-iterator predicate), reader
-// capability (filtered search) and the kill-switch into the single prefilter_allowed bit.
+// prefilter_allowed is the caller-derived "PRE is sound and enabled" bit; this table only fixes
+// how user choice interacts with it.
 TEST(AnnFilterResolverTest, truth_table) {
     using S = AnnFilterStrategy;
     // AUTO and an explicit 'pre' coincide: PRE iff prefilter_allowed. The kill-switch is part of
@@ -1169,14 +1168,25 @@ TEST(ResolveBruteForceVectorColumnTest, internal_error_when_dict_chunk_is_null) 
     EXPECT_TRUE(st.status().is_internal_error());
 }
 
+static PredicateTree single_node_tree(ColumnPredicate* pred) {
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(pred));
+    return PredicateTree::create(std::move(root));
+}
+// Two-branch OR wrapped in the AND root (callers keep predicate ownership).
+static PredicateTree or_tree(ColumnPredicate* a, ColumnPredicate* b) {
+    PredicateOrNode or_node;
+    or_node.add_child(PredicateColumnNode(a));
+    or_node.add_child(PredicateColumnNode(b));
+    PredicateAndNode root;
+    root.add_child(std::move(or_node));
+    return PredicateTree::create(std::move(root));
+}
+
 // ---------------------------------------------------------------------------------------------------
-// Direct unit tests for evaluate_pred_tree_to_bitmap (segment_iterator.h). ANN-independent: no vector
-// index, no VectorSearchOption, no SegmentIterator -- a plain segment plus raw column iterators. Runs
-// without WITH_TENANN.
-//
-// The 100k-row segment is the point: the function reads + evaluates in <= 4096-row batches, so a
-// full-range candidate spans 25 batches and several data pages -- coverage the 8-row ANN fixtures
-// structurally cannot provide (their whole segment fits in one batch and one page).
+// Direct unit tests for evaluate_pred_tree_to_bitmap (segment_iterator.h). No vector index involved;
+// runs without WITH_TENANN. The 100k-row segment matters: a full-range candidate spans 25 read
+// batches and several data pages -- coverage the one-batch 8-row ANN fixtures cannot provide.
 // ---------------------------------------------------------------------------------------------------
 class EvaluatePredTreeBitmapTest : public testing::Test {
 protected:
@@ -1233,9 +1243,9 @@ protected:
         ASSIGN_OR_ABORT(_segment, Segment::open(_fs, FileInfo{seg_file}, 0, _tablet_schema));
         ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(seg_file));
 
-        // Raw, initialized column iterators for the two predicate columns, indexed by cid; the id
+        // Initialized column iterators for the two predicate columns, indexed by cid; the id
         // column entry stays null on purpose (non-predicate columns may be null per the contract).
-        _iters_by_cid.assign(3, nullptr);
+        _iters_by_cid.resize(3);
         for (int cid = 1; cid <= 2; cid++) {
             ASSIGN_OR_ABORT(auto it, _segment->new_column_iterator(_tablet_schema->column(cid), nullptr));
             ColumnIteratorOptions iter_opts;
@@ -1243,8 +1253,7 @@ protected:
             iter_opts.read_file = _read_file.get();
             iter_opts.use_page_cache = false;
             ASSERT_OK(it->init(iter_opts));
-            _iters_by_cid[cid] = it.get();
-            _owned_iters.emplace_back(std::move(it));
+            _iters_by_cid[cid] = std::move(it);
         }
 
         // Schema holding ONLY the predicate columns (field->id() == cid) -- also verifies the
@@ -1263,11 +1272,6 @@ protected:
         r.addRange(0, kRows);
         return r;
     }
-    static PredicateTree single_node_tree(ColumnPredicate* pred) {
-        PredicateAndNode root;
-        root.add_child(PredicateColumnNode(pred));
-        return PredicateTree::create(std::move(root));
-    }
 
     const std::string kDir = "evaluate_pred_tree_bitmap_test";
     std::shared_ptr<FileSystem> _fs;
@@ -1275,8 +1279,7 @@ protected:
     std::shared_ptr<Segment> _segment;
     std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
-    std::vector<std::unique_ptr<ColumnIterator>> _owned_iters;
-    std::vector<ColumnIterator*> _iters_by_cid;
+    std::vector<std::unique_ptr<ColumnIterator>> _iters_by_cid;
     Schema _schema;
 };
 
@@ -1297,13 +1300,8 @@ TEST_F(EvaluatePredTreeBitmapTest, or_tree_evaluated_whole) {
     // branches select the first and the last batch of the file.
     std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate(get_type_info(TYPE_INT), 1, "50"));
     std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99950"));
-    PredicateOrNode or_node;
-    or_node.add_child(PredicateColumnNode(lt.get()));
-    or_node.add_child(PredicateColumnNode(ge.get()));
-    PredicateAndNode root;
-    root.add_child(std::move(or_node));
-    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(PredicateTree::create(std::move(root)), _schema,
-                                                           _iters_by_cid, nullptr, full_range()));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(or_tree(lt.get(), ge.get()), _schema, _iters_by_cid,
+                                                           nullptr, full_range()));
     roaring::Roaring expect;
     expect.addRange(0, 50);
     expect.addRange(99950, kRows);
@@ -1511,13 +1509,33 @@ protected:
         bool build_vi = true;       // false: leave the .vi missing -> runtime brute-force fallback
     };
 
+    struct ResidualCaseResult {
+        std::vector<int64_t> ids;
+        std::vector<float> distances; // appended ANN distance column values, when present
+        int64_t search_ns = -1;
+        int64_t raw_rows_read = -1;
+    };
+
+    // L2 and cosine disagree on this data: row 6 is cosine-best (1.0) but l2-worst; row 7 ~0.707.
+    static ResidualCaseConfig cosine_disagreement_cfg() {
+        ResidualCaseConfig cfg;
+        cfg.metric = "cosine_similarity";
+        cfg.query = {1.f, 0.f, 0.f, 0.f};
+        cfg.vecs.resize(8);
+        for (int i = 0; i < 6; i++) {
+            cfg.vecs[i] = {1.f, static_cast<float>(i + 2), 0.f, 0.f}; // non-zero, pairwise-distinct angles
+        }
+        cfg.vecs[6] = {100.f, 0.f, 0.f, 0.f};
+        cfg.vecs[7] = {1.f, 1.f, 0.f, 0.f};
+        return cfg;
+    }
+
     // Runs the residual-predicate ANN query and asserts the top-k contains only matching rows.
     // Both the PRE (early-eval) and POST (oversample + read-time filter) paths must return the same
     // correct result for this data.
-    void run_residual_case(PredicateTree pred_tree, bool above_predicate, std::vector<int64_t>* out_ids,
+    void run_residual_case(PredicateTree pred_tree, bool above_predicate, ResidualCaseResult* result,
                            AnnFilterStrategy user_choice = AnnFilterStrategy::AUTO, bool pred_col_late_mat = false,
-                           int64_t* out_search_ns = nullptr, const ResidualCaseConfig* cfg_in = nullptr,
-                           std::vector<float>* out_distances = nullptr, int64_t* out_raw_rows_read = nullptr) {
+                           const ResidualCaseConfig* cfg_in = nullptr) {
         const ResidualCaseConfig default_cfg;
         const ResidualCaseConfig& cfg = cfg_in != nullptr ? *cfg_in : default_cfg;
         const int N = 8;
@@ -1551,10 +1569,9 @@ protected:
         auto rschema = read_schema_with_index(cfg.metric);
         ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{seg_file}, 0, rschema));
 
-        // build the real HNSW .vi at exactly the path _init_ann_reader computes. The rowset id must be
-        // unique per test case: the TenANN index cache is a process-global keyed by the index PATH, so a
-        // shared path would serve one test's (stale) index to every later test -- including a test whose
-        // .vi was deliberately left unbuilt (the cache hit would silently revive the ANN path).
+        // Unique rowset id per test: the TenANN index cache is process-global and keyed by index
+        // path; a shared path would serve a stale cached index to later tests (even one whose .vi
+        // was deliberately not built).
         static std::atomic<int64_t> rid_seq{2};
         RowsetId rid;
         rid.init(rid_seq.fetch_add(1));
@@ -1652,20 +1669,19 @@ protected:
         // The ANN distance column is appended to the output chunk after the declared output columns
         // (id, filter_col). Expose its values so metric regressions (cosine scored as L2) are visible:
         // ids alone cannot catch them when every candidate is returned anyway.
-        if (out_distances != nullptr) {
-            ASSERT_EQ(out->num_columns(), 3u) << "expected the appended ANN distance column";
+        if (out->num_columns() == 3) {
             const auto* dcol = down_cast<const FloatColumn*>(out->get_column_by_index(2).get());
-            out_distances->assign(dcol->get_data().begin(), dcol->get_data().end());
+            result->distances.assign(dcol->get_data().begin(), dcol->get_data().end());
         }
         it->close();
-        if (out_ids != nullptr) *out_ids = got;
+        result->ids = got;
         // vector_search_timer accumulates ONLY inside the ANN search block; it stays exactly 0 when the
         // cardinality short-circuit skipped the search (a deterministic marker, not a timing assertion).
-        if (out_search_ns != nullptr) *out_search_ns = stats.vector_search_timer;
+        result->search_ns = stats.vector_search_timer;
         // raw_rows_read accumulates ONLY in the read loop's _read (the residual-bitmap evaluation reads
         // through raw column iterators and does not count) -- so it equals the number of rows the read
         // loop actually fetched: the deterministic marker for brute pre-narrowing.
-        if (out_raw_rows_read != nullptr) *out_raw_rows_read = static_cast<int64_t>(stats.raw_rows_read);
+        result->raw_rows_read = static_cast<int64_t>(stats.raw_rows_read);
     }
 };
 
@@ -1673,9 +1689,7 @@ protected:
 // `pred` (the tree stores a raw pointer), so it must outlive the run_residual_case() call.
 static PredicateTree make_ge4_tree(std::unique_ptr<ColumnPredicate>& pred) {
     pred.reset(new_column_ge_predicate(get_type_info(TYPE_INT), 2, "4"));
-    PredicateAndNode root;
-    root.add_child(PredicateColumnNode(pred.get()));
-    return PredicateTree::create(std::move(root));
+    return single_node_tree(pred.get());
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_predicate_prefilters_ann) {
@@ -1683,9 +1697,9 @@ TEST_F(VectorResidualPrefilterTest, residual_predicate_prefilters_ann) {
     // (filtered ANN). Returns exactly the k=3 nearest matching rows; id 7 (matching but farther) is
     // dropped by the segment-level k-limit.
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &ids);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6}));
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_config_off_routes_to_brute) {
@@ -1697,12 +1711,10 @@ TEST_F(VectorResidualPrefilterTest, residual_config_off_routes_to_brute) {
     config::enable_vector_index_residual_prefilter = false;
     DeferOp restore([&] { config::enable_vector_index_residual_prefilter = saved; });
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, nullptr, nullptr, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6, 7}));
-    EXPECT_EQ(raw_rows, 8) << "kill-switch brute must bypass the bitmap machinery entirely";
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 8) << "kill-switch brute must bypass the bitmap machinery entirely";
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {
@@ -1711,12 +1723,10 @@ TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {
     // ALL matching rows {4,5,6,7}; PRE would return only {4,5,6}. Brute pre-narrowing must confine
     // the read loop to the 4 surviving rows (raw_rows_read), not the full 8-row segment.
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, nullptr, nullptr, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6, 7}));
-    EXPECT_EQ(raw_rows, 4) << "brute read loop was not narrowed to the residual survivors";
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "brute read loop was not narrowed to the residual survivors";
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_or_predicate_prefilters_ann) {
@@ -1726,14 +1736,9 @@ TEST_F(VectorResidualPrefilterTest, residual_or_predicate_prefilters_ann) {
     // PRE returns both (k=3, only 2 match).
     std::unique_ptr<ColumnPredicate> eq4(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "4"));
     std::unique_ptr<ColumnPredicate> eq6(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "6"));
-    PredicateOrNode or_node;
-    or_node.add_child(PredicateColumnNode(eq4.get()));
-    or_node.add_child(PredicateColumnNode(eq6.get()));
-    PredicateAndNode root;
-    root.add_child(std::move(or_node));
-    std::vector<int64_t> ids;
-    run_residual_case(PredicateTree::create(std::move(root)), /*above_predicate=*/false, &ids);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 6}));
+    ResidualCaseResult res;
+    run_residual_case(or_tree(eq4.get(), eq6.get()), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 6}));
 }
 
 TEST_F(VectorResidualPrefilterTest, explicit_brute_force_returns_all_matching) {
@@ -1742,12 +1747,10 @@ TEST_F(VectorResidualPrefilterTest, explicit_brute_force_returns_all_matching) {
     // Pre-narrowing applies (results are identical either way, so the ground-truth role is intact):
     // the read loop touches only the 4 survivors.
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &ids, AnnFilterStrategy::BRUTE,
-                      /*pred_col_late_mat=*/false, nullptr, nullptr, nullptr, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6, 7}));
-    EXPECT_EQ(raw_rows, 4) << "explicit brute read loop was not narrowed to the residual survivors";
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, AnnFilterStrategy::BRUTE);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "explicit brute read loop was not narrowed to the residual survivors";
 }
 
 TEST_F(VectorResidualPrefilterTest, explicit_post_filter_oversamples) {
@@ -1759,9 +1762,9 @@ TEST_F(VectorResidualPrefilterTest, explicit_post_filter_oversamples) {
     // POST stays approximate (a filter selective enough to survive past the oversampled window can still
     // under-return); AUTO/PRE/BRUTE remain the exact paths.
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &ids, AnnFilterStrategy::POST);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, AnnFilterStrategy::POST);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_with_predicate_col_late_materialize) {
@@ -1772,18 +1775,16 @@ TEST_F(VectorResidualPrefilterTest, residual_with_predicate_col_late_materialize
     // upstream ColumnRef dereferences a short column. Expect no crash, every column == num_rows, and the
     // k=3 nearest matching rows {4,5,6}.
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
                       /*pred_col_late_mat=*/true);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
 }
 
 // `filter_col >= <value>` variant of make_ge4_tree, for the short-circuit cardinality cases.
 static PredicateTree make_ge_tree(std::unique_ptr<ColumnPredicate>& pred, const char* value) {
     pred.reset(new_column_ge_predicate(get_type_info(TYPE_INT), 2, value));
-    PredicateAndNode root;
-    root.add_child(PredicateColumnNode(pred.get()));
-    return PredicateTree::create(std::move(root));
+    return single_node_tree(pred.get());
 }
 
 TEST_F(VectorResidualPrefilterTest, cardinality_below_k_short_circuits_search) {
@@ -1792,24 +1793,20 @@ TEST_F(VectorResidualPrefilterTest, cardinality_below_k_short_circuits_search) {
     // skips it and scores the candidates exactly. Expect all candidates and NO search issued
     // (vector_search_timer accumulates only inside the search block -> exactly 0 when skipped).
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns);
-    EXPECT_EQ(ids, (std::vector<int64_t>{6, 7}));
-    EXPECT_EQ(search_ns, 0) << "filtered ANN search ran despite cardinality < k";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite cardinality < k";
 }
 
 TEST_F(VectorResidualPrefilterTest, cardinality_equal_k_short_circuits_search) {
     // Boundary: filter_col >= 5 -> cardinality 3 == k=3. The gate is <=, so the search is still a no-op
     // (all 3 candidates must be returned) and must be skipped.
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    run_residual_case(make_ge_tree(pred, "5"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns);
-    EXPECT_EQ(ids, (std::vector<int64_t>{5, 6, 7}));
-    EXPECT_EQ(search_ns, 0) << "filtered ANN search ran despite cardinality == k";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "5"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{5, 6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite cardinality == k";
 }
 
 TEST_F(VectorResidualPrefilterTest, sparse_ratio_short_circuits_search) {
@@ -1821,12 +1818,10 @@ TEST_F(VectorResidualPrefilterTest, sparse_ratio_short_circuits_search) {
     config::vector_index_brute_selectivity_threshold = 0.5;
     DeferOp restore([&] { config::vector_index_brute_selectivity_threshold = saved; });
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6, 7}));
-    EXPECT_EQ(search_ns, 0) << "filtered ANN search ran despite ratio gate";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite ratio gate";
 }
 
 TEST_F(VectorResidualPrefilterTest, cosine_metric_survives_exact_rescan) {
@@ -1839,27 +1834,17 @@ TEST_F(VectorResidualPrefilterTest, cosine_metric_survives_exact_rescan) {
     //   row 7 = [1,1,0,0]:   cosine 1/sqrt(2) ~ 0.707, l2^2 1
     // filter_col >= 6 -> bitmap {6,7}, cardinality 2 < k=3 -> short-circuit -> exact rescan. The
     // appended distance column must carry cosine similarities; with the bug it carried 9801 and 1.
-    ResidualCaseConfig cfg;
-    cfg.metric = "cosine_similarity";
-    cfg.query = {1.f, 0.f, 0.f, 0.f};
-    cfg.vecs.resize(8);
-    for (int i = 0; i < 6; i++) {
-        cfg.vecs[i] = {1.f, static_cast<float>(i + 2), 0.f, 0.f}; // non-zero, pairwise-distinct angles
-    }
-    cfg.vecs[6] = {100.f, 0.f, 0.f, 0.f};
-    cfg.vecs[7] = {1.f, 1.f, 0.f, 0.f};
+    ResidualCaseConfig cfg = cosine_disagreement_cfg();
 
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    std::vector<float> dist;
-    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns, &cfg, &dist);
-    EXPECT_EQ(ids, (std::vector<int64_t>{6, 7}));
-    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
-    ASSERT_EQ(dist.size(), 2u);
-    EXPECT_NEAR(dist[0], 1.0f, 1e-4) << "row 6 must score cosine 1.0, not l2 9801";
-    EXPECT_NEAR(dist[1], 1.0f / std::sqrt(2.0f), 1e-4) << "row 7 must score cosine ~0.707, not l2 1";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_NEAR(res.distances[0], 1.0f, 1e-4) << "row 6 must score cosine 1.0, not l2 9801";
+    EXPECT_NEAR(res.distances[1], 1.0f / std::sqrt(2.0f), 1e-4) << "row 7 must score cosine ~0.707, not l2 1";
 }
 
 TEST_F(VectorResidualPrefilterTest, above_gate_runs_search_path) {
@@ -1867,61 +1852,44 @@ TEST_F(VectorResidualPrefilterTest, above_gate_runs_search_path) {
     // (0.01 -> 0.08 rows on this 8-row segment) cannot fire. The filtered ANN search must actually run
     // (timer > 0) and keep the segment-level k-limit: the k=3 nearest matching rows, not all 4.
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6}));
-    EXPECT_GT(search_ns, 0) << "short-circuit gate fired above both thresholds";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(res.search_ns, 0) << "short-circuit gate fired above both thresholds";
 }
 
 TEST_F(VectorResidualPrefilterTest, range_short_circuit_applies_radius_cut) {
-    // Range query (l2, dist = i^2): filter_col >= 5 -> bitmap {5,6,7}, cardinality 3 <= k=3 ->
-    // short-circuit. The FE folds the radius out of the scan predicate, so the exact rescan itself
-    // must cut out-of-radius rows: vector_range=36 keeps rows 5 (25) and 6 (36 -- the bound is
-    // inclusive, matching the FE's `<=`), and must NOT publish row 7 (49). Without the cut the
-    // out-of-radius row flows straight into the result -- nothing downstream re-checks it.
+    // Range query: bitmap {5,6,7} <= k short-circuits; the rescan itself must cut rows outside
+    // vector_range=36 (nothing downstream re-checks the radius): keep 5 (dist 25) and 6 (36,
+    // inclusive bound), drop 7 (49).
     ResidualCaseConfig cfg;
     cfg.vector_range = 36.0;
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    std::vector<float> dist;
-    run_residual_case(make_ge_tree(pred, "5"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns, &cfg, &dist);
-    EXPECT_EQ(ids, (std::vector<int64_t>{5, 6}));
-    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
-    ASSERT_EQ(dist.size(), 2u);
-    EXPECT_FLOAT_EQ(dist[0], 25.0f);
-    EXPECT_FLOAT_EQ(dist[1], 36.0f);
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "5"), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{5, 6}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_FLOAT_EQ(res.distances[0], 25.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 36.0f);
 }
 
 TEST_F(VectorResidualPrefilterTest, range_short_circuit_cosine_keeps_ge_threshold) {
-    // Cosine range query: the radius semantics flip (descending keeps similarity >= range). Same
-    // data as cosine_metric_survives_exact_rescan: row 6 scores 1.0, row 7 scores ~0.707. filter_col
-    // >= 6 -> bitmap {6,7} -> short-circuit; vector_range=0.9 must keep only row 6.
-    ResidualCaseConfig cfg;
-    cfg.metric = "cosine_similarity";
-    cfg.query = {1.f, 0.f, 0.f, 0.f};
-    cfg.vecs.resize(8);
-    for (int i = 0; i < 6; i++) {
-        cfg.vecs[i] = {1.f, static_cast<float>(i + 2), 0.f, 0.f};
-    }
-    cfg.vecs[6] = {100.f, 0.f, 0.f, 0.f};
-    cfg.vecs[7] = {1.f, 1.f, 0.f, 0.f};
+    // Cosine range query: the radius semantics flip (descending keeps similarity >= range).
+    // filter_col >= 6 -> bitmap {6,7} -> short-circuit; vector_range=0.9 must keep only row 6.
+    ResidualCaseConfig cfg = cosine_disagreement_cfg();
     cfg.vector_range = 0.9;
     cfg.result_order = 1;
 
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    std::vector<float> dist;
-    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns, &cfg, &dist);
-    EXPECT_EQ(ids, (std::vector<int64_t>{6}));
-    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
-    ASSERT_EQ(dist.size(), 1u);
-    EXPECT_NEAR(dist[0], 1.0f, 1e-4);
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 1u);
+    EXPECT_NEAR(res.distances[0], 1.0f, 1e-4);
 }
 
 TEST_F(VectorResidualPrefilterTest, range_short_circuit_can_cut_all_candidates) {
@@ -1931,12 +1899,11 @@ TEST_F(VectorResidualPrefilterTest, range_short_circuit_can_cut_all_candidates) 
     ResidualCaseConfig cfg;
     cfg.vector_range = 10.0;
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns, &cfg);
-    EXPECT_TRUE(ids.empty()) << "out-of-radius candidates leaked into the result";
-    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_TRUE(res.ids.empty()) << "out-of-radius candidates leaked into the result";
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
 }
 
 TEST_F(VectorResidualPrefilterTest, range_above_gates_runs_range_search) {
@@ -1946,12 +1913,11 @@ TEST_F(VectorResidualPrefilterTest, range_above_gates_runs_range_search) {
     ResidualCaseConfig cfg;
     cfg.vector_range = 36.0;
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, &search_ns, &cfg);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6}));
-    EXPECT_GT(search_ns, 0) << "short-circuit gate fired above both thresholds";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(res.search_ns, 0) << "short-circuit gate fired above both thresholds";
 }
 
 TEST_F(VectorResidualPrefilterTest, scattered_candidates_rescan_exact_distances) {
@@ -1961,25 +1927,18 @@ TEST_F(VectorResidualPrefilterTest, scattered_candidates_rescan_exact_distances)
     // distances (0, 1, 49), not just the id set.
     std::unique_ptr<ColumnPredicate> lt2(new_column_lt_predicate(get_type_info(TYPE_INT), 2, "2"));
     std::unique_ptr<ColumnPredicate> ge7(new_column_ge_predicate(get_type_info(TYPE_INT), 2, "7"));
-    PredicateOrNode or_node;
-    or_node.add_child(PredicateColumnNode(lt2.get()));
-    or_node.add_child(PredicateColumnNode(ge7.get()));
-    PredicateAndNode root;
-    root.add_child(std::move(or_node));
 
     ResidualCaseConfig cfg;
     cfg.min_filter_col = 0; // rows 0 and 1 are legitimate matches of the OR residual
-    std::vector<int64_t> ids;
-    int64_t search_ns = -1;
-    std::vector<float> dist;
-    run_residual_case(PredicateTree::create(std::move(root)), /*above_predicate=*/false, &ids,
-                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, &search_ns, &cfg, &dist);
-    EXPECT_EQ(ids, (std::vector<int64_t>{0, 1, 7}));
-    EXPECT_EQ(search_ns, 0) << "short-circuit did not fire";
-    ASSERT_EQ(dist.size(), 3u);
-    EXPECT_FLOAT_EQ(dist[0], 0.0f);
-    EXPECT_FLOAT_EQ(dist[1], 1.0f);
-    EXPECT_FLOAT_EQ(dist[2], 49.0f);
+    ResidualCaseResult res;
+    run_residual_case(or_tree(lt2.get(), ge7.get()), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 3u);
+    EXPECT_FLOAT_EQ(res.distances[0], 0.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 1.0f);
+    EXPECT_FLOAT_EQ(res.distances[2], 49.0f);
 }
 
 TEST_F(VectorResidualPrefilterTest, brute_kill_switch_overrides_above_predicate_narrowing) {
@@ -1990,12 +1949,10 @@ TEST_F(VectorResidualPrefilterTest, brute_kill_switch_overrides_above_predicate_
     config::enable_vector_index_residual_prefilter = false;
     DeferOp restore([&] { config::enable_vector_index_residual_prefilter = saved; });
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, nullptr, nullptr, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6, 7}));
-    EXPECT_EQ(raw_rows, 8) << "kill-switch must override pre-narrowing regardless of the brute reason";
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 8) << "kill-switch must override pre-narrowing regardless of the brute reason";
 }
 
 TEST_F(VectorResidualPrefilterTest, brute_narrow_or_residual_exact_distances) {
@@ -2004,33 +1961,23 @@ TEST_F(VectorResidualPrefilterTest, brute_narrow_or_residual_exact_distances) {
     // assert the exact distances -- a wrong seek surfaces as a wrong value, not a wrong count.
     std::unique_ptr<ColumnPredicate> eq4(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "4"));
     std::unique_ptr<ColumnPredicate> eq6(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "6"));
-    PredicateOrNode or_node;
-    or_node.add_child(PredicateColumnNode(eq4.get()));
-    or_node.add_child(PredicateColumnNode(eq6.get()));
-    PredicateAndNode root;
-    root.add_child(std::move(or_node));
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    std::vector<float> dist;
-    run_residual_case(PredicateTree::create(std::move(root)), /*above_predicate=*/true, &ids,
-                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, nullptr, nullptr, &dist, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 6}));
-    EXPECT_EQ(raw_rows, 2) << "OR residual was not narrowed";
-    ASSERT_EQ(dist.size(), 2u);
-    EXPECT_FLOAT_EQ(dist[0], 16.0f);
-    EXPECT_FLOAT_EQ(dist[1], 36.0f);
+    ResidualCaseResult res;
+    run_residual_case(or_tree(eq4.get(), eq6.get()), /*above_predicate=*/true, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 6}));
+    EXPECT_EQ(res.raw_rows_read, 2) << "OR residual was not narrowed";
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_FLOAT_EQ(res.distances[0], 16.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 36.0f);
 }
 
 TEST_F(VectorResidualPrefilterTest, brute_narrow_empty_residual_returns_zero_rows) {
     // Residual matches nothing -> the narrowed scan range is empty -> the read loop must perform
     // ZERO row reads and the iterator must end cleanly (no error, no rows).
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    run_residual_case(make_ge_tree(pred, "100"), /*above_predicate=*/true, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, nullptr, nullptr, &raw_rows);
-    EXPECT_TRUE(ids.empty());
-    EXPECT_EQ(raw_rows, 0) << "empty residual must short out the read loop entirely";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "100"), /*above_predicate=*/true, &res);
+    EXPECT_TRUE(res.ids.empty());
+    EXPECT_EQ(res.raw_rows_read, 0) << "empty residual must short out the read loop entirely";
 }
 
 TEST_F(VectorResidualPrefilterTest, brute_narrow_full_match_residual) {
@@ -2038,12 +1985,11 @@ TEST_F(VectorResidualPrefilterTest, brute_narrow_full_match_residual) {
     ResidualCaseConfig cfg;
     cfg.min_filter_col = 0;
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    run_residual_case(make_ge_tree(pred, "0"), /*above_predicate=*/true, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, &cfg, nullptr, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{0, 1, 2, 3, 4, 5, 6, 7}));
-    EXPECT_EQ(raw_rows, 8);
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "0"), /*above_predicate=*/true, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2, 3, 4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 8);
 }
 
 TEST_F(VectorResidualPrefilterTest, brute_narrow_with_vector_range) {
@@ -2052,42 +1998,30 @@ TEST_F(VectorResidualPrefilterTest, brute_narrow_with_vector_range) {
     ResidualCaseConfig cfg;
     cfg.vector_range = 36.0;
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    std::vector<float> dist;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, &cfg, &dist, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6}));
-    EXPECT_EQ(raw_rows, 4) << "radius filtering happens after the read; narrowing is by residual only";
-    ASSERT_EQ(dist.size(), 3u);
-    EXPECT_FLOAT_EQ(dist[0], 16.0f);
-    EXPECT_FLOAT_EQ(dist[1], 25.0f);
-    EXPECT_FLOAT_EQ(dist[2], 36.0f);
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "radius filtering happens after the read; narrowing is by residual only";
+    ASSERT_EQ(res.distances.size(), 3u);
+    EXPECT_FLOAT_EQ(res.distances[0], 16.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 25.0f);
+    EXPECT_FLOAT_EQ(res.distances[2], 36.0f);
 }
 
 TEST_F(VectorResidualPrefilterTest, brute_narrow_cosine_metric) {
     // Narrowed brute on a cosine index must still score with the cosine kernel (the metric is
     // resolved by _setup_brute_force_fallback; narrowing must not bypass that initialization).
-    ResidualCaseConfig cfg;
-    cfg.metric = "cosine_similarity";
-    cfg.query = {1.f, 0.f, 0.f, 0.f};
-    cfg.vecs.resize(8);
-    for (int i = 0; i < 6; i++) {
-        cfg.vecs[i] = {1.f, static_cast<float>(i + 2), 0.f, 0.f};
-    }
-    cfg.vecs[6] = {100.f, 0.f, 0.f, 0.f};
-    cfg.vecs[7] = {1.f, 1.f, 0.f, 0.f};
+    ResidualCaseConfig cfg = cosine_disagreement_cfg();
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    std::vector<float> dist;
-    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/true, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, &cfg, &dist, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{6, 7}));
-    EXPECT_EQ(raw_rows, 2);
-    ASSERT_EQ(dist.size(), 2u);
-    EXPECT_NEAR(dist[0], 1.0f, 1e-4) << "row 6 must score cosine 1.0, not l2";
-    EXPECT_NEAR(dist[1], 1.0f / std::sqrt(2.0f), 1e-4) << "row 7 must score cosine ~0.707, not l2";
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/true, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 2);
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_NEAR(res.distances[0], 1.0f, 1e-4) << "row 6 must score cosine 1.0, not l2";
+    EXPECT_NEAR(res.distances[1], 1.0f / std::sqrt(2.0f), 1e-4) << "row 7 must score cosine ~0.707, not l2";
 }
 
 TEST_F(VectorResidualPrefilterTest, vi_missing_fallback_brute_narrows) {
@@ -2096,12 +2030,11 @@ TEST_F(VectorResidualPrefilterTest, vi_missing_fallback_brute_narrows) {
     ResidualCaseConfig cfg;
     cfg.build_vi = false;
     std::unique_ptr<ColumnPredicate> pred;
-    std::vector<int64_t> ids;
-    int64_t raw_rows = -1;
-    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &ids, AnnFilterStrategy::AUTO,
-                      /*pred_col_late_mat=*/false, nullptr, &cfg, nullptr, &raw_rows);
-    EXPECT_EQ(ids, (std::vector<int64_t>{4, 5, 6, 7}));
-    EXPECT_EQ(raw_rows, 4) << "fallback brute (.vi missing) was not narrowed";
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "fallback brute (.vi missing) was not narrowed";
 }
 #endif // WITH_TENANN
 
