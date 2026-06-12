@@ -285,6 +285,7 @@ message FlatJsonConfigPB {
     optional double flat_json_null_factor = 2;
     optional double flat_json_sparsity_factor = 3;
     optional int64 flat_json_max_column_max = 4;
+    optional int64 version = 5;
 }
 
 message TabletMetaPB {

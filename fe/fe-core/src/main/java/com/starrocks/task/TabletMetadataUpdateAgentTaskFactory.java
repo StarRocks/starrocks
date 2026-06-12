@@ -16,6 +16,7 @@ package com.starrocks.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Pair;
@@ -98,6 +99,21 @@ public class TabletMetadataUpdateAgentTaskFactory {
     public static TabletMetadataUpdateAgentTask createBinlogConfigUpdateTask(long backendId,
                                                                              List<Pair<Long, BinlogConfig>> configs) {
         return new UpdateBinlogConfigTask(backendId, requireNonNull(configs, "configs is null"));
+    }
+
+    public static TabletMetadataUpdateAgentTask createFlatJsonConfigUpdateTask(long backendId,
+                                                                               Set<Long> tablets,
+                                                                               FlatJsonConfig flatJsonConfig) {
+        requireNonNull(tablets, "tablets is null");
+        requireNonNull(flatJsonConfig, "flatJsonConfig is null");
+        List<Pair<Long, FlatJsonConfig>> configList = tablets.stream()
+                .map(id -> new Pair<>(id, flatJsonConfig)).collect(Collectors.toList());
+        return createFlatJsonConfigUpdateTask(backendId, configList);
+    }
+
+    public static TabletMetadataUpdateAgentTask createFlatJsonConfigUpdateTask(long backendId,
+                                                                               List<Pair<Long, FlatJsonConfig>> configs) {
+        return new UpdateFlatJsonConfigTask(backendId, requireNonNull(configs, "configs is null"));
     }
 
     public static TabletMetadataUpdateAgentTask createPrimaryIndexCacheExpireTimeUpdateTask(long backendId,
@@ -309,6 +325,33 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 metaInfo.setTablet_id(pair.first);
                 metaInfo.setBinlog_config(pair.second.toTBinlogConfig());
                 metaInfo.setMeta_type(TTabletMetaType.BINLOG_CONFIG);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateFlatJsonConfigTask extends TabletMetadataUpdateAgentTask {
+        private final List<Pair<Long, FlatJsonConfig>> flatJsonConfigList;
+
+        private UpdateFlatJsonConfigTask(long backendId, List<Pair<Long, FlatJsonConfig>> flatJsonConfigList) {
+            super(backendId, flatJsonConfigList.hashCode());
+            this.flatJsonConfigList = flatJsonConfigList;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return flatJsonConfigList.stream().map(p -> p.first).collect(Collectors.toSet());
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Pair<Long, FlatJsonConfig> pair : flatJsonConfigList) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(pair.first);
+                metaInfo.setFlat_json_config(pair.second.toTFlatJsonConfig());
+                metaInfo.setMeta_type(TTabletMetaType.FLAT_JSON_CONFIG);
                 metaInfos.add(metaInfo);
             }
             return metaInfos;

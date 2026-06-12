@@ -62,6 +62,7 @@
 namespace starrocks {
 
 class DataDir;
+class FlatJsonConfig;
 class RowsetReadOptions;
 class Tablet;
 class TabletMeta;
@@ -310,6 +311,8 @@ public:
     // This will modify the TabletMeta, and save_meta() will be called outside
     // to persist it. See run_update_meta_info_task() in agent_task.cpp
     void update_binlog_config(const BinlogConfig& binlog_config);
+
+    void update_flat_json_config(const FlatJsonConfig& flat_json_config);
 
     BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
 

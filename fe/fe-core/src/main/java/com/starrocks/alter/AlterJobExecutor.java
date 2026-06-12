@@ -573,11 +573,21 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
-                boolean isSuccess = schemaChangeHandler.updateFlatJsonConfigMeta(db, table.getId(),
-                        properties, TTabletMetaType.FLAT_JSON_CONFIG);
-                if (!isSuccess) {
-                    throw new DdlException("modify flat json config of FEMeta failed");
-
+                if (table.isCloudNativeTable()) {
+                    Locker locker = new Locker();
+                    locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                    try {
+                        schemaChangeHandler.processLakeTableAlterMeta(clause, db, (OlapTable) table);
+                    } finally {
+                        locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                    }
+                    isSynchronous = false;
+                } else {
+                    boolean isSuccess = schemaChangeHandler.updateFlatJsonConfigMeta(db, table.getId(),
+                            properties, TTabletMetaType.FLAT_JSON_CONFIG);
+                    if (!isSuccess) {
+                        throw new DdlException("modify flat json config of FEMeta failed");
+                    }
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {

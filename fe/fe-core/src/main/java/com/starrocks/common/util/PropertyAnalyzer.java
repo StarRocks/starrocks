@@ -178,6 +178,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
 
+    public static final String PROPERTIES_FLAT_JSON_VERSION = "flat_json.version";
+
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
 
