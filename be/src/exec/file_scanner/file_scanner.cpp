@@ -272,8 +272,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     // in JsonReader::_read_file_stream(). Wrapping the pipe in a CompressedInputStream here would
     // both double-decompress and break the down_cast<StreamLoadPipeInputStream*> in
     // _read_file_stream() (the stream becomes a CompressedInputStream), causing a crash.
-    if (range_desc.file_type == TFileType::FILE_STREAM &&
-        range_desc.format_type == TFileFormatType::FORMAT_JSON) {
+    if (range_desc.file_type == TFileType::FILE_STREAM && range_desc.format_type == TFileFormatType::FORMAT_JSON) {
         compression = CompressionTypePB::NO_COMPRESSION;
     } else if (range_desc.__isset.compression_type) {
         // Prefer explicit compression type if provided by FE
