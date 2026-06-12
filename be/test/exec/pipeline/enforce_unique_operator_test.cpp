@@ -204,4 +204,40 @@ TEST_F(EnforceUniqueOperatorTest, SetFinishing) {
     EXPECT_TRUE(op->is_finished());
 }
 
+// Keys are resolved by SLOT ID, not physical position: with a leading unrelated
+// column the key columns sit at physical indices 1/2 but keep slot ids 7/9, and
+// the duplicate must still be caught.
+TEST_F(EnforceUniqueOperatorTest, KeysResolvedBySlotIdNotPosition) {
+    EnforceUniqueOperatorFactory factory(/*id=*/0, /*plan_node_id=*/0, std::vector<int32_t>{7, 9});
+    auto op = factory.create(1, 0);
+
+    auto chunk = std::make_shared<Chunk>();
+    auto data_col = FixedLengthColumn<int64_t>::create();
+    data_col->append(100);
+    data_col->append(200);
+    chunk->append_column(std::move(data_col), /*slot_id=*/3);
+    auto file_col = BinaryColumn::create();
+    file_col->append("file1.parquet");
+    file_col->append("file1.parquet");
+    chunk->append_column(std::move(file_col), /*slot_id=*/7);
+    auto pos_col = FixedLengthColumn<int64_t>::create();
+    pos_col->append(0);
+    pos_col->append(0);
+    chunk->append_column(std::move(pos_col), /*slot_id=*/9);
+
+    auto st = op->push_chunk(&_state, chunk);
+    EXPECT_FALSE(st.ok());
+}
+
+// A key slot id that does not exist in the chunk must yield a clear error.
+TEST_F(EnforceUniqueOperatorTest, MissingKeySlotRejected) {
+    EnforceUniqueOperatorFactory factory(/*id=*/0, /*plan_node_id=*/0, std::vector<int32_t>{42, 1});
+    auto op = factory.create(1, 0);
+
+    auto chunk = build_chunk({"file1.parquet"}, {0});
+    auto st = op->push_chunk(&_state, chunk);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.message().find("does not exist") != std::string::npos) << st.message();
+}
+
 } // namespace starrocks::pipeline

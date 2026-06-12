@@ -232,7 +232,7 @@ OpFactories PipelineBuilderContext::interpolate_local_key_partition_exchange(
 
 OpFactories PipelineBuilderContext::interpolate_local_column_hash_partition_exchange(
         RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
-        const std::vector<int32_t>& partition_column_indices, int num_receivers) {
+        const std::vector<int32_t>& key_slot_ids, int num_receivers) {
     if (num_receivers <= 1) {
         return pred_operators;
     }
@@ -248,10 +248,10 @@ OpFactories PipelineBuilderContext::interpolate_local_column_hash_partition_exch
     inherit_upstream_source_properties(local_shuffle_source.get(), pred_source_op);
     local_shuffle_source->set_could_local_shuffle(false);
     local_shuffle_source->set_degree_of_parallelism(num_receivers);
-    local_shuffle_source->mark_column_hash_partitioned(partition_column_indices);
+    local_shuffle_source->mark_column_hash_partitioned(key_slot_ids);
 
-    auto local_shuffle = std::make_shared<ColumnHashPartitionExchanger>(mem_mgr, local_shuffle_source.get(),
-                                                                        partition_column_indices);
+    auto local_shuffle =
+            std::make_shared<ColumnHashPartitionExchanger>(mem_mgr, local_shuffle_source.get(), key_slot_ids);
     auto local_shuffle_sink =
             std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), plan_node_id, local_shuffle);
     pred_operators.emplace_back(std::move(local_shuffle_sink));

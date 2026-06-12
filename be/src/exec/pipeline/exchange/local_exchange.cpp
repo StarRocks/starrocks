@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "column/nullable_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "connector/utils.h"
@@ -142,30 +143,63 @@ Status ColumnHashPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t
                                                TPartitionType::HASH_PARTITIONED, _source->get_sources().size(), 1);
     }
 
+    // Resolve the key columns by slot id. Chunk::get_column_by_slot_id is only
+    // DCHECK-guarded, so verify existence explicitly.
+    Columns key_columns;
+    key_columns.reserve(_key_slot_ids.size());
+    for (int32_t slot_id : _key_slot_ids) {
+        if (!chunk->is_slot_exist(slot_id)) {
+            return Status::InternalError(
+                    fmt::format("ColumnHashPartitioner: key slot {} does not exist in the input chunk", slot_id));
+        }
+        key_columns.emplace_back(chunk->get_column_by_slot_id(slot_id));
+    }
+
     if (_exchange_hash_function_version == 1) {
         _hash_values.assign(num_rows, HashUtil::XXH3_SEED_32);
-        for (int32_t column_index : _column_indices) {
-            if (column_index < 0 || column_index >= static_cast<int32_t>(chunk->num_columns())) {
-                return Status::InternalError(
-                        fmt::format("ColumnHashPartitioner: invalid column index {}, chunk has {} columns",
-                                    column_index, chunk->num_columns()));
-            }
-            chunk->get_column_by_index(column_index)->xxh3_hash(_hash_values.data(), 0, num_rows);
+        for (const auto& column : key_columns) {
+            column->xxh3_hash(_hash_values.data(), 0, num_rows);
         }
     } else {
         _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-        for (int32_t column_index : _column_indices) {
-            if (column_index < 0 || column_index >= static_cast<int32_t>(chunk->num_columns())) {
-                return Status::InternalError(
-                        fmt::format("ColumnHashPartitioner: invalid column index {}, chunk has {} columns",
-                                    column_index, chunk->num_columns()));
-            }
-            chunk->get_column_by_index(column_index)->fnv_hash(_hash_values.data(), 0, num_rows);
+        for (const auto& column : key_columns) {
+            column->fnv_hash(_hash_values.data(), 0, num_rows);
         }
     }
 
     _shuffle_channel_id.resize(num_rows);
     _shuffler->local_exchange_shuffle(_shuffle_channel_id, _hash_values, num_rows);
+
+    // Rows whose key contains NULL are exempt from the uniqueness check
+    // (EnforceUniqueOperator skips NULL keys), so their placement is
+    // unconstrained — but NULL hashes to a per-row CONSTANT, which would funnel
+    // e.g. every MERGE NOT-MATCHED insert row into one channel and serialize
+    // that stream on a single driver. Spread them round-robin instead.
+    _null_key_flags.assign(num_rows, 0);
+    bool has_null_key_rows = false;
+    for (const auto& column : key_columns) {
+        if (column->only_null()) {
+            has_null_key_rows = true;
+            std::fill(_null_key_flags.begin(), _null_key_flags.end(), 1);
+            break;
+        }
+        if (!column->is_nullable() || !column->has_null()) {
+            continue;
+        }
+        has_null_key_rows = true;
+        const auto& null_data = down_cast<const NullableColumn*>(column.get())->null_column()->immutable_data();
+        for (size_t i = 0; i < num_rows; ++i) {
+            _null_key_flags[i] |= null_data[i];
+        }
+    }
+    if (has_null_key_rows) {
+        const auto num_channels = static_cast<uint32_t>(_source->get_sources().size());
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (_null_key_flags[i]) {
+                _shuffle_channel_id[i] = _next_null_row_channel++ % num_channels;
+            }
+        }
+    }
     return Status::OK();
 }
 
@@ -244,12 +278,12 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
 
 ColumnHashPartitionExchanger::ColumnHashPartitionExchanger(
         const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager, LocalExchangeSourceOperatorFactory* source,
-        std::vector<int32_t> column_indices)
-        : LocalExchanger("ColumnHashPartition", memory_manager, source), _column_indices(std::move(column_indices)) {}
+        std::vector<int32_t> key_slot_ids)
+        : LocalExchanger("ColumnHashPartition", memory_manager, source), _key_slot_ids(std::move(key_slot_ids)) {}
 
 void ColumnHashPartitionExchanger::incr_sinker() {
     LocalExchanger::incr_sinker();
-    auto partitioner = std::make_unique<ColumnHashPartitioner>(_source, _column_indices);
+    auto partitioner = std::make_unique<ColumnHashPartitioner>(_source, _key_slot_ids);
     if (_source->runtime_state() != nullptr &&
         _source->runtime_state()->query_options().__isset.exchange_hash_function_version) {
         partitioner->set_exchange_hash_function_version(

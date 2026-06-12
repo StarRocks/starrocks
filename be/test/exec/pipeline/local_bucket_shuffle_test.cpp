@@ -165,6 +165,108 @@ TEST_F(LocalBucketShuffleTest, test_column_hash_partitioner_routes_equal_keys_to
     EXPECT_EQ(partition_by_row[1], partition_by_row[4]);
 }
 
+TEST_F(LocalBucketShuffleTest, test_column_hash_partitioner_spreads_null_key_rows_round_robin) {
+    auto chunk = std::make_shared<Chunk>();
+
+    auto file_col = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    file_col->append_nulls(6);
+    chunk->append_column(std::move(file_col), 0);
+
+    auto pos_col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    pos_col->append_nulls(6);
+    chunk->append_column(std::move(pos_col), 1);
+
+    ColumnHashPartitioner partitioner(_source_op_factory.get(), {0, 1});
+    std::vector<uint32_t> partition_indexes(chunk->num_rows());
+    ASSERT_OK(partitioner.partition_chunk(chunk, _dop, partition_indexes));
+
+    // 6 NULL-key rows round-robin over 3 channels -> exactly 2 per partition.
+    // Pure hash routing would funnel all of them into one channel because NULL
+    // hashes to a constant.
+    for (size_t partition_id = 0; partition_id < _dop; partition_id++) {
+        EXPECT_EQ(2U,
+                  partitioner.partition_end_offset(partition_id) - partitioner.partition_begin_offset(partition_id));
+    }
+}
+
+TEST_F(LocalBucketShuffleTest, test_column_hash_partitioner_mixed_null_and_equal_keys) {
+    auto chunk = std::make_shared<Chunk>();
+
+    // Rows 0/3: equal non-null keys -> must co-locate.
+    // Rows 1/2: NULL file -> exempt from the check, spread round-robin.
+    auto file_col = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    file_col->append_datum(Datum(Slice("file-a")));
+    file_col->append_nulls(2);
+    file_col->append_datum(Datum(Slice("file-a")));
+    chunk->append_column(std::move(file_col), 0);
+
+    auto pos_col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    pos_col->append_datum(Datum(int64_t{7}));
+    pos_col->append_nulls(2);
+    pos_col->append_datum(Datum(int64_t{7}));
+    chunk->append_column(std::move(pos_col), 1);
+
+    ColumnHashPartitioner partitioner(_source_op_factory.get(), {0, 1});
+    std::vector<uint32_t> partition_indexes(chunk->num_rows());
+    ASSERT_OK(partitioner.partition_chunk(chunk, _dop, partition_indexes));
+
+    std::vector<size_t> partition_by_row(chunk->num_rows());
+    for (size_t partition_id = 0; partition_id < _dop; partition_id++) {
+        for (size_t i = partitioner.partition_begin_offset(partition_id);
+             i < partitioner.partition_end_offset(partition_id); i++) {
+            partition_by_row[partition_indexes[i]] = partition_id;
+        }
+    }
+
+    EXPECT_EQ(partition_by_row[0], partition_by_row[3]);
+    // The two NULL-key rows take consecutive round-robin channels.
+    EXPECT_NE(partition_by_row[1], partition_by_row[2]);
+}
+
+TEST_F(LocalBucketShuffleTest, test_column_hash_partitioner_resolves_keys_by_slot_id) {
+    auto chunk = std::make_shared<Chunk>();
+
+    // A leading unrelated column makes the key columns' physical indices (1, 2)
+    // differ from their slot ids (7, 9).
+    auto data_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    for (int i = 0; i < 4; ++i) {
+        data_col->append_datum(Datum(i));
+    }
+    chunk->append_column(std::move(data_col), 3);
+
+    auto file_col = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    std::vector<Slice> files{{"file-a"}, {"file-b"}, {"file-a"}, {"file-b"}};
+    file_col->append_strings(files.data(), files.size());
+    chunk->append_column(std::move(file_col), 7);
+
+    auto pos_col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    pos_col->append_datum(Datum(int64_t{7}));
+    pos_col->append_datum(Datum(int64_t{9}));
+    pos_col->append_datum(Datum(int64_t{7}));
+    pos_col->append_datum(Datum(int64_t{9}));
+    chunk->append_column(std::move(pos_col), 9);
+
+    ColumnHashPartitioner partitioner(_source_op_factory.get(), {7, 9});
+    std::vector<uint32_t> partition_indexes(chunk->num_rows());
+    ASSERT_OK(partitioner.partition_chunk(chunk, _dop, partition_indexes));
+
+    std::vector<size_t> partition_by_row(chunk->num_rows());
+    for (size_t partition_id = 0; partition_id < _dop; partition_id++) {
+        for (size_t i = partitioner.partition_begin_offset(partition_id);
+             i < partitioner.partition_end_offset(partition_id); i++) {
+            partition_by_row[partition_indexes[i]] = partition_id;
+        }
+    }
+
+    EXPECT_EQ(partition_by_row[0], partition_by_row[2]);
+    EXPECT_EQ(partition_by_row[1], partition_by_row[3]);
+
+    // A slot id absent from the chunk must produce a clear error, not a crash.
+    ColumnHashPartitioner bad_partitioner(_source_op_factory.get(), {42, 9});
+    std::vector<uint32_t> bad_indexes(chunk->num_rows());
+    EXPECT_FALSE(bad_partitioner.partition_chunk(chunk, _dop, bad_indexes).ok());
+}
+
 TEST_F(LocalBucketShuffleTest, test_local_exchange_source_records_column_hash_partition_keys) {
     EXPECT_FALSE(_source_op_factory->is_column_hash_partitioned_by({0, 1}));
 

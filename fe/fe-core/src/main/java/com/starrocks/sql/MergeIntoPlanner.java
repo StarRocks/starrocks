@@ -14,14 +14,15 @@
 
 package com.starrocks.sql;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
+import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.EnforceUniqueNode;
 import com.starrocks.planner.IcebergRowDeltaSink;
@@ -32,7 +33,6 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
-import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MergeIntoStmt;
@@ -55,13 +55,14 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TIcebergWriteMode;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.iceberg.expressions.Expression;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 public class MergeIntoPlanner {
 
@@ -130,11 +131,35 @@ public class MergeIntoPlanner {
         List<String> colNames = Lists.newArrayList(mergeIntoStmt.getOutputColumnNames());
         colNames.add(OP_CODE_COLUMN_NAME);
 
-        // Use the 3-arg overload: MERGE wraps all data columns in CASE expressions, causing
-        // ColumnRefOperator names to become "case" instead of the original column name.
-        // The 3-arg overload matches partition columns by the saved column output names.
-        PhysicalPropertySet requiredProperty = IcebergPlannerUtils.createShuffleProperty(
-                icebergTable, outputColumns, colNames);
+        // Cross-BE co-location requirement for the duplicate-match check: the BE-side
+        // EnforceUniqueNode deduplicates only within one BE (its seen-sets are per
+        // driver), so all join-output copies of one target row must reach the same
+        // fragment instance. validateDuplicateCheckDistribution() re-checks the final
+        // plan against this invariant.
+        PhysicalPropertySet requiredProperty;
+        if (icebergTable.isPartitioned()) {
+            // Shuffle by the target's partition columns. This serves Iceberg write
+            // clustering AND co-locates duplicate matches: all copies of one target row
+            // carry identical partition values because the analyzer rejects
+            // partition-column UPDATEs. (The 3-arg overload matches partition columns
+            // by the saved output names — MERGE wraps data columns in CASE exprs, so
+            // ColumnRefOperator names degrade to "case".)
+            requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns, colNames);
+        } else {
+            // Non-partitioned targets need no write-clustering shuffle, but without an
+            // enforced distribution the duplicate co-location would silently depend on
+            // the join's physical shape: a shuffle equi-join happens to co-locate
+            // duplicates (they share the join key), but a broadcast of the target side
+            // (small target table, or non-equi ON via nestloop) emits copies of one
+            // target row on whichever BEs the matching source rows live, and the check
+            // would miss cross-BE duplicates. Enforce a shuffle on _file: duplicate
+            // matches share (_file, _pos) and hence _file. NOT MATCHED insert rows
+            // carry NULL _file and all hash to one instance.
+            Preconditions.checkState(IcebergTable.FILE_PATH.equalsIgnoreCase(colNames.get(0)),
+                    "MERGE output must start with %s, got %s", IcebergTable.FILE_PATH, colNames.get(0));
+            requiredProperty = IcebergPlannerUtils.createHashShuffleProperty(
+                    Collections.singletonList(outputColumns.get(0).getId()));
+        }
 
         return createMergePlan(mergeIntoStmt, session, logicalPlan.getRootBuilder().getRoot(),
                 columnRefFactory, outputColumns, colNames, icebergTable, requiredProperty);
@@ -205,111 +230,76 @@ public class MergeIntoPlanner {
         execPlan.getFragments().get(0).setSink(dataSink);
 
         // Insert EnforceUniqueNode to check that each target row is matched at most once.
-        // Key columns are _file and _pos — resolved against the plan root's physical
-        // output layout below, NOT hardcoded to [0, 1].
+        // Key columns are _file and _pos, identified by SLOT ID — the BE resolves the
+        // chunk columns through the chunk's slot-id map.
         insertEnforceUniqueNode(execPlan);
+
+        validateDuplicateCheckDistribution(execPlan, icebergTable, colNames);
     }
 
     private void insertEnforceUniqueNode(ExecPlan execPlan) {
         PlanFragment sinkFragment = execPlan.getFragments().get(0);
         PlanNode currentRoot = sinkFragment.getPlanRoot();
 
-        // Resolve the physical chunk positions of _file and _pos.
-        //
-        // MergeIntoAnalyzer builds the SELECT list with _file at output-position 0
-        // and _pos at position 1, so execPlan.getOutputExprs().get(0)/(1) reference
-        // those two slots.
-        //
-        // The physical chunk flowing into the EnforceUniqueOperator is emitted by
-        // the sender ProjectNode, which on the BE side orders its columns by
-        // ASCENDING slot ID (project_node.cpp init() iterates Thrift's
-        // `map<SlotId, Expr> slot_map` which in C++ is a `std::map` — keys come
-        // out sorted). That's true whether the FE root here is the ProjectNode
-        // itself (single-BE / non-partitioned) or an ExchangeNode receiver (the
-        // multi-BE partition-shuffle case — the Exchange shares the sender
-        // Project's tupleId and preserves column order over the wire).
-        //
-        // We MUST NOT call `currentRoot.getOutputSlotIds(descTbl)` here:
-        //   - ProjectNode overrides it to return slot-ID-sorted order (correct).
-        //   - ExchangeNode does NOT override it, so it falls back to
-        //     PlanNode.getOutputSlotIds, which returns tuple-descriptor
-        //     insertion order. PlanFragmentBuilder populates the ProjectNode's
-        //     tuple via iterating `Maps.newHashMap()` (node.getColumnRefMap
-        //     entries), so insertion order ≠ slot-ID order in general.
-        //
-        // Taking the plan root's tuple slots and sorting by slot-ID ourselves
-        // gives the same order the BE actually sees, for both topologies.
-        // When source-side ColumnRefOperators get smaller slot IDs than the
-        // target-side _file/_pos (which happens routinely with any non-trivial
-        // source — multi-branch UNION ALL, MATCHED+NOT MATCHED pairs,
-        // partition-transform shuffles), the _file/_pos chunk indices are NOT
-        // 0/1. A hardcoded [0, 1] points at source data columns, and the BE-side
-        // EnforceUniqueOperator does a
-        //   down_cast<const FixedLengthColumn<int64_t>*>(row_pos_col)->get_data().data()
-        // on a column that isn't that type — in RELEASE builds this silently
-        // yields a bad pointer and SIGSEGVs, or — when the column happens to be
-        // readable as binary — surfaces as a spurious "matched by at most one
-        // source row" error with a bogus file path (e.g. a STRING data column's
-        // value like 'hot').
+        // MergeIntoAnalyzer builds the SELECT list with _file at output-position 0 and
+        // _pos at position 1, so execPlan.getOutputExprs().get(0)/(1) reference those
+        // two slots. The keys are handed to the BE as SLOT IDS and the BE operator
+        // resolves the chunk columns through the chunk's slot-id map (the same
+        // mechanism the Iceberg sink uses to locate _file/_pos), so the FE does not
+        // need to predict the physical column order of the BE chunk.
         List<Expr> outputExprs = execPlan.getOutputExprs();
         Preconditions.checkArgument(outputExprs.size() >= 2,
                 "MERGE output must have at least _file and _pos; got %s", outputExprs.size());
         SlotId fileSlotId = extractSlotId(outputExprs.get(0), "_file");
         SlotId posSlotId = extractSlotId(outputExprs.get(1), "_pos");
 
-        List<SlotId> physicalOrder = collectSlotsSortedById(currentRoot, execPlan.getDescTbl());
-        int fileIdx = physicalOrder.indexOf(fileSlotId);
-        int posIdx = physicalOrder.indexOf(posSlotId);
-        Preconditions.checkArgument(fileIdx >= 0 && posIdx >= 0,
-                "could not locate _file(slot=%s) / _pos(slot=%s) in plan root output slots %s",
-                fileSlotId, posSlotId, physicalOrder);
-
         PlanNodeId nodeId = execPlan.getNextNodeId();
         EnforceUniqueNode enforceNode = new EnforceUniqueNode(
-                nodeId, currentRoot, Arrays.asList(fileIdx, posIdx));
+                nodeId, currentRoot, Arrays.asList(fileSlotId.asInt(), posSlotId.asInt()));
         sinkFragment.setPlanRoot(enforceNode);
     }
 
     /**
-     * Collect every slot reachable from the given plan node's output tuples and
-     * return their SlotIds in ASCENDING slot-ID order.
-     *
-     * This mirrors the BE ProjectOperator's behavior: `project_node.cpp` iterates
-     * `tnode.project_node.slot_map` (a Thrift `map<SlotId, Expr>` → C++
-     * `std::map`, which keys are sorted), producing chunk columns in slot-ID
-     * ascending order regardless of how the FE tuple was populated. Using this
-     * sorted view here keeps FE's index resolution consistent with the BE
-     * chunk layout for every topology EnforceUniqueNode can sit under — both
-     * Project-at-root and Exchange-at-root (multi-BE partition-shuffle).
-     *
-     * Only MATERIALIZED slots are included. A ProjectNode's tuple descriptor
-     * holds both materialized output slots (populated via
-     * `setIsMaterialized(true)` in PlanFragmentBuilder) and non-materialized
-     * common sub-operator slots (`setIsMaterialized(false)`). The two travel
-     * through Thrift in DIFFERENT fields: `project_node.slot_map` (materialized
-     * outputs — what ends up as chunk columns) vs `project_node.common_slot_map`
-     * (common sub-expressions — evaluated in place, not emitted). Counting the
-     * common-sub slots here would shift the physical indices of `_file` / `_pos`
-     * whenever a common-sub slot happens to have a smaller slot-ID — e.g. for
-     * the CASE WHEN `_file IS NOT NULL` pattern that MergeIntoAnalyzer emits on
-     * every MERGE output column, which the optimizer CSE's out.
+     * Fail-loud guard for the cross-BE co-location invariant of the duplicate-match
+     * check. The BE EnforceUniqueNode deduplicates per BE, so the sink fragment's
+     * input distribution must guarantee that all copies of one target row land on the
+     * same fragment instance. That holds when the fragment is
+     * <ul>
+     *   <li>UNPARTITIONED</li>
+     *   <li>hash-partitioned</li>
+     * </ul>
      */
-    @VisibleForTesting
-    static List<SlotId> collectSlotsSortedById(PlanNode node, DescriptorTable descTbl) {
-        List<SlotId> slotIds = Lists.newArrayList();
-        for (TupleId tid : node.getTupleIds()) {
-            TupleDescriptor tupleDesc = descTbl.getTupleDesc(tid);
-            if (tupleDesc == null) {
-                continue;
-            }
-            for (SlotDescriptor slot : tupleDesc.getSlots()) {
-                if (slot.isMaterialized()) {
-                    slotIds.add(slot.getId());
+    private static void validateDuplicateCheckDistribution(ExecPlan execPlan, IcebergTable icebergTable,
+                                                           List<String> colNames) {
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        DataPartition partition = sinkFragment.getDataPartition();
+        if (partition.getType() == TPartitionType.UNPARTITIONED) {
+            return;
+        }
+        Preconditions.checkState(partition.getType() == TPartitionType.HASH_PARTITIONED,
+                "MERGE sink fragment must be UNPARTITIONED or HASH_PARTITIONED to keep the "
+                        + "duplicate-match check sound, got %s", partition.getType());
+
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        Set<SlotId> allowedSlots = Sets.newHashSet();
+        allowedSlots.add(extractSlotId(outputExprs.get(0), "_file"));
+        List<String> partitionColNames = icebergTable.getPartitionColumnNames();
+        for (int i = 0; i < colNames.size(); i++) {
+            for (String partCol : partitionColNames) {
+                if (colNames.get(i).equalsIgnoreCase(partCol)) {
+                    allowedSlots.add(extractSlotId(outputExprs.get(i), colNames.get(i)));
                 }
             }
         }
-        slotIds.sort(Comparator.comparingInt(SlotId::asInt));
-        return slotIds;
+
+        for (Expr partitionExpr : partition.getPartitionExprs()) {
+            SlotId slotId = extractSlotId(partitionExpr, "sink fragment partition expr");
+            Preconditions.checkState(allowedSlots.contains(slotId),
+                    "MERGE sink fragment is hash-partitioned by slot %s, which is neither _file nor a "
+                            + "target partition column (allowed slots %s); duplicate matches of one target "
+                            + "row could spread across BEs and escape the uniqueness check",
+                    slotId, allowedSlots);
+        }
     }
 
     /**

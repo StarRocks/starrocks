@@ -96,14 +96,21 @@ private:
     int32_t _exchange_hash_function_version = 0;
 };
 
-// Shuffle by physical column indexes in the input chunk.
+// Shuffle by key columns identified by SLOT ID; the columns are resolved per
+// chunk through the chunk's slot-id map, so the partitioner is insensitive to
+// the physical column order of the input chunk.
+//
+// Rows whose key contains NULL are distributed ROUND-ROBIN instead of by hash:
+// NULL hashes to a constant, which would funnel all NULL-key rows into a single
+// channel. Callers must therefore not rely on NULL-key co-location (the MERGE
+// duplicate check skips NULL keys, so this is safe for its only user).
 class ColumnHashPartitioner final : public Partitioner {
 public:
     // NOTE: must not dereference source->runtime_state() here — incr_sinker constructs
     // partitioners before checking that the runtime state is set. _hash_values is sized
     // on first use in shuffle_channel_ids.
-    ColumnHashPartitioner(LocalExchangeSourceOperatorFactory* source, std::vector<int32_t> column_indices)
-            : Partitioner(source), _column_indices(std::move(column_indices)) {}
+    ColumnHashPartitioner(LocalExchangeSourceOperatorFactory* source, std::vector<int32_t> key_slot_ids)
+            : Partitioner(source), _key_slot_ids(std::move(key_slot_ids)) {}
 
     ~ColumnHashPartitioner() override = default;
 
@@ -112,8 +119,12 @@ public:
     void set_exchange_hash_function_version(int32_t version) { _exchange_hash_function_version = version; }
 
 private:
-    std::vector<int32_t> _column_indices;
+    std::vector<int32_t> _key_slot_ids;
     std::vector<uint32_t> _hash_values;
+    // Per-row flag: 1 if any key column is NULL in that row.
+    std::vector<uint8_t> _null_key_flags;
+    // Round-robin cursor for NULL-key rows; persists across chunks for even spread.
+    uint32_t _next_null_row_channel = 0;
     std::unique_ptr<Shuffler> _shuffler;
     int32_t _exchange_hash_function_version = 0;
 };
@@ -222,11 +233,11 @@ private:
     std::vector<std::unique_ptr<ShufflePartitioner>> _partitioners;
 };
 
-// Exchange local data by hashing physical column indexes in the input chunk.
+// Exchange local data by hashing key columns identified by slot id.
 class ColumnHashPartitionExchanger final : public LocalExchanger {
 public:
     ColumnHashPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
-                                 LocalExchangeSourceOperatorFactory* source, std::vector<int32_t> column_indices);
+                                 LocalExchangeSourceOperatorFactory* source, std::vector<int32_t> key_slot_ids);
 
     ~ColumnHashPartitionExchanger() override = default;
 
@@ -235,7 +246,7 @@ public:
     void incr_sinker() override;
 
 private:
-    std::vector<int32_t> _column_indices;
+    std::vector<int32_t> _key_slot_ids;
     std::vector<std::unique_ptr<ColumnHashPartitioner>> _partitioners;
 };
 

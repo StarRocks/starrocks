@@ -1267,7 +1267,10 @@ struct TAssertNumRowsNode {
 }
 
 struct TEnforceUniqueNode {
-    1: optional list<i32> unique_key_col_indices
+    // Slot ids of the unique-key columns. The BE resolves the actual chunk
+    // columns through the chunk's slot-id map, so the FE does not need to
+    // predict the physical column order of the BE chunk.
+    1: optional list<Types.TSlotId> unique_key_slot_ids
 }
 
 struct THdfsScanNode {

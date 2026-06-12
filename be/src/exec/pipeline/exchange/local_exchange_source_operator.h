@@ -153,12 +153,12 @@ public:
 
     ChunkBufferMemoryManager* memory_manager() { return _memory_manager.get(); }
 
-    void mark_column_hash_partitioned(std::vector<int32_t> column_indices) {
+    void mark_column_hash_partitioned(std::vector<int32_t> key_slot_ids) {
         _is_column_hash_partitioned = true;
-        _column_hash_partition_indices = std::move(column_indices);
+        _column_hash_partition_slot_ids = std::move(key_slot_ids);
     }
-    bool is_column_hash_partitioned_by(const std::vector<int32_t>& column_indices) const {
-        return _is_column_hash_partitioned && _column_hash_partition_indices == column_indices;
+    bool is_column_hash_partitioned_by(const std::vector<int32_t>& key_slot_ids) const {
+        return _is_column_hash_partitioned && _column_hash_partition_slot_ids == key_slot_ids;
     }
 
     std::vector<LocalExchangeSourceOperator*>& get_sources() { return _sources; }
@@ -168,7 +168,7 @@ private:
     std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
     std::vector<LocalExchangeSourceOperator*> _sources;
     bool _is_column_hash_partitioned = false;
-    std::vector<int32_t> _column_hash_partition_indices;
+    std::vector<int32_t> _column_hash_partition_slot_ids;
 };
 
 } // namespace starrocks::pipeline

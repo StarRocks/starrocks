@@ -79,10 +79,19 @@ Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     }
 
     // Key-count validation runs once in EnforceUniqueOperatorFactory::prepare.
-    DCHECK_EQ(_unique_key_col_indices.size(), 2);
+    DCHECK_EQ(_unique_key_slot_ids.size(), 2);
 
-    auto file_path_col = chunk->get_column_by_index(_unique_key_col_indices[0]);
-    auto row_pos_col = chunk->get_column_by_index(_unique_key_col_indices[1]);
+    // Resolve the key columns by slot id. Chunk::get_column_by_slot_id is only
+    // DCHECK-guarded, so verify existence explicitly: in RELEASE builds a missing
+    // slot would silently default-construct a map entry pointing at column 0.
+    for (SlotId slot_id : _unique_key_slot_ids) {
+        if (!chunk->is_slot_exist(slot_id)) {
+            return Status::InternalError("EnforceUniqueOperator: key slot " + std::to_string(slot_id) +
+                                         " does not exist in the input chunk");
+        }
+    }
+    auto file_path_col = chunk->get_column_by_slot_id(_unique_key_slot_ids[0]);
+    auto row_pos_col = chunk->get_column_by_slot_id(_unique_key_slot_ids[1]);
 
     // Determine if columns are nullable
     const NullableColumn* file_path_nullable = nullptr;
@@ -96,24 +105,23 @@ Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
     // Get the underlying data columns (unwrap nullable/const).
     //
-    // Defense-in-depth type check: the FE resolves unique_key_col_indices by
-    // slot ID now (MergeIntoPlanner::insertEnforceUniqueNode), so this shouldn't
-    // fire in practice. But down_cast is unchecked in RELEASE builds, so without
-    // these guards a bad index — i.e. the historical Bug #1 where indices [0,1]
-    // pointed at non-binary/non-int64 data columns — would dereference garbage
-    // and SIGSEGV instead of producing a diagnosable error. Verify the unwrapped
-    // types first and fail with a clear message if they mismatch.
+    // Defense-in-depth type check: the keys are resolved by slot id, so a
+    // mismatch means the FE bound the wrong slots. down_cast is unchecked in
+    // RELEASE builds — without these guards a wrong slot pointing at a
+    // non-binary/non-int64 column would dereference garbage and SIGSEGV
+    // instead of producing a diagnosable error. Verify the unwrapped types
+    // first and fail with a clear message if they mismatch.
     const Column* file_path_inner = ColumnHelper::get_data_column(file_path_col.get());
     if (!file_path_inner->is_binary()) {
-        return Status::InternalError("EnforceUniqueOperator: expected _file key column (index " +
-                                     std::to_string(_unique_key_col_indices[0]) + ") to be a binary column, got " +
+        return Status::InternalError("EnforceUniqueOperator: expected _file key column (slot " +
+                                     std::to_string(_unique_key_slot_ids[0]) + ") to be a binary column, got " +
                                      file_path_inner->get_name());
     }
     const Column* row_pos_data_col = ColumnHelper::get_data_column(row_pos_col.get());
     const auto* row_pos_typed = dynamic_cast<const FixedLengthColumn<int64_t>*>(row_pos_data_col);
     if (row_pos_typed == nullptr) {
-        return Status::InternalError("EnforceUniqueOperator: expected _pos key column (index " +
-                                     std::to_string(_unique_key_col_indices[1]) +
+        return Status::InternalError("EnforceUniqueOperator: expected _pos key column (slot " +
+                                     std::to_string(_unique_key_slot_ids[1]) +
                                      ") to be FixedLengthColumn<int64_t>, got " + row_pos_data_col->get_name());
     }
     const auto* file_path_data = down_cast<const BinaryColumn*>(file_path_inner);
@@ -156,9 +164,9 @@ Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
 Status EnforceUniqueOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    if (_unique_key_col_indices.size() != 2) {
+    if (_unique_key_slot_ids.size() != 2) {
         return Status::InternalError("EnforceUniqueOperator expects exactly 2 key columns, got " +
-                                     std::to_string(_unique_key_col_indices.size()));
+                                     std::to_string(_unique_key_slot_ids.size()));
     }
     return Status::OK();
 }
