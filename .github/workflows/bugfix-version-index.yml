@@ -94,13 +94,18 @@ jobs:
 
   # ② a backport PR merged to a release branch → rebuild the origin's versions record (the
   # backport_set + per-line earliest_fix_tag accrete as backports land). Idempotent rebuild.
+  # Exclude branch-sync PRs (head like `branch-4.1-sync-pr-74722` → branch-4.1): a sync of a
+  # backport carries 'backport' in its title but is NOT a real (backport #N) landing — it would
+  # misattribute the origin. Do NOT exclude `mergify/` here (unlike origin-merge): mergify IS the
+  # backport mechanism (head `mergify/bp/branch-X.Y/pr-N`) — excluding it would drop real backports.
   backport-merge:
     if: >
       github.event_name == 'pull_request_target' &&
       github.event.action == 'closed' &&
       github.event.pull_request.merged == true &&
       startsWith(github.base_ref, 'branch-') &&
-      contains(github.event.pull_request.title, 'backport')
+      contains(github.event.pull_request.title, 'backport') &&
+      !contains(github.head_ref, '-sync-pr-')
     runs-on: [self-hosted, normal]
     continue-on-error: true
     env:
