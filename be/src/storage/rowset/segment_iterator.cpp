@@ -1179,6 +1179,28 @@ Status SegmentIterator::_init_ann_reader() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_vector_index() {
+    // Brute pre-narrowing. A brute-force vector read keeps the residual in pred_tree, and -- with
+    // late materialization disabled for vector reads -- the read loop would fetch EVERY scan-range
+    // row's columns (including the wide embedding column) only to drop the non-matching rows after
+    // the read. Evaluate the residual into an exact bitmap first and narrow _scan_range, so the read
+    // loop touches surviving rows only. Results are unchanged: the rows cut here are exactly the
+    // rows the read-time predicates would drop. Gated on the residual-prefilter kill-switch: with it
+    // off, brute is the escape hatch that must not depend on the bitmap machinery. Outside the
+    // TenANN guard because the brute fallback is alive in non-TenANN builds too.
+    if (_vector_index_ctx != nullptr && _vector_index_ctx->use_brute_force && !_opts.pred_tree.empty() &&
+        config::enable_vector_index_residual_prefilter && !_scan_range.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
+        ASSIGN_OR_RETURN(auto matched, _evaluate_residual_to_bitmap(range2roaring(_scan_range)));
+        const size_t prev_span = _scan_range.span_size();
+        _scan_range = roaring2range(matched);
+        _opts.stats->rows_vector_index_filtered += (prev_span - _scan_range.span_size());
+        // Every surviving row passed the WHOLE tree, so drop it: the predicate machinery downstream
+        // (_rewrite_predicates / _init_column_predicates / the read loop) runs after this point and
+        // would only re-evaluate rows that are already known to match. Predicates are owned at the
+        // reader level; this empties the per-segment view only.
+        _opts.pred_tree = PredicateTree();
+        return Status::OK();
+    }
 #ifdef WITH_TENANN
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
@@ -1198,6 +1220,10 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         ASSIGN_OR_RETURN(auto matched_tmp, _evaluate_residual_to_bitmap(range2roaring(_scan_range)));
         matched = std::move(matched_tmp);
         _scan_range = roaring2range(matched);
+        // The final scan range stays a subset of `matched` (the search/gates only intersect), so every
+        // row the read loop sees already passed the WHOLE tree -- drop it instead of re-evaluating it
+        // per batch. POST never reaches here: its read-time predicate IS its filtering mechanism.
+        _opts.pred_tree = PredicateTree();
         RETURN_IF(_scan_range.empty(), Status::OK());
         pre_narrowed = true;
     }
@@ -3458,10 +3484,13 @@ Status SegmentIterator::_init_context() {
     // append_vector_column / brute-force distance compute), and brute-force additionally appends the
     // embedding column to _schema for the raw read. Neither is a normal output column, so predicate-
     // column late materialization -- which assumes the last read-schema column is the rowid and that
-    // the output columns mirror the read columns -- mis-indexes. Disable it for vector reads; the
-    // ANN/brute result is only k rows, so eager reads cost nothing here. The refine path computes its
-    // distance in the expression layer above the scan (no post-read distance column), so it keeps late
-    // materialization.
+    // the output columns mirror the read columns -- mis-indexes. PRE and pre-narrowed brute already
+    // dropped their (fully pre-evaluated) pred_tree, so the empty-tree arm below picks the eager
+    // context for them anyway; this flag stays load-bearing for the reads that intentionally KEEP
+    // read-time predicates -- POST (the read-time residual is its filtering mechanism) and
+    // kill-switch brute (the residual is deliberately not pre-evaluated). The refine path computes
+    // its distance in the expression layer above the scan (no post-read distance column), so it
+    // keeps late materialization.
     // (The separate crash where a residual predicate's ProjectionIterator dropped the appended
     // distance column is fixed in ProjectionIterator::do_get_next.)
     const bool vector_read_active = _vector_index_ctx != nullptr &&
