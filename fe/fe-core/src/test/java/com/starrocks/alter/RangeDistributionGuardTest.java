@@ -14,10 +14,14 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -27,6 +31,7 @@ import org.junit.jupiter.api.function.Executable;
 
 import java.util.Locale;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -55,6 +60,31 @@ public class RangeDistributionGuardTest {
         return "create table " + name + " (k1 int, k2 int, v1 int)\n" +
                 "order by(k1, k2)\n" +
                 "properties('replication_num' = '1');";
+    }
+
+    // Range table whose leading sort/key column k1 is a VARCHAR, used by the
+    // VARCHAR-widen relaxation tests below.
+    private static String varcharSortKeyRangeTableDdl(String name) {
+        return "create table " + name + " (k1 varchar(20) NOT NULL, k2 int NOT NULL, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    // Asserts the ALTER is rejected by the range-distribution sort-key guard
+    // (whose DdlException message always contains "range distribution").
+    private static void assertAlterRejectedWithRangeDistribution(String alterSql) {
+        Throwable e = assertThrows(Throwable.class, () -> starRocksAssert.alterTable(alterSql));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + e.getMessage());
+    }
+
+    private static Column baseColumn(String tableName, String columnName) {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getDb("test").getTable(tableName);
+        return table.getBaseSchema().stream()
+                .filter(c -> c.getName().equalsIgnoreCase(columnName))
+                .findFirst().orElseThrow();
     }
 
     /**
@@ -224,5 +254,101 @@ public class RangeDistributionGuardTest {
                 "properties('replication_num' = '1');");
         starRocksAssert.alterTable(
                 "alter table t_guard_modok modify column v1 bigint");
+    }
+
+    @Test
+    public void testWidenVarcharSortKeyColumnAllowedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(varcharSortKeyRangeTableDdl("t_guard_widen"));
+
+        // VARCHAR length increase on a sort-key column: allowed (must not throw).
+        starRocksAssert.alterTable(
+                "alter table t_guard_widen modify column k1 varchar(40) KEY NOT NULL");
+
+        // The synchronous FSE path applies the new length in place; verify it.
+        Column k1 = baseColumn("t_guard_widen", "k1");
+        assertEquals(PrimitiveType.VARCHAR, k1.getPrimitiveType());
+        assertEquals(40, k1.getStrLen());
+    }
+
+    @Test
+    public void testShrinkVarcharSortKeyColumnRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(varcharSortKeyRangeTableDdl("t_guard_shrink"));
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_shrink modify column k1 varchar(5) KEY NOT NULL");
+    }
+
+    @Test
+    public void testNonVarcharTypeChangeSortKeyColumnRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_guard_int (k1 int NOT NULL, k2 int NOT NULL, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');");
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_int modify column k1 bigint KEY NOT NULL");
+    }
+
+    /**
+     * With FSE v2 off the widen no longer takes the synchronous in-place path; it is
+     * routed to the asynchronous fast-schema-change job instead. The widen keeps the
+     * boundary tuples byte-identical, so it is range-correct on that path too and must
+     * be allowed — it behaves exactly like a VARCHAR widen on a non-range table. The
+     * call succeeding (no DdlException) is the assertion; the async job applies the new
+     * length later, so the length is not checked here.
+     */
+    @Test
+    public void testVarcharWidenAllowedWhenFastSchemaEvolutionV2Disabled() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_guard_nov2 (k1 varchar(20) NOT NULL, k2 int NOT NULL, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1',\n" +
+                "           'cloud_native_fast_schema_evolution_v2' = 'false');");
+        starRocksAssert.alterTable(
+                "alter table t_guard_nov2 modify column k1 varchar(40) KEY NOT NULL");
+    }
+
+    @Test
+    public void testVarcharWidenOfNonSortKeyValueColumnUnaffectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_guard_val (k1 int NOT NULL, k2 int NOT NULL, v1 varchar(20))\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');");
+        // v1 is NOT in the sort key, so the guard never applied; widening it stays allowed.
+        starRocksAssert.alterTable(
+                "alter table t_guard_val modify column v1 varchar(40)");
+        assertEquals(40, baseColumn("t_guard_val", "v1").getStrLen());
+    }
+
+    @Test
+    public void testVarcharWidenWithColumnRepositionRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(varcharSortKeyRangeTableDdl("t_guard_after"));
+        // A widen that ALSO repositions the sort-key column (AFTER) reorders the
+        // sort key and would invalidate boundaries -> must stay rejected.
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_after modify column k1 varchar(40) KEY NOT NULL AFTER k2");
+    }
+
+    @Test
+    public void testVarcharWidenRejectedWhenGlobalShareDataFseDisabled() throws Exception {
+        boolean saved = Config.enable_fast_schema_evolution_in_share_data_mode;
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        try {
+            starRocksAssert.withTable(varcharSortKeyRangeTableDdl("t_guard_nogfse"));
+            assertAlterRejectedWithRangeDistribution(
+                    "alter table t_guard_nogfse modify column k1 varchar(40) KEY NOT NULL");
+        } finally {
+            Config.enable_fast_schema_evolution_in_share_data_mode = saved;
+        }
+    }
+
+    @Test
+    public void testVarcharWidenThatAlsoFlipsKeynessRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable(varcharSortKeyRangeTableDdl("t_guard_flip"));
+        // Widen k1 but DROP the KEY attribute: this is a keyness flip, not a pure
+        // widen, so the relaxation must not apply and it must stay rejected.
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_flip modify column k1 varchar(40)");
     }
 }
