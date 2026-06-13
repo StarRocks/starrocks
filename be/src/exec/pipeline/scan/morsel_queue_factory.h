@@ -19,28 +19,9 @@
 #include <vector>
 
 #include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 
 namespace starrocks::pipeline {
-
-/// MorselQueueFactory.
-class MorselQueueFactory {
-public:
-    virtual ~MorselQueueFactory() = default;
-
-    virtual MorselQueue* create(int driver_sequence) = 0;
-    virtual size_t size() const = 0;
-    virtual size_t num_original_morsels() const = 0;
-
-    virtual bool is_shared() const = 0;
-    virtual bool could_local_shuffle() const = 0;
-
-    virtual Status append_morsels(int driver_seq, Morsels&& morsels);
-    virtual StatusOr<int> next_driver_seq();
-    virtual bool enable_random_append_split_morsel() const { return false; }
-    virtual void set_has_more_scan_ranges(bool v) {}
-    virtual Status mark_split_source_morsel_finished();
-    virtual bool reach_limit() const { return false; }
-};
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
 public:
