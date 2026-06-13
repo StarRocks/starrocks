@@ -1,0 +1,273 @@
+-- name: test_ivm_with_iceberg_same_name_join
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_a_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_b_${uuid0};
+-- result:
+-- !result
+create table mv_ice_db_a_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table mv_ice_db_b_${uuid0}.tj (
+  k int,
+  w bigint,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into mv_ice_db_a_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_ice_db_b_${uuid0}.tj values (1, 100, '2023-12-01'), (2, 200, '2023-12-02');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT a.dt, a.k, a.v, b.w
+FROM mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj a
+JOIN mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj b ON a.dt = b.dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+2
+-- !result
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+-- result:
+2023-12-01	1	10	100
+2023-12-02	2	20	200
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj values (3, 30, '2023-12-03');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj values (3, 300, '2023-12-03');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+3
+-- !result
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+-- result:
+2023-12-01	1	10	100
+2023-12-02	2	20	200
+2023-12-03	3	30	300
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0} force;
+-- result:
+-- !result
+-- name: test_pct_mv_with_iceberg_same_name_join
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_a_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_b_${uuid0};
+-- result:
+-- !result
+create table mv_ice_db_a_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table mv_ice_db_b_${uuid0}.tj (
+  k int,
+  w bigint,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into mv_ice_db_a_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_ice_db_b_${uuid0}.tj values (1, 100, '2023-12-01'), (2, 200, '2023-12-02');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+AS SELECT a.dt, a.k, a.v, b.w
+FROM mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj a
+JOIN mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj b ON a.dt = b.dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+2
+-- !result
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+-- result:
+2023-12-01	1	10	100
+2023-12-02	2	20	200
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj values (3, 30, '2023-12-03');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj values (3, 300, '2023-12-03');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+3
+-- !result
+SELECT dt, k, v, w FROM test_mv1 ORDER BY dt, k;
+-- result:
+2023-12-01	1	10	100
+2023-12-02	2	20	200
+2023-12-03	3	30	300
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0}.tj force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0}.tj force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_a_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_b_${uuid0} force;
+-- result:
+-- !result
+-- name: test_mv_with_iceberg_self_join
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table mv_ice_db_${uuid0}.tj (
+  k int,
+  v bigint,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into mv_ice_db_${uuid0}.tj values (1, 10, '2023-12-01'), (2, 20, '2023-12-02');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+AS SELECT a.dt, a.k, a.v, b.k AS k2
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj a
+JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj b ON a.dt = b.dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+2
+-- !result
+SELECT dt, k, v, k2 FROM test_mv1 ORDER BY dt, k;
+-- result:
+2023-12-01	1	10	1
+2023-12-02	2	20	2
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj values (3, 30, '2023-12-03');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+3
+-- !result
+SELECT dt, k, v, k2 FROM test_mv1 ORDER BY dt, k;
+-- result:
+2023-12-01	1	10	1
+2023-12-02	2	20	2
+2023-12-03	3	30	3
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.tj force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result

@@ -68,6 +68,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -598,8 +599,16 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     private InsertStmt buildInsertPlan(InsertStmt insertStmt) throws AnalysisException {
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Multimap<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
-        Map<String, TvrVersionRange> baseTableNameToTvrVersionRangeMap = snapshotBaseTables.values()
-                .stream()
+        bindBaseTableTvrVersionRanges(snapshotBaseTables.values(), tableRelations);
+        return insertStmt;
+    }
+
+    @VisibleForTesting
+    static void bindBaseTableTvrVersionRanges(Collection<BaseTableSnapshotInfo> snapshotInfos,
+                                              Multimap<String, TableRelation> tableRelations) {
+        // Key by table identifier, not name: a refresh query may join two distinct base tables that
+        // share an unqualified name across databases, which would collide under a name key.
+        Map<String, TvrVersionRange> tvrRangeByTableIdentifier = snapshotInfos.stream()
                 .map(snapshotInfo -> (TvrTableSnapshotInfo) snapshotInfo)
                 .map(snapshotInfo -> {
                     BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
@@ -608,20 +617,19 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                         throw new SemanticException("Base table %s.%s does not have a valid tvr version range",
                                 baseTableInfo.getDbName(), baseTableInfo.getTableName());
                     }
-                    return Maps.immutableEntry(baseTableInfo.getTableName(), tvrVersionRange);
+                    return Maps.immutableEntry(baseTableInfo.getTableIdentifier(), tvrVersionRange);
                 })
-                .collect(Collectors.toMap(entry -> entry.getKey(), Map.Entry::getValue));
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         for (Map.Entry<String, TableRelation> entry : tableRelations.entries()) {
             TableRelation tableRelation = entry.getValue();
             Table table = tableRelation.getTable();
-            if (!baseTableNameToTvrVersionRangeMap.containsKey(table.getName())) {
+            TvrVersionRange tvrVersionRange = tvrRangeByTableIdentifier.get(table.getTableIdentifier());
+            if (tvrVersionRange == null) {
                 throw new SemanticException("Base table %s.%s is not found in the changed version ranges",
                         tableRelation.getName().getDb(), tableRelation.getName().getTbl());
             }
-            TvrVersionRange tvrVersionRange = baseTableNameToTvrVersionRangeMap.get(table.getName());
             tableRelation.setTvrVersionRange(tvrVersionRange);
         }
-        return insertStmt;
     }
 
     @Override
