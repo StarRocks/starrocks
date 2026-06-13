@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "common/status.h"
+#include "compute_env/spill/serde.h"
 #include "compute_env/workgroup/scan_task.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 
@@ -25,6 +26,9 @@ namespace starrocks::spill {
 
 struct SpillIOTaskContext {
     bool use_local_io_executor = true;
+    // the serialize buffer survives yields and re-submissions of the task,
+    // so it is allocated once per IO task instead of once per resumption
+    SerdeContext serde_ctx;
 };
 using SpillIOTaskContextPtr = std::shared_ptr<SpillIOTaskContext>;
 

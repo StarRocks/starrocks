@@ -258,7 +258,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                     return;
                 }
                 Status res;
-                SerdeContext serd_ctx;
                 if (!yield_ctx.task_context_data.has_value()) {
                     yield_ctx.task_context_data = std::make_shared<SpillIOTaskContext>();
                 }
@@ -270,7 +269,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
 
                 YieldableRestoreTask task(_stream);
-                res = task.do_read(yield_ctx, serd_ctx);
+                res = task.do_read(yield_ctx, ctx->serde_ctx);
 
                 FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
                 // Simulate a non-EOF error coming out of the restore IO task

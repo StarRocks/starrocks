@@ -90,7 +90,7 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     shuffle_timer = ADD_CHILD_TIMER(profile, "ShuffleTime", parent);
     split_partition_timer = ADD_CHILD_TIMER(profile, "SplitPartitionTime", parent);
     restore_from_mem_table_rows = ADD_CHILD_COUNTER(profile, "RowsRestoreFromMemTable", TUnit::UNIT, parent);
-    restore_from_mem_table_bytes = ADD_CHILD_COUNTER(profile, "BytesRestoreFromMemTable", TUnit::UNIT, parent);
+    restore_from_mem_table_bytes = ADD_CHILD_COUNTER(profile, "BytesRestoreFromMemTable", TUnit::BYTES, parent);
     partition_writer_peak_memory_usage =
             profile->AddHighWaterMarkCounter("PartitionWriterPeakMemoryBytes", TUnit::BYTES,
                                              RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);

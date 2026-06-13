@@ -48,6 +48,7 @@ bool UnorderedMemTable::is_empty() {
 Status UnorderedMemTable::append(ChunkPtr chunk) {
     DCHECK(!_is_done);
     DCHECK(chunk != nullptr);
+    _consumed_by_exclusive_read = false;
     auto chunk_mem_usage = chunk->memory_usage();
     _tracker->consume(chunk_mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk_mem_usage);
@@ -68,6 +69,7 @@ Status UnorderedMemTable::append(ChunkPtr chunk) {
 
 Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK(!_is_done);
+    _consumed_by_exclusive_read = false;
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
         _chunks.emplace_back(src.clone_empty());
         _tracker->consume(_chunks.back()->memory_usage());
@@ -90,7 +92,6 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spi
     SCOPED_TIMER(_spiller->metrics().mem_table_finalize_timer);
     auto& serde = _spiller->serde();
     {
-        SerdeContext serde_ctx;
         auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
         bool need_aligned = _runtime_state->spill_enable_direct_io();
         while (_processed_index < _chunks.size()) {
@@ -102,7 +103,7 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spi
             }
             SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
             auto chunk = _chunks[_processed_index++];
-            RETURN_IF_ERROR(serde->serialize(_runtime_state, serde_ctx, chunk, output, need_aligned));
+            RETURN_IF_ERROR(serde->serialize(_runtime_state, io_ctx->serde_ctx, chunk, output, need_aligned));
             RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
         }
     }
@@ -114,13 +115,28 @@ void UnorderedMemTable::reset() {
     SpillableMemTable::reset();
     _chunks.clear();
     _processed_index = 0;
+    _consumed_by_exclusive_read = false;
 }
 
-StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(bool shared) {
-    if (shared) {
+StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(MemTableReadMode mode) {
+    if (mode == MemTableReadMode::SHARED) {
+        // the mem table keeps its chunks, the stream serves copies so that it
+        // can be consumed by multiple readers
         return SpillInputStream::as_stream(_chunks, _spiller);
     } else {
-        return SpillInputStream::as_stream(_chunks, _spiller);
+        // exclusive read: hand the chunks over to the stream so they can be
+        // returned without copying and freed incrementally as they are
+        // consumed.
+        // The tracker consumption is deliberately kept: the chunks are still
+        // alive inside the stream, and releasing the accounting here would
+        // understate spill memory while they are being consumed. It is
+        // released when the mem table is reset or destroyed — the same
+        // timeline as when the mem table itself kept the chunks until then.
+        auto stream = SpillInputStream::as_stream(std::move(_chunks), _spiller);
+        _chunks.clear();
+        _processed_index = 0;
+        _consumed_by_exclusive_read = true;
+        return stream;
     }
 }
 
@@ -170,7 +186,6 @@ Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spill
     // seriealize data, store result into _block
     auto& serde = _spiller->serde();
 
-    SerdeContext serde_ctx;
     auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     while (!_chunk_slice.empty()) {
         if (!(output->is_remote() ^ io_ctx->use_local_io_executor)) {
@@ -183,7 +198,7 @@ Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spill
         ChunkPtr chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
         bool need_aligned = _runtime_state->spill_enable_direct_io();
 
-        RETURN_IF_ERROR(serde->serialize(_runtime_state, serde_ctx, chunk, output, need_aligned));
+        RETURN_IF_ERROR(serde->serialize(_runtime_state, io_ctx->serde_ctx, chunk, output, need_aligned));
         RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
     }
     TRACE_SPILL_LOG << fmt::format("finalize spillable ordered memtable done, rows[{}]", num_rows());

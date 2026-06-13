@@ -179,27 +179,27 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     auto chunk = _chunk_builder();
     auto& columns = chunk->columns();
 
-    auto& serialize_buffer = ctx.serialize_buffer;
-    serialize_buffer.resize(attachment_size);
-
-    auto buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
-    const auto* end = buf + serialize_buffer.size();
-    {
-        auto st = reader->read_fully(buf, attachment_size);
-        RETURN_IF(st.is_end_of_file(), Status::InternalError("not found enough data in block"));
-        RETURN_IF_ERROR(st);
+    size_t encode_level_sizes = columns.size() * sizeof(uint32_t);
+    if (attachment_size < encode_level_sizes) {
+        return Status::InternalError(fmt::format("corrupted spill data, attachment size {} is less than {}",
+                                                 attachment_size, encode_level_sizes));
     }
 
-    const uint32_t* encode_levels = nullptr;
-    const uint8_t* read_cursor = buf;
-    encode_levels = reinterpret_cast<uint32_t*>(serialize_buffer.data());
+    // the view points either into the reader's internal buffer or into
+    // ctx.serialize_buffer; it stays valid until the next read on this reader
+    auto view_st = reader->read_view(&ctx.serialize_buffer, attachment_size);
+    RETURN_IF(view_st.status().is_end_of_file(), Status::InternalError("not found enough data in block"));
+    RETURN_IF_ERROR(view_st.status());
 
-    read_cursor += columns.size() * sizeof(uint32_t);
+    const auto* encode_level_cursor = reinterpret_cast<const uint8_t*>(view_st.value().data);
+    const auto* read_cursor = encode_level_cursor + encode_level_sizes;
+    const auto* end = encode_level_cursor + attachment_size;
+
     SCOPED_TIMER(_parent->metrics().deserialize_timer);
     for (size_t i = 0; i < columns.size(); i++) {
-        ASSIGN_OR_RETURN(read_cursor,
-                         serde::ColumnArraySerde::deserialize(read_cursor, end, columns[i]->as_mutable_raw_ptr(), false,
-                                                              encode_levels[i]));
+        uint32_t encode_level = UNALIGNED_LOAD32(encode_level_cursor + i * sizeof(uint32_t));
+        ASSIGN_OR_RETURN(read_cursor, serde::ColumnArraySerde::deserialize(
+                                              read_cursor, end, columns[i]->as_mutable_raw_ptr(), false, encode_level));
     }
 
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()
