@@ -1006,7 +1006,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
             }
         } else if (!kafkaPartitionOffsets.isEmpty()) {
-            // check if partition is validate; an ALTER that touches no partition offsets has
+            // check if partition is validated; an ALTER that touches no partition offsets has
             // nothing to validate against the broker, so it must not require the warehouse
             try {
                 // validation-only: acquire a local compute resource and route the broker RPC
