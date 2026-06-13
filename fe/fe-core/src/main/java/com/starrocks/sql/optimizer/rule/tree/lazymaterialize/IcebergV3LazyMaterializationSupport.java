@@ -40,7 +40,7 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
     public boolean supports(PhysicalScanOperator scanOperator) {
         IcebergTable scanTable = (IcebergTable) scanOperator.getTable();
 
-        if (!scanTable.isParquetFormat() || scanTable.getFormatVersion() < 3) {
+        if (!scanTable.isParquetFormat() || scanTable.getFormatVersion() < 2) {
             return false;
         }
 
