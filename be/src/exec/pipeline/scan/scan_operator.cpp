@@ -459,7 +459,19 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
 
-            auto chunk_source = _chunk_sources[chunk_source_index];
+            // Load the slot under shared_lock(_task_mutex) to pair with the
+            // unique_lock-protected reset in _close_chunk_source_unlocked();
+            // a bare read would be a data race on the shared_ptr slot
+            // (refcount is atomic, the pointer slot is not). The local copy
+            // then keeps the ChunkSource alive for the whole IO task.
+            ChunkSourcePtr chunk_source;
+            {
+                std::shared_lock guard(_task_mutex);
+                chunk_source = _chunk_sources[chunk_source_index];
+            }
+            if (chunk_source == nullptr) {
+                return;
+            }
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
 
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
