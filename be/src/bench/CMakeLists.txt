@@ -47,3 +47,5 @@ ADD_BE_BENCH(${SRC_DIR}/bench/parquet_simd_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/storage_simd_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/execution_simd_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/column_ops_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/arrow_scanner_bench)
+

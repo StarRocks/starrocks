@@ -1,0 +1,409 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "exec/file_scanner/arrow_scanner.h"
+
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
+
+#include "base/simd/simd.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/cast_expr.h"
+#include "exprs/column_ref.h"
+#include "fs/fs_broker.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
+#include "runtime/rejected_record_writer.h"
+#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
+
+namespace starrocks {
+
+static const int MAX_ERROR_MESSAGE_COUNTER = 100;
+
+namespace {
+
+class StarRocksArrowInputStream : public arrow::io::InputStream {
+public:
+    StarRocksArrowInputStream(RuntimeState* state, std::shared_ptr<SequentialFile> file)
+            : _state(state), _file(std::move(file)), _pos(0), _closed(false) {}
+
+    ~StarRocksArrowInputStream() override = default;
+
+    arrow::Result<int64_t> Read(int64_t nbytes, void* out) override {
+        if (_closed) {
+            return arrow::Status::Invalid("stream is closed");
+        }
+        auto res = _file->read(out, nbytes);
+        if (!res.ok()) {
+            return arrow::Status::IOError(res.status().to_string());
+        }
+        int64_t bytes_read = res.value();
+        _pos += bytes_read;
+        if (_state != nullptr) {
+            _state->update_num_bytes_scan_from_source(bytes_read);
+        }
+        return bytes_read;
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
+        ARROW_ASSIGN_OR_RAISE(auto buf, arrow::AllocateResizableBuffer(nbytes));
+        ARROW_ASSIGN_OR_RAISE(auto bytes_read, Read(nbytes, buf->mutable_data()));
+        if (bytes_read < nbytes) {
+            ARROW_RETURN_NOT_OK(buf->Resize(bytes_read));
+        }
+        return std::shared_ptr<arrow::Buffer>(std::move(buf));
+    }
+
+    arrow::Result<int64_t> Tell() const override {
+        if (_closed) {
+            return arrow::Status::Invalid("stream is closed");
+        }
+        return _pos;
+    }
+
+    arrow::Status Close() override {
+        _closed = true;
+        return arrow::Status::OK();
+    }
+
+    bool closed() const override { return _closed; }
+
+private:
+    RuntimeState* _state;
+    std::shared_ptr<SequentialFile> _file;
+    int64_t _pos;
+    bool _closed;
+};
+
+} // namespace
+
+ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
+                           ScannerCounter* counter, bool schema_only)
+        : FileScanner(state, profile, scan_range.params, counter, schema_only),
+          _scan_range(scan_range),
+          _curr_file_reader(nullptr),
+          _max_chunk_size(state->chunk_size() ? state->chunk_size() : 4096) {
+    _file_format_str = "arrow";
+    _chunk_filter.reserve(_max_chunk_size);
+    _conv_ctx.timezone = state->timezone();
+    _conv_ctx.report_error_message = [state, ctx = &_conv_ctx](const std::string& reason, const std::string& raw_data,
+                                                               int64_t row_offset_in_array) {
+        if (ctx->error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
+        ctx->error_message_counter += 1;
+        const std::string& col_name = ctx->current_column_name;
+        std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
+                                                    col_name.empty() ? "null" : col_name, raw_data);
+        RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+
+        auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+        if (writer != nullptr) {
+            const std::string key = col_name.empty() ? std::string("_raw") : col_name;
+
+            rapidjson::Document src_doc;
+            src_doc.SetObject();
+            auto& alloc = src_doc.GetAllocator();
+            src_doc.AddMember("format", rapidjson::Value("arrow", 5, alloc), alloc);
+            src_doc.AddMember("file",
+                              rapidjson::Value(ctx->current_file.c_str(),
+                                               static_cast<rapidjson::SizeType>(ctx->current_file.size()), alloc),
+                              alloc);
+            if (ctx->current_batch_first_row_in_file >= 0 && row_offset_in_array >= 0) {
+                int64_t row_in_file = ctx->current_batch_first_row_in_file + row_offset_in_array;
+                src_doc.AddMember("row_in_file", rapidjson::Value(row_in_file), alloc);
+            }
+            if (ctx->file_size >= 0) {
+                src_doc.AddMember("file_size", rapidjson::Value(ctx->file_size), alloc);
+            }
+            if (ctx->file_mtime_ms >= 0) {
+                src_doc.AddMember("file_mtime_ms", rapidjson::Value(ctx->file_mtime_ms), alloc);
+            }
+            rapidjson::StringBuffer src_buf;
+            rapidjson::Writer<rapidjson::StringBuffer> src_writer(src_buf);
+            src_doc.Accept(src_writer);
+
+            writer->append_from_slices({Slice{raw_data.data(), raw_data.size()}}, {key},
+                                       /*error_code=*/"TYPE_MISMATCH", reason, col_name,
+                                       std::string(src_buf.GetString(), src_buf.GetSize()));
+        }
+    };
+}
+
+ArrowScanner::~ArrowScanner() = default;
+
+Status ArrowScanner::open() {
+    RETURN_IF_ERROR(FileScanner::open());
+    if (_scan_range.ranges.empty()) {
+        return Status::OK();
+    }
+    auto range = _scan_range.ranges[0];
+    _num_of_columns_from_file = range.__isset.num_of_columns_from_file
+                                        ? implicit_cast<int>(range.num_of_columns_from_file)
+                                        : implicit_cast<int>(_src_slot_descriptors.size());
+
+    for (auto i = 0; i < _num_of_columns_from_file; ++i) {
+        _conv_funcs.emplace_back(std::make_unique<ConvertFuncTree>());
+    }
+    _cast_exprs.resize(_num_of_columns_from_file, nullptr);
+
+    if (range.__isset.num_of_columns_from_file) {
+        int nums = range.columns_from_path.size();
+        for (const auto& rng : _scan_range.ranges) {
+            if (nums != rng.columns_from_path.size()) {
+                return Status::InternalError("Different range different columns.");
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ArrowScanner::open_next_reader() {
+    if (_next_file >= _scan_range.ranges.size()) {
+        _scanner_eof = true;
+        return Status::EndOfFile("no more files to read");
+    }
+    const auto& range_desc = _scan_range.ranges[_next_file++];
+
+    if (range_desc.start_offset == 0) {
+        ++_counter->num_files_read;
+    }
+
+    std::shared_ptr<SequentialFile> file;
+    TNetworkAddress address;
+    if (!_scan_range.broker_addresses.empty()) {
+        address = _scan_range.broker_addresses[0];
+    }
+    RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &file));
+
+    auto arrow_stream = std::make_shared<StarRocksArrowInputStream>(_state, std::move(file));
+    auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(arrow_stream);
+    if (!reader_res.ok()) {
+        return Status::InternalError("open RecordBatchStreamReader failed, reason: " + reader_res.status().ToString());
+    }
+
+    _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
+    _conv_ctx.current_file = range_desc.path;
+    _conv_ctx.current_batch_first_row_in_file = -1;
+    _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
+    _conv_ctx.file_size = range_desc.size;
+    _last_file_scan_rows = 0;
+    return Status::OK();
+}
+
+Status ArrowScanner::next_batch() {
+    SCOPED_RAW_TIMER(&_counter->read_batch_ns);
+    _batch_start_idx = 0;
+    if (_curr_file_reader == nullptr) {
+        auto status = open_next_reader();
+        if (!status.ok()) {
+            if (status.is_end_of_file()) {
+                _scanner_eof = true;
+            }
+            return status;
+        }
+    }
+
+    arrow::Status status = _curr_file_reader->ReadNext(&_batch);
+    if (!status.ok()) {
+        return Status::InternalError("ReadNext batch failed, reason: " + status.ToString());
+    }
+
+    if (_batch == nullptr) {
+        _curr_file_reader.reset();
+        return Status::EndOfFile("reach end of current file");
+    }
+
+    _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
+    _last_file_scan_rows += _batch->num_rows();
+
+    return Status::OK();
+}
+
+Status ArrowScanner::initialize_src_chunk(ChunkPtr* chunk) {
+    SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
+    _pool.clear();
+    (*chunk) = std::make_shared<Chunk>();
+    _chunk_filter.clear();
+    for (auto i = 0; i < _num_of_columns_from_file; ++i) {
+        SlotDescriptor* slot_desc = _src_slot_descriptors[i];
+        if (slot_desc == nullptr) {
+            continue;
+        }
+        MutableColumnPtr column;
+        auto array_ptr = _batch->GetColumnByName(std::string(slot_desc->col_name()));
+        if (array_ptr == nullptr) {
+            _cast_exprs[i] = _pool.add(new ColumnRef(slot_desc));
+            column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        } else {
+            RETURN_IF_ERROR(new_column(array_ptr->type().get(), slot_desc, &column, _conv_funcs[i].get(),
+                                       &_cast_exprs[i], _pool, _strict_mode));
+        }
+        column->reserve(_max_chunk_size);
+        (*chunk)->append_column(std::move(column), slot_desc->id());
+    }
+    return Status::OK();
+}
+
+Status ArrowScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
+    SCOPED_RAW_TIMER(&_counter->fill_ns);
+    size_t num_elements =
+            std::min<size_t>((_max_chunk_size - _chunk_start_idx), (_batch->num_rows() - _batch_start_idx));
+    _chunk_filter.resize(_chunk_filter.size() + num_elements, 1);
+    for (auto i = 0; i < _num_of_columns_from_file; ++i) {
+        SlotDescriptor* slot_desc = _src_slot_descriptors[i];
+        if (slot_desc == nullptr) {
+            continue;
+        }
+        _conv_ctx.set_current_column(slot_desc->col_name(), slot_desc->type());
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
+        auto array_ptr = _batch->GetColumnByName(std::string(slot_desc->col_name()));
+        if (array_ptr == nullptr) {
+            (void)column->append_nulls(num_elements);
+        } else {
+            auto st = convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
+                                                    _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
+            if (!st.ok()) {
+                return st.clone_and_prepend(strings::Substitute("file=$0 column=$1 batch_row_range=[$2,$3)",
+                                                                _conv_ctx.current_file, slot_desc->col_name(),
+                                                                _batch_start_idx, _batch_start_idx + num_elements));
+            }
+        }
+    }
+
+    _chunk_start_idx += num_elements;
+    _batch_start_idx += num_elements;
+    return Status::OK();
+}
+
+Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk) {
+    auto num_rows = (*chunk)->filter(_chunk_filter);
+    _counter->num_rows_filtered += _chunk_start_idx - num_rows;
+    ChunkPtr cast_chunk = std::make_shared<Chunk>();
+    {
+        SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
+        for (auto i = 0; i < _num_of_columns_from_file; ++i) {
+            SlotDescriptor* slot_desc = _src_slot_descriptors[i];
+            if (slot_desc == nullptr) {
+                continue;
+            }
+
+            ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, (*chunk).get()));
+            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
+            cast_chunk->append_column(column, slot_desc->id());
+        }
+        auto range = _scan_range.ranges.at(_next_file - 1);
+        if (range.__isset.num_of_columns_from_file) {
+            fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
+                                   cast_chunk->num_rows());
+        }
+    }
+    if (VLOG_ROW_IS_ON) {
+        VLOG_ROW << "before finalize chunk: " << (*chunk)->debug_columns();
+    }
+    ASSIGN_OR_RETURN(auto dest_chunk, materialize(*chunk, cast_chunk));
+    if (VLOG_ROW_IS_ON) {
+        VLOG_ROW << "after finalize chunk: " << dest_chunk->debug_columns();
+    }
+    *chunk = dest_chunk;
+    _chunk_start_idx = 0;
+    return Status::OK();
+}
+
+StatusOr<ChunkPtr> ArrowScanner::get_next() {
+    SCOPED_RAW_TIMER(&_counter->total_ns);
+    ChunkPtr chunk;
+    if (batch_is_exhausted()) {
+        while (true) {
+            Status status = next_batch();
+            if (_scanner_eof) {
+                return status;
+            }
+            if (status.ok()) {
+                break;
+            }
+            if (status.is_end_of_file()) {
+                _curr_file_reader.reset();
+                continue;
+            }
+            return status;
+        }
+    }
+    RETURN_IF_ERROR(initialize_src_chunk(&chunk));
+    while (!_scanner_eof) {
+        RETURN_IF_ERROR(append_batch_to_src_chunk(&chunk));
+        if (chunk_is_full()) {
+            break;
+        }
+        auto status = next_batch();
+        if (status.ok()) {
+            continue;
+        }
+        if (!status.is_end_of_file()) {
+            return status;
+        }
+
+        _curr_file_reader.reset();
+        if (chunk->num_rows() > 0) {
+            break;
+        }
+        RETURN_IF_ERROR(next_batch());
+        RETURN_IF_ERROR(initialize_src_chunk(&chunk));
+    }
+    RETURN_IF_ERROR(finalize_src_chunk(&chunk));
+    return std::move(chunk);
+}
+
+Status ArrowScanner::get_schema(std::vector<SlotDescriptor>* schema) {
+    return Status::NotSupported("Arrow schema inference not supported yet");
+}
+
+void ArrowScanner::close() {
+    FileScanner::close();
+    _curr_file_reader.reset();
+    _pool.clear();
+}
+
+Status ArrowScanner::new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc,
+                                MutableColumnPtr* column, ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool,
+                                bool strict_mode) {
+    auto& type_desc = slot_desc->type();
+    TypeDescriptor raw_type_desc;
+    bool need_cast = false;
+    RETURN_IF_ERROR(build_arrow_column_convert_plan(arrow_type, &type_desc, slot_desc->is_nullable(), &raw_type_desc,
+                                                    conv_func, need_cast, strict_mode));
+    *column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, slot_desc->is_nullable());
+    if (!need_cast) {
+        *expr = pool.add(new ColumnRef(slot_desc));
+    } else {
+        auto slot = pool.add(new ColumnRef(slot_desc));
+        *expr = VectorizedCastExprFactory::from_type(raw_type_desc, slot_desc->type(), slot, &pool);
+        if ((*expr) == nullptr) {
+            return illegal_converting_error(arrow_type->name(), type_desc.debug_string());
+        }
+    }
+    return Status::OK();
+}
+
+bool ArrowScanner::chunk_is_full() {
+    return _chunk_start_idx >= _max_chunk_size;
+}
+
+bool ArrowScanner::batch_is_exhausted() {
+    return _scanner_eof || _batch == nullptr || _batch_start_idx >= _batch->num_rows();
+}
+
+} // namespace starrocks
