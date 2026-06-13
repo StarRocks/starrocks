@@ -157,6 +157,13 @@ public:
 
     std::vector<ExprContext*>& get_heavy_expr_ctxs() { return _heavy_expr_ctxs; }
 
+    // Set once at fragment setup (FragmentExecutor tree walk): true when a row-reducing operator
+    // (e.g. a SELECT for a residual predicate that could not be pushed into this scan) sits ABOVE
+    // this scan but below the TopN limit. An ANN top-k scan reads this so the vector filter resolver
+    // routes to the exact brute-force path -- a segment-level k-limit would otherwise under-return.
+    void set_filtered_above_iterator(bool v) { _filtered_above_iterator = v; }
+    bool is_filtered_above_iterator() const { return _filtered_above_iterator; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -172,6 +179,7 @@ protected:
     RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
+    bool _filtered_above_iterator = false;
     int64_t _mem_limit = 0;
     int32_t _io_tasks_per_scan_operator = 0;
 

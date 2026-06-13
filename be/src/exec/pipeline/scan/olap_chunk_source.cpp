@@ -351,6 +351,14 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
 
+    // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
+    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
+    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // operator placed ABOVE this scan in the execution tree (e.g. a SELECT for a residual the optimizer
+    // could not push down, such as cat+tag>50) -- detected by FragmentExecutor's tree walk. See design §7.
+    _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
+                                           _scan_node->is_filtered_above_iterator();
+
     // Range
     for (const auto& key_range : key_ranges) {
         if (key_range->begin_scan_range.size() == 1 && key_range->begin_scan_range.get_value(0) == NEGATIVE_INFINITY) {
