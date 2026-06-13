@@ -79,6 +79,9 @@ void AggregateFuncResolver::register_approx() {
                                                            AggregateFactory::MakeHllUnionAggregateFunction());
     add_aggregate_mapping<TYPE_HLL, TYPE_BIGINT, HyperLogLog>("hll_union_agg", false,
                                                               AggregateFactory::MakeHllUnionCountAggregateFunction());
+
+    add_aggregate_mapping<TYPE_VARBINARY, TYPE_VARBINARY, ThetaSketchState>(
+            "ds_theta_combine", false, AggregateFactory::MakeThetaSketchCombineAggregateFunction());
 }
 
 } // namespace starrocks
