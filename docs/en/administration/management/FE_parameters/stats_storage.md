@@ -200,6 +200,15 @@ This topic introduces the following types of FE configurations:
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.
 - Introduced in: v2.5.7
 
+### `enable_random_distribution_for_agg_table`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow `DISTRIBUTED BY RANDOM` on aggregate-key tables at CREATE TABLE and ALTER TABLE time. The default `false` matches the behavior introduced by the analyzer check that rejects random distribution on aggregate tables, because non-aggregation queries over such tables may return inconsistent results when tablets are split or merged. Enable this only if you accept that trade-off — for example, on tables that are created and altered dynamically by a UI layer where end-users cannot reliably choose hash columns. Tables declaring `REPLACE` / `REPLACE_IF_NOT_NULL` aggregate columns remain rejected even when this flag is enabled, because random distribution would break `REPLACE` semantics.
+- Introduced in: -
+
 ### `enable_experimental_rowstore`
 
 - Default: false

@@ -734,8 +734,11 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Currently not support default distribution in " + keysDesc.getKeysType());
                 }
             }
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS
+                    && !(Config.enable_random_distribution_for_agg_table
+                            && keysDesc.getKeysType() == KeysType.AGG_KEYS && !stmt.isHasReplace())) {
                 throw new SemanticException(keysDesc.getKeysType().toSql()
+                        + (stmt.isHasReplace() ? " with replace " : "")
                         + " cannot use random distribution", distributionDesc.getPos());
             }
             if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()

@@ -4250,6 +4250,19 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
 
+    /**
+     * If true, {@code DISTRIBUTED BY RANDOM} is allowed on aggregate-key tables,
+     * both at CREATE TABLE and ALTER TABLE time. The default {@code false} matches
+     * the behavior introduced in #60702, which rejects random distribution on
+     * aggregate tables because non-aggregation queries may return inconsistent
+     * results when tablets are split/merged. Enable this only if your workload
+     * tolerates that trade-off and you rely on random distribution for
+     * dynamically-managed aggregate tables (e.g. tables created by a UI layer
+     * where end-users cannot reliably choose hash columns).
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_random_distribution_for_agg_table = false;
+
     @ConfField(mutable = true)
     public static int max_column_number_per_table = 10000;
 

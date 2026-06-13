@@ -39,6 +39,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -693,8 +694,11 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // analyze distribution
         DistributionDesc distributionDesc = clause.getDistributionDesc();
         if (distributionDesc != null) {
-            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS) {
-                throw new SemanticException(targetKeysType.toSql() + " must use hash distribution", distributionDesc.getPos());
+            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS
+                    && !(Config.enable_random_distribution_for_agg_table
+                            && targetKeysType == KeysType.AGG_KEYS && !hasReplace)) {
+                throw new SemanticException(targetKeysType.toSql() + (hasReplace ? " with replace " : "")
+                        + " must use hash distribution", distributionDesc.getPos());
             }
             DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
             clause.setDistributionDesc(distributionDesc);

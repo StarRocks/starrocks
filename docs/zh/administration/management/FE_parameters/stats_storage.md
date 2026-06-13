@@ -200,6 +200,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 如果此参数设置为 `FALSE`，您在创建表或添加分区时需要手动指定 bucket 数量。如果您在向表添加新分区时不指定 bucket 数量，新分区将继承表创建时设置的 bucket 数量。但是，您也可以手动为新分区指定 bucket 数量。
 - 引入版本: v2.5.7
 
+### `enable_random_distribution_for_agg_table`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否允许在聚合模型（Aggregate Key）表上使用 `DISTRIBUTED BY RANDOM`（在 `CREATE TABLE` 和 `ALTER TABLE` 语句中）。默认值 `false` 与分析器当前行为一致，禁止对聚合表使用随机分布，因为当 tablet 发生 split/merge 时，非聚合查询可能返回不一致的结果。仅当您能接受这种一致性折衷时才启用该参数，例如通过 UI 动态创建和修改聚合表、终端用户无法可靠选择哈希列的场景。即使启用了该参数，声明了 `REPLACE` / `REPLACE_IF_NOT_NULL` 聚合列的表仍会被拒绝，因为随机分布会破坏 `REPLACE` 语义。
+- 引入版本: -
+
 ### `enable_experimental_rowstore`
 
 - 默认值: false
