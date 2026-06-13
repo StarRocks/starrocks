@@ -191,8 +191,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：否
 - 引入版本：v4.2.0
-- 描述：是否对大部分外部 BE HTTP 接口启用 Basic Auth。凭证通过 Thrift `checkAuth` RPC 转发到 FE Leader 校验，用户/密码以 FE 端的认证体系（含 LDAP / security integration）为准。以下接口始终豁免：
-  - 公开探针 / 可观测性：`/api/health`、`/metrics`、`/metrics/memory`。
+- 描述：是否对大部分外部 BE HTTP 接口启用 Basic Auth。凭证通过 Thrift `checkAuth` RPC 转发到 FE Leader 校验，用户/密码以 FE 端的认证体系（含 LDAP / security integration）为准。公开探针 / 可观测性端点 `/api/health`、`/metrics` 和 `/metrics/memory` 为仅认证（AuthN-only）：当 `enable_http_auth=true` 时它们要求提供有效的 Basic 凭证，但**不**要求任何 RBAC 权限，因此任意已认证用户均可调用；当 `enable_http_auth=false` 时它们保持匿名访问。以下接口无论该开关如何设置都始终完全豁免：
   - Token 鉴权的内部传输（FE/BE 用于 tablet clone 和 load 错误文件拉取）：`/api/_tablet/_download`、`/api/_download_load`。这些接口仍由各自的 token 检查保护；开启 `enable_http_auth=true` **不**能弥补 `enable_token_check=false` 带来的安全损失。
   - Stream Load 及 transaction 接口，由 handler 内基于 load label + 表级授权识别身份：`/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
 
