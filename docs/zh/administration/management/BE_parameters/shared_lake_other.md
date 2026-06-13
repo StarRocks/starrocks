@@ -171,6 +171,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
+### lake_vacuum_min_batch_delete_size
+
+- 默认值：200
+- 类型：Int64
+- 单位：文件数
+- 是否动态：是
+- 描述：存算分离集群下，Vacuum 单次 `DeleteObjects` 请求批量合并的过期文件数量。批量越大，单次调用摊销的 HTTP/认证/签名等固定开销越多，且对对象存储 prefix 级别的请求频次压力越小；代价是单次调用 latency 升高、出现瞬时错误需要 retry 时回放成本增大。AWS S3 用户可以进一步将该值调到协议上限 `1000`，因为 AWS S3 单 `DeleteObjects` 服务端耗时几乎与 batch size 无关。
+
 ### loop_count_wait_fragments_finish
 
 - 默认值：2
