@@ -18,6 +18,7 @@
 #include <sstream>
 
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
@@ -96,7 +97,7 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
                 // Without this, a spiller restore failure leaves the merger waiting
                 // on a leaf provider that will never become ready, and the query hangs.
                 if (!status.ok() && !status.is_end_of_file()) {
-                    state->fragment_ctx()->cancel(status);
+                    cancel_fragment_context(state->fragment_ctx(), status);
                     *eos = true;
                     return false;
                 }
