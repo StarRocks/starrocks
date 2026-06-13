@@ -74,9 +74,15 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
         auto& current = path_exprs[i];
 
         if (i == 0) {
-            if (current.size() == 0 || current[0] != '$') {
+            if (current.empty()) {
                 parsed_paths->emplace_back("", -1, true);
                 continue;
+            }
+            if (current[0] != '$') {
+                // Simple syntax (no leading "$"): insert the implicit root segment, then fall
+                // through to parse this token as the first real segment. Every consumer iterates
+                // from segment 1, so dropping the token here would silently resolve "a.b" as "$.b".
+                parsed_paths->emplace_back("", -1, true);
             }
         }
 

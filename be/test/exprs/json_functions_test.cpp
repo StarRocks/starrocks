@@ -1362,6 +1362,28 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"key1": null})", "$.key1[1].key4", &output));
 }
 
+TEST_F(JsonFunctionsTest, parse_json_paths_simple_syntax_keeps_first_segment) {
+    // "order.id" must mean "$.order.id": the implicit-root rewrite must not drop the first token,
+    // or the path silently resolves to "$.id" and extracts the wrong field.
+    std::vector<SimpleJsonPath> paths;
+    ASSERT_TRUE(JsonFunctions::parse_json_paths("order.id", &paths).ok());
+    ASSERT_EQ(3u, paths.size());
+    EXPECT_EQ("order", paths[1].key);
+    EXPECT_EQ("id", paths[2].key);
+
+    std::string output;
+    EXPECT_OK(test_extract_from_object(R"({"order": {"id": 42}, "id": 7})", "order.id", &output));
+    EXPECT_STREQ(output.data(), "42");
+
+    // A single-token simple path used to parse into the root placeholder alone and fail as an
+    // "empty json path"; it must select the field.
+    EXPECT_OK(test_extract_from_object(R"({"k1": 1, "k2": 2})", "k2", &output));
+    EXPECT_STREQ(output.data(), "2");
+
+    EXPECT_OK(test_extract_from_object(R"({"arr": [1, 2]})", "arr[1]", &output));
+    EXPECT_STREQ(output.data(), "2");
+}
+
 class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
 
 TEST_P(JsonLengthTestFixture, json_length_test) {
