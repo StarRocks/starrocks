@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
+keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'rewrite equality delete files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
 description: "Iceberg catalog procedures in StarRocks for snapshot management, branch management, data maintenance, and metadata operations."
 ---
 
@@ -144,6 +144,30 @@ The following example performs manual Compaction on specific partitions in the I
 
 ```SQL
 ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
+```
+
+### Rewrite equality delete files
+
+Converts the table's equality-delete files into position-delete files. Equality deletes (typically produced by upstream CDC or Flink writers) must be applied with a join on every read, which gets more expensive as they accumulate. Converting them to position deletes removes that per-query cost. The procedure removes the equality-delete files and adds equivalent position-delete files in a single atomic commit, so the visible rows stay exactly the same.
+
+:::note
+This procedure rewrites the equality deletes of the current snapshot for the whole table. It takes no parameters and does not support a `WHERE` clause.
+:::
+
+#### `rewrite_equality_delete_files` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rewrite_equality_delete_files()
+```
+
+#### Example
+
+Convert the equality-delete files of the Iceberg table `order` into position-delete files:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rewrite_equality_delete_files();
 ```
 
 ## Metadata management

@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.sql.ast.ConvertEqualityDeletesStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -44,6 +45,9 @@ public enum DmlType {
         } else if (stmt instanceof UpdateStmt) {
             return UPDATE;
         } else if (stmt instanceof DeleteStmt) {
+            return DELETE;
+        } else if (stmt instanceof ConvertEqualityDeletesStmt) {
+            // equality-delete -> position-delete conversion removes rows, so it behaves as a DELETE.
             return DELETE;
         } else if (stmt instanceof StreamLoadStmt) {
             return STREAM_LOAD;

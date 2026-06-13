@@ -3129,6 +3129,159 @@ public class IcebergMetadataTest extends TableTestBase {
                 "row-delta commit must advance the snapshot id past the plan-time base");
     }
 
+    // ---- equality-delete -> position-delete conversion commit (commitConvertEqualityDeleteOperation) ----
+    // These exercise the real finishSink convert branch on a local TestTable: the custom
+    // ConvertEqualityDeleteRewriteFiles must drop the converted equality-delete files, add the
+    // materialized position deletes, and -- inside the commit retry loop -- fail if a referenced data
+    // file vanished since the planning snapshot.
+
+    private IcebergMetadata newConvertMetadata(org.apache.iceberg.Table nativeTbl) {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), nativeTbl, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        return metadata;
+    }
+
+    private Set<DeleteFile> collectDeletes(org.apache.iceberg.Table tbl) {
+        Set<DeleteFile> deletes = new HashSet<>();
+        for (FileScanTask t : Lists.newArrayList(tbl.newScan().planFiles())) {
+            deletes.addAll(t.deletes());
+        }
+        return deletes;
+    }
+
+    private Set<String> dataFilePaths(org.apache.iceberg.Table tbl) {
+        Set<String> paths = new HashSet<>();
+        for (FileScanTask t : Lists.newArrayList(tbl.newScan().planFiles())) {
+            paths.add(t.file().path().toString());
+        }
+        return paths;
+    }
+
+    private DeleteFile onlyEqualityDelete(org.apache.iceberg.Table tbl) {
+        return collectDeletes(tbl).stream()
+                .filter(d -> d.content() == FileContent.EQUALITY_DELETES)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("expected an equality-delete file"));
+    }
+
+    // Position-delete file the conversion "produces", referencing the live data file FILE_A.
+    private TIcebergDataFile buildConvertPositionDeleteFile() {
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/convert-pos-delete.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(1);
+        deleteFile.setFile_size_in_bytes(128);
+        deleteFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        deleteFile.setReferenced_data_file(FILE_A.path().toString());
+        deleteFile.setColumn_stats(emptyColumnStats());
+        return deleteFile;
+    }
+
+    @Test
+    public void testConvertRemovesEqualityDeleteAndAddsPositionDelete() throws Exception {
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newRowDelta().addDeletes(FILE_A2_DELETES).commit();
+        long baseSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+        DeleteFile eqDelete = onlyEqualityDelete(mockedNativeTableA);
+
+        IcebergMetadata metadata = newConvertMetadata(mockedNativeTableA);
+
+        TSinkCommitInfo posDeleteCommit = new TSinkCommitInfo();
+        posDeleteCommit.setIceberg_data_file(buildConvertPositionDeleteFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setConvertEqualityDeletes(true);
+        extra.setBaseSnapshotId(baseSnapshotId);
+        extra.addEqualityDeleteFilesToRemove(Set.of(eqDelete));
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(posDeleteCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Assertions.assertNotEquals(baseSnapshotId, mockedNativeTableA.currentSnapshot().snapshotId(),
+                "convert must advance the snapshot id");
+        Set<DeleteFile> deletes = collectDeletes(mockedNativeTableA);
+        Assertions.assertTrue(deletes.stream().noneMatch(d -> d.content() == FileContent.EQUALITY_DELETES),
+                "converted equality-delete files must be removed");
+        Assertions.assertTrue(deletes.stream().anyMatch(d -> d.content() == FileContent.POSITION_DELETES),
+                "position-delete files must be added");
+        Assertions.assertTrue(dataFilePaths(mockedNativeTableA).contains(FILE_A.path().toString()),
+                "referenced data file must remain in the table");
+        // The added position deletes inherit the highest sequence number among the removed equality deletes.
+        long maxRemovedSeq = eqDelete.dataSequenceNumber();
+        Assertions.assertTrue(deletes.stream()
+                        .filter(d -> d.content() == FileContent.POSITION_DELETES)
+                        .allMatch(d -> d.dataSequenceNumber() == maxRemovedSeq),
+                "position deletes must carry the removed equality delete's sequence number");
+    }
+
+    @Test
+    public void testConvertFailsWhenReferencedDataFileConcurrentlyRemoved() throws Exception {
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newRowDelta().addDeletes(FILE_A2_DELETES).commit();
+        long baseSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+        DeleteFile eqDelete = onlyEqualityDelete(mockedNativeTableA);
+
+        // Concurrent op removes the data file our position deletes reference, after planning.
+        // Use DeleteFiles, not RewriteFiles: RewriteFiles refuses to replace a data file that still
+        // has a live equality delete, so it cannot stand in for the "file vanished" race here.
+        mockedNativeTableA.newDelete().deleteFile(FILE_A).commit();
+
+        IcebergMetadata metadata = newConvertMetadata(mockedNativeTableA);
+
+        TSinkCommitInfo posDeleteCommit = new TSinkCommitInfo();
+        posDeleteCommit.setIceberg_data_file(buildConvertPositionDeleteFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setConvertEqualityDeletes(true);
+        extra.setBaseSnapshotId(baseSnapshotId);
+        extra.addEqualityDeleteFilesToRemove(Set.of(eqDelete));
+
+        // The custom RewriteFiles validates referenced-data-file liveness inside the commit; the lost
+        // FILE_A must fail the commit (surfaced as StarRocksConnectorException by commitWithCleanup).
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(posDeleteCommit), null, extra));
+    }
+
+    @Test
+    public void testConvertRemovalOnlyCommitsWithEmptyCommitInfos() throws Exception {
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newRowDelta().addDeletes(FILE_A2_DELETES).commit();
+        long baseSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+        DeleteFile eqDelete = onlyEqualityDelete(mockedNativeTableA);
+
+        IcebergMetadata metadata = newConvertMetadata(mockedNativeTableA);
+
+        // No commitInfos (the equality delete matched no live rows), but a non-empty removal set: the
+        // dead-weight equality delete must still be cleaned up instead of short-circuiting on empty.
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setConvertEqualityDeletes(true);
+        extra.setBaseSnapshotId(baseSnapshotId);
+        extra.addEqualityDeleteFilesToRemove(Set.of(eqDelete));
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(), null, extra);
+
+        mockedNativeTableA.refresh();
+        Assertions.assertNotEquals(baseSnapshotId, mockedNativeTableA.currentSnapshot().snapshotId(),
+                "removal-only convert must still commit");
+        Set<DeleteFile> deletes = collectDeletes(mockedNativeTableA);
+        Assertions.assertTrue(deletes.stream().noneMatch(d -> d.content() == FileContent.EQUALITY_DELETES),
+                "the dead-weight equality delete must be removed");
+        Assertions.assertTrue(deletes.stream().noneMatch(d -> d.content() == FileContent.POSITION_DELETES),
+                "removal-only must not add position deletes");
+    }
+
     @Test
     public void testCommitRowDeltaOperationSerializableIsolation() throws Exception {
         // SERIALIZABLE turns on validateNoConflictingDataFiles in addition to the
