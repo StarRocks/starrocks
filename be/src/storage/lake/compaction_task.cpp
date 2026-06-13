@@ -105,7 +105,12 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
     if (rowset_meta.overlapped()) {
         return false;
     }
-    if (max_sparse_chain_depth_for_rowset(rowset_meta, metadata->dcg_meta()) < SDCG_COMPACTION_TRIGGER_DEPTH) {
+    const int64_t eval_depth = max_sparse_chain_depth_for_rowset(rowset_meta, metadata->dcg_meta());
+    LOG(INFO) << fmt::format(
+            "sdcg overlay-merge eval: tablet {} rowset {} segs {} dcgs {} depth {} (trigger {}) compact_version {}",
+            _tablet.id(), rowset_meta.id(), rowset_meta.segment_metas_size(), metadata->dcg_meta().dcgs().size(),
+            eval_depth, SDCG_COMPACTION_TRIGGER_DEPTH, metadata->version());
+    if (eval_depth < SDCG_COMPACTION_TRIGGER_DEPTH) {
         return false;
     }
 
@@ -135,6 +140,8 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
         const uint32_t rssid = get_rssid(rowset_meta, pos);
         auto dcg_it = metadata->dcg_meta().dcgs().find(rssid);
         if (dcg_it == metadata->dcg_meta().dcgs().end()) {
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} pos {} rssid {} no-dcg", _tablet.id(),
+                                     pos, rssid);
             continue;
         }
         const DeltaColumnGroupVerPB& ver = dcg_it->second;
@@ -142,6 +149,8 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
         // v1 EXCLUSIONS: anything we cannot losslessly fold here is left unmerged (always correct -- the
         // reader keeps walking the original chain). Inline patches and encrypted DCGs are out of scope.
         if (ver.inline_patches_size() > 0 || ver.encryption_metas_size() > 0) {
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} inline={} enc={}", _tablet.id(),
+                                     rssid, ver.inline_patches_size(), ver.encryption_metas_size());
             continue;
         }
         bool skip_segment = false;
@@ -170,14 +179,20 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
             ++sparse_layers;
         }
         if (skip_segment) {
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} unfoldable-layer (dense/packed/raced)",
+                                     _tablet.id(), rssid);
             continue;
         }
         // Need at least 2 layers to collapse; a single sparse layer is already minimal.
         if (sparse_layers < 2) {
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} sparse_layers={}", _tablet.id(),
+                                     rssid, sparse_layers);
             continue;
         }
 
         if (pos >= static_cast<int>(base_segments.size()) || base_segments[pos] == nullptr) {
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} pos {} base_segments={} null-or-oob",
+                                     _tablet.id(), pos, base_segments.size());
             continue;
         }
         SegmentPtr base_segment = base_segments[pos];
@@ -373,6 +388,8 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
 
     // ---- 6. Nothing merged => fall through to normal compaction. Else emit the txn log. ----
     if (op->entries_size() == 0) {
+        LOG(INFO) << fmt::format("sdcg overlay-merge: tablet {} produced no entries -> normal compaction",
+                                 _tablet.id());
         return false;
     }
     if (_context->skip_write_txnlog) {
