@@ -216,7 +216,7 @@ private:
 
     int64_t _scan_limit = 0;
     // _wg_mem_tracker is used to grab mem_tracker in workgroup to prevent it from
-    // being released prematurely in FragmentContext::cancel, otherwise accessing
+    // being released prematurely by cancel_fragment_context, otherwise accessing
     // workgroup's mem_tracker in QueryContext's dtor shall cause segmentation fault.
     std::shared_ptr<MemTracker> _wg_mem_tracker = nullptr;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
