@@ -292,7 +292,79 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
     @Override
     public String dataSourcePropertiesToSql() {
-        return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("(\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.PULSAR_SERVICE_URL_PROPERTY).append("\"=\"");
+        sb.append(serviceUrl).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.PULSAR_TOPIC_PROPERTY).append("\"=\"");
+        sb.append(topic).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.PULSAR_SUBSCRIPTION_PROPERTY).append("\"=\"");
+        sb.append(subscription).append("\",\n");
+
+        if (!customPulsarPartitions.isEmpty()) {
+            List<String> sortedPartitions = Lists.newArrayList(customPulsarPartitions);
+            Collections.sort(sortedPartitions);
+            sb.append("\"").append(CreateRoutineLoadStmt.PULSAR_PARTITIONS_PROPERTY).append("\"=\"");
+            sb.append(Joiner.on(",").join(sortedPartitions)).append("\",\n");
+
+            // Only emit pulsar_initial_positions when every partition still has
+            // an explicit initial position. After PulsarProgress.update() commits
+            // a partition it removes that partition's initial position, so
+            // getInitialPosition() returns -1. Fabricating a fallback value
+            // (e.g. POSITION_EARLIEST) would change replay semantics and could
+            // reload old data; omitting the property entirely is safer because
+            // the Pulsar subscription cursor governs the actual resume offset.
+            boolean allHavePosition = true;
+            List<String> initialPositionStrs = new ArrayList<>();
+            for (String partition : sortedPartitions) {
+                Long pos = ((PulsarProgress) progress).getInitialPosition(partition);
+                if (pos == -1L) {
+                    allHavePosition = false;
+                    break;
+                } else if (pos == POSITION_EARLIEST_VAL) {
+                    initialPositionStrs.add(POSITION_EARLIEST);
+                } else if (pos == POSITION_LATEST_VAL) {
+                    initialPositionStrs.add(POSITION_LATEST);
+                } else {
+                    initialPositionStrs.add(Long.toString(pos));
+                }
+            }
+            if (allHavePosition && !initialPositionStrs.isEmpty()) {
+                sb.append("\"").append(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY).append("\"=\"");
+                sb.append(Joiner.on(",").join(initialPositionStrs)).append("\",\n");
+            }
+        }
+        // NOTE: When customPulsarPartitions is empty the job was created without
+        // explicit pulsar_partitions and auto-discovers partitions from the broker.
+        // We intentionally omit pulsar_partitions in the SHOW CREATE output so that
+        // a replayed CREATE ROUTINE LOAD statement keeps the auto-discovery behavior;
+        // emitting currentPulsarPartitions here would pin the recreated job to a
+        // fixed partition set and silently stop consuming newly added partitions.
+
+        // custom properties
+        for (Map.Entry<String, String> entry : customProperties.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            // mask sensitive properties
+            if (key.contains("password") || key.contains("secret") || key.contains("token")) {
+                value = "******";
+            }
+            // Escape embedded double-quotes so property values containing
+            // JSON (e.g. OAuth authParams) produce parsable DDL.
+            String escapedValue = value.replace("\\", "\\\\").replace("\"", "\\\"");
+            sb.append("\"").append("property.").append(key).append("\"=\"");
+            sb.append(escapedValue).append("\",\n");
+        }
+
+        if (sb.length() >= 2) {
+            sb.delete(sb.length() - 2, sb.length());
+            sb.append("\n");
+        }
+        sb.append(")");
+        return sb.toString();
     }
 
     @Override
