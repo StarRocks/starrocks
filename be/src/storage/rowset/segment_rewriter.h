@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,6 +20,19 @@ class TabletSchema;
 
 class Column;
 
+// Directs how the segment rewrite produces vector indexes for the dest segment. Shared-data
+// callers fill the location-provider-resolved .vi paths (keyed on the dest segment name) plus the
+// schema's index_build_mode/threshold; the rewrite then mirrors the normal lake writer: sync
+// indexes are built inline at the reader-visible path, async builds are deferred to the
+// FE-scheduled VectorIndexBuildTask, and the actually-produced/scheduled index ids are recorded
+// on the dest FileInfo. Shared-nothing callers leave the defaults (empty paths, sync, threshold
+// 0): the SegmentWriter then uses its IndexDescriptor fallback paths and no ids are recorded.
+struct RewriteVectorIndexOptions {
+    std::map<int64_t, std::string> file_paths;
+    bool defer_build = false;
+    uint32_t build_threshold = 0;
+};
+
 class SegmentRewriter {
 public:
     SegmentRewriter();
@@ -31,7 +46,8 @@ public:
                                          const std::shared_ptr<const TabletSchema>& tschema,
                                          std::vector<uint32_t>& column_ids, MutableColumns& columns,
                                          uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
-                                         SegmentFileMark segment_file_mark = {});
+                                         SegmentFileMark segment_file_mark = {},
+                                         RewriteVectorIndexOptions vector_index_opts = {});
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
@@ -41,7 +57,7 @@ public:
             const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
-            const starrocks::lake::Tablet* tablet);
+            const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {});
 };
 
 } // namespace starrocks
