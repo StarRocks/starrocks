@@ -371,6 +371,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。自 v3.4.0 起，该参数默认值由 `70` 变更为 `80`。该参数自 v4.0 起由 `datacache_disk_safe_level` 更名为 `disk_safe_level`。
 - 引入版本：v3.3.0
 
+### connector_sink_skew_rebalance_min_data_processed
+
+- 默认值：209715200
+- 类型：Int64
+- 单位：字节
+- 是否动态：是
+- 描述：外表写入倾斜分区 rebalancer 的全局触发阈值。距上次 rebalance pass 累积字节达到该值才会执行下一次 pass，防止每个 chunk 都跑算法的额外开销。跨过该阈值仅触发一次 rebalance 检查，是否对某个分区进行 spread 仍由 `connector_sink_skew_rebalance_min_partition_data_processed` 决定。默认 200 MB。仅在 FE 计划下发 `CONNECTOR_SINK_SKEW_HASH_PARTITIONED` 分区类型时生效。
+- 引入版本：v4.1
+
+### connector_sink_skew_rebalance_min_partition_data_processed
+
+- 默认值：125829120
+- 类型：Int64
+- 单位：字节
+- 是否动态：是
+- 描述：外表写入倾斜分区 rebalancer 的单分区门槛。某分区的预估数据量（字节）必须达到该值乘以当前已分配给该分区的 task 数，才可以被 spread 到另一个 task。这一机制使 spread 节奏渐进：热分区每次 pass 最多新增一个 task，且仅在现有 task 已经饱和时才会扩。默认 120 MB。
+- 引入版本：v4.1
+
 ### enable_connector_sink_spill
 
 - 默认值：true

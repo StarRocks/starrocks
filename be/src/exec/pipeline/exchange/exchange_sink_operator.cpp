@@ -26,6 +26,7 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/config_compression_fwd.h"
+#include "common/config_connector_sink_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/system/backend_options.h"
@@ -396,6 +397,13 @@ ExchangeSinkOperator::ExchangeSinkOperator(
     _shuffler = std::make_unique<Shuffler>(get_factory()->runtime_state()->func_version() <= 3,
                                            !_is_channel_bound_driver_sequence, _part_type, _channels.size(),
                                            _num_shuffles_per_channel, !bucket_properties.empty());
+
+    if (_part_type == TPartitionType::CONNECTOR_SINK_SKEW_HASH_PARTITIONED) {
+        _scale_writer_shuffler = std::make_unique<ScaleWriterShuffler>(
+                static_cast<int32_t>(_channels.size()),
+                config::connector_sink_skew_rebalance_min_partition_data_processed,
+                config::connector_sink_skew_rebalance_min_data_processed);
+    }
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
@@ -448,12 +456,21 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
     _unique_metrics->add_info_string("ChannelNum", std::to_string(_channels.size()));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+        _part_type == TPartitionType::CONNECTOR_SINK_SKEW_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
         _unique_metrics->add_info_string("ShuffleNumPerChannel", std::to_string(_num_shuffles_per_channel));
         _unique_metrics->add_info_string("TotalShuffleNum", std::to_string(_num_shuffles));
         _unique_metrics->add_info_string("PipelineLevelShuffle", _is_pipeline_level_shuffle ? "Yes" : "No");
-        _unique_metrics->add_info_string("HashFunction", _exchange_hash_function_version == 1 ? "xxh3" : "fnv");
+        const char* hash_fn = "fnv";
+        if (_part_type == TPartitionType::HASH_PARTITIONED) {
+            hash_fn = _exchange_hash_function_version == 1 ? "xxh3" : "fnv";
+        } else if (_part_type == TPartitionType::CONNECTOR_SINK_SKEW_HASH_PARTITIONED) {
+            hash_fn = "crc32";
+        } else {
+            hash_fn = _bucket_properties.empty() ? "crc32" : "murmur";
+        }
+        _unique_metrics->add_info_string("HashFunction", hash_fn);
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
@@ -474,6 +491,14 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
     _shuffle_chunk_append_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkAppendCounter", TUnit::UNIT);
     _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
+    if (_scale_writer_shuffler != nullptr) {
+        _skew_rebalance_pass_count = ADD_COUNTER(_unique_metrics, "SkewRebalancePassCount", TUnit::UNIT);
+        _skew_rebalance_spread_events = ADD_COUNTER(_unique_metrics, "SkewRebalanceSpreadEvents", TUnit::UNIT);
+        _skew_rebalance_max_assigned_tasks = ADD_COUNTER(_unique_metrics, "SkewRebalanceMaxAssignedTasks", TUnit::UNIT);
+        _skew_rebalance_spread_partition_count =
+                ADD_COUNTER(_unique_metrics, "SkewRebalanceSpreadPartitionCount", TUnit::UNIT);
+        _skew_rebalance_data_processed = ADD_COUNTER(_unique_metrics, "SkewRebalanceDataProcessed", TUnit::BYTES);
+    }
     _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
             "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
             RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
@@ -589,7 +614,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+               _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+               _part_type == TPartitionType::CONNECTOR_SINK_SKEW_HASH_PARTITIONED) {
         // hash-partition batch's rows across channels
         {
             SCOPED_TIMER(_shuffle_hash_timer);
@@ -613,6 +639,14 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
                         column->fnv_hash(&_hash_values[0], 0, num_rows);
                     }
                 }
+            } else if (_part_type == TPartitionType::CONNECTOR_SINK_SKEW_HASH_PARTITIONED) {
+                // Match the Crc32 hash used by Trino's ScaleWriterPartitioner
+                // (Crc32HashPartitioner). The hash result feeds ScaleWriterShuffler
+                // which reduces modulo partition_count internally.
+                _hash_values.assign(num_rows, 0);
+                for (const ColumnPtr& column : _partitions_columns) {
+                    column->crc32_hash(&_hash_values[0], 0, num_rows);
+                }
             } else if (_bucket_properties.empty()) {
                 // The data distribution was calculated using CRC32_HASH,
                 // and bucket shuffle need to use the same hash function when sending data
@@ -626,7 +660,15 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
             // Compute row indexes for each channel's each shuffle
             _channel_row_idx_start_points.assign(_num_shuffles + 1, 0);
-            _shuffler->exchange_shuffle(_shuffle_channel_ids, _hash_values, _bucket_ids, num_rows);
+            if (_scale_writer_shuffler != nullptr) {
+                // Use send_chunk bytes (after _output_columns projection), not chunk bytes —
+                // the latter overestimates payload, triggers spread too early, and inflates
+                // writer fanout.
+                _scale_writer_shuffler->exchange_shuffle(_shuffle_channel_ids, _hash_values, num_rows,
+                                                         static_cast<int64_t>(send_chunk->bytes_usage()));
+            } else {
+                _shuffler->exchange_shuffle(_shuffle_channel_ids, _hash_values, _bucket_ids, num_rows);
+            }
 
             for (size_t i = 0; i < num_rows; ++i) {
                 _channel_row_idx_start_points[_shuffle_channel_ids[i]]++;
@@ -716,6 +758,14 @@ void ExchangeSinkOperator::close(RuntimeState* state) {
     }
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
         state->query_ctx()->incr_transmitted_bytes(_buffer->get_sent_bytes());
+    }
+    if (_scale_writer_shuffler != nullptr && _skew_rebalance_pass_count != nullptr) {
+        const auto& r = _scale_writer_shuffler->rebalancer();
+        COUNTER_SET(_skew_rebalance_pass_count, r.rebalance_pass_count());
+        COUNTER_SET(_skew_rebalance_spread_events, r.spread_events_count());
+        COUNTER_SET(_skew_rebalance_max_assigned_tasks, static_cast<int64_t>(r.max_assigned_tasks()));
+        COUNTER_SET(_skew_rebalance_spread_partition_count, static_cast<int64_t>(r.spread_partition_count()));
+        COUNTER_SET(_skew_rebalance_data_processed, r.total_data_processed());
     }
     Operator::close(state);
 }
@@ -875,7 +925,8 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+        _part_type == TPartitionType::CONNECTOR_SINK_SKEW_HASH_PARTITIONED) {
         RETURN_IF_ERROR(ExprExecutor::prepare(_partition_expr_ctxs, state));
         RETURN_IF_ERROR(ExprExecutor::open(_partition_expr_ctxs, state));
     }

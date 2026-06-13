@@ -264,12 +264,12 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | ChannelNum | チャネル数。通常、チャネル数は受信者数と同じです。 |
 | DestFragments | 宛先FragmentInstanceIDのリスト。 |
 | DestID | 宛先ノードID。 |
-| PartType | データ分散モード。UNPARTITIONED、RANDOM、HASH_PARTITIONED、BUCKET_SHUFFLE_HASH_PARTITIONEDが含まれます。 |
+| PartType | データ分散モード。UNPARTITIONED、RANDOM、HASH_PARTITIONED、BUCKET_SHUFFLE_HASH_PARTITIONED、CONNECTOR_SINK_SKEW_HASH_PARTITIONEDが含まれます。 |
 | SerializeChunkTime | チャンクのシリアライズにかかった時間。 |
 | SerializedBytes | シリアライズされたデータのサイズ。 |
-| ShuffleChunkAppendCounter | PartTypeがHASH_PARTITIONEDまたはBUCKET_SHUFFLE_HASH_PARTITIONEDの場合のチャンクアペンド操作の回数。 |
-| ShuffleChunkAppendTime | PartTypeがHASH_PARTITIONEDまたはBUCKET_SHUFFLE_HASH_PARTITIONEDの場合のチャンクアペンド操作にかかった時間。 |
-| ShuffleHashTime | PartTypeがHASH_PARTITIONEDまたはBUCKET_SHUFFLE_HASH_PARTITIONEDの場合のハッシュ計算にかかった時間。 |
+| ShuffleChunkAppendCounter | PartTypeがHASH_PARTITIONED、BUCKET_SHUFFLE_HASH_PARTITIONEDまたはCONNECTOR_SINK_SKEW_HASH_PARTITIONEDの場合のチャンクアペンド操作の回数。 |
+| ShuffleChunkAppendTime | PartTypeがHASH_PARTITIONED、BUCKET_SHUFFLE_HASH_PARTITIONEDまたはCONNECTOR_SINK_SKEW_HASH_PARTITIONEDの場合のチャンクアペンド操作にかかった時間。 |
+| ShuffleHashTime | PartTypeがHASH_PARTITIONED、BUCKET_SHUFFLE_HASH_PARTITIONEDまたはCONNECTOR_SINK_SKEW_HASH_PARTITIONEDの場合のハッシュ計算にかかった時間。 |
 | RequestSent | 送信されたデータパケット数。 |
 | RequestUnsent | 未送信のデータパケット数。ショートサーキットロジックがある場合にゼロ以外になります。それ以外はゼロです。 |
 | BytesSent | 送信されたデータのサイズ。 |
@@ -285,6 +285,11 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | OverallTime | 転送プロセス全体の合計時間。つまり、最初のデータパケットの送信から最後のデータパケットの正常受信確認までの時間。 |
 | RpcAvgTime | RPCの平均時間。 |
 | RpcCount | RPCの総数。 |
+| SkewRebalancePassCount | スキューパーティション rebalancer が実際に実行した rebalance pass の回数。グローバル閾値 `connector_sink_skew_rebalance_min_data_processed` を超え、実 pass が走った場合にのみ加算され、ゲートを通過しない軽量チェック自体はカウントされません。PartType が CONNECTOR_SINK_SKEW_HASH_PARTITIONED の場合のみ出力。 |
+| SkewRebalanceSpreadEvents | rebalancer がホットパーティションの task 割り当てを実際に拡張（task を 1 つ追加）した回数。均一ワークロードでは 0 のままとなる。PartType が CONNECTOR_SINK_SKEW_HASH_PARTITIONED の場合のみ出力。 |
+| SkewRebalanceMaxAssignedTasks | 単一の logical partition にこれまでに割り当てられた writer task の最大数。spread が発生していない場合は 1。PartType が CONNECTOR_SINK_SKEW_HASH_PARTITIONED の場合のみ出力。 |
+| SkewRebalanceSpreadPartitionCount | これまでに少なくとも 1 回拡張された（task が追加された）logical partition の数。PartType が CONNECTOR_SINK_SKEW_HASH_PARTITIONED の場合のみ出力。 |
+| SkewRebalanceDataProcessed | rebalancer がこの operator インスタンスで観測した累計バイト数（単位: バイト）。rebalance 判断を駆動した実データ量の確認に使用。PartType が CONNECTOR_SINK_SKEW_HASH_PARTITIONED の場合のみ出力。 |
 
 #### エクスチェンジソースオペレーター
 

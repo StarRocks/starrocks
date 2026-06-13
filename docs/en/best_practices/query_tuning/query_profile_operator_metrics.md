@@ -276,12 +276,12 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | ChannelNum | Number of channels. Generally, the number of channels is equal to the number of receivers. |
 | DestFragments | List of destination FragmentInstance IDs. |
 | DestID | Destination node ID. |
-| PartType | Data distribution mode, including: UNPARTITIONED, RANDOM, HASH_PARTITIONED, and BUCKET_SHUFFLE_HASH_PARTITIONED. |
+| PartType | Data distribution mode, including: UNPARTITIONED, RANDOM, HASH_PARTITIONED, BUCKET_SHUFFLE_HASH_PARTITIONED, and CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
 | SerializeChunkTime | Time taken to serialize chunks. |
 | SerializedBytes | Size of serialized data. |
-| ShuffleChunkAppendCounter | Number of Chunk Append operations when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED. |
-| ShuffleChunkAppendTime | Time taken for Chunk Append operations when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED. |
-| ShuffleHashTime | Time taken to calculate hash when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED. |
+| ShuffleChunkAppendCounter | Number of Chunk Append operations when PartType is HASH_PARTITIONED, BUCKET_SHUFFLE_HASH_PARTITIONED, or CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
+| ShuffleChunkAppendTime | Time taken for Chunk Append operations when PartType is HASH_PARTITIONED, BUCKET_SHUFFLE_HASH_PARTITIONED, or CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
+| ShuffleHashTime | Time taken to calculate hash when PartType is HASH_PARTITIONED, BUCKET_SHUFFLE_HASH_PARTITIONED, or CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
 | RequestSent | Number of data packets sent. |
 | RequestUnsent | Number of unsent data packets. This metric is non-zero when there is a short-circuit logic; otherwise, it is zero. |
 | BytesSent | Size of sent data. |
@@ -297,6 +297,11 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | OverallTime | Total time for the entire transmission process, i.e., from sending the first data packet to confirming the correct reception of the last data packet. |
 | RpcAvgTime | Average time for RPC. |
 | RpcCount | Total number of RPCs. |
+| SkewRebalancePassCount | Number of rebalance passes the skew partition rebalancer actually executed. Incremented only after the global `connector_sink_skew_rebalance_min_data_processed` threshold is crossed and a real pass runs; the per-chunk gate check itself is not counted. Only emitted when PartType is CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
+| SkewRebalanceSpreadEvents | Number of times the rebalancer actually expanded a hot partition's task assignment by one. Stays 0 for uniform workloads. Only emitted when PartType is CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
+| SkewRebalanceMaxAssignedTasks | Maximum number of writer tasks ever assigned to a single logical partition. Equals 1 if no spread has happened. Only emitted when PartType is CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
+| SkewRebalanceSpreadPartitionCount | Number of distinct logical partitions whose assignment was expanded by at least one extra task. Only emitted when PartType is CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
+| SkewRebalanceDataProcessed | Total bytes the rebalancer has observed on this operator instance (in bytes). Useful for sanity-checking how much data drove the rebalance decisions. Only emitted when PartType is CONNECTOR_SINK_SKEW_HASH_PARTITIONED. |
 
 #### Exchange Source Operator
 
