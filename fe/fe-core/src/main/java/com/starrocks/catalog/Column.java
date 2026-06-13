@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
@@ -80,13 +82,13 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import static com.starrocks.catalog.DefaultExpr.isEmptyDefaultTimeFunction;
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultTimeFunction;
 import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
 
@@ -753,7 +755,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public DefaultValueType getDefaultValueType() {
         if (defaultExpr != null) {
-            if (isEmptyDefaultTimeFunction(defaultExpr)) {
+            if (defaultExpr.isTimeFunction()) {
+                // now() / now(N) / current_timestamp(N): stable within a statement, materializes to
+                // a single value, so it is a const default - the precision argument does not make it volatile.
                 return DefaultValueType.CONST;
             } else if (defaultExpr.hasExprObject()) {
                 return DefaultValueType.CONST;
@@ -766,6 +770,25 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return DefaultValueType.NULL;
     }
 
+    // Build the per-row materialization expr for a volatile (VARY) default such as uuid() / uuid_numeric().
+    // A schema-change rewrite evaluates it once per pre-existing row so each row gets its own value, exactly
+    // as an INSERT evaluates the default per row. CONST defaults (literals, now(N)) freeze a single value and
+    // never reach here. Returns null when there is no obtainable default expr.
+    public TExpr getMaterializedDefaultThriftExpr() {
+        if (defaultExpr == null) {
+            return null;
+        }
+        Expr expr = defaultExpr.obtainExpr();
+        if (expr == null) {
+            return null;
+        }
+        if (!expr.getType().equals(getType())) {
+            expr = new CastExpr(getType(), expr);
+        }
+        expr = ExprUtils.analyzeAndCastFold(expr);
+        return ExprToThrift.treeToThrift(expr);
+    }
+
     // if the column have a default value or default expr can be calculated like now(). return calculated value
     // else for a batch of every row different like uuid(). return null
     // consistency requires ConnectContext.get() != null to assurance
@@ -773,15 +796,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValue() {
         if (defaultExpr != null) {
-            if (isEmptyDefaultTimeFunction(defaultExpr)) {
-                // current transaction time
+            if (defaultExpr.isTimeFunction()) {
+                int scale = defaultExpr.getTimeFunctionScale();
+                // current transaction time; use the full start Instant (microsecond precision), not
+                // getStartTime() which truncates to epoch milliseconds and would drop the sub-millisecond
+                // digits of CURRENT_TIMESTAMP(4..6) that BE's now(N) keeps via query_globals timestamp_us.
                 if (ConnectContext.get() != null) {
-                    LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                    LocalDateTime localDateTime = ConnectContext.get().getStartTimeInstant()
                             .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                    return localDateTime.format(DATE_TIME_FORMATTER);
+                    return formatDateTimeWithScale(localDateTime, scale);
                 } else {
                     // should not run up here
-                    return LocalDateTime.now().format(DATE_TIME_FORMATTER);
+                    return formatDateTimeWithScale(LocalDateTime.now(), scale);
                 }
             }
         }
@@ -793,6 +819,20 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return null;
     }
 
+    // Format a timestamp into a time-function default literal honoring its fractional-second scale.
+    // scale 0 -> "yyyy-MM-dd HH:mm:ss"; scale N -> N fractional digits. DATETIME stores microseconds,
+    // so the frozen literal must carry the precision or now(N) would silently collapse to seconds.
+    private static String formatDateTimeWithScale(LocalDateTime dateTime, int scale) {
+        if (scale <= 0) {
+            return dateTime.format(DATE_TIME_FORMATTER);
+        }
+        StringBuilder pattern = new StringBuilder("yyyy-MM-dd HH:mm:ss.");
+        for (int i = 0; i < scale; i++) {
+            pattern.append('S');
+        }
+        return dateTime.format(DateTimeFormatter.ofPattern(pattern.toString()));
+    }
+
     // if the column have a default value or default expr can be calculated like now(). return calculated value
     // else for a batch of every row different like uuid(). return null
     // require specify currentTimestamp. this will get the default value of the incoming time
@@ -801,10 +841,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValueWithTime(long currentTimestamp) {
         if (defaultExpr != null) {
-            if (isEmptyDefaultTimeFunction(defaultExpr)) {
+            if (defaultExpr.isTimeFunction()) {
                 LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
                         .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                return localDateTime.format(DATE_TIME_FORMATTER);
+                return formatDateTimeWithScale(localDateTime, defaultExpr.getTimeFunctionScale());
             } else if (defaultExpr.hasExprObject()) {
                 // For expr object type default expressions, return null
                 // The actual default value will be evaluated in BE from TExpr
@@ -823,11 +863,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         // Generator expressions must win over any materialized defaultValue: schema-change paths freeze
         // ALTER-time into defaultValue so BE can backfill existing rows, but metadata callers (DESCRIBE,
         // information_schema.columns) must still report the generator, not the frozen literal.
-        if (defaultExpr != null && isEmptyDefaultTimeFunction(defaultExpr)) {
+        if (defaultExpr != null && defaultExpr.isTimeFunction()) {
             if (extras != null) {
                 extras.add("DEFAULT_GENERATED");
             }
-            return "CURRENT_TIMESTAMP";
+            int scale = defaultExpr.getTimeFunctionScale();
+            return scale > 0 ? "CURRENT_TIMESTAMP(" + scale + ")" : "CURRENT_TIMESTAMP";
         }
         if (defaultValue != null) {
             return defaultValue;
