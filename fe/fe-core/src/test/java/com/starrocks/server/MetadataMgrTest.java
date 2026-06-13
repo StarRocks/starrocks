@@ -33,6 +33,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -500,6 +504,49 @@ public class MetadataMgrTest {
         Assertions.assertFalse(MetadataTableName.isMetadataTable("table$"));
         Assertions.assertFalse(MetadataTableName.isMetadataTable("table$unknown_type"));
         Assertions.assertTrue(MetadataTableName.isMetadataTable("table$logical_iceberg_metadata"));
+    }
+
+    @Test
+    public void testBackfillUnknownColumnsFromConnector() {
+        ColumnRefOperator collected = new ColumnRefOperator(1, IntegerType.INT, "collected", true);
+        ColumnRefOperator uncollected = new ColumnRefOperator(2, IntegerType.INT, "uncollected", true);
+
+        // Internal stats from a partial ANALYZE: one collected column, one left unknown.
+        ColumnStatistic collectedStat = ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(100).setNullsFraction(0.0).setAverageRowSize(4)
+                .setDistinctValuesCount(50).build();
+        Statistics internal = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(collected, collectedStat)
+                .addColumnStatistic(uncollected, ColumnStatistic.unknown())
+                .build();
+
+        // Connector/manifest stats: fresher row count plus min/max for both columns.
+        ColumnStatistic connectorCollected = ColumnStatistic.builder()
+                .setMinValue(0).setMaxValue(9).setNullsFraction(0.0).setAverageRowSize(4)
+                .setDistinctValuesCount(5).build();
+        ColumnStatistic connectorUncollected = ColumnStatistic.builder()
+                .setMinValue(5).setMaxValue(500).setNullsFraction(0.0).setAverageRowSize(4)
+                .setDistinctValuesCount(200).build();
+        Statistics connector = Statistics.builder()
+                .setOutputRowCount(999999)
+                .addColumnStatistic(collected, connectorCollected)
+                .addColumnStatistic(uncollected, connectorUncollected)
+                .build();
+
+        Statistics merged = MetadataMgr.backfillUnknownColumnsFromConnector(internal, connector);
+
+        // Collected column keeps its collected stats, not the connector's.
+        Assertions.assertFalse(merged.getColumnStatistic(collected).isUnknown());
+        Assertions.assertEquals(100, merged.getColumnStatistic(collected).getMaxValue(), 0.001);
+        Assertions.assertEquals(50, merged.getColumnStatistic(collected).getDistinctValuesCount(), 0.001);
+
+        // Uncollected column is backfilled from the connector instead of staying unknown.
+        Assertions.assertFalse(merged.getColumnStatistic(uncollected).isUnknown());
+        Assertions.assertEquals(500, merged.getColumnStatistic(uncollected).getMaxValue(), 0.001);
+
+        // Row count comes from the connector (queried snapshot), not the stale collected stats.
+        Assertions.assertEquals(999999, merged.getOutputRowCount(), 0.001);
     }
 
     private void dropCatalogIfExists(String catalogName) {
