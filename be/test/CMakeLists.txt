@@ -245,6 +245,7 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
+        ./formats/parquet/statistics_helper_test.cpp
         ./formats/disk_range_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
