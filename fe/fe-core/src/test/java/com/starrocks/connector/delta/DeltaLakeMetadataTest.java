@@ -171,7 +171,7 @@ public class DeltaLakeMetadataTest {
 
         new Expectations() {
             {
-                snapshot.getScanBuilder((Engine) any);
+                snapshot.getScanBuilder();
                 result = scanBuilder;
                 minTimes = 0;
 

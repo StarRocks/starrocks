@@ -48,7 +48,7 @@ subprojects {
         set("bouncycastle.version", "1.84")
         set("byteman.version", "4.0.24")
         set("commons-beanutils.version", "1.11.0")
-        set("delta-kernel.version", "4.0.0rc1")
+        set("delta-kernel.version", "4.2.0")
         set("dlf-metastore-client.version", "0.2.14")
         set("dnsjava.version", "3.6.3")
         set("fastutil.version", "8.5.15")
