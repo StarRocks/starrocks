@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -101,6 +102,76 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
             return operator.getChild(0).accept(this, context);
+        }
+
+        @Override
+        public ColumnStatistic visitDictMappingOperator(DictMappingOperator operator, Void context) {
+            if (inputStatistics == null) {
+                return ColumnStatistic.unknown();
+            }
+
+            final var stringProvideOperator = operator.getStringProvideOperator();
+            final var originOperator = operator.getOriginScalaOperator();
+            final ColumnStatistic statistic;
+            if (stringProvideOperator != null) {
+                if (!hasAllColumnStatisticsFor(stringProvideOperator, inputStatistics)) {
+                    // Return unknown stats in case we don't have the non-dict stats anymore.
+                    return ColumnStatistic.unknown();
+                }
+
+                final var providerColumnStatistic = stringProvideOperator.accept(this, context);
+                if (providerColumnStatistic.isUnknown()) {
+                    return ColumnStatistic.unknown();
+                }
+
+                // Rewrite the input stats to contain the provider stats on the dict column to evaluate the origin operator
+                // based on the provider stats.
+                final var providerStatistics = Statistics.buildFrom(inputStatistics) //
+                        .addColumnStatistic(operator.getDictColumn(), providerColumnStatistic) //
+                        .build();
+
+                if (!hasAllColumnStatisticsFor(originOperator, providerStatistics)) {
+                    return ColumnStatistic.unknown();
+                }
+                statistic = originOperator.accept(copyWithNewStats(providerStatistics), context);
+            } else {
+                if (!hasAllColumnStatisticsFor(originOperator, inputStatistics)) {
+                    // Return unknown stats in case we don't have the non-dict stats anymore.
+                    return ColumnStatistic.unknown();
+                }
+                statistic = originOperator.accept(this, context);
+            }
+
+            if (statistic.isUnknown() || operator.getType().matchesType(originOperator.getType())) {
+                return statistic;
+            }
+
+            // If the dict type does not match the materialized type, we have to drop type-specific stats.
+            return ColumnStatistic.buildFrom(statistic)
+                    .setMinString(null) //
+                    .setMaxString(null) //
+                    .setMinValue(Double.NEGATIVE_INFINITY) //
+                    .setMaxValue(Double.POSITIVE_INFINITY) //
+                    .setAverageRowSize(operator.getType().getTypeSize()) //
+                    .setHistogram(null) //
+                    .build();
+        }
+
+        private boolean hasAllColumnStatisticsFor(ScalarOperator operator, Statistics statistics) {
+            final var columns = operator.getColumnRefs();
+            if (columns.isEmpty()) {
+                return true;
+            }
+            if (statistics == null) {
+                return false;
+            }
+            return columns.stream().allMatch(statistics.getColumnStatistics()::containsKey);
+        }
+
+        private ExpressionStatisticVisitor copyWithNewStats(Statistics statistics) {
+            final var copy = new ExpressionStatisticVisitor(statistics, this.rowCount);
+            copy.mappedStats.putAll(this.mappedStats);
+            return copy;
         }
 
         @Override
