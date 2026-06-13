@@ -1440,7 +1440,7 @@ CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
-CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "200");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
 // below). Enabled by default: low-value sparse mid-tier picks are skipped per the
