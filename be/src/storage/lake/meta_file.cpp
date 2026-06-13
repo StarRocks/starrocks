@@ -986,8 +986,8 @@ void MetaFileBuilder::apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op
 
         auto emit = [&](const std::string& file, int64_t version, const DeltaColumnGroupColumnIdsPB& cids,
                         int64_t file_size, DeltaColumnFileKindPB kind, int64_t sparse_row_count,
-                        const SparsePresencePB& presence, const ColumnPresenceListPB& cpl,
-                        const std::string& enc, bool shared) {
+                        const SparsePresencePB& presence, const ColumnPresenceListPB& cpl, const std::string& enc,
+                        bool shared) {
             neo.add_column_files(file);
             neo.add_versions(version);
             neo.add_unique_column_ids()->CopyFrom(cids);
@@ -1028,8 +1028,8 @@ void MetaFileBuilder::apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op
         for (uint32_t uid : entry.column_uids()) {
             merged_cids.add_column_ids(uid);
         }
-        emit(entry.merged_file().name(), merged_file_version, merged_cids, entry.merged_file().size(),
-             SPARSE_PERCOL, entry.presence().row_count(), entry.presence(), entry.column_presence(),
+        emit(entry.merged_file().name(), merged_file_version, merged_cids, entry.merged_file().size(), SPARSE_PERCOL,
+             entry.presence().row_count(), entry.presence(), entry.column_presence(),
              entry.merged_file().encryption_meta(), entry.merged_file().shared());
 
         // 3. Optional 1:1 arrays: emit only when any entry is non-trivial (preserve absence otherwise).
