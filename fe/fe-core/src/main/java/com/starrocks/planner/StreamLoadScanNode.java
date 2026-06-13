@@ -257,6 +257,12 @@ public class StreamLoadScanNode extends LoadScanNode {
         if (streamLoadInfo.getConfluentSchemaRegistryUrl() != null) {
             params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
         }
+        // Resolved once at job creation (CreateRoutineLoadStmt) and persisted, so it is uniform across
+        // all BE nodes and stable across FE-config changes. null = a job created before this feature
+        // (or a non-avro job) -> leave unset, BE falls back to the legacy scanner.
+        if (streamLoadInfo.getUseNativeAvroReader() != null) {
+            params.setUse_native_avro_reader(streamLoadInfo.getUseNativeAvroReader());
+        }
         initColumns();
         initWhereExpr(streamLoadInfo.getWhereExpr());
     }

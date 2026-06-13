@@ -384,6 +384,69 @@ FROM KAFKA
   >
   > You do not need to specify the `COLUMNS` parameter if the names and number of the fields in the Avro record completely match those of columns in the StarRocks table.
 
+- Native Avro reader (`STRUCT`/`MAP` and logical types)
+
+  By default, Routine Load uses the legacy Avro reader, which loads `record`/`map` fields as JSON strings and reads Avro logical types (`date`, `timestamp`, `decimal`) as raw integers/bytes.
+
+  Set `"avro.use_native_reader" = "true"` in `PROPERTIES` to use the native reader instead:
+
+  - `record` is loaded into a `STRUCT` column and `map` into a `MAP` column (instead of JSON).
+  - Avro logical types are interpreted: `date` → `DATE`, `timestamp-millis`/`timestamp-micros` → `DATETIME` (converted with the job time zone), and `decimal(precision, scale)` → `DECIMAL(precision, scale)`.
+
+  The property is set per job. When it is not specified, the FE configuration item `enable_routine_load_native_avro_reader` (default `false`) decides which reader to use. The reader choice is fixed when the job is created, so changing the configuration item later affects only newly created jobs — existing jobs keep their reader.
+
+  For example, given the following Avro schema with a nested `record` field `event`, a `map` field `tags`, a logical `date` field `d`, and a logical `decimal` field `amount`:
+
+  ```JSON
+  {
+      "type": "record",
+      "name": "Event",
+      "fields": [
+          {"name": "id", "type": "long"},
+          {"name": "event", "type": {
+              "type": "record",
+              "name": "EventInfo",
+              "fields": [
+                  {"name": "name", "type": "string"},
+                  {"name": "code", "type": "int"}
+              ]
+          }},
+          {"name": "tags", "type": {"type": "map", "values": "long"}},
+          {"name": "d", "type": {"type": "int", "logicalType": "date"}},
+          {"name": "amount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 18, "scale": 4}}
+      ]
+  }
+  ```
+
+  Create a matching table and load it with the native reader:
+
+  ```SQL
+  CREATE TABLE example_db.events (
+      id           BIGINT,
+      event        STRUCT<name VARCHAR(64), code INT>,
+      tags         MAP<VARCHAR(64), BIGINT>,
+      d            DATE,
+      amount       DECIMAL(18, 4)
+  )
+  ENGINE = OLAP
+  DUPLICATE KEY(id)
+  DISTRIBUTED BY HASH(id);
+
+  CREATE ROUTINE LOAD example_db.events_load_job ON events
+  PROPERTIES
+  (
+      "format" = "avro",
+      "avro.use_native_reader" = "true"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+      "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",
+      "kafka_topic" = "topic_events",
+      "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+  );
+  ```
+
 After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) statement to check the status of the load job.
 
 #### Data types mapping
@@ -407,12 +470,22 @@ The data type mapping between the Avro data fields you want to load and the Star
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
-| record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
+| record         | Legacy reader: the entire RECORD or its subfields as JSON. Native reader (`avro.use_native_reader = true`): `STRUCT`. |
 | enums          | STRING                                                       |
 | arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
+| maps           | Legacy reader: JSON. Native reader: `MAP`.                  |
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
+
+##### Logical types
+
+The native reader (`avro.use_native_reader = true`) also interprets Avro logical types. The legacy reader loads them as their underlying primitive (raw int/long/bytes).
+
+| Avro logical type            | StarRocks (native reader) |
+| ---------------------------- | ------------------------- |
+| date                         | DATE                      |
+| timestamp-millis / -micros   | DATETIME                  |
+| decimal(precision, scale)    | DECIMAL(precision, scale) |
 
 #### Limits
 

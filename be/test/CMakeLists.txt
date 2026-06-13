@@ -118,7 +118,10 @@ set(EXEC_FILES
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
+        ./exec/file_scanner/avro_datum_path_test.cpp
         ./exec/file_scanner/avro_scanner_test.cpp
+        ./exec/file_scanner/avro_struct_map_test.cpp
+        ./exec/file_scanner/confluent_avro_decoder_test.cpp
         ./exec/file_scanner/csv_scanner_test.cpp
         ./exec/file_scanner/file_scanner_test.cpp
         ./exec/file_scanner/json_scanner_test.cpp

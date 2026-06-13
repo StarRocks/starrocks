@@ -303,6 +303,11 @@ struct TBrokerScanRangeParams {
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
     34: optional bool schema_sample_types = true
+    // Per-job choice for avro routine load: use the avrocpp-based scanner (STRUCT/MAP support). The FE
+    // resolves this at job creation (from the avro.use_native_reader property, defaulting to the FE
+    // config enable_avro_routine_load_native_reader) and sets it here. If unset (e.g. an older FE), the
+    // BE falls back to the legacy avro scanner.
+    35: optional bool use_native_avro_reader
 }
 
 // Broker scan range
