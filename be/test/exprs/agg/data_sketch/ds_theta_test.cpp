@@ -104,4 +104,117 @@ TEST_F(DataSketchsThetaTest, TestSerializeDeserialize2) {
         ASSERT_EQ(theta4.estimate_cardinality(), 100);
     }
 }
+
+// The serialized payload must start with the 2-byte StarRocks header
+// [0xFE][lg_k] so that lg_k survives serialize -> deserialize round-trips.
+TEST_F(DataSketchsThetaTest, HeaderRoundTripPreservesLgK) {
+    int64_t memory_usage = 0;
+    constexpr uint8_t kCustomLgK = 14;
+    DataSketchesTheta theta(kCustomLgK, &memory_usage);
+    for (int i = 0; i < 500; ++i) {
+        theta.update(i);
+    }
+
+    uint8_t dst[8192];
+    size_t size = theta.serialize(dst);
+    ASSERT_GE(size, DataSketchesTheta::kHeaderSize);
+    EXPECT_EQ(dst[0], DataSketchesTheta::kMagicByte);
+    EXPECT_EQ(dst[1], kCustomLgK);
+
+    DataSketchesTheta restored(&memory_usage);
+    ASSERT_TRUE(restored.deserialize(Slice(dst, size)));
+    EXPECT_EQ(restored.get_lg_config_k(), kCustomLgK);
+    // The estimate should still match (within theta error bounds, but with
+    // lg_k=14 and 500 distinct values it is essentially exact).
+    EXPECT_EQ(restored.estimate_cardinality(), 500);
+}
+
+// Header-less payloads written by older StarRocks versions must still
+// deserialize. Compact-theta's first byte is pre_longs in {1,2,3}, which can
+// never collide with the magic byte 0xFE.
+TEST_F(DataSketchsThetaTest, LegacyBytesWithoutHeaderDeserialize) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta source(&memory_usage);
+    for (int i = 0; i < 100; ++i) {
+        source.update(i);
+    }
+    uint8_t framed[1024];
+    size_t framed_size = source.serialize(framed);
+    ASSERT_GT(framed_size, DataSketchesTheta::kHeaderSize);
+
+    // Drop the 2-byte StarRocks header to mimic a pre-magic-byte payload.
+    const uint8_t* legacy = framed + DataSketchesTheta::kHeaderSize;
+    size_t legacy_size = framed_size - DataSketchesTheta::kHeaderSize;
+    ASSERT_NE(legacy[0], DataSketchesTheta::kMagicByte);
+
+    DataSketchesTheta restored(&memory_usage);
+    ASSERT_TRUE(restored.deserialize(Slice(legacy, legacy_size)));
+    EXPECT_EQ(restored.estimate_cardinality(), 100);
+    // Header-less payloads carry no lg_k, so deserialization keeps the default.
+    EXPECT_EQ(restored.get_lg_config_k(), DEFAULT_THETA_LOG_K);
+}
+
+// During merge() in the aggregate path, an empty state adopts the lg_k carried
+// in the wire format of the incoming sketch. This keeps the configured
+// precision intact across shuffle boundaries.
+TEST_F(DataSketchsThetaTest, DeserializeAdoptsIncomingLgK) {
+    int64_t memory_usage = 0;
+    constexpr uint8_t kIncomingLgK = 14;
+    DataSketchesTheta incoming(kIncomingLgK, &memory_usage);
+    for (int i = 0; i < 100; ++i) {
+        incoming.update(i);
+    }
+
+    uint8_t buf[2048];
+    size_t size = incoming.serialize(buf);
+
+    DataSketchesTheta parsed(Slice(buf, size), &memory_usage);
+    EXPECT_EQ(parsed.get_lg_config_k(), kIncomingLgK);
+
+    // Mirror what ThetaSketchAggregateFunction::merge() does when the state is
+    // still empty: construct using the incoming sketch's lg_k, then merge.
+    DataSketchesTheta state(parsed.get_lg_config_k(), &memory_usage);
+    state.merge(parsed);
+    EXPECT_EQ(state.get_lg_config_k(), kIncomingLgK);
+    EXPECT_EQ(state.estimate_cardinality(), 100);
+}
+
+// A corrupted or malicious lg_k byte must not poison the state: we keep the
+// default and still parse the body (the theta-union update will fail safely
+// only on truly malformed bytes).
+TEST_F(DataSketchsThetaTest, OutOfRangeLgKInHeaderFallsBackToDefault) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta source(&memory_usage);
+    for (int i = 0; i < 50; ++i) {
+        source.update(i);
+    }
+    uint8_t framed[1024];
+    size_t size = source.serialize(framed);
+
+    // 0xFF is outside [MIN_LG_K=5, MAX_LG_K=26].
+    framed[1] = 0xFF;
+
+    DataSketchesTheta restored(&memory_usage);
+    ASSERT_TRUE(restored.deserialize(Slice(framed, size)));
+    EXPECT_EQ(restored.get_lg_config_k(), DEFAULT_THETA_LOG_K);
+    EXPECT_EQ(restored.estimate_cardinality(), 50);
+}
+
+// A state that never saw update() or merge() serializes to just the header.
+// Round-tripping that 2-byte payload must not throw and must keep the
+// estimate at zero.
+TEST_F(DataSketchsThetaTest, EmptyStateSerializeRoundTrip) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta empty(&memory_usage);
+    EXPECT_EQ(empty.estimate_cardinality(), 0);
+
+    uint8_t dst[16];
+    size_t size = empty.serialize(dst);
+    EXPECT_EQ(size, DataSketchesTheta::kHeaderSize);
+    EXPECT_EQ(dst[0], DataSketchesTheta::kMagicByte);
+
+    DataSketchesTheta restored(&memory_usage);
+    ASSERT_TRUE(restored.deserialize(Slice(dst, size)));
+    EXPECT_EQ(restored.estimate_cardinality(), 0);
+}
 } // namespace starrocks

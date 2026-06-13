@@ -48,5 +48,7 @@ select dt, ds_theta_count_distinct_merge(theta_id), ds_theta_count_distinct_merg
 INSERT INTO t1 values (1, 'a', 1, '2024-07-22'), (3, 'c', 1, '2024-07-25'), (5, NULL, NULL, '2024-07-24');
 INSERT INTO t1 values (1, 'a', 1, '2024-07-22'), (3, 'c', 1, '2024-07-25'), (5, NULL, NULL, '2024-07-24');
 insert into test_theta_sketch select dt, ds_theta_count_distinct_state(id), ds_theta_count_distinct_state(province), ds_theta_count_distinct_state(age), ds_theta_count_distinct_state(dt) from t1;
+-- mix in a non-default lg_k to exercise the new (col, log_k) pathway
+insert into test_theta_sketch select dt, ds_theta_count_distinct_state(id, 14), ds_theta_count_distinct_state(province, 14), ds_theta_count_distinct_state(age, 14), ds_theta_count_distinct_state(dt, 14) from t1;
 select ds_theta_count_distinct_merge(theta_id), ds_theta_count_distinct_merge(theta_province), ds_theta_count_distinct_merge(theta_age), ds_theta_count_distinct_merge(theta_dt) from test_theta_sketch;
 select dt, ds_theta_count_distinct_merge(theta_id), ds_theta_count_distinct_merge(theta_province), ds_theta_count_distinct_merge(theta_age), ds_theta_count_distinct_merge(theta_dt) from test_theta_sketch group by dt order by 1 limit 3;

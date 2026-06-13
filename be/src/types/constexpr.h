@@ -31,6 +31,9 @@ constexpr int HLL_EMPTY_SIZE = 1;
 const static int MAX_HLL_LOG_K = 20;
 const static uint8_t DEFAULT_HLL_LOG_K = 17;
 
+// For DataSketches theta (lg_k matches datasketches::theta_constants).
+const static uint8_t DEFAULT_THETA_LOG_K = 12;
+
 // For JSON type
 constexpr int kJsonDefaultSize = 128;
 constexpr int kJsonMetaDefaultFormatVersion = 1;
