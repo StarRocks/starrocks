@@ -131,6 +131,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String KAFKA_PARTITIONS_PROPERTY = "kafka_partitions";
     public static final String KAFKA_OFFSETS_PROPERTY = "kafka_offsets";
     public static final String KAFKA_DEFAULT_OFFSETS = "kafka_default_offsets";
+    // when "true", kafka_partitions/kafka_offsets only seed the starting offsets and the job
+    // keeps discovering new partitions from the broker instead of pinning the partition list
+    public static final String KAFKA_PARTITION_DISCOVERY = "kafka_partition_discovery";
     // optional
     public static final String CONFLUENT_SCHEMA_REGISTRY_URL = "confluent.schema.registry.url";
 
@@ -241,6 +244,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     // custom kafka property map<key, value>
     private Map<String, String> customKafkaProperties = Maps.newHashMap();
+
+    // analyzed from property.kafka_partition_discovery; when true the kafka_partitions list
+    // only seeds the starting offsets instead of pinning the consumed partitions
+    private boolean kafkaPartitionDiscovery = false;
 
     // pulsar related properties
     private String pulsarServiceUrl;
@@ -429,6 +436,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public Map<String, String> getCustomKafkaProperties() {
         return customKafkaProperties;
+    }
+
+    public boolean isKafkaPartitionDiscovery() {
+        return kafkaPartitionDiscovery;
     }
 
     public String getPulsarServiceUrl() {
@@ -755,6 +766,16 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (kafkaOffsetsString != null) {
             analyzeKafkaOffsetProperty(kafkaOffsetsString, kafkaPartitionOffsets);
         }
+
+        // kafka_partition_discovery decides whether the kafka_partitions list pins the consumed
+        // partitions or only seeds their starting offsets, so it requires the list to be present
+        if (customKafkaProperties.containsKey(KAFKA_PARTITION_DISCOVERY) && kafkaPartitionOffsets.isEmpty()) {
+            throw new AnalysisException("property." + KAFKA_PARTITION_DISCOVERY + " is only meaningful when "
+                    + KAFKA_PARTITIONS_PROPERTY + " is specified");
+        }
+        // value format already validated in analyzeKafkaCustomProperties
+        kafkaPartitionDiscovery = Boolean.parseBoolean(customKafkaProperties.get(KAFKA_PARTITION_DISCOVERY));
+
         String confluentSchemaRegistryUrlString = dataSourceProperties.get(CONFLUENT_SCHEMA_REGISTRY_URL);
         if (confluentSchemaRegistryUrlString == null) {
             if (format == null) {
@@ -855,6 +876,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         // check kafka_default_offsets
         if (customKafkaProperties.containsKey(KAFKA_DEFAULT_OFFSETS)) {
             getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
+        }
+
+        // check kafka_partition_discovery
+        if (customKafkaProperties.containsKey(KAFKA_PARTITION_DISCOVERY)) {
+            String value = customKafkaProperties.get(KAFKA_PARTITION_DISCOVERY);
+            if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+                throw new AnalysisException("Invalid value " + value + " of property."
+                        + KAFKA_PARTITION_DISCOVERY + ", it must be true or false");
+            }
         }
     }
 
