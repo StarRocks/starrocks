@@ -125,6 +125,13 @@ public:
 
     void merge(const HyperLogLog& other);
 
+    // Merge a serialized HLL (as produced by serialize()) directly into this,
+    // without materializing a temporary HyperLogLog. Only the FULL payload is
+    // merged in place (a flat register array, so register max is order-independent
+    // and dup-free => byte-identical); EXPLICIT/SPARSE/invalid inputs delegate to
+    // the temp-object path to preserve byte-identical state. See hll.cpp.
+    void merge(const Slice& src);
+
     // Return max size of serialized binary
     size_t max_serialized_size() const;
 

@@ -356,6 +356,53 @@ void HyperLogLog::merge(const HyperLogLog& other) {
     }
 }
 
+void HyperLogLog::merge(const Slice& src) {
+    // Invalid / null / empty input must be a no-op, matching the behavior of the
+    // HyperLogLog(const Slice&) ctor + merge() path this replaces: an unparseable
+    // slice becomes an empty HLL there, and merging an empty HLL does nothing.
+    // The null-pointer guard mirrors deserialize() (some ingested HLL data has a
+    // null data pointer); it must come before is_valid(), which dereferences
+    // src.data as soon as src.size >= 1.
+    if (src.data == nullptr || !is_valid(src)) {
+        return;
+    }
+    const auto type = static_cast<HllDataType>(*reinterpret_cast<const uint8_t*>(src.data));
+    if (type == HLL_DATA_EMPTY) {
+        return;
+    }
+    // Only the FULL payload can be merged in place byte-identically. EXPLICIT
+    // serialization depends on hash-set iteration order, and SPARSE deserialize is
+    // last-write-wins on duplicate indexes (not max); both must go through the
+    // temp-object path to keep the serialized bytes identical to the old code.
+    if (type != HLL_DATA_FULL) {
+        merge(HyperLogLog(src));
+        return;
+    }
+
+    // FULL slice layout is [type:1][register:1 * HLL_REGISTERS_COUNT]. Mirror the
+    // merge(const HyperLogLog&) switch operation-for-operation, sourcing the other
+    // registers from the slice payload instead of a deserialized temporary.
+    const uint8_t* other_registers = reinterpret_cast<const uint8_t*>(src.data) + 1;
+    switch (_type) {
+    case HLL_DATA_EMPTY:
+        _type = HLL_DATA_FULL;
+        if (UNLIKELY(!_allocate_registers(HLL_REGISTERS_COUNT))) {
+            throw std::bad_alloc();
+        }
+        memcpy(_registers.data, other_registers, HLL_REGISTERS_COUNT);
+        break;
+    case HLL_DATA_EXPLICIT:
+        _convert_explicit_to_register();
+        merge_registers_impl(_registers.data, other_registers);
+        _type = HLL_DATA_FULL;
+        break;
+    case HLL_DATA_SPARSE:
+    case HLL_DATA_FULL:
+        merge_registers_impl(_registers.data, other_registers);
+        break;
+    }
+}
+
 size_t HyperLogLog::max_serialized_size() const {
     switch (_type) {
     case HLL_DATA_EMPTY:
