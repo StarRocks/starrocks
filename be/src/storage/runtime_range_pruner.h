@@ -60,6 +60,10 @@ public:
         return _update(global_dictmaps, std::move(updater), force, raw_read_rows);
     }
 
+    // True iff this scan has any pushdownable runtime filter registered (arrived or not). Lets the
+    // vector stage keep PRE off when a runtime filter would post-filter the top-k (-> under-return).
+    bool has_runtime_filters() const { return !_arrived_runtime_filters_masks.empty(); }
+
 private:
     std::vector<const RuntimeFilterProbeDescriptor*> _unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> _slot_descs;

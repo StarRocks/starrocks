@@ -41,9 +41,23 @@
 #include "gutil/walltime.h"
 #include "runtime/mem_pool.h"
 #include "common/object_pool.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "gen_cpp/RuntimeFilter_types.h"
+#include "runtime/runtime_filter.h"
+#include "storage/predicate_parser.h"
+#include "storage/runtime_range_pruner.hpp"
+#include "testutil/exprs_test_helper.h"
+#include "types/logical_type.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
@@ -1475,6 +1489,91 @@ TEST_F(EvaluatePredTreeBitmapTest, dict_code_mixed_with_plain_column) {
     EXPECT_TRUE(expect == got);
 }
 
+// Repro for the index-only-expr / dict-code mismatch. AddIndexOnlyPredicateRule marks an
+// ngram_search call index_filter_only and adds it as a `<call> >= 0` expr predicate on the scan; the
+// ColumnPredicateRewriter deliberately leaves index_filter_only expr predicates in their original
+// (string) form (RewritePredicateTreeVisitor short-circuits on is_index_filter_only && expr). When
+// the same column is low-cardinality dict-encoded it is also flagged for dict-code reading
+// (need_rewrite[cid]=1), so evaluate_pred_tree_to_bitmap reads it as INT codes and hands those codes
+// to the string-typed expr -> a type mismatch.
+//
+// The read loop never hits this because _init_column_predicates strips index_filter_only predicates
+// (IndexOnlyPredicateChecker) -- but that runs AFTER the vector stage, so the residual bitmap sees
+// the full tree. Correct behavior: an index_filter_only predicate is already applied by the index
+// filter stage (its effect is in the candidate) and must NOT be re-evaluated here, so the residual
+// bitmap equals the candidate unchanged.
+TEST_F(EvaluatePredTreeBitmapTest, index_only_expr_predicate_not_evaluated_against_dict_codes) {
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    ObjectPool pool;
+
+    // A VARCHAR slot the expr's SLOT_REF binds to.
+    TDescriptorTableBuilder table_builder;
+    TTupleDescriptorBuilder tuple_builder;
+    TSlotDescriptorBuilder slot_builder;
+    tuple_builder.add_slot(slot_builder.string_type(8).column_name("c3").column_pos(0).nullable(false).build());
+    tuple_builder.build(&table_builder);
+    DescriptorTbl* tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(&state, &pool, table_builder.desc_tbl(), &tbl, /*chunk_size=*/4096));
+    TupleDescriptor* tuple_desc = tbl->get_tuple_descriptor(0);
+    SlotDescriptor* slot = tuple_desc->slots()[0];
+
+    // Expr tree for `c3 == 'w3'` in prefix order: BINARY_PRED(EQ) -> SLOT_REF(c3), STRING_LITERAL('w3').
+    std::vector<TExprNode> nodes;
+    nodes.emplace_back(ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, TExprOpcode::EQ));
+    TExprNode slot_ref;
+    slot_ref.node_type = TExprNodeType::SLOT_REF;
+    slot_ref.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    slot_ref.num_children = 0;
+    TSlotRef t_slot_ref;
+    t_slot_ref.slot_id = slot->id();
+    t_slot_ref.tuple_id = 0;
+    slot_ref.__set_slot_ref(t_slot_ref);
+    slot_ref.is_nullable = false;
+    nodes.emplace_back(slot_ref);
+    TExprNode literal;
+    literal.node_type = TExprNodeType::STRING_LITERAL;
+    literal.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    literal.num_children = 0;
+    TStringLiteral string_literal;
+    string_literal.value = "w3";
+    literal.__set_string_literal(string_literal);
+    literal.is_nullable = false;
+    nodes.emplace_back(literal);
+    TExpr t_expr;
+    t_expr.nodes = std::move(nodes);
+
+    std::vector<ExprContext*> ctxs;
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, std::vector<TExpr>{t_expr}, &ctxs, &state));
+    ASSERT_OK(ExprExecutor::prepare(ctxs, &state));
+    ASSERT_OK(ExprExecutor::open(ctxs, &state));
+
+    ASSIGN_OR_ABORT(ColumnExprPredicate * raw_expr_pred,
+                    ColumnExprPredicate::make_column_expr_predicate(get_type_info(TYPE_VARCHAR), /*column_id=*/3,
+                                                                    &state, ctxs[0], slot));
+    std::unique_ptr<ColumnPredicate> expr_pred(raw_expr_pred);
+    expr_pred->set_index_filter_only(true);
+    ASSERT_TRUE(expr_pred->is_expr_predicate());
+    ASSERT_TRUE(expr_pred->is_index_filter_only());
+
+    // Run the rewriter exactly as the segment iterator does: c3 is flagged, but an index_filter_only
+    // expr predicate is left UNCHANGED (still a string-typed expr).
+    PredicateTree tree = single_node_tree(expr_pred.get());
+    std::vector<uint8_t> need_rewrite(4, 0);
+    need_rewrite[3] = 1;
+    SparseRange<> scan_range(0, kRows);
+    ObjectPool rewrite_pool;
+    ColumnPredicateRewriter rewriter(_iters_by_cid, _schema, need_rewrite, /*column_size=*/3, scan_range);
+    ASSERT_OK(rewriter.rewrite_predicate(&rewrite_pool, tree));
+
+    // c3 is read as INT dict codes (need_rewrite[3]=1 && all_page_dict_encoded), then fed to the
+    // string-typed `c3 == 'w3'` expr. The index_filter_only predicate must be ignored, so the
+    // residual bitmap must equal the candidate (all rows).
+    ASSIGN_OR_ABORT(auto got,
+                    evaluate_pred_tree_to_bitmap(tree, _schema, _iters_by_cid, nullptr, full_range(), &need_rewrite));
+    EXPECT_EQ(got.cardinality(), kRows);
+}
+
 #ifdef WITH_TENANN
 // Validates the residual-predicate PRE-filter in SegmentIterator::_get_row_ranges_by_vector_index:
 // with a real HNSW .vi present (use_vector_index=true), a scalar predicate on a column WITHOUT an exact
@@ -1586,6 +1685,7 @@ protected:
         int min_filter_col = 4;     // every returned row must satisfy filter_col >= this
         bool build_vi = true;       // false: leave the .vi missing -> runtime brute-force fallback
         bool with_tag_column = false; // include the dict-encoded VARCHAR tag column in the read schema
+        bool with_runtime_filter = false; // register an (unarrived) pushdown RF -> must route to BRUTE
     };
 
     struct ResidualCaseResult {
@@ -1714,6 +1814,36 @@ protected:
         seg_opts.enable_predicate_col_late_materialize = pred_col_late_mat;
         seg_opts.pred_tree = std::move(pred_tree);
 
+        // Optionally register an (unarrived) pushdown runtime filter. A runtime filter post-filters the
+        // top-k above the per-segment search, so PRE would under-return -- its presence must route AUTO
+        // to exact BRUTE. Unarrived means the read loop's update_range_if_arrived is a no-op, so this
+        // only flips the has_runtime_filters() signal. These locals outlive the iterator run below.
+        ObjectPool rf_pool;
+        RuntimeState rf_state;
+        OlapPredicateParser rf_parser(rschema);
+        SlotDescriptor rf_slot(0, "filter_col", TypeDescriptor(TYPE_INT));
+        std::shared_ptr<RuntimeFilterProbeDescriptor> rf_desc;
+        UnarrivedRuntimeFilterList rf_list;
+        RuntimeScanRangePruner rf_pruner;
+        if (cfg.with_runtime_filter) {
+            TRuntimeFilterDescription rfd;
+            rfd.__set_filter_id(1);
+            rfd.__set_has_remote_targets(false);
+            rfd.__set_build_plan_node_id(0);
+            rfd.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+            rfd.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+            TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(3, true);
+            rfd.__isset.plan_node_id_to_target_expr = true;
+            rfd.plan_node_id_to_target_expr.emplace(0, col_ref);
+            rf_desc = std::make_shared<RuntimeFilterProbeDescriptor>();
+            ASSERT_OK(rf_desc->init(&rf_pool, rfd, 0, &rf_state));
+            rf_list.add_unarrived_rf(rf_desc.get(), &rf_slot, 1);
+            rf_pruner = RuntimeScanRangePruner(&rf_parser, rf_list);
+            ASSERT_TRUE(rf_pruner.has_runtime_filters());
+            seg_opts.enable_join_runtime_filter_pushdown = true;
+            seg_opts.runtime_range_pruner = rf_pruner;
+        }
+
         // output id + filter_col so we can assert the predicate held on every returned row
         Schema read_schema;
         auto idf = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
@@ -1816,6 +1946,22 @@ TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &res);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
     EXPECT_EQ(res.raw_rows_read, 4) << "brute read loop was not narrowed to the residual survivors";
+}
+
+TEST_F(VectorResidualPrefilterTest, residual_runtime_filter_routes_to_brute) {
+    // A runtime filter post-filters the top-k above the per-segment search, so even though
+    // `filter_col >= 4` is a plain in-iterator residual (which alone would PRE-filter), the presence of
+    // a runtime filter must route AUTO to exact BRUTE -- and brute must still pre-narrow the read loop by
+    // the residual. Markers: brute returns ALL matching rows {4,5,6,7} (PRE would return the k=3 nearest
+    // {4,5,6}), and the read loop touches only the 4 residual survivors, not the full 8-row segment.
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    ResidualCaseConfig cfg;
+    cfg.with_runtime_filter = true;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, AnnFilterStrategy::AUTO,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7})) << "a runtime filter must route AUTO to BRUTE, not PRE";
+    EXPECT_EQ(res.raw_rows_read, 4) << "brute read loop was not narrowed by the residual under a runtime filter";
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_or_predicate_prefilters_ann) {
