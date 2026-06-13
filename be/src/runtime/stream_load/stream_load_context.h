@@ -68,7 +68,10 @@ public:
               topic(t_info.topic),
               confluent_schema_registry_url(t_info.confluent_schema_registry_url),
               begin_offset(t_info.partition_begin_offset),
-              properties(t_info.properties) {
+              properties(t_info.properties),
+              need_source_metadata(t_info.__isset.need_source_metadata && t_info.need_source_metadata),
+              need_message_key(t_info.__isset.need_message_key && t_info.need_message_key),
+              need_message_headers(t_info.__isset.need_message_headers && t_info.need_message_headers) {
         // The offset(begin_offset) sent from FE is the starting offset,
         // and the offset(cmt_offset) reported by BE to FE is the consumed offset,
         // so we need to minus 1 here.
@@ -97,6 +100,12 @@ public:
     std::map<int32_t, int64_t> cmt_offset_timestamp;
     //custom kafka property key -> value
     std::map<std::string, std::string> properties;
+    // Attach the extended per-message metadata (topic/timestamp/key/headers) to the buffer only when
+    // the job references a metadata column.
+    bool need_source_metadata{false};
+    // Only extract the message key / headers into buffer meta when the job references __key__ / __headers__.
+    bool need_message_key{false};
+    bool need_message_headers{false};
 };
 
 // pulsar related info
@@ -107,7 +116,10 @@ public:
               topic(t_info.topic),
               subscription(t_info.subscription),
               partitions(t_info.partitions),
-              properties(t_info.properties) {
+              properties(t_info.properties),
+              need_source_metadata(t_info.__isset.need_source_metadata && t_info.need_source_metadata),
+              need_message_key(t_info.__isset.need_message_key && t_info.need_message_key),
+              need_message_headers(t_info.__isset.need_message_headers && t_info.need_message_headers) {
         if (t_info.__isset.initial_positions) {
             initial_positions = t_info.initial_positions;
         }
@@ -132,6 +144,12 @@ public:
 
     // custom kafka property key -> value
     std::map<std::string, std::string> properties;
+    // Attach per-message source metadata to the buffer only when the job references a metadata column.
+    bool need_source_metadata{false};
+    // Only extract the message key (partition key) / headers (properties) when the job references
+    // __key__ / __headers__.
+    bool need_message_key{false};
+    bool need_message_headers{false};
 };
 
 class MessageBodySink;

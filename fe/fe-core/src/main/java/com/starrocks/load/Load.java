@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -91,7 +92,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.thrift.TRoutineLoadMetaColumn;
+import com.starrocks.thrift.TStreamSourceMetaKind;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
@@ -116,6 +120,290 @@ public class Load {
     public static final String VERSION = "v1";
 
     public static final String LOAD_OP_COLUMN = "__op";
+
+    // ---- Routine-load source-metadata functions ----
+    // Per-message Kafka/Pulsar metadata is exposed through source-specific functions usable in the
+    // COLUMNS clause (kafka_topic(), kafka_header('k'), pulsar_message_id(), ...). Each call is lowered
+    // at planning into a hidden source column the BE scanner fills from the message metadata, so a
+    // payload field named like a metadata field is never shadowed. The kinds mirror
+    // TStreamSourceMetaKind in PlanNodes.thrift.
+    public enum StreamMetaKind {
+        TOPIC, PARTITION, OFFSET, MESSAGE_ID, TIMESTAMP, EVENT_TIME, KEY, HEADER, HEADERS
+    }
+
+    // Spec of a metadata function: which source it belongs to, the metadata kind, the fixed return
+    // type, and whether it takes a single string-literal key (header/property lookup).
+    public static final class StreamMetaFunc {
+        public final String source; // "KAFKA" or "PULSAR"
+        public final StreamMetaKind kind;
+        public final Type type;
+        public final boolean takesKey;
+
+        public StreamMetaFunc(String source, StreamMetaKind kind, Type type, boolean takesKey) {
+            this.source = source;
+            this.kind = kind;
+            this.type = type;
+            this.takesKey = takesKey;
+        }
+    }
+
+    private static final Map<String, StreamMetaFunc> STREAM_META_FUNCS = buildStreamMetaFuncs();
+
+    private static Map<String, StreamMetaFunc> buildStreamMetaFuncs() {
+        Type vc = VarcharType.VARCHAR;
+        Type map = new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR);
+        Map<String, StreamMetaFunc> m = Maps.newHashMap();
+        m.put("kafka_topic", new StreamMetaFunc("KAFKA", StreamMetaKind.TOPIC, vc, false));
+        m.put("kafka_partition", new StreamMetaFunc("KAFKA", StreamMetaKind.PARTITION, IntegerType.INT, false));
+        m.put("kafka_offset", new StreamMetaFunc("KAFKA", StreamMetaKind.OFFSET, IntegerType.BIGINT, false));
+        m.put("kafka_timestamp_ms", new StreamMetaFunc("KAFKA", StreamMetaKind.TIMESTAMP, IntegerType.BIGINT, false));
+        m.put("kafka_key", new StreamMetaFunc("KAFKA", StreamMetaKind.KEY, vc, false));
+        m.put("kafka_header", new StreamMetaFunc("KAFKA", StreamMetaKind.HEADER, vc, true));
+        m.put("kafka_headers", new StreamMetaFunc("KAFKA", StreamMetaKind.HEADERS, map, false));
+        m.put("pulsar_topic", new StreamMetaFunc("PULSAR", StreamMetaKind.TOPIC, vc, false));
+        m.put("pulsar_partition", new StreamMetaFunc("PULSAR", StreamMetaKind.PARTITION, IntegerType.INT, false));
+        m.put("pulsar_message_id", new StreamMetaFunc("PULSAR", StreamMetaKind.MESSAGE_ID, vc, false));
+        m.put("pulsar_publish_time_ms", new StreamMetaFunc("PULSAR", StreamMetaKind.TIMESTAMP, IntegerType.BIGINT, false));
+        m.put("pulsar_event_time_ms", new StreamMetaFunc("PULSAR", StreamMetaKind.EVENT_TIME, IntegerType.BIGINT, false));
+        m.put("pulsar_key", new StreamMetaFunc("PULSAR", StreamMetaKind.KEY, vc, false));
+        m.put("pulsar_property", new StreamMetaFunc("PULSAR", StreamMetaKind.HEADER, vc, true));
+        m.put("pulsar_properties", new StreamMetaFunc("PULSAR", StreamMetaKind.HEADERS, map, false));
+        return m;
+    }
+
+    // The spec for an UNQUALIFIED metadata function call like kafka_topic(); null if `fn` is not a
+    // metadata function. A qualified call (db.kafka_topic()) is never treated as metadata, so it can
+    // never shadow a user UDF of the same name.
+    public static StreamMetaFunc streamMetaFuncOf(FunctionCallExpr fn) {
+        List<String> parts = fn.getFnName().getParts();
+        if (parts.size() != 1) {
+            return null;
+        }
+        return STREAM_META_FUNCS.get(parts.get(0).toLowerCase());
+    }
+
+    // Validates every metadata function in the column mappings against the job's data source. Throws on
+    // a wrong-source call (e.g. kafka_offset() in a Pulsar job), use with a non-JSON/Avro format (CSV
+    // maps one message to many rows, so per-message metadata is ambiguous), Avro on a Pulsar job
+    // (PulsarTaskInfo sends non-JSON data to the BE as CSV), Avro without the native
+    // reader (only AvroStreamScanner fills metadata; the non-native AvroScanner would not), a missing/extra
+    // argument, or a header/property lookup whose key is not a string literal. Called at CREATE and ALTER.
+    // `avroNativeReader` is the job's resolved avro.use_native_reader (null when not Avro).
+    public static void validateStreamMetaFunctions(List<ImportColumnDesc> columnDescs, String dataSourceType,
+                                                   String format, Boolean avroNativeReader) throws DdlException {
+        if (columnDescs == null) {
+            return;
+        }
+        boolean isJson = "json".equalsIgnoreCase(format);
+        boolean isAvro = "avro".equalsIgnoreCase(format);
+        for (ImportColumnDesc desc : columnDescs) {
+            Expr expr = desc.getExpr();
+            if (expr == null) {
+                continue;
+            }
+            // collectAll (not collect): collect() stops at the first matching node and does not descend,
+            // so it would miss a metadata call nested inside another function, e.g.
+            // from_unixtime(kafka_timestamp_ms()/1000).
+            List<FunctionCallExpr> funcs = Lists.newArrayList();
+            expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, funcs);
+            for (FunctionCallExpr fn : funcs) {
+                StreamMetaFunc spec = streamMetaFuncOf(fn);
+                if (spec == null) {
+                    continue;
+                }
+                String name = fn.getFnName().getParts().get(0).toLowerCase();
+                if (!isJson && !isAvro) {
+                    throw new DdlException(name + "() requires the data format to be JSON or Avro");
+                }
+                if (isAvro && "PULSAR".equalsIgnoreCase(dataSourceType)) {
+                    // PulsarTaskInfo sends any non-JSON format to the BE as CSV, so an Avro Pulsar job
+                    // would never fill metadata slots.
+                    throw new DdlException(name
+                            + "() requires 'format' = 'json' for Pulsar routine load; Pulsar does not support Avro");
+                }
+                if (isAvro && !Boolean.TRUE.equals(avroNativeReader)) {
+                    throw new DdlException(name
+                            + "() with Avro requires the native Avro reader; set 'avro.use_native_reader' = 'true'");
+                }
+                if (!spec.source.equalsIgnoreCase(dataSourceType)) {
+                    throw new DdlException(name + "() is only available for " + spec.source + " routine load");
+                }
+                int argc = fn.getChildren().size();
+                if (spec.takesKey) {
+                    if (argc != 1 || !(fn.getChild(0) instanceof StringLiteral)) {
+                        throw new DdlException(name + "() requires a single string-literal key argument");
+                    }
+                } else if (argc != 0) {
+                    throw new DdlException(name + "() takes no arguments");
+                }
+            }
+        }
+    }
+
+    // The set of metadata kinds the column mappings reference; drives the BE consumer gates.
+    public static Set<StreamMetaKind> collectStreamMetaKinds(List<ImportColumnDesc> columnDescs) {
+        Set<StreamMetaKind> kinds = Sets.newHashSet();
+        if (columnDescs == null) {
+            return kinds;
+        }
+        for (ImportColumnDesc desc : columnDescs) {
+            Expr expr = desc.getExpr();
+            if (expr == null) {
+                continue;
+            }
+            // collectAll (not collect): collect() stops at the first matching node and does not descend,
+            // so it would miss a metadata call nested inside another function, e.g.
+            // from_unixtime(kafka_timestamp_ms()/1000).
+            List<FunctionCallExpr> funcs = Lists.newArrayList();
+            expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, funcs);
+            for (FunctionCallExpr fn : funcs) {
+                StreamMetaFunc spec = streamMetaFuncOf(fn);
+                if (spec != null) {
+                    kinds.add(spec.kind);
+                }
+            }
+        }
+        return kinds;
+    }
+
+    public static boolean referencesAnyStreamMeta(List<ImportColumnDesc> columnDescs) {
+        return !collectStreamMetaKinds(columnDescs).isEmpty();
+    }
+
+    // A hidden source column synthesized for one distinct metadata function call, plus its BE binding.
+    public static final class StreamMetaBinding {
+        public final String hiddenName;
+        public final StreamMetaKind kind;
+        public final String key; // header/property key, else null
+        public final Type type;
+
+        StreamMetaBinding(String hiddenName, StreamMetaKind kind, String key, Type type) {
+            this.hiddenName = hiddenName;
+            this.kind = kind;
+            this.key = key;
+            this.type = type;
+        }
+    }
+
+    // Deep copy of the column mappings so planning can rewrite expr trees in place without touching the
+    // job's persisted ImportColumnDesc/Expr objects (which SHOW CREATE ROUTINE LOAD renders).
+    public static List<ImportColumnDesc> deepCopyColumnDescs(List<ImportColumnDesc> columnExprs) {
+        List<ImportColumnDesc> copy = Lists.newArrayList();
+        for (ImportColumnDesc desc : columnExprs) {
+            if (desc.getExpr() != null) {
+                copy.add(new ImportColumnDesc(desc.getColumnName(), desc.getExpr().clone(),
+                        desc.isMaterialized(), desc.getPos()));
+            } else {
+                copy.add(new ImportColumnDesc(desc.getColumnName(), desc.isMaterialized()));
+            }
+        }
+        return copy;
+    }
+
+    // Lowers metadata function calls in `columnExprs` (which must already be deep-copied -- the rewrite
+    // mutates expr trees in place) to hidden source columns: each distinct (source, kind, key) gets one
+    // generated hidden column whose name cannot collide with a user column, the call is replaced by a
+    // SlotRef to it, and a bare ImportColumnDesc is appended so a source slot is created. Returns the
+    // bindings so the caller can type the slots and emit TRoutineLoadMetaColumn descriptors. `tbl` seeds
+    // the collision set with the destination schema so a generated name can never equal a real table
+    // column (which initColumns would otherwise type from the table, not as metadata).
+    public static List<StreamMetaBinding> lowerStreamMetaFunctions(List<ImportColumnDesc> columnExprs, Table tbl) {
+        Map<String, StreamMetaBinding> bySignature = Maps.newLinkedHashMap();
+        Set<String> usedNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ImportColumnDesc desc : columnExprs) {
+            usedNames.add(desc.getColumnName());
+        }
+        if (tbl != null) {
+            for (Column column : tbl.getFullSchema()) {
+                usedNames.add(column.getName());
+            }
+        }
+        for (int i = 0; i < columnExprs.size(); i++) {
+            ImportColumnDesc desc = columnExprs.get(i);
+            Expr expr = desc.getExpr();
+            if (expr == null) {
+                continue;
+            }
+            Expr rewritten = rewriteStreamMetaCalls(expr, bySignature, usedNames);
+            if (rewritten != expr) {
+                // The call was at the expression root, so replace the whole mapping expr.
+                columnExprs.set(i, new ImportColumnDesc(desc.getColumnName(), rewritten,
+                        desc.isMaterialized(), desc.getPos()));
+            }
+        }
+        List<StreamMetaBinding> bindings = Lists.newArrayList(bySignature.values());
+        for (StreamMetaBinding b : bindings) {
+            columnExprs.add(new ImportColumnDesc(b.hiddenName));
+        }
+        return bindings;
+    }
+
+    private static Expr rewriteStreamMetaCalls(Expr expr, Map<String, StreamMetaBinding> bySignature,
+                                               Set<String> usedNames) {
+        if (expr instanceof FunctionCallExpr) {
+            StreamMetaFunc spec = streamMetaFuncOf((FunctionCallExpr) expr);
+            if (spec != null) {
+                String key = null;
+                if (spec.takesKey && !expr.getChildren().isEmpty() && expr.getChild(0) instanceof StringLiteral) {
+                    key = ((StringLiteral) expr.getChild(0)).getValue();
+                }
+                String signature = spec.source + ":" + spec.kind + ":" + (key == null ? "" : key);
+                StreamMetaBinding b = bySignature.get(signature);
+                if (b == null) {
+                    String hiddenName = generateHiddenMetaName(usedNames, bySignature.size());
+                    usedNames.add(hiddenName);
+                    b = new StreamMetaBinding(hiddenName, spec.kind, key, spec.type);
+                    bySignature.put(signature, b);
+                }
+                return new SlotRef(null, b.hiddenName);
+            }
+        }
+        for (int i = 0; i < expr.getChildren().size(); i++) {
+            Expr child = expr.getChild(i);
+            Expr rewritten = rewriteStreamMetaCalls(child, bySignature, usedNames);
+            if (rewritten != child) {
+                expr.setChild(i, rewritten);
+            }
+        }
+        return expr;
+    }
+
+    // Internal hidden-column name (user cannot reference it) that is guaranteed not to collide with any
+    // existing column name (case-insensitive, matching the load column maps).
+    private static String generateHiddenMetaName(Set<String> usedNames, int seq) {
+        String name;
+        do {
+            name = "__starrocks_rl_meta_" + seq;
+            seq++;
+        } while (usedNames.contains(name));
+        return name;
+    }
+
+    private static TStreamSourceMetaKind toTStreamSourceMetaKind(StreamMetaKind kind) {
+        switch (kind) {
+            case TOPIC:
+                return TStreamSourceMetaKind.TOPIC;
+            case PARTITION:
+                return TStreamSourceMetaKind.PARTITION;
+            case OFFSET:
+                return TStreamSourceMetaKind.OFFSET;
+            case MESSAGE_ID:
+                return TStreamSourceMetaKind.MESSAGE_ID;
+            case TIMESTAMP:
+                return TStreamSourceMetaKind.TIMESTAMP;
+            case EVENT_TIME:
+                return TStreamSourceMetaKind.EVENT_TIME;
+            case KEY:
+                return TStreamSourceMetaKind.KEY;
+            case HEADER:
+                return TStreamSourceMetaKind.HEADER;
+            case HEADERS:
+                return TStreamSourceMetaKind.HEADERS;
+            default:
+                throw new IllegalStateException("unknown stream meta kind: " + kind);
+        }
+    }
+
     // load job meta
     private LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
 
@@ -305,7 +593,7 @@ public class Load {
                                    List<String> columnsFromPath, boolean isLoadJson) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, isLoadJson, false);
+                columnsFromPath, isLoadJson, false, null);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -314,7 +602,7 @@ public class Load {
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isLoadJson,
-                                   boolean partialUpdate) throws StarRocksException {
+                                   boolean partialUpdate, String routineLoadSourceType) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -365,8 +653,12 @@ public class Load {
         }
 
         // We make a copy of the columnExprs so that our subsequent changes
-        // to the columnExprs will not affect the original columnExprs.
-        List<ImportColumnDesc> copiedColumnExprs = Lists.newArrayList(columnExprs);
+        // to the columnExprs will not affect the original columnExprs. Routine load rewrites mapping
+        // exprs in place (metadata-function lowering, __op reset), so it needs a deep copy; otherwise
+        // SHOW CREATE ROUTINE LOAD -- which renders the job's shared ImportColumnDesc/Expr objects --
+        // would display the lowered hidden slots instead of the user's kafka_topic() text.
+        List<ImportColumnDesc> copiedColumnExprs = routineLoadSourceType != null
+                ? deepCopyColumnDescs(columnExprs) : Lists.newArrayList(columnExprs);
 
         // If user does not specify the file field names, generate it by using base schema of table.
         // So that the following process can be unified
@@ -416,6 +708,20 @@ public class Load {
                 // 2. __op is not specified
                 copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
                         isLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
+            }
+        }
+
+        // Lower routine-load metadata function calls (kafka_topic(), kafka_header('k'), ...) in the
+        // mapping exprs to hidden source columns the BE scanner fills from the message metadata; the
+        // hidden bare columns are appended last so they sit after the jsonpath-covered columns. Only for
+        // routine load; elsewhere a metadata-function name is left alone and fails normal function
+        // resolution ("No matching function"), which is the desired "not supported here".
+        List<StreamMetaBinding> metaBindings = Lists.newArrayList();
+        Map<String, StreamMetaBinding> metaByName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        if (routineLoadSourceType != null) {
+            metaBindings = lowerStreamMetaFunctions(copiedColumnExprs, tbl);
+            for (StreamMetaBinding b : metaBindings) {
+                metaByName.put(b.hiddenName, b);
             }
         }
 
@@ -523,6 +829,14 @@ public class Load {
             }
         }
 
+        // Hidden source-metadata columns have a fixed type assigned below; exclude them from expr-driven
+        // type inference (replaceSrcSlotDescType) so a MAP/INT/BIGINT metadata slot keeps its type.
+        for (ImportColumnDesc importColumnDesc : copiedColumnExprs) {
+            if (importColumnDesc.isColumn() && metaByName.containsKey(importColumnDesc.getColumnName())) {
+                varcharColumns.add(importColumnDesc.getColumnName());
+            }
+        }
+
         // init slot desc add expr map, also transform hadoop functions
         // if use vectorized load, set src slot desc type with starrocks schema if source column is in starrocks table
         // else set varchar firstly, and try to set specific type later after expr analyzed.
@@ -558,6 +872,14 @@ public class Load {
                         slotDesc.setType(IntegerType.TINYINT);
                         slotDesc.setColumn(new Column(columnName, IntegerType.TINYINT));
                         slotDesc.setIsMaterialized(true);
+                    } else if (metaByName.containsKey(columnName)) {
+                        // Hidden source-metadata column (lowered from kafka_topic() etc.). Fix the type
+                        // (INT/BIGINT/VARCHAR/MAP) here, before expression analysis, so kafka_headers()['k']
+                        // sees a MAP child.
+                        Type metaType = metaByName.get(columnName).type;
+                        slotDesc.setType(metaType);
+                        slotDesc.setColumn(new Column(columnName, metaType));
+                        slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(VarcharType.VARCHAR);
                         slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
@@ -581,6 +903,23 @@ public class Load {
                 slotDescByName.put(columnName, slotDesc);
             }
         }
+
+        // Emit a TRoutineLoadMetaColumn for each hidden metadata slot so the BE scanner fills it from the
+        // message metadata by slot id (never by name, so payload fields are not shadowed).
+        for (StreamMetaBinding b : metaBindings) {
+            SlotDescriptor metaSlot = slotDescByName.get(b.hiddenName);
+            if (metaSlot == null) {
+                continue;
+            }
+            TRoutineLoadMetaColumn metaDesc = new TRoutineLoadMetaColumn();
+            metaDesc.setSlot_id(metaSlot.getId().asInt());
+            metaDesc.setKind(toTStreamSourceMetaKind(b.kind));
+            if (b.key != null) {
+                metaDesc.setKey(b.key);
+            }
+            params.addToStream_source_meta_columns(metaDesc);
+        }
+
         /*
          * The extension column of the materialized view is added to the expression evaluation of load
          * To avoid nested expressions. eg : column(a, tmp_c, c = expr(tmp_c)) ,
@@ -852,8 +1191,11 @@ public class Load {
             }
 
             // check if contain aggregation
+            // collectAll (not collect): collect() stops at the first matching node and does not descend,
+            // so it would miss a metadata call nested inside another function, e.g.
+            // from_unixtime(kafka_timestamp_ms()/1000).
             List<FunctionCallExpr> funcs = Lists.newArrayList();
-            expr.collect(FunctionCallExpr.class, funcs);
+            expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
                     throw new StarRocksException("Don't support aggregation function in load expression");
@@ -889,8 +1231,11 @@ public class Load {
             expr = ExprUtils.analyzeAndCastFold(expr);
 
             // check if contain aggregation
+            // collectAll (not collect): collect() stops at the first matching node and does not descend,
+            // so it would miss a metadata call nested inside another function, e.g.
+            // from_unixtime(kafka_timestamp_ms()/1000).
             List<FunctionCallExpr> funcs = Lists.newArrayList();
-            expr.collect(FunctionCallExpr.class, funcs);
+            expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
                     throw new StarRocksException("Don't support aggregation function in load expression");

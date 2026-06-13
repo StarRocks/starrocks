@@ -617,7 +617,7 @@ public class LoadTest {
                 "missing dependency column for generated column c3",
                 () -> Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable,
                         localSrcTupleDesc, localSlotDescByName, new TBrokerScanRangeParams(), true, true,
-                        Lists.newArrayList(), false, true));
+                        Lists.newArrayList(), false, true, null));
     }
 
     /**
