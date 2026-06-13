@@ -40,4 +40,6 @@ public interface BasicTable {
     long getCreateTime();
 
     long getLastCheckTime();
+
+    String getCreator();
 }
