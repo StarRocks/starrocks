@@ -1546,11 +1546,22 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                         }
                     }
                 }
-                // During linked schema change, the now() default value is stored in TabletMeta.
-                // When receiving a new schema change request, the last default value stored should be
-                // remained instead of changing.
-                if (old_column.has_default_value()) {
+                // During linked schema change the frozen default is stored as default_value in
+                // TabletMeta. Inherit it only when the request omits its own default (e.g. a
+                // now()/expr default materialized on the BE); when the request carries a
+                // default_value (e.g. MODIFY ... DEFAULT changed it), honor it so the new default
+                // reaches new writes instead of being reverted to the old one.
+                if (old_column.has_default_value() && !new_column.__isset.default_value) {
                     new_columns[new_col_idx].__set_default_value(old_column.default_value());
+                }
+                // The old tablet is authoritative for the frozen backfill default (origin): rows
+                // older than the column keep the default in effect when it was added, regardless of a
+                // later MODIFY. For schemas predating origin_default_value, the old default_value is
+                // that frozen value.
+                if (old_column.has_origin_default_value()) {
+                    new_columns[new_col_idx].__set_origin_default_value(old_column.origin_default_value());
+                } else if (old_column.has_default_value()) {
+                    new_columns[new_col_idx].__set_origin_default_value(old_column.default_value());
                 }
                 col_idx_to_unique_id[new_col_idx] = old_unique_id;
             } else {

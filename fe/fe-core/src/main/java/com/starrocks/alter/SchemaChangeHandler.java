@@ -892,6 +892,11 @@ public class SchemaChangeHandler extends AlterHandler {
         modColumn.setName(oriColumn.getName());
         modColumn.setColumnId(oriColumn.getColumnId());
         modColumn.setUniqueId(oriColumn.getUniqueId());
+        // Carry over the frozen backfill default. MODIFY only changes the default for new
+        // writes (modColumn.defaultValue); rows older than the column must keep the default
+        // that was in effect when it was added, so origin is inherited, not taken from the clause.
+        modColumn.setOriginDefaultValue(oriColumn.getOriginDefaultValue());
+        modColumn.setOriginDefaultExpr(oriColumn.getOriginDefaultExpr());
 
         if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
             throw new DdlException("Can not modify a non-generated column to a generated column");

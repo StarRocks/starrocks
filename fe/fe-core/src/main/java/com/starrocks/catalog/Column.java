@@ -97,6 +97,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private static final Logger LOG = LogManager.getLogger(Column.class);
 
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
+    // Sentinel stored in originDefaultValue meaning the column had no default when it was added,
+    // so rows older than it stay NULL even if a default is added later. Mirrors BE's "NULL"
+    // default_value convention (DefaultValueColumnIterator maps "NULL" to a null fill).
+    public static final String NULL_ORIGIN_DEFAULT_VALUE = "NULL";
     public static final int COLUMN_UNIQUE_ID_INIT_VALUE = -1;
 
     // logical name, rename will change this name.
@@ -141,6 +145,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private boolean isAutoIncrement;
     @SerializedName(value = "defaultValue")
     private String defaultValue;
+    // Add-time default used to backfill rows that physically lack this column (added via fast
+    // schema evolution). Set when ALTER ... MODIFY ... DEFAULT changes the default: it freezes the
+    // pre-change (add-time) value here while |defaultValue| moves to the new default, so rows older
+    // than the column keep the default that was in effect when it was added. Null until then;
+    // getOriginDefaultValue() derives the add-time value from the current state in that case.
+    @SerializedName(value = "originDefaultValue")
+    private String originDefaultValue;
+    // Expression form of the add-time backfill default, used for complex (ARRAY/MAP/STRUCT) defaults
+    // whose materialized JSON only exists on the BE: MODIFY freezes the pre-change expression here,
+    // and the BE converts it to the origin JSON. Scalar defaults use |originDefaultValue| instead.
+    @SerializedName(value = "originDefaultExpr")
+    private DefaultExpr originDefaultExpr;
     // this handle function like now() or simple expression
     @SerializedName(value = "defaultExpr")
     private DefaultExpr defaultExpr;
@@ -295,6 +311,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isKey = column.isKey();
         this.isAllowNull = column.isAllowNull();
         this.defaultValue = column.getDefaultValue();
+        this.originDefaultValue = column.originDefaultValue;
+        this.originDefaultExpr = column.originDefaultExpr;
         this.comment = column.getComment();
         this.defineExpr = column.getDefineExpr();
         this.defaultExpr = column.defaultExpr;
@@ -434,6 +452,52 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.defaultValue;
     }
 
+    public void setOriginDefaultValue(String originDefaultValue) {
+        this.originDefaultValue = originDefaultValue;
+    }
+
+    // Add-time backfill default for rows that physically lack this column. Returns the value
+    // frozen by a prior MODIFY ... DEFAULT once set; otherwise derives it from the current state,
+    // which equals the add-time default because a default can only be changed via MODIFY (which
+    // freezes it here), so an unfrozen column has never had its default changed. Complex
+    // (ARRAY/MAP/STRUCT) defaults return null here and carry their origin via getOriginDefaultExpr();
+    // a column with no backfillable literal returns null too. See the per-branch notes below.
+    public String getOriginDefaultValue() {
+        if (this.originDefaultValue != null) {
+            return this.originDefaultValue;
+        }
+        // Complex (ARRAY/MAP/STRUCT) defaults have no literal here — their add-time origin is carried
+        // in expression form via getOriginDefaultExpr() and materialized to JSON on the BE.
+        if (defaultExpr != null && defaultExpr.hasExprObject()) {
+            return null;
+        }
+        // A frozen literal (a literal default, or an ADD-time now()/current_timestamp) is what older
+        // rows read; anything not materialized into a literal (uuid(), current_timestamp(N), no
+        // default) leaves older rows reading SQL NULL.
+        if (defaultValue != null) {
+            return defaultValue;
+        }
+        return isAllowNull ? NULL_ORIGIN_DEFAULT_VALUE : null;
+    }
+
+    public void setOriginDefaultExpr(DefaultExpr originDefaultExpr) {
+        this.originDefaultExpr = originDefaultExpr;
+    }
+
+    // Add-time backfill default in expression form, for complex (ARRAY/MAP/STRUCT) defaults. Returns
+    // the value frozen by a prior MODIFY once set; otherwise the current complex default expression,
+    // which equals the add-time value (a default can only change via MODIFY, which freezes it). Null
+    // for non-complex columns (those use getOriginDefaultValue()).
+    public DefaultExpr getOriginDefaultExpr() {
+        if (this.originDefaultExpr != null) {
+            return this.originDefaultExpr;
+        }
+        if (defaultExpr != null && defaultExpr.hasExprObject()) {
+            return defaultExpr;
+        }
+        return null;
+    }
+
     public void setComment(String comment) {
         this.comment = comment;
     }
@@ -517,6 +581,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         } else if (this.defaultValue != null) {
             tColumn.setDefault_value(this.defaultValue);
         }
+        // Frozen backfill default for rows older than this column. Sent independently of
+        // default_value/default_expr so MODIFY DEFAULT does not retroactively change them.
+        String originDefault = getOriginDefaultValue();
+        if (originDefault != null) {
+            tColumn.setOrigin_default_value(originDefault);
+        }
+        // Complex (ARRAY/MAP/STRUCT) defaults carry their frozen origin in expression form; the BE
+        // converts it to the origin JSON, mirroring default_expr -> default_value.
+        DefaultExpr originExpr = getOriginDefaultExpr();
+        if (originExpr != null && originExpr.getExprObject() != null) {
+            tColumn.setOrigin_default_expr(ExprToThrift.treeToThrift(originExpr.getExprObject()));
+        }
 
         // The define expr does not need to be serialized here for now.
         // At present, only serialized(analyzed) define expr is directly used when creating a materialized view.
@@ -581,8 +657,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             throw new DdlException("Can not change from nullable to non-nullable");
         }
 
-        // Adding a default value to a column without a default value is not supported
-        if (!this.isSameDefaultValue(other)) {
+        // Allow changing the default for non-key value columns (see isDefaultValueChangeAllowed).
+        // The change is never retroactive: rows older than the column keep their add-time default
+        // via getOriginDefaultValue()/getOriginDefaultExpr() -- frozen on the first MODIFY, derived
+        // from the current (still add-time) default before that -- so even columns created before
+        // this feature keep their old rows' values; only new writes see the new default.
+        if (!this.isSameDefaultValue(other) && !this.isDefaultValueChangeAllowed()) {
             throw new DdlException(CAN_NOT_CHANGE_DEFAULT_VALUE);
         }
 
@@ -621,6 +701,19 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         return true;
+    }
+
+    // Whether MODIFY ... DEFAULT may change this column's default. Allowed for any non-key value
+    // column with a simple aggregation: scalar defaults keep the add-time value via
+    // getOriginDefaultValue(), complex (ARRAY/MAP/STRUCT) defaults via getOriginDefaultExpr(). Key
+    // columns and SUM/MIN/MAX/union aggregations (e.g. SUM requires a zero default) stay immutable.
+    private boolean isDefaultValueChangeAllowed() {
+        if (isKey) {
+            return false;
+        }
+        return aggregationType == null || aggregationType == AggregateType.NONE
+                || aggregationType == AggregateType.REPLACE
+                || aggregationType == AggregateType.REPLACE_IF_NOT_NULL;
     }
 
     public boolean nameEquals(String otherColName, boolean ignorePrefix) {
