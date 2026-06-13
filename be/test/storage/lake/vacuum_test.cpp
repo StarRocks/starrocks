@@ -3657,6 +3657,85 @@ TEST_P(LakeVacuumTest, full_vacuum_drops_local_cache_for_active_idx) {
     EXPECT_NE(std::find(dropped.begin(), dropped.end(), std::string("8003_active.idx")), dropped.end());
 }
 
+// A deadline that expires while walking the version chain must stop the walk early without
+// deleting anything; the next run (no deadline pressure) completes normally.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_deadline_expired_mid_walk) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 2,
+            "prev_garbage_version": 0,
+            "commit_time": 1687331159
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 3,
+            "prev_garbage_version": 2,
+            "commit_time": 1687331160
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 4,
+            "prev_garbage_version": 3,
+            "commit_time": 1687331161
+        }
+        )DEL")));
+
+    // The first checks (request entry, first two walk iterations) observe a mocked clock
+    // before the deadline, every later check observes one far past it, so the deadline
+    // expires in the middle of the version chain walk.
+    int64_t check_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline", [&](void* arg) {
+        check_count++;
+        *(int64_t*)arg = (check_count > 3) ? (int64_t{1} << 62) : 0;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(20002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331162);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response, /*deadline_ms=*/1);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_GT(check_count, 3);
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 4)));
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(20002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331162);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(4, response.vacuumed_version());
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(20002, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(20002, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 4)));
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 

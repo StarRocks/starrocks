@@ -17,6 +17,7 @@
 #include <butil/fast_rand.h>
 #include <butil/time.h>
 #include <bvar/bvar.h>
+#include <fmt/format.h>
 
 #include <optional>
 #include <set>
@@ -174,6 +175,23 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
     }
     auto message = st.message();
     return MatchPattern(message, config::lake_vacuum_retry_pattern.value());
+}
+
+// Returns Status::TimedOut once |deadline_ms| (milliseconds since the Epoch) has passed.
+// deadline_ms <= 0 means no deadline. The deadline is anchored at the time the BE received
+// the vacuum request, so it also expires for tasks that waited too long in the thread pool
+// queue: by then the FE caller has given up waiting and would re-dispatch the partition,
+// continuing would only keep a vacuum worker occupied for a response nobody reads.
+Status check_vacuum_deadline(int64_t deadline_ms) {
+    if (deadline_ms <= 0) {
+        return Status::OK();
+    }
+    int64_t now_ms = butil::gettimeofday_ms();
+    TEST_SYNC_POINT_CALLBACK("vacuum:check_deadline", &now_ms);
+    if (now_ms >= deadline_ms) {
+        return Status::TimedOut(fmt::format("vacuum task deadline exceeded, now={}, deadline={}", now_ms, deadline_ms));
+    }
+    return Status::OK();
 }
 
 Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> paths) {
@@ -417,7 +435,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
                                       AsyncSharedFileDeleter* shared_file_deleter, int64_t* total_datafile_size,
                                       int64_t* vacuumed_version, int64_t* extra_datafile_size,
-                                      const TabletRetainInfo& retain_info) {
+                                      const TabletRetainInfo& retain_info, int64_t deadline_ms) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
@@ -437,6 +455,9 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
     while (version >= min_version) {
+        if (auto st = check_vacuum_deadline(deadline_ms); !st.ok()) {
+            return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
+        }
         // fill data cache to avoid read bundle meta file from remote storage repeatedly.
         auto res = tablet_mgr->get_tablet_metadata(
                 tablet_id, version, false /* Not need to fill meta cache */,
@@ -557,7 +578,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                                      int64_t grace_timestamp, bool enable_file_bundling,
                                      bool enable_shared_file_cleanup, int64_t* vacuumed_files,
                                      int64_t* vacuumed_file_size, int64_t* vacuumed_version, int64_t* extra_file_size,
-                                     const std::unordered_set<int64_t>& retain_versions) {
+                                     const std::unordered_set<int64_t>& retain_versions, int64_t deadline_ms) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
@@ -586,7 +607,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
                                                 vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
                                                 &shared_file_deleter, vacuumed_file_size, &tablet_vacuumed_version,
-                                                extra_file_size, tablet_retain_info));
+                                                extra_file_size, tablet_retain_info, deadline_ms));
         RETURN_IF_ERROR(datafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
         if (!enable_file_bundling) {
@@ -795,7 +816,8 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
     return ret;
 }
 
-Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
+Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response,
+                   int64_t deadline_ms) {
     if (UNLIKELY(tablet_mgr == nullptr)) {
         return Status::InvalidArgument("tablet_mgr is null");
     }
@@ -808,6 +830,9 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     if (UNLIKELY(request.grace_timestamp() <= 0)) {
         return Status::InvalidArgument("value of grace_timestamp is zero or nagative");
     }
+    // The task may have stayed in the thread pool queue long enough that the FE caller
+    // already timed out and gave up, abort without doing any work in that case.
+    RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
 
     auto tablet_infos = std::vector<TabletInfoPB>();
     if (request.tablet_infos_size() > 0) {
@@ -852,7 +877,8 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
             request.has_enable_shared_file_cleanup() ? request.enable_shared_file_cleanup() : enable_file_bundling;
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
                                            enable_file_bundling, enable_shared_file_cleanup, &vacuumed_files,
-                                           &vacuumed_file_size, &vacuumed_version, &extra_file_size, retain_versions));
+                                           &vacuumed_file_size, &vacuumed_version, &extra_file_size, retain_versions,
+                                           deadline_ms));
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
@@ -871,9 +897,9 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     return Status::OK();
 }
 
-void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
-    auto st = vacuum_impl(tablet_mgr, request, response);
-    LOG_IF(ERROR, !st.ok()) << st;
+void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response, int64_t deadline_ms) {
+    auto st = vacuum_impl(tablet_mgr, request, response, deadline_ms);
+    LOG_IF(ERROR, !st.ok()) << "Fail to vacuum partition " << request.partition_id() << ": " << st;
     st.to_protobuf(response->mutable_status());
 }
 
