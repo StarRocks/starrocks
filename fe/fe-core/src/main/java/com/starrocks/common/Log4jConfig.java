@@ -51,6 +51,7 @@ import java.util.logging.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
@@ -465,6 +466,20 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     public static synchronized void initLogging() throws IOException {
+        String customConfig = System.getProperty("log4j.configurationFile");
+
+        if (StringUtils.isNotBlank(customConfig)) {
+            try {
+                URI uri = URI.create(customConfig);
+                LoggerContext context = (LoggerContext) LogManager.getContext(false);
+                context.setConfigLocation(uri);
+                return;
+            } catch (Exception e) {
+                System.err.println("[ERROR] Failed to initialize custom Log4j config: " + customConfig);
+                e.printStackTrace(System.err);
+            }
+        }
+
         sysLogLevel = Config.sys_log_level;
         verboseModules = Config.sys_log_verbose_modules;
         auditModules = Config.audit_log_modules;
