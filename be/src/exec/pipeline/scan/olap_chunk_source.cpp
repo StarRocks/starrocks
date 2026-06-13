@@ -964,9 +964,11 @@ void OlapChunkSource::_update_counter() {
 
     // Data sampling
     if (_params.sample_options.enable_sampling) {
+        double sample_percent = _params.sample_options.__isset.probability_percent_v2
+                                        ? _params.sample_options.probability_percent_v2
+                                        : static_cast<double>(_params.sample_options.probability_percent);
         _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
-        _runtime_profile->add_info_string("SamplePercent",
-                                          std::to_string(_params.sample_options.probability_percent) + "%");
+        _runtime_profile->add_info_string("SamplePercent", std::to_string(sample_percent) + "%");
         COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name),
                        _reader->stats().sample_population_size);
         COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleBuildHistogramTime", parent_name),
