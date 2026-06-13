@@ -1296,10 +1296,10 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 #endif
 }
 
-StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(const PredicateTree& pred_tree, const Schema& schema,
-                                                        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
-                                                        std::vector<rowid_t>* fallback_rowids,
-                                                        const roaring::Roaring& candidate) {
+StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
+        const PredicateTree& pred_tree, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate) {
     if (candidate.isEmpty() || pred_tree.empty()) {
         return candidate;
     }
@@ -1317,8 +1317,7 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(const PredicateTree& pre
     auto pred_schema = std::make_shared<Schema>();
     for (ColumnId cid : pred_tree.column_ids()) {
         auto it = cid_2_fid.find(cid);
-        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() ||
-            column_iterators_by_cid[cid] == nullptr) {
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() || column_iterators_by_cid[cid] == nullptr) {
             return Status::InternalError(
                     strings::Substitute("pred-tree bitmap: predicate column $0 is not readable", cid));
         }

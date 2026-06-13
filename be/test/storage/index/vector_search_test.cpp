@@ -53,9 +53,9 @@
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
+#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
-#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -1300,8 +1300,8 @@ TEST_F(EvaluatePredTreeBitmapTest, or_tree_evaluated_whole) {
     // branches select the first and the last batch of the file.
     std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate(get_type_info(TYPE_INT), 1, "50"));
     std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99950"));
-    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(or_tree(lt.get(), ge.get()), _schema, _iters_by_cid,
-                                                           nullptr, full_range()));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(or_tree(lt.get(), ge.get()), _schema, _iters_by_cid, nullptr,
+                                                           full_range()));
     roaring::Roaring expect;
     expect.addRange(0, 50);
     expect.addRange(99950, kRows);
@@ -1387,8 +1387,8 @@ TEST_F(EvaluatePredTreeBitmapTest, fallback_rowids_published_per_batch) {
     roaring::Roaring one_batch;
     one_batch.addRange(2000, 2100);
     std::vector<rowid_t> buf = {999, 999};
-    ASSIGN_OR_ABORT(auto got1, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
-                                                            &buf, one_batch));
+    ASSIGN_OR_ABORT(auto got1, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid, &buf,
+                                                            one_batch));
     EXPECT_EQ(100u, got1.cardinality());
     ASSERT_EQ(100u, buf.size());
     EXPECT_EQ(2000u, buf.front());
@@ -1398,8 +1398,8 @@ TEST_F(EvaluatePredTreeBitmapTest, fallback_rowids_published_per_batch) {
     // overwrite contract the fallback depends on.
     roaring::Roaring two_batches;
     two_batches.addRange(0, 4106);
-    ASSIGN_OR_ABORT(auto got2, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
-                                                            &buf, two_batches));
+    ASSIGN_OR_ABORT(auto got2, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid, &buf,
+                                                            two_batches));
     EXPECT_EQ(4106u, got2.cardinality());
     ASSERT_EQ(10u, buf.size());
     EXPECT_EQ(4096u, buf.front());
@@ -1474,9 +1474,10 @@ protected:
         idx->set_index_name("vector_index");
         idx->set_index_type(IndexType::VECTOR);
         idx->add_col_unique_id(1);
-        idx->set_index_properties(R"({"common_properties":{"index_type":"hnsw","dim":"4","metric_type":")" + metric +
-                                  R"(","is_vector_normed":"false"},)"
-                                  R"("index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})");
+        idx->set_index_properties(
+                R"({"common_properties":{"index_type":"hnsw","dim":"4","metric_type":")" + metric +
+                R"(","is_vector_normed":"false"},)"
+                R"("index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})");
         return TabletSchema::create(pb);
     }
     ColumnPtr make_array_column(const std::vector<std::vector<float>>& vecs) {
