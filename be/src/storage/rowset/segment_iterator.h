@@ -67,11 +67,17 @@ StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const 
 //   fallback_rowids          optional; filled per batch with the batch's segment rowids, for
 //                            predicates that resolve chunk rows back to rowids (the inverted-index
 //                            fallback for a MATCH inside an OR).
+//   dict_code_candidates_by_cid
+//                            optional; flags columns whose predicates the ColumnPredicateRewriter
+//                            rewrote into dict codes. A flagged, all-page-dict-encoded column is
+//                            read as codes (DictCodeColumnIterator + code-typed field) so the
+//                            rewritten predicates evaluate against matching values.
 //
 // Reads in <= 4096-row batches and seeks every batch, so prior iterator positions do not matter.
 StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         const PredicateTree& pred_tree, const Schema& schema,
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
-        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate);
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
+        const std::vector<uint8_t>* dict_code_candidates_by_cid = nullptr);
 
 } // namespace starrocks

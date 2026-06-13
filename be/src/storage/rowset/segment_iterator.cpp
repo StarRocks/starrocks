@@ -955,12 +955,16 @@ Status SegmentIterator::_init_internal() {
     if (apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
     }
-    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
-    RETURN_IF_ERROR(_apply_data_sampling());
 
     // rewrite stage
-    // Rewriting predicates using segment dictionary codes
+    // Rewriting predicates using segment dictionary codes. Runs before the vector stage so the
+    // residual bitmap there evaluates the rewritten (dict-code) predicates and inherits the
+    // ALWAYS_TRUE / ALWAYS_FALSE collapses; must stay after the index filters above (the inverted
+    // index consumes predicates from the tree) and before _init_column_predicates (which splits
+    // the tree into the read-loop copies the vector stage's pruning must precede).
     RETURN_IF_ERROR(_rewrite_predicates());
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
     _init_column_predicates();
     RETURN_IF_ERROR(_init_context());
 
@@ -1296,10 +1300,11 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 #endif
 }
 
-StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
-        const PredicateTree& pred_tree, const Schema& schema,
-        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
-        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate) {
+StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(const PredicateTree& pred_tree, const Schema& schema,
+                                                        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+                                                        std::vector<rowid_t>* fallback_rowids,
+                                                        const roaring::Roaring& candidate,
+                                                        const std::vector<uint8_t>* dict_code_candidates_by_cid) {
     if (candidate.isEmpty() || pred_tree.empty()) {
         return candidate;
     }
@@ -1310,10 +1315,16 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         cid_2_fid.emplace(schema.field(i)->id(), i);
     }
 
-    // Collect every column referenced by the predicate tree, with its field, once. A missing
-    // iterator/field is a hard error rather than a silent skip -- silently skipping would make the
-    // bitmap incomplete (too wide) and let a downstream k-limit under-return.
-    std::vector<std::pair<ColumnId, FieldPtr>> pred_columns;
+    // Collect every column referenced by the predicate tree, with its field and reader, once. A
+    // missing iterator/field is a hard error rather than a silent skip -- silently skipping would
+    // make the bitmap incomplete (too wide) and let a downstream k-limit under-return.
+    struct PredColumn {
+        ColumnId cid;
+        FieldPtr field;
+        ColumnIterator* iter;
+    };
+    std::vector<PredColumn> pred_columns;
+    std::vector<std::unique_ptr<ColumnIterator>> dict_code_wrappers;
     auto pred_schema = std::make_shared<Schema>();
     for (ColumnId cid : pred_tree.column_ids()) {
         auto it = cid_2_fid.find(cid);
@@ -1321,8 +1332,19 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
             return Status::InternalError(
                     strings::Substitute("pred-tree bitmap: predicate column $0 is not readable", cid));
         }
-        const FieldPtr& field = schema.field(it->second);
-        pred_columns.emplace_back(cid, field);
+        FieldPtr field = schema.field(it->second);
+        ColumnIterator* iter = column_iterators_by_cid[cid].get();
+        // A dict-code candidate carries predicates the ColumnPredicateRewriter rewrote into dict
+        // codes -- it rewrites exactly when the column is all-page dict-encoded -- so the column
+        // must be read as codes: code-typed field + DictCodeColumnIterator, mirroring the read
+        // context (_build_context).
+        if (dict_code_candidates_by_cid != nullptr && cid < dict_code_candidates_by_cid->size() &&
+            (*dict_code_candidates_by_cid)[cid] && iter->all_page_dict_encoded()) {
+            field = std::make_shared<Field>(cid, field->name(), kDictCodeType, -1, -1, field->is_nullable());
+            dict_code_wrappers.emplace_back(std::make_unique<DictCodeColumnIterator>(cid, iter));
+            iter = dict_code_wrappers.back().get();
+        }
+        pred_columns.emplace_back(PredColumn{cid, field, iter});
         pred_schema->append(field);
     }
 
@@ -1340,13 +1362,13 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         // per-column immediate map (which silently drops OR/expr nodes and widens the result).
         Columns cols;
         cols.reserve(pred_columns.size());
-        for (const auto& [cid, field] : pred_columns) {
+        for (const auto& [cid, field, iter] : pred_columns) {
             MutableColumnPtr col = ChunkFactory::column_from_field(*field);
             // next_batch reads from the current page and does not seek internally; position first.
-            RETURN_IF_ERROR(column_iterators_by_cid[cid]->seek_to_ordinal(r.begin()));
+            RETURN_IF_ERROR(iter->seek_to_ordinal(r.begin()));
             SparseRange<> sub;
             sub.add(r);
-            RETURN_IF_ERROR(column_iterators_by_cid[cid]->next_batch(sub, col.get()));
+            RETURN_IF_ERROR(iter->next_batch(sub, col.get()));
             cols.emplace_back(std::move(col));
         }
         // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in
@@ -1382,7 +1404,8 @@ StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const r
             _inverted_index_ctx != nullptr && _inverted_index_ctx->has_fallback_predicates
                     ? &_inverted_index_ctx->rowid_buffer
                     : nullptr;
-    return evaluate_pred_tree_to_bitmap(_opts.pred_tree, _schema, _column_iterators, fallback_rowids, candidate);
+    return evaluate_pred_tree_to_bitmap(_opts.pred_tree, _schema, _column_iterators, fallback_rowids, candidate,
+                                        &_predicate_need_rewrite);
 }
 
 // Narrows _scan_range to the residual survivors and drops the fully evaluated tree, so the read

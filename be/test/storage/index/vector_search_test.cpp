@@ -40,8 +40,10 @@
 #include "gutil/casts.h"
 #include "gutil/walltime.h"
 #include "runtime/mem_pool.h"
+#include "common/object_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
+#include "storage/column_predicate_rewriter.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
@@ -1199,7 +1201,7 @@ protected:
 
         TabletSchemaPB pb;
         pb.set_keys_type(DUP_KEYS);
-        pb.set_next_column_unique_id(3);
+        pb.set_next_column_unique_id(4);
         auto* c0 = pb.add_column();
         c0->set_unique_id(0);
         c0->set_name("id");
@@ -1220,9 +1222,18 @@ protected:
             c->set_index_length(4);
             c->set_aggregation("NONE");
         }
+        auto* c3 = pb.add_column();
+        c3->set_unique_id(3);
+        c3->set_name("c3");
+        c3->set_type("VARCHAR");
+        c3->set_is_key(false);
+        c3->set_is_nullable(false);
+        c3->set_length(8);
+        c3->set_aggregation("NONE");
         _tablet_schema = TabletSchema::create(pb);
 
-        // id = i, c1 = i (monotonic -> expected sets are exact ranges), c2 = i % 7.
+        // id = i, c1 = i (monotonic -> expected sets are exact ranges), c2 = i % 7,
+        // c3 = "w" + (i % 7) (low-cardinality string -> every page dict-encoded).
         std::string seg_file = kDir + "/seg.dat";
         ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(seg_file));
         SegmentWriterOptions wopts;
@@ -1235,6 +1246,8 @@ protected:
                 chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i)));
                 chunk->columns()[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
                 chunk->columns()[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i % 7)));
+                const std::string w = "w" + std::to_string(i % 7);
+                chunk->columns()[3]->as_mutable_ptr()->append_datum(Datum(Slice(w)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -1243,18 +1256,21 @@ protected:
         ASSIGN_OR_ABORT(_segment, Segment::open(_fs, FileInfo{seg_file}, 0, _tablet_schema));
         ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(seg_file));
 
-        // Initialized column iterators for the two predicate columns, indexed by cid; the id
-        // column entry stays null on purpose (non-predicate columns may be null per the contract).
-        _iters_by_cid.resize(3);
-        for (int cid = 1; cid <= 2; cid++) {
+        // Initialized column iterators for the predicate columns, indexed by cid; the id column
+        // entry stays null on purpose (non-predicate columns may be null per the contract). The
+        // string column checks dict encoding so all_page_dict_encoded()/dict_lookup() work.
+        _iters_by_cid.resize(4);
+        for (int cid = 1; cid <= 3; cid++) {
             ASSIGN_OR_ABORT(auto it, _segment->new_column_iterator(_tablet_schema->column(cid), nullptr));
             ColumnIteratorOptions iter_opts;
             iter_opts.stats = &_stats;
             iter_opts.read_file = _read_file.get();
             iter_opts.use_page_cache = false;
+            iter_opts.check_dict_encoding = (cid == 3);
             ASSERT_OK(it->init(iter_opts));
             _iters_by_cid[cid] = std::move(it);
         }
+        ASSERT_TRUE(_iters_by_cid[3]->all_page_dict_encoded());
 
         // Schema holding ONLY the predicate columns (field->id() == cid) -- also verifies the
         // function does not require non-predicate columns to be present.
@@ -1262,8 +1278,11 @@ protected:
         f1->set_uid(1);
         auto f2 = std::make_shared<Field>(2, "c2", get_type_info(TYPE_INT), false);
         f2->set_uid(2);
+        auto f3 = std::make_shared<Field>(3, "c3", get_type_info(TYPE_VARCHAR), false);
+        f3->set_uid(3);
         _schema.append(f1);
         _schema.append(f2);
+        _schema.append(f3);
     }
     void TearDown() override { (void)fs::remove_all(kDir); }
 
@@ -1406,6 +1425,56 @@ TEST_F(EvaluatePredTreeBitmapTest, fallback_rowids_published_per_batch) {
     EXPECT_EQ(4105u, buf.back());
 }
 
+TEST_F(EvaluatePredTreeBitmapTest, dict_code_predicate_equals_value_evaluation) {
+    // The ColumnPredicateRewriter turns a string predicate on an all-page-dict-encoded column into a
+    // dict-code predicate; evaluating the rewritten tree with the dict-code candidates flagged must
+    // select exactly the rows the original value predicate selects, across all 25 batches.
+    std::unique_ptr<ColumnPredicate> value_pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "w3"));
+    ASSIGN_OR_ABORT(auto by_value, evaluate_pred_tree_to_bitmap(single_node_tree(value_pred.get()), _schema,
+                                                                _iters_by_cid, nullptr, full_range()));
+
+    std::unique_ptr<ColumnPredicate> to_rewrite(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "w3"));
+    PredicateTree tree = single_node_tree(to_rewrite.get());
+    std::vector<uint8_t> need_rewrite(4, 0);
+    need_rewrite[3] = 1;
+    SparseRange<> scan_range(0, kRows);
+    ObjectPool pool;
+    ColumnPredicateRewriter rewriter(_iters_by_cid, _schema, need_rewrite, /*column_size=*/3, scan_range);
+    ASSERT_OK(rewriter.rewrite_predicate(&pool, tree));
+
+    ASSIGN_OR_ABORT(auto by_code,
+                    evaluate_pred_tree_to_bitmap(tree, _schema, _iters_by_cid, nullptr, full_range(), &need_rewrite));
+    EXPECT_EQ(by_value.cardinality(), kRows / 7 + (3 < kRows % 7 ? 1 : 0));
+    EXPECT_TRUE(by_value == by_code);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, dict_code_mixed_with_plain_column) {
+    // A rewritten string column and a plain INT column in the same tree: only the flagged column
+    // switches to code reading; the INT predicate keeps the value path.
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99990"));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "w3"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(ge.get()));
+    root.add_child(PredicateColumnNode(eq.get()));
+    PredicateTree tree = PredicateTree::create(std::move(root));
+    std::vector<uint8_t> need_rewrite(4, 0);
+    need_rewrite[3] = 1;
+    SparseRange<> scan_range(0, kRows);
+    ObjectPool pool;
+    ColumnPredicateRewriter rewriter(_iters_by_cid, _schema, need_rewrite, /*column_size=*/3, scan_range);
+    ASSERT_OK(rewriter.rewrite_predicate(&pool, tree));
+
+    ASSIGN_OR_ABORT(auto got,
+                    evaluate_pred_tree_to_bitmap(tree, _schema, _iters_by_cid, nullptr, full_range(), &need_rewrite));
+    roaring::Roaring expect;
+    for (uint32_t i = 99990; i < kRows; i++) {
+        if (i % 7 == 3) {
+            expect.add(i);
+        }
+    }
+    EXPECT_TRUE(expect == got);
+}
+
 #ifdef WITH_TENANN
 // Validates the residual-predicate PRE-filter in SegmentIterator::_get_row_ranges_by_vector_index:
 // with a real HNSW .vi present (use_vector_index=true), a scalar predicate on a column WITHOUT an exact
@@ -1429,7 +1498,7 @@ protected:
     TabletSchemaPB base_schema_pb() {
         TabletSchemaPB pb;
         pb.set_keys_type(DUP_KEYS);
-        pb.set_next_column_unique_id(4);
+        pb.set_next_column_unique_id(5);
         auto* c0 = pb.add_column();
         c0->set_unique_id(0);
         c0->set_name("id");
@@ -1464,6 +1533,14 @@ protected:
         c3->set_length(4);
         c3->set_index_length(4);
         c3->set_aggregation("NONE");
+        auto* c4 = pb.add_column();
+        c4->set_unique_id(4);
+        c4->set_name("tag");
+        c4->set_type("VARCHAR");
+        c4->set_is_key(false);
+        c4->set_is_nullable(false);
+        c4->set_length(8);
+        c4->set_aggregation("NONE");
         return pb;
     }
     std::shared_ptr<TabletSchema> write_schema() { return TabletSchema::create(base_schema_pb()); }
@@ -1508,6 +1585,7 @@ protected:
         int result_order = 0;       // 0 = ascending (l2), 1 = descending (cosine)
         int min_filter_col = 4;     // every returned row must satisfy filter_col >= this
         bool build_vi = true;       // false: leave the .vi missing -> runtime brute-force fallback
+        bool with_tag_column = false; // include the dict-encoded VARCHAR tag column in the read schema
     };
 
     struct ResidualCaseResult {
@@ -1563,6 +1641,11 @@ protected:
             chunk->columns()[1]->as_mutable_ptr()->append_datum(Datum(a));
         }
         for (int i = 0; i < N; i++) chunk->columns()[2]->as_mutable_ptr()->append_datum(Datum(filt[i]));
+        // tag: low-cardinality dict-encoded VARCHAR; "red" for rows 0..3, "blue" for rows 4..7.
+        for (int i = 0; i < N; i++) {
+            const std::string tag = i < 4 ? "red" : "blue";
+            chunk->columns()[3]->as_mutable_ptr()->append_datum(Datum(Slice(tag)));
+        }
         ASSERT_OK(writer.init());
         ASSERT_OK(writer.append_chunk(*chunk));
         uint64_t seg_sz = 0, idx_sz = 0, footer = 0;
@@ -1639,6 +1722,11 @@ protected:
         auto ff = std::make_shared<Field>(2, "filter_col", get_type_info(TYPE_INT), false);
         ff->set_uid(3);
         read_schema.append(ff);
+        if (cfg.with_tag_column) {
+            auto tf = std::make_shared<Field>(3, "tag", get_type_info(TYPE_VARCHAR), false);
+            tf->set_uid(4);
+            read_schema.append(tf);
+        }
 
         auto it = new_segment_iterator(segment, read_schema, seg_opts);
         ASSERT_TRUE(it != nullptr);
@@ -1667,11 +1755,11 @@ protected:
             EXPECT_GE(fcol->get_data()[i], cfg.min_filter_col) << "returned row violates the residual predicate";
             got.push_back(idcol->get_data()[i]);
         }
-        // The ANN distance column is appended to the output chunk after the declared output columns
-        // (id, filter_col). Expose its values so metric regressions (cosine scored as L2) are visible:
-        // ids alone cannot catch them when every candidate is returned anyway.
-        if (out->num_columns() == 3) {
-            const auto* dcol = down_cast<const FloatColumn*>(out->get_column_by_index(2).get());
+        // The ANN distance column is appended to the output chunk after the declared output columns.
+        // Expose its values so metric regressions (cosine scored as L2) are visible: ids alone cannot
+        // catch them when every candidate is returned anyway.
+        if (out->num_columns() == read_schema.num_fields() + 1) {
+            const auto* dcol = down_cast<const FloatColumn*>(out->get_column_by_index(read_schema.num_fields()).get());
             result->distances.assign(dcol->get_data().begin(), dcol->get_data().end());
         }
         it->close();
@@ -1785,6 +1873,14 @@ TEST_F(VectorResidualPrefilterTest, residual_with_predicate_col_late_materialize
 // `filter_col >= <value>` variant of make_ge4_tree, for the short-circuit cardinality cases.
 static PredicateTree make_ge_tree(std::unique_ptr<ColumnPredicate>& pred, const char* value) {
     pred.reset(new_column_ge_predicate(get_type_info(TYPE_INT), 2, value));
+    return single_node_tree(pred.get());
+}
+
+// `tag = / != <value>` on the dict-encoded VARCHAR tag column (cid 3) -- the residual shape the
+// ColumnPredicateRewriter rewrites into a dict-code predicate before the vector stage.
+static PredicateTree make_tag_tree(std::unique_ptr<ColumnPredicate>& pred, bool eq, const char* value) {
+    pred.reset(eq ? new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, value)
+                  : new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 3, value));
     return single_node_tree(pred.get());
 }
 
@@ -2036,6 +2132,75 @@ TEST_F(VectorResidualPrefilterTest, vi_missing_fallback_brute_narrows) {
                       /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
     EXPECT_EQ(res.raw_rows_read, 4) << "fallback brute (.vi missing) was not narrowed";
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_prefilters_ann) {
+    // tag is a low-cardinality dict-encoded VARCHAR, so the rewrite stage (ahead of the vector stage)
+    // turns tag='blue' into a dict-code predicate and the residual bitmap must read codes. A broken
+    // code path cannot hide: an int code predicate mis-evaluates against a value column.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/true, "blue"), /*above_predicate=*/false, &res,
+                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6})); // PRE k-limit over matching rows {4..7}
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_brute_narrowed) {
+    // Brute (above-iterator predicate) with the dict-coded residual: pre-narrowing must evaluate the
+    // code predicate and confine the read loop to the 4 matching rows.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/true, "blue"), /*above_predicate=*/true, &res,
+                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "dict-coded residual was not pre-narrowed";
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_absent_word_collapses_to_empty) {
+    // The rewriter resolves tag='green' against the segment dict, finds no code, and collapses to
+    // ALWAYS_FALSE -- emptying the scan range before the vector stage even runs.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/true, "green"), /*above_predicate=*/false, &res,
+                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_TRUE(res.ids.empty());
+    EXPECT_EQ(res.raw_rows_read, 0);
+    EXPECT_EQ(res.search_ns, 0) << "ALWAYS_FALSE collapse must short out the ANN search";
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_ne_absent_word_collapses_to_match_all) {
+    // tag != 'green' on a non-nullable column with no such dict word -> ALWAYS_TRUE: the tree is
+    // emptied before the vector stage, leaving a plain ANN top-k.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    cfg.min_filter_col = 0;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/false, "green"), /*above_predicate=*/false, &res,
+                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_kill_switch_brute_reads_full_segment) {
+    // Kill-switch off: no pre-narrowing; the read loop itself evaluates the dict-code predicate
+    // through the read context's dict machinery (the rewrite still ran, ahead of the vector stage).
+    bool saved = config::enable_vector_index_residual_prefilter;
+    config::enable_vector_index_residual_prefilter = false;
+    DeferOp restore([&] { config::enable_vector_index_residual_prefilter = saved; });
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/true, "blue"), /*above_predicate=*/false, &res,
+                      AnnFilterStrategy::AUTO, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 8);
 }
 #endif // WITH_TENANN
 
