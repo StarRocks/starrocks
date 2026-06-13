@@ -356,6 +356,7 @@ private:
     TypeDescriptor(const std::vector<TTypeNode>& types, int* idx);
     TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNode>& types, int* idx);
     void to_protobuf(PTypeDesc* proto_type) const;
+    bool support_groupby(bool nested) const;
 };
 
 static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
