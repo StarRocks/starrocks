@@ -351,6 +351,14 @@ PROPERTIES(
    "histogram_sample_ratio" = "0.5"
 );
 
+-- Manually collect histograms on v3 in asynchronous mode, with 32 buckets and 50% sampling ratio.
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
+WITH ASYNC MODE
+WITH 32 BUCKETS
+PROPERTIES(
+   "histogram_sample_ratio" = "0.5"
+);
+
 -- Collect histograms on v3 using the 'hll' mode for accurate distinct count estimation per bucket.
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
 PROPERTIES(

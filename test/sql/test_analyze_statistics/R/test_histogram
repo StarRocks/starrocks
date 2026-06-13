@@ -326,9 +326,9 @@ insert into test_escaped_string select "aaaaa's";
 insert into test_escaped_string select "bbbbbbb";
 -- result:
 -- !result
-[UC] analyze table test_escaped_string update histogram on k1;
+analyze table test_escaped_string update histogram on k1;
 -- result:
-analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.test_escaped_string	histogram	status	OK
+[REGEX]analyze_test_.*\.test_escaped_string	histogram	status	OK
 -- !result
 function: assert_explain_costs_contains('select k1 from test_escaped_string', 'MCV')
 -- result:

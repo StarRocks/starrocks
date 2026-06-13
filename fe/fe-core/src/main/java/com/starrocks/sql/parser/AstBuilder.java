@@ -3365,6 +3365,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             bucket = Config.histogram_buckets_size;
         }
 
+        return buildHistogramAnalyzeStmt(tableRef, analyzeColumn, properties, bucket, context);
+    }
+
+    private AnalyzeStmt buildHistogramAnalyzeStmt(TableRef tableRef, Pair<Boolean, List<Expr>> analyzeColumn,
+                                                  Map<String, String> properties, long bucket,
+                                                  ParserRuleContext context) {
         return new AnalyzeStmt(tableRef, analyzeColumn.second, null, properties, true,
                 false, analyzeColumn.first, new AnalyzeHistogramDesc(bucket), createPos(context));
     }
@@ -3372,7 +3378,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitAnalyzeHistogramStatement(
             com.starrocks.sql.parser.StarRocksParser.AnalyzeHistogramStatementContext context) {
-        AnalyzeStmt analyzeStmt = histogramStatement(context.histogramStatement());
+        QualifiedName qualifiedName = getQualifiedName(context.tableName().qualifiedName());
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, createPos(context));
+        Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
+        long bucket = context.bucket != null
+                ? Long.parseLong(context.bucket.getText())
+                : Config.histogram_buckets_size;
+
+        AnalyzeStmt analyzeStmt = buildHistogramAnalyzeStmt(tableRef, analyzeColumn, properties, bucket, context);
         analyzeStmt.setIsAsync(context.ASYNC() != null);
         return analyzeStmt;
     }
