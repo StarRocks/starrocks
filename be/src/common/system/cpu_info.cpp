@@ -107,8 +107,8 @@ std::vector<std::vector<int>> CpuInfo::numa_node_to_cores_;
 std::vector<size_t> CpuInfo::cpuset_cores_;
 std::set<size_t> CpuInfo::offline_cores_;
 std::vector<int> CpuInfo::numa_node_core_idx_;
-std::vector<long> CpuInfo::cache_sizes;
-std::vector<long> CpuInfo::cache_line_sizes;
+std::vector<long> CpuInfo::cache_sizes(CpuInfo::NUM_CACHE_LEVELS, 0);
+std::vector<long> CpuInfo::cache_line_sizes(CpuInfo::NUM_CACHE_LEVELS, 0);
 
 const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
     static const std::vector<FlagMapping> mappings = {

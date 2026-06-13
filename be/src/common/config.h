@@ -1809,18 +1809,16 @@ CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
-// Software prefetch distance (in rows) for the agg hash-map / hash-set
-// probe loop.  Default 16 is empirical for L3-resident tables; raise on
-// DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
-// per chunk; changes take effect on the next chunk.
-CONF_mInt32(agg_hash_map_prefetch_dist, "16");
-// Software prefetch is gated on the bucket array spilling L2: it is only
-// enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
-// Below that the table is L2-resident and prefetch is a net loss (measured by
-// agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
-// contended many-driver-per-core deployments where the effective L2 share per
-// table is smaller than the nominal per-core size.
+// Software prefetch distance (in rows) for the aggregation and hash-join probe
+// loops; 0 disables. Each path gates prefetch on L2 residency via its own ratio.
+CONF_mInt32(hash_map_prefetch_dist, "16");
+CONF_Alias(hash_map_prefetch_dist, agg_hash_map_prefetch_dist);
+// L2-residency gate for the aggregation prefetch: armed only once
+// bucket_count * slot_bytes >= L2_size * this ratio.
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
+// L2-residency gate for the hash-join bucket-resolution prefetch: armed only
+// once bucket_size * 4 >= L2_size * this ratio (default lower than agg's).
+CONF_mDouble(join_probe_prefetch_l2_ratio, "0.4");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
 
