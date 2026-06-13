@@ -571,7 +571,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
 
         if (this.aggregationType != other.aggregationType) {
-            throw new DdlException("Can not change aggregation type");
+            throw new DdlException("Can not change aggregation type of column '" + other.getName()
+                    + "' from " + this.aggregationType + " to " + other.aggregationType);
         }
         if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
             throw new DdlException("Can not change aggregation state desc type");

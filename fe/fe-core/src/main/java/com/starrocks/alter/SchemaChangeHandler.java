@@ -727,6 +727,48 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    private static Column findColumnInSchema(List<Column> schema, String columnName) {
+        if (schema == null) {
+            return null;
+        }
+        for (Column column : schema) {
+            if (column.getName().equalsIgnoreCase(columnName)) {
+                return column;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * For UNIQUE/DUPLICATE tables the key set of an index is fixed at creation time and cannot be changed by
+     * MODIFY COLUMN. When the user omits the KEY keyword (e.g. only changing a comment), keep an existing key
+     * column as a key column. Because the column clause was analyzed (in {@code buildColumnForModify}) with
+     * isKey=false, the key-only constraints that {@code ColumnDefAnalyzer} enforces were skipped, so re-apply
+     * them here: a non-nullable key stays non-nullable, and the (possibly changed) type must still be a valid
+     * key-column type.
+     */
+    private static void keepKeyAttributeIfOmitted(Column modColumn, Column existingColumn) throws DdlException {
+        if (existingColumn == null || !existingColumn.isKey() || modColumn.isKey()) {
+            return;
+        }
+        modColumn.setIsKey(true);
+        if (!existingColumn.isAllowNull()) {
+            // checkSchemaChangeAllowed() only rejects nullable -> non-nullable, so without this an omitted
+            // NOT NULL would silently relax a non-nullable key column to nullable.
+            modColumn.setIsAllowNull(false);
+        }
+        if (!modColumn.getType().canDistributedBy()) {
+            // Mirror the key-column type check in ColumnDefAnalyzer that was skipped during analysis.
+            if (modColumn.getType().isFloatingPointType()) {
+                throw new DdlException(String.format(
+                        "Invalid data type of key column '%s': '%s', use decimal instead",
+                        modColumn.getName(), modColumn.getType()));
+            }
+            throw new DdlException(String.format(
+                    "Invalid data type of key column '%s': '%s'", modColumn.getName(), modColumn.getType()));
+        }
+    }
+
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexMetaIdToSchema,
@@ -736,6 +778,29 @@ public class SchemaChangeHandler extends AlterHandler {
         // But fast schema evolution for widening varchar length can be performed in both shared data and share nothing.
         boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
         Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
+
+        ColumnPosition columnPos = alterClause.getColPos();
+        String targetIndexName = alterClause.getRollupName();
+        checkIndexExists(olapTable, targetIndexName);
+
+        String baseIndexName = olapTable.getName();
+        checkAssignedTargetIndexName(baseIndexName, targetIndexName);
+
+        if (targetIndexName != null && columnPos == null) {
+            throw new DdlException("Do not need to specify index name when just modifying column type");
+        }
+
+        String indexNameForFindingColumn = targetIndexName;
+        if (indexNameForFindingColumn == null) {
+            indexNameForFindingColumn = baseIndexName;
+        }
+
+        long indexMetaIdForFindingColumn = olapTable.getIndexMetaIdByName(indexNameForFindingColumn);
+        // Resolve the schema of the index actually being modified. The key set can differ between the
+        // base index and a rollup (a base-table key column may be a value column in a rollup), so the
+        // backward-compatibility key restoration below must consult this schema rather than the base index.
+        List<Column> schemaForFinding = indexMetaIdToSchema.get(indexMetaIdForFindingColumn);
+
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
             if (baseColumn != null) {
@@ -779,6 +844,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
                         modColumn.getName());
             }
+            keepKeyAttributeIfOmitted(modColumn, findColumnInSchema(schemaForFinding, modColumn.getName()));
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
             }
@@ -787,6 +853,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
                         modColumn.getName());
             }
+            keepKeyAttributeIfOmitted(modColumn, findColumnInSchema(schemaForFinding, modColumn.getName()));
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
             }
@@ -807,26 +874,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        ColumnPosition columnPos = alterClause.getColPos();
-        String targetIndexName = alterClause.getRollupName();
-        checkIndexExists(olapTable, targetIndexName);
-
-        String baseIndexName = olapTable.getName();
-        checkAssignedTargetIndexName(baseIndexName, targetIndexName);
-
-        if (targetIndexName != null && columnPos == null) {
-            throw new DdlException("Do not need to specify index name when just modifying column type");
-        }
-
-        String indexNameForFindingColumn = targetIndexName;
-        if (indexNameForFindingColumn == null) {
-            indexNameForFindingColumn = baseIndexName;
-        }
-
-        long indexMetaIdForFindingColumn = olapTable.getIndexMetaIdByName(indexNameForFindingColumn);
-
         // find modified column
-        List<Column> schemaForFinding = indexMetaIdToSchema.get(indexMetaIdForFindingColumn);
         String newColName = modColumn.getName();
         boolean hasColPos = (columnPos != null && !columnPos.isFirst());
         boolean found = false;
