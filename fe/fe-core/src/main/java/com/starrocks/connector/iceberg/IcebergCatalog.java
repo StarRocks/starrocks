@@ -57,7 +57,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -312,6 +312,11 @@ public interface IcebergCatalog extends MemoryTrackable {
     // --------------- partition APIs ---------------
     default Map<String, Partition> getPartitions(IcebergTable icebergTable, long snapshotId, ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
+        Optional<Map<String, Partition>> fromStats =
+                IcebergPartitionStatsProvider.tryRead(nativeTable, snapshotId);
+        if (fromStats.isPresent()) {
+            return fromStats.get();
+        }
         Map<String, Partition> partitionMap = Maps.newHashMap();
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
@@ -487,11 +492,12 @@ public interface IcebergCatalog extends MemoryTrackable {
             long posDeleteFc = getStatsColumnAsLong(row, posDeleteFileCountIndex);
             long eqDeleteRc = getStatsColumnAsLong(row, eqDeleteRecordCountIndex);
             long eqDeleteFc = getStatsColumnAsLong(row, eqDeleteFileCountIndex);
-            // Include all data and delete file stats so that delete-only operations
-            // (position deletes, equality deletes) or rewrites that preserve data file
-            // counts but change delete files are correctly detected as changes.
-            // Produce a non-negative 31-bit hash to satisfy the >= 0 sentinel check in DefaultTraits.
-            return (long) Objects.hash(rc, fc, ts, posDeleteRc, posDeleteFc, eqDeleteRc, eqDeleteFc) & 0x7FFFFFFFL;
+            // Single shared formula with IcebergPartitionStatsProvider keeps the stats-file fast path
+            // bit-equivalent with this PartitionsTable scan path. Include all data and delete file
+            // stats so delete-only operations or rewrites that preserve data file counts but change
+            // delete files are still detected as changes. Produces a non-negative 31-bit hash to
+            // satisfy the >= 0 sentinel check in DefaultTraits.
+            return IcebergPartitionStatsProvider.fingerprint(rc, fc, ts, posDeleteRc, posDeleteFc, eqDeleteRc, eqDeleteFc);
         } catch (Exception e) {
             logger.error("Failed to compute stats fingerprint for partition [{}]", partitionName, e);
             return -1L;
