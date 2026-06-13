@@ -50,8 +50,22 @@
 
 namespace starrocks {
 
+// percentile_approx* return SQL NULL on empty / all-rejected state (zero total
+// weight) via PercentileApproxAggEmptyPred. The predicate lives in the
+// nullable wrapper, so the resolver must select the nullable mapping even when
+// all arguments are non-nullable; otherwise the raw aggregate path would
+// finalize the empty digest to NaN.
 static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = {
-        "variance_samp", "var_samp", "stddev_samp", "covar_samp", "corr", "max_by_v2", "min_by_v2"};
+        "variance_samp",
+        "var_samp",
+        "stddev_samp",
+        "covar_samp",
+        "corr",
+        "max_by_v2",
+        "min_by_v2",
+        "percentile_approx",
+        "percentile_approx_weighted",
+};
 
 static const std::string FUNCTION_COUNT = "count";
 
@@ -1140,9 +1154,9 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
             } else {
                 {
                     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
-                    // convert_to_serialize_format expects const Columns&, create a view
-                    _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
-                                                                   result_chunk->num_rows(), agg_result_column[i]);
+                    // convert_to_exchange_format expects const Columns&, create a view
+                    _agg_functions[i]->convert_to_exchange_format(_agg_fn_ctxs[i], _agg_input_columns[i],
+                                                                  result_chunk->num_rows(), agg_result_column[i]);
                 }
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
@@ -1192,8 +1206,8 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
-                _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
-                                                               result_chunk->num_rows(), agg_result_column[i]);
+                _agg_functions[i]->convert_to_exchange_format(_agg_fn_ctxs[i], _agg_input_columns[i],
+                                                              result_chunk->num_rows(), agg_result_column[i]);
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
@@ -1285,8 +1299,8 @@ MutableColumns Aggregator::_create_group_by_columns(size_t num_rows) const {
 
 void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
-                                               agg_result_columns[i].get());
+        _agg_functions[i]->serialize_to_exchange_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
+                                                        agg_result_columns[i].get());
     }
 }
 

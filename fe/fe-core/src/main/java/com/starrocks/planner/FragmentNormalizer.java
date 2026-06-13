@@ -320,6 +320,15 @@ public class FragmentNormalizer {
                 digest.update(serializer.serialize(dict));
             }
 
+            // Format-scope the cache key by the percentile compact-intermediate
+            // flag: aggregate intermediates serialized under ON and OFF have
+            // incompatible layouts, so they must never share a cache entry. With
+            // the flag folded in, the ON and OFF key spaces are disjoint, making
+            // a flag flip (or a downgrade) safe by construction -- a reader on the
+            // other setting computes a different digest, misses, and recomputes.
+            digest.update((byte) (execPlan.getConnectContext().getSessionVariable()
+                    .isEnablePercentileCompactIntermediate() ? 1 : 0));
+
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
             Map<Integer, Integer> outputSlotIdRemapping = Maps.newHashMap();
