@@ -39,8 +39,8 @@ namespace starrocks {
 template <typename T, typename = void>
 struct HasDistributedExprsField : std::false_type {};
 template <typename T>
-struct HasDistributedExprsField<T, std::void_t<decltype(std::declval<T>().distributed_exprs_size())>>
-        : std::true_type {};
+struct HasDistributedExprsField<T, std::void_t<decltype(std::declval<T>().distributed_exprs_size())>> : std::true_type {
+};
 static_assert(!HasDistributedExprsField<POlapTableIndexSchema>::value,
               "proto POlapTableIndexSchema must not carry distributed_exprs: per-index range routing is sender-only");
 
@@ -1338,8 +1338,7 @@ TEST_F(TabletSinkSenderRangeTest, PerIndexDistributedExprsRouting) {
     tschema.slot_descs.push_back(make_bigint_slot(0, "c1"));
     tschema.slot_descs.push_back(make_bigint_slot(1, "c2"));
 
-    auto make_index = [](int64_t index_id, const std::vector<std::string>& cols,
-                         const std::vector<int>& uids) {
+    auto make_index = [](int64_t index_id, const std::vector<std::string>& cols, const std::vector<int>& uids) {
         TOlapTableIndexSchema index_schema;
         index_schema.id = index_id;
         index_schema.columns = cols;
