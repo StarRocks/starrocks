@@ -239,9 +239,10 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
 TEST_F(TabletSinkIndexChannelTest, pipeline_load_channel_profile) {
     TQueryOptions query_options;
     pipeline::QueryContext query_ctx;
-    query_ctx.set_enable_profile();
-    query_ctx.set_big_query_profile_threshold(10, TTimeUnit::SECOND);
-    query_ctx.set_runtime_profile_report_interval(5);
+    auto& query_runtime_state = query_ctx.query_runtime_state();
+    query_runtime_state.set_enable_profile();
+    query_runtime_state.set_big_query_profile_threshold(10, TTimeUnit::SECOND);
+    query_runtime_state.set_runtime_profile_report_interval(5);
     auto runtime_state = _build_runtime_state(query_options);
     runtime_state->set_query_ctx(&query_ctx, &query_ctx.query_runtime_state());
     PLoadChannelProfileConfig expect_config;
