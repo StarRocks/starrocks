@@ -152,8 +152,8 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
         // layer's per-file encryption_meta, the writer re-encrypts the merged `.spcols` under the current
         // KEK, and the apply side carries the merged file's encryption_meta.
         if (ver.inline_patches_size() > 0) {
-            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} inline_patches={}",
-                                     _tablet.id(), rssid, ver.inline_patches_size());
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} inline_patches={}", _tablet.id(),
+                                     rssid, ver.inline_patches_size());
             continue;
         }
         bool skip_segment = false;
