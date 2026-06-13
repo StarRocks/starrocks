@@ -140,8 +140,8 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
         const uint32_t rssid = get_rssid(rowset_meta, pos);
         auto dcg_it = metadata->dcg_meta().dcgs().find(rssid);
         if (dcg_it == metadata->dcg_meta().dcgs().end()) {
-            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} pos {} rssid {} no-dcg", _tablet.id(),
-                                     pos, rssid);
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} pos {} rssid {} no-dcg", _tablet.id(), pos,
+                                     rssid);
             continue;
         }
         const DeltaColumnGroupVerPB& ver = dcg_it->second;
@@ -182,8 +182,9 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
             ++sparse_layers;
         }
         if (skip_segment) {
-            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} unfoldable-layer (dense/packed/raced)",
-                                     _tablet.id(), rssid);
+            LOG(INFO) << fmt::format(
+                    "sdcg overlay-merge skip seg: tablet {} rssid {} unfoldable-layer (dense/packed/raced)",
+                    _tablet.id(), rssid);
             continue;
         }
         // Need at least 2 layers to collapse; a single sparse layer is already minimal.
