@@ -113,7 +113,7 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
                 if (sid >= 0) {
                     chunk->append_vector_column(std::move(input_columns[k]), f, sid);
                 } else {
-                    chunk->append_column(input_columns[k], f);
+                    chunk->append_column(std::move(input_columns[k]), f);
                 }
                 input_columns[k] = std::move(empty);
             }
