@@ -250,16 +250,29 @@ void PersistentIndexMemtable::clear() {
 
 void PersistentIndexMemtable::run() {
     auto st = flush();
-    if (!st.ok()) {
-        LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
+    {
         std::lock_guard<std::mutex> lg(_flush_mutex);
-        _flush_status = st;
+        if (!st.ok()) {
+            LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
+            _flush_status = st;
+        }
+        _flush_done = true;
     }
+    _flush_cv.notify_all();
 }
 
 void PersistentIndexMemtable::cancel() {
-    std::lock_guard<std::mutex> lg(_flush_mutex);
-    _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+        _flush_done = true;
+    }
+    _flush_cv.notify_all();
+}
+
+bool PersistentIndexMemtable::wait_flush_done(int64_t timeout_us) {
+    std::unique_lock<std::mutex> lk(_flush_mutex);
+    return _flush_cv.wait_for(lk, std::chrono::microseconds(timeout_us), [this] { return _flush_done; });
 }
 
 std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {

@@ -271,9 +271,10 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
     TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
     // 1. flush inactive memtables
     for (auto& memtable : _inactive_memtables) {
+        int64_t remaining_us = wait_timeout_us;
         int64_t start_us = butil::gettimeofday_us();
         bool wait_success = false;
-        while (butil::gettimeofday_us() - start_us < wait_timeout_us) {
+        while (remaining_us > 0) {
             RETURN_IF_ERROR(memtable->flush_status());
             auto sstable = memtable->release_sstable();
             if (sstable != nullptr) {
@@ -282,7 +283,8 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
                 wait_success = true;
                 break;
             } else {
-                usleep(1000000); // wait for flush finish, 1s
+                memtable->wait_flush_done(remaining_us);
+                remaining_us = wait_timeout_us - (butil::gettimeofday_us() - start_us);
             }
         }
         if (!wait_success) {
