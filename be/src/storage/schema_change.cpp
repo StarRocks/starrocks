@@ -1067,6 +1067,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.tablet_schema_hash = new_tablet->schema_hash();
         writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
         writer_context.tablet_schema = new_tablet->tablet_schema();
+        writer_context.flat_json_config = new_tablet->flat_json_config();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = sc_params.rowsets_to_change[i]->version();
         writer_context.segments_overlap = sc_params.rowsets_to_change[i]->rowset_meta()->segments_overlap();
