@@ -4072,6 +4072,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String access_control = "native";
 
+    @ConfField
+    public static String opa_policy_url = "";
+
+    @ConfField
+    public static String opa_row_filters_url = "";
+
+    @ConfField
+    public static String opa_column_masking_url = "";
+
+    @ConfField
+    public static String opa_batch_column_masking_url = "";
+
+    @ConfField
+    public static int opa_connect_timeout_ms = 5000;
+
+    @ConfField
+    public static int opa_read_timeout_ms = 5000;
+
     /**
      * Whether to use the unix group as the ranger authentication group
      */
