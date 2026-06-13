@@ -948,6 +948,21 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _seg_init_timer = ADD_TIMER(_runtime_profile, segment_init_name);
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", segment_init_name);
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
+
+    // Lake PK rowset-level secondary (sorted) index. Grouped under its own
+    // "SecondaryIndex" node so the profile shows whether scan time was spent
+    // opening/looking up the .idx vs reading the base table.
+    const std::string sidx_name = "SecondaryIndex";
+    _sidx_total_timer = ADD_TIMER(_runtime_profile, sidx_name);
+    _sidx_open_timer = ADD_CHILD_TIMER(_runtime_profile, "OpenTime", sidx_name);
+    _sidx_lookup_timer = ADD_CHILD_TIMER(_runtime_profile, "LookupTime", sidx_name);
+    _sidx_files_opened_counter = ADD_CHILD_COUNTER(_runtime_profile, "FilesOpened", TUnit::UNIT, sidx_name);
+    _sidx_cache_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "ReaderCacheHits", TUnit::UNIT, sidx_name);
+    _sidx_cache_miss_counter = ADD_CHILD_COUNTER(_runtime_profile, "ReaderCacheMisses", TUnit::UNIT, sidx_name);
+    _sidx_rows_scanned_counter = ADD_CHILD_COUNTER(_runtime_profile, "IndexRowsScanned", TUnit::UNIT, sidx_name);
+    _sidx_candidate_rows_counter = ADD_CHILD_COUNTER(_runtime_profile, "CandidateRows", TUnit::UNIT, sidx_name);
+    _sidx_skipped_by_selectivity_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SkippedBySelectivity", TUnit::UNIT, sidx_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
@@ -1105,6 +1120,16 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+
+    COUNTER_UPDATE(_sidx_total_timer, _reader->stats().secondary_index_total_ns);
+    COUNTER_UPDATE(_sidx_open_timer, _reader->stats().secondary_index_open_ns);
+    COUNTER_UPDATE(_sidx_lookup_timer, _reader->stats().secondary_index_lookup_ns);
+    COUNTER_UPDATE(_sidx_files_opened_counter, _reader->stats().secondary_index_files_opened);
+    COUNTER_UPDATE(_sidx_cache_hit_counter, _reader->stats().secondary_index_cache_hits);
+    COUNTER_UPDATE(_sidx_cache_miss_counter, _reader->stats().secondary_index_cache_misses);
+    COUNTER_UPDATE(_sidx_rows_scanned_counter, _reader->stats().secondary_index_rows_scanned);
+    COUNTER_UPDATE(_sidx_candidate_rows_counter, _reader->stats().secondary_index_candidate_rows);
+    COUNTER_UPDATE(_sidx_skipped_by_selectivity_counter, _reader->stats().secondary_index_skipped_by_selectivity);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);

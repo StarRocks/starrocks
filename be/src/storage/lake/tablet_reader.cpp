@@ -14,9 +14,13 @@
 
 #include "storage/lake/tablet_reader.h"
 
+#include <algorithm>
 #include <future>
+#include <map>
+#include <unordered_set>
 #include <utility>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
@@ -24,6 +28,7 @@
 #include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/config_secondary_index_fwd.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"
@@ -36,8 +41,12 @@
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/index/secondary_sorted/index_registry.h"
+#include "storage/index/secondary_sorted/secondary_index_reader.h"
+#include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
@@ -391,6 +400,204 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
+    // ---- Per-rowset secondary index lookup ----
+    // When the caller has opted in (use_secondary_index) and the index read
+    // path is enabled globally, walk over rowsets that carry a secondary
+    // index file in their metadata and pre-compute a per-segment Roaring
+    // bitmap of candidate row ids. The bitmap is threaded into Rowset::read()
+    // via the `presupplied_rowid_filter_per_segment` field on RowsetReadOptions.
+    //
+    // Live on the TabletReader instance so SegmentIterator's pointer into the
+    // Roaring stays valid across the entire scan -- a local would dangle the
+    // moment get_segment_iterators() returns.
+    auto& sidx_per_rowset = _sidx_per_rowset;
+    sidx_per_rowset.clear();
+    // Rowsets whose index fully covers the query (predicate + output cols):
+    // these are served entirely from the .idx (covering fast path), bypassing
+    // the base-table scan. Maps rowset id -> the covering index reader.
+    std::unordered_map<uint32_t, std::shared_ptr<secondary_sorted::SecondaryIndexReader>> covering_reader_by_rowset;
+    // BE-config-only gate for now: the FE-side session variable that would
+    // set TabletReaderParams::use_secondary_index is not wired yet. Once a
+    // SELECT references columns that any registered index covers, the lookup
+    // automatically fires whenever the BE-level read switch is on.
+    if (config::enable_secondary_index_read) {
+        // Time the whole secondary-index resolution so the FE profile can
+        // attribute scan time to the index path vs the base-table read.
+        MonotonicStopWatch sidx_watch;
+        sidx_watch.start();
+        DeferOp sidx_total_timer([&] { _stats.secondary_index_total_ns += sidx_watch.elapsed_time(); });
+        // Collect the column-ids actually predicated by this query once; an
+        // index whose covered columns don't overlap this set cannot narrow
+        // the scan and would otherwise pay a full ~25MB OSS download + a
+        // full-file segment scan returning every position back.
+        std::unordered_set<ColumnId> queried_col_ids;
+        for (auto& [cid, _] : params.pred_tree.get_immediate_column_predicate_map()) {
+            queried_col_ids.insert(cid);
+        }
+
+        // Build a deterministic signature of the query's column predicates so
+        // morsels of the SAME query (identical predicate) share one cached
+        // lookup result, while different queries (e.g. user_id=5 vs =10) on
+        // the same .idx file get distinct cache keys. Sort by column id so
+        // unordered_map iteration order doesn't perturb the signature.
+        std::string pred_signature;
+        {
+            std::map<ColumnId, std::string> sig_by_col;
+            for (auto& [cid, preds] : params.pred_tree.get_immediate_column_predicate_map()) {
+                std::string s;
+                for (const auto* p : preds) s += p->debug_string();
+                sig_by_col.emplace(cid, std::move(s));
+            }
+            for (auto& [cid, s] : sig_by_col) {
+                pred_signature += fmt::format("c{}:{};", cid, s);
+            }
+        }
+
+        // Output columns the query needs (by source column id). Used to test
+        // whether an index *covers* the query (output ⊆ index columns).
+        std::unordered_set<ColumnId> output_src_cids;
+        for (size_t f = 0; f < static_cast<size_t>(schema().num_fields()); ++f) {
+            const size_t ci = _tablet_schema->field_index(std::string(schema().field(f)->name()));
+            if (ci != static_cast<size_t>(-1)) output_src_cids.insert(static_cast<ColumnId>(ci));
+        }
+        // Covering is only safe when the index alone produces the full answer:
+        // no runtime filters / not a special reader type that needs base rows.
+        // (PK deletes are still honored via DelVec inside the covering reader.)
+        // Global-dict columns are emitted dict-encoded by the base scan; the
+        // covering reader produces raw values, so disable covering when any
+        // global dict is active to avoid a downstream encoding mismatch.
+        const bool has_global_dict = params.global_dictmaps != nullptr && !params.global_dictmaps->empty();
+        // A 0-field output schema (e.g. some COUNT(*) plans) would make the
+        // covering iterator emit 0-column chunks whose num_rows() is always 0,
+        // silently losing the row count. Require >=1 output column so the
+        // count is carried by a real column; otherwise fall back to the
+        // (correct) candidate-bitmap lookup path below.
+        const bool covering_allowed = config::enable_secondary_index_covering && params.runtime_filter_preds.empty() &&
+                                      !has_global_dict && params.reader_type == ReaderType::READER_QUERY &&
+                                      schema().num_fields() > 0;
+
+        // Resolve a Lake-aware FileSystem rooted at the tablet directory; we
+        // reuse it across all index files for this query.
+        const std::string root = _tablet_mgr->tablet_root_location(_tablet_metadata->id());
+        ASSIGN_OR_RETURN(auto sidx_fs, FileSystemFactory::CreateSharedFromString(root));
+        for (auto& rowset : _rowsets) {
+            const auto& meta = rowset->metadata();
+            if (meta.secondary_indexes_size() == 0) continue;
+
+            // Covering fast path: if an index covers BOTH the predicate and all
+            // output columns, serve this rowset entirely from the .idx and skip
+            // the candidate-bitmap / base-scan path below.
+            if (covering_allowed) {
+                int covering_idx = -1;
+                for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
+                    const auto& fpb = meta.secondary_indexes(i);
+                    std::unordered_set<ColumnId> idx_cids;
+                    bool ok = true;
+                    for (const auto& nm : fpb.index_col_names()) {
+                        const size_t ci = _tablet_schema->field_index(nm);
+                        if (ci == static_cast<size_t>(-1)) {
+                            ok = false;
+                            break;
+                        }
+                        idx_cids.insert(static_cast<ColumnId>(ci));
+                    }
+                    if (!ok) continue;
+                    bool covered = true;
+                    for (auto c : queried_col_ids) {
+                        if (!idx_cids.count(c)) {
+                            covered = false;
+                            break;
+                        }
+                    }
+                    if (covered) {
+                        for (auto c : output_src_cids) {
+                            if (!idx_cids.count(c)) {
+                                covered = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (covered) {
+                        covering_idx = i;
+                        break;
+                    }
+                }
+                if (covering_idx >= 0) {
+                    secondary_sorted::SecondaryIndexReader::OpenInput open_in;
+                    open_in.fs = sidx_fs;
+                    open_in.tablet_mgr = _tablet_mgr;
+                    open_in.tablet_id = rowset->tablet_id();
+                    open_in.file_pb = meta.secondary_indexes(covering_idx);
+                    open_in.source_schema = _tablet_schema;
+                    ASSIGN_OR_RETURN(auto rdr, secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
+                    covering_reader_by_rowset[rowset->id()] = std::move(rdr);
+                    continue; // skip the candidate-bitmap path for this rowset
+                }
+            }
+
+            // Look up every secondary index attached to this rowset; intersect
+            // their per-segment candidate bitmaps. A segment that produces an
+            // empty bitmap for any index is fully skipped by the downstream
+            // scan because it cannot satisfy that index's predicates.
+            std::unordered_map<uint32_t, roaring::Roaring> merged;
+            bool first_index = true;
+            for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
+                const auto& file_pb = meta.secondary_indexes(i);
+                // Predicate-applicability gate: a sorted secondary index can
+                // only narrow the scan when the query's predicate covers the
+                // LEADING (prefix) column. Predicates on non-leading columns
+                // still match per-page bloom/zone-map inside the .idx but
+                // would force a whole-file scan to build the candidate set --
+                // not what we want here, so skip the index entirely.
+                if (file_pb.index_col_names_size() == 0) continue;
+                const std::string& prefix_col = file_pb.index_col_names(0);
+                const size_t prefix_src_idx = _tablet_schema->field_index(prefix_col);
+                if (prefix_src_idx == static_cast<size_t>(-1) ||
+                    !queried_col_ids.count(static_cast<ColumnId>(prefix_src_idx))) {
+                    continue;
+                }
+
+                secondary_sorted::SecondaryIndexReader::OpenInput open_in;
+                open_in.fs = sidx_fs;
+                open_in.tablet_mgr = _tablet_mgr;
+                open_in.tablet_id = rowset->tablet_id();
+                open_in.file_pb = file_pb;
+                open_in.source_schema = _tablet_schema;
+                ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
+                // Cache the lookup result across morsels: key by .idx file
+                // (unique per rowset+index) + the query's predicate signature.
+                const std::string lookup_key = file_pb.file_name() + "|" + pred_signature;
+                ASSIGN_OR_RETURN(auto per_seg_ptr,
+                                 reader->lookup_cached(lookup_key, params.pred_tree, &_obj_pool, &_stats));
+                const auto& per_seg = *per_seg_ptr;
+
+                if (first_index) {
+                    merged = per_seg; // copy: the cached bitmap is shared+immutable
+                    first_index = false;
+                    continue;
+                }
+                // Intersect into a fresh map so we drop seg_ids missing from
+                // the new lookup (those segments have zero candidates).
+                std::unordered_map<uint32_t, roaring::Roaring> next;
+                for (auto& [seg_id, bitmap] : merged) {
+                    auto it = per_seg.find(seg_id);
+                    if (it == per_seg.end()) continue;
+                    roaring::Roaring r = bitmap;
+                    r &= it->second;
+                    if (!r.isEmpty()) {
+                        next.emplace(seg_id, std::move(r));
+                    }
+                }
+                merged = std::move(next);
+                if (merged.empty()) break; // no rows can satisfy all indexes
+            }
+            for (auto& [seg_id, bitmap] : merged) {
+                _stats.secondary_index_candidate_rows += static_cast<int64_t>(bitmap.cardinality());
+            }
+            sidx_per_rowset[rowset->id()] = std::move(merged);
+        }
+    }
+
     std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
     // The parallel tasks capture local variables and |this| by reference.
     // Must wait for all tasks to complete before returning, otherwise
@@ -407,7 +614,89 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             continue;
         }
 
-        if (config::enable_load_segment_parallel) {
+        // Covering fast path: this rowset is fully answered by its .idx -- build
+        // a covering iterator (predicate + DelVec applied inside) and skip the
+        // base-table scan entirely.
+        if (auto cit = covering_reader_by_rowset.find(rowset->id()); cit != covering_reader_by_rowset.end()) {
+            auto delvec_loader = std::make_shared<lake::LakeDelvecLoader>(
+                    _tablet_mgr, nullptr, params.lake_io_opts.fill_data_cache, params.lake_io_opts);
+            // Parallelize the covering scan across morsels: the .idx has one
+            // entry per base row, so this morsel's base-rowid coverage maps
+            // numerically onto a disjoint slice of the .idx row space [0,N_idx).
+            // Map each owned (segment, rowid-subrange) through the segment's
+            // cumulative base-row offset; the union of all morsels' slices is
+            // the whole .idx, scanned exactly once and in parallel.
+            SparseRangePtr idx_range;
+            if (params.rowid_range_option != nullptr) {
+                auto& m = params.rowid_range_option->rowid_range_per_segment_per_rowset;
+                if (auto rit = m.find(rowset->rowset_id()); rit != m.end()) {
+                    const auto& rmeta = rowset->metadata();
+                    std::unordered_map<uint32_t, int64_t> seg_offset;
+                    int64_t off = 0;
+                    for (int s = 0; s < rmeta.segment_metas_size(); ++s) {
+                        seg_offset[static_cast<uint32_t>(s)] = off;
+                        off += rmeta.segment_metas(s).num_rows();
+                    }
+                    std::vector<std::pair<rowid_t, rowid_t>> ivals;
+                    for (const auto& [seg_id, split] : rit->second) {
+                        auto oit = seg_offset.find(static_cast<uint32_t>(seg_id));
+                        if (oit == seg_offset.end() || split.row_id_range == nullptr) continue;
+                        const int64_t base = oit->second;
+                        const auto& sr = *split.row_id_range;
+                        for (size_t i = 0; i < sr.size(); ++i) {
+                            ivals.emplace_back(static_cast<rowid_t>(base + sr[i].begin()),
+                                               static_cast<rowid_t>(base + sr[i].end()));
+                        }
+                    }
+                    std::sort(ivals.begin(), ivals.end());
+                    idx_range = std::make_shared<SparseRange<>>();
+                    for (const auto& [lo, hi] : ivals) idx_range->add(Range<>(lo, hi));
+                }
+            }
+            // Does this rowset have any delete vector? If none of its segments
+            // appear in the tablet's delvec map, the covering scan can skip the
+            // position column + per-row DelVec test entirely.
+            bool needs_delvec = false;
+            {
+                const auto& dvs = _tablet_metadata->delvec_meta().delvecs();
+                if (!dvs.empty()) {
+                    const uint32_t base = rowset->id();
+                    const int nseg = rowset->metadata().segment_metas_size();
+                    for (int s = 0; s < nseg; ++s) {
+                        if (dvs.find(base + static_cast<uint32_t>(s)) != dvs.end()) {
+                            needs_delvec = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            auto cov_or = cit->second->make_covering_iterator(
+                    schema(), params.pred_tree, &_obj_pool, static_cast<int64_t>(rowset->id()),
+                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, needs_delvec,
+                    std::move(idx_range), &_stats);
+            if (cov_or.status().is_end_of_file()) {
+                continue; // index pruned this rowset entirely
+            }
+            RETURN_IF_ERROR(cov_or.status());
+            iters->push_back(std::move(cov_or).value());
+            continue;
+        }
+
+        // Thread this rowset's per-segment rowid filter into rs_opts just
+        // before invoking rowset->read(). When no entry exists for this
+        // rowset (typical case), the field stays null and Rowset::read()
+        // falls back to the normal scan.
+        if (auto it = sidx_per_rowset.find(rowset->id()); it != sidx_per_rowset.end()) {
+            rs_opts.presupplied_rowid_filter_per_segment = &it->second;
+        } else {
+            rs_opts.presupplied_rowid_filter_per_segment = nullptr;
+        }
+
+        // Parallel load captures rs_opts by reference; mutating
+        // presupplied_rowid_filter_per_segment per iteration would race.
+        // Force the serial path whenever a secondary index lookup is in use.
+        const bool use_parallel = config::enable_load_segment_parallel && !config::enable_secondary_index_read;
+        if (use_parallel) {
             auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
 #ifdef BE_TEST
                 Status injected_st;

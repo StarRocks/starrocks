@@ -533,7 +533,6 @@ endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Webserver
     Tools
     ${WL_START_GROUP}
     Agent
@@ -546,11 +545,14 @@ set(STARROCKS_LINK_LIBS
     FileSystem
     Formats
     FormatsIO
+    Service
+    ServiceBE
     Storage
     Rowset
     Runtime
     Udf
     Util
+    Webserver
     Script
     orc
     ${WL_END_GROUP}

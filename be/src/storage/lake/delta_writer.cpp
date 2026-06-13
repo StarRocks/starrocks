@@ -27,6 +27,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_secondary_index_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
 #include "fs/bundle_file.h"
@@ -37,6 +38,9 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
+#include "storage/index/secondary_sorted/build_hook.h"
+#include "storage/index/secondary_sorted/collector.h"
+#include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -410,6 +414,20 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
                     _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context,
                     _global_dicts);
+        }
+        // Inject a secondary-index collector if any index is registered for
+        // this tablet. The collector siphons index-column values directly out
+        // of each write chunk, avoiding the bundle-uploader race that the
+        // old read-back hook hit.
+        if (config::enable_secondary_index_write && _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+            auto defs = secondary_sorted::SecondaryIndexRegistry::get_for_tablet(_tablet_id);
+            if (!defs.empty()) {
+                ASSIGN_OR_RETURN(auto collector, secondary_sorted::SecondaryIndexCollector::create(
+                                                         _tablet_id, _txn_id, defs, _tablet_schema));
+                if (collector != nullptr) {
+                    _tablet_writer->set_secondary_index_collector(std::move(collector));
+                }
+            }
         }
         if (_force_build_vector_index_inline) {
             _tablet_writer->force_set_build_vector_index_inline();
@@ -899,6 +917,45 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
         }
     }
+
+    // ---- Build rowset-level secondary index files ----
+    // After all segments have been recorded into op_write->rowset(), but
+    // before the txn log is sealed, optionally scan those segments and emit
+    // one index file per configured (tablet, index). The resulting PB entries
+    // are attached to the same RowsetMetadataPB so they travel atomically
+    // with the rowset on commit.
+    if (config::enable_secondary_index_write) {
+        // PCU correctness gate: a partial update that modifies any column
+        // referenced by a registered secondary index would leave the index
+        // pointing to stale values. Reject the commit before any side effects.
+        if (is_partial_update()) {
+            auto defs = secondary_sorted::SecondaryIndexRegistry::get_for_tablet(_tablet_id);
+            for (const auto& def : defs) {
+                for (const auto& idx_col_name : def.index_col_names) {
+                    size_t idx_col_pos = _tablet_schema->field_index(idx_col_name);
+                    if (idx_col_pos == static_cast<size_t>(-1)) continue;
+                    for (int32_t write_cid : _write_column_ids) {
+                        if (static_cast<size_t>(write_cid) == idx_col_pos) {
+                            return Status::NotSupported(fmt::format(
+                                    "Column '{}' is referenced by secondary index '{}' and cannot be modified "
+                                    "via partial column update. Use full row upsert or drop the index first.",
+                                    idx_col_name, def.index_name));
+                        }
+                    }
+                }
+            }
+        }
+
+        // The TabletWriter has already finalized its secondary-index
+        // collector inside _tablet_writer->finish() above and stashed the
+        // resulting PB entries; pick them up and attach to the rowset
+        // metadata so they commit atomically with the data segments.
+        for (auto& pb : _tablet_writer->mutable_secondary_index_files()) {
+            *(op_write->mutable_rowset()->add_secondary_indexes()) = std::move(pb);
+        }
+        _tablet_writer->mutable_secondary_index_files().clear();
+    }
+
     auto prepare_txn_log_ts = watch.elapsed_time();
     ADD_COUNTER_RELAXED(_stats.finish_prepare_txn_log_time_ns, prepare_txn_log_ts - wait_flush_ts);
     if (mode == kWriteTxnLog) {

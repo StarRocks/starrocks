@@ -474,6 +474,29 @@ CONF_mBool(enable_pk_index_eager_build, "true");
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
+
+// ============================================================================
+// Secondary index for Lake PK table (rowset-level lightweight sorted idx)
+// ============================================================================
+// Enable building secondary index files during load and compaction.
+CONF_mBool(enable_secondary_index_write, "false");
+// Enable using secondary index files during query.
+CONF_mBool(enable_secondary_index_read, "false");
+// Memory limit (in MB) for sorting (idx_cols, seg_id, rowid) entries during build.
+CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
+// Per-BE index registry while the FE-side DDL is not yet wired.
+// Format: "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
+// Multiple indexes for the same tablet allowed by repeating the tablet_id
+// prefix.
+CONF_mString(secondary_index_defs, "");
+// Max number of opened SecondaryIndexReader instances kept in the process-
+// wide LRU cache. Each entry retains an opened Segment (footer + column
+// readers + zone-map index) for a single .idx file. Default 256 covers
+// 256 distinct (tablet, index) pairs at <~100 MB resident metadata.
+CONF_mInt64(secondary_index_reader_cache_capacity, "256");
+// Enable the covering-index fast path: predicate AND output columns all in
+// the index -> answer from .idx (DelVec-filtered), no base-table readback.
+CONF_mBool(enable_secondary_index_covering, "true");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.

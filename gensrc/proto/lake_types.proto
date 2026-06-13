@@ -220,6 +220,16 @@ message SegmentMetadataPB {
     optional int64 bundle_file_offset = 12;
 }
 
+// Rowset-level lightweight sorted secondary index file metadata.
+// Each entry describes one secondary index built for a rowset; payload stores
+// (idx_cols..., encoded position) sorted by idx_cols.
+message SecondaryIndexFilePB {
+    optional string index_name = 1;       // logical name (e.g. "idx_by_town")
+    optional string file_name = 2;        // basename within fileset
+    optional int64 file_size = 3;
+    repeated string index_col_names = 4;  // ordered list of indexed columns
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
@@ -258,6 +268,8 @@ message RowsetMetadataPB {
     // from the same logical rowset compare equal. MERGE dedups rowsets by uid equality.
     // Optional => backward compatible; legacy rowsets are backfilled at split time.
     optional PUniqueId uid = 19;
+    // Rowset-level secondary indexes (one entry per index)
+    repeated SecondaryIndexFilePB secondary_indexes = 20;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
