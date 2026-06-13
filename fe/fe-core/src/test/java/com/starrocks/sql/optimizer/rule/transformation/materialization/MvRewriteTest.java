@@ -1806,6 +1806,29 @@ public class MvRewriteTest extends MVTestBase {
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
     }
 
+    @Test
+    public void testLeftJoinWithDifferentConstantEquivalenceClasses() throws Exception {
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                "PARTITION BY a_k1\n" +
+                "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                "FROM test_partition_tbl1 as a \n" +
+                "left join test_partition_tbl2 as b " +
+                "on a.v1=b.v1 and a.v2=b.v2 \n");
+        {
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.v2=1 and b.v2=2 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_partition_tbl_mv3");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
     private List<MvPlanContext> getPlanContext(MaterializedView mv, boolean useCache) {
         boolean prev = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
         connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(useCache);
