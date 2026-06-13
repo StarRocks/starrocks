@@ -574,9 +574,9 @@ public class KafkaRoutineLoadJobTest {
 
         routineLoadJob.checkDataSourceProperties(dataSourceProperties);
 
-        // ALTER is only allowed on paused jobs, which may not have been scheduled since this
-        // FE became leader; the broker validation must re-acquire the job's compute resource
-        // instead of trusting the transient field (default warehouse after a restart)
+        // the broker validation must re-acquire the job's compute resource instead of
+        // trusting the possibly stale persisted field (or the creation-time default on a
+        // job that has never been scheduled)
         Assertions.assertSame(acquiredResource, resourceSeenByValidation[0]);
     }
 

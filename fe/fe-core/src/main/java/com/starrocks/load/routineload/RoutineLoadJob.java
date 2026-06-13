@@ -923,7 +923,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     abstract RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo);
 
-    // call before first scheduling
+    // called by the scheduler every time this job is scheduled, i.e. whenever it is in
+    // NEED_SCHEDULE: the initial scheduling, after each resume, and on reschedules
+    // (e.g. after a Kafka partition-count change).
     // derived class can override this.
     public void prepare() throws StarRocksException {
         acquireComputeResource();
@@ -931,8 +933,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     // acquire the compute resource of this job's warehouse. Broker-metadata RPCs that run
     // outside the scheduling path (e.g. partition validation at CREATE or ALTER) must call
-    // this first: the field is transient and defaults to the default warehouse, so in
-    // shared-data mode the RPC would otherwise be routed there instead of the job's warehouse.
+    // this first: a freshly created job still holds the static default resource, and the
+    // persisted value restored after a restart or leader change may reference stale
+    // warehouse state; prepare() re-acquires on every scheduling for the same reason.
     // An unavailable warehouse is rethrown as a checked LoadException so that every caller
     // handles it as a regular job/DDL failure; the scheduler in particular only catches
     // StarRocksException per job, and an escaping RuntimeException would abort the whole

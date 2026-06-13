@@ -1008,10 +1008,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             // check if partition is validate; an ALTER that touches no partition offsets has
             // nothing to validate against the broker, so it must not require the warehouse
             try {
-                // the job may not have been scheduled since this FE became leader (ALTER is
-                // only allowed on paused jobs), so the transient compute resource may still
-                // point at the default warehouse; acquire it so the broker RPC targets the
-                // job's warehouse
+                // the compute resource may be outdated here: a job that has never been
+                // scheduled still holds the creation-time default, and after a restart or
+                // leader change the persisted value may reference stale warehouse state;
+                // re-acquire so the broker RPC targets the job's current warehouse resource
                 acquireComputeResource();
                 checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
             } catch (StarRocksException e) {
