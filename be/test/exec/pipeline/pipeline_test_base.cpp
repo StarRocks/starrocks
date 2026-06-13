@@ -27,6 +27,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
@@ -124,7 +125,8 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
     _pipelines.clear();
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
-    _fragment_ctx->iterate_pipeline([this](Pipeline* pipeline) { _fragment_ctx->instantiate_drivers(pipeline); });
+    _fragment_ctx->iterate_pipeline(
+            [this](Pipeline* pipeline) { instantiate_pipeline_drivers(_fragment_ctx, pipeline); });
 }
 
 void PipelineTestBase::_execute() {

@@ -47,6 +47,7 @@
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -823,7 +824,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline);
             return;
         }
-        fragment_ctx->instantiate_drivers(pipeline);
+        instantiate_pipeline_drivers(fragment_ctx, pipeline);
     });
 
     if (!unready_pipeline_groups.empty()) {
