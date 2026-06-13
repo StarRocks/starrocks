@@ -126,6 +126,15 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         return optExpression.getOp().accept(this, optExpression, context);
     }
 
+    private static ScalarOperator firstArgOfAggFn(CallOperator aggFn) {
+        return aggFn.getChildren().isEmpty() ? null : aggFn.getChild(0);
+    }
+
+    private static Type getIntermediateType(CallOperator aggregation) {
+        AggregateFunction af = (AggregateFunction) aggregation.getFunction();
+        return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
+    }
+
     @Override
     public OptExpression visitLogicalFilter(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
@@ -178,7 +187,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         List<ColumnRefOperator> keys = Lists.newArrayList(context.aggregations.keySet());
         for (ColumnRefOperator key : keys) {
             CallOperator aggFn = context.aggregations.get(key);
-            ScalarOperator aggInput = aggFn.getChild(0);
+            ScalarOperator aggInput = firstArgOfAggFn(aggFn);
+            if (aggInput == null) {
+                continue;
+            }
 
             if (!(aggInput instanceof ColumnRefOperator)) {
                 context.aggregations.put(key, (CallOperator) rewriter.rewrite(aggFn));
@@ -282,14 +294,22 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 .flatMap(Collection::stream)
                 .distinct().collect(Collectors.toList());
 
+        boolean isNonGroupBy = aggregate.getGroupingKeys().isEmpty();
         // rewrite origin aggregation
         for (ColumnRefOperator ref : allAggregateRefs) {
             CallOperator call = aggregate.getAggregations().get(ref);
-            ColumnRefOperator newRef = factory.create(call.getFnName(), call.getType(), call.isNullable());
-            childContext.aggregations.put(newRef, call);
-
-            CallOperator newCall = genAggregation(call, newRef);
-            newAggregations.put(ref, newCall);
+            if (isNonGroupBy) {
+                ColumnRefOperator newRef = factory.create(call.getFnName(), getIntermediateType(call),
+                        call.isNullable());
+                childContext.aggregations.put(newRef, call);
+                newAggregations.put(ref, new CallOperator(call.getFnName(), call.getType(),
+                        Lists.newArrayList(newRef), call.getFunction()));
+            } else {
+                ColumnRefOperator newRef = factory.create(call.getFnName(), call.getType(), call.isNullable());
+                childContext.aggregations.put(newRef, call);
+                CallOperator newCall = genAggregation(call, newRef);
+                newAggregations.put(ref, newCall);
+            }
         }
 
         // group by
@@ -299,8 +319,12 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 .filter(c -> aggregate.getGroupingKeys().contains(c))
                 .distinct().forEach(c -> childContext.groupBys.put(c, c));
 
-        LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder().withOperator(aggregate)
-                .setAggregations(newAggregations).build();
+        LogicalAggregationOperator.Builder aggBuilder = LogicalAggregationOperator.builder().withOperator(aggregate)
+                .setAggregations(newAggregations);
+        if (isNonGroupBy) {
+            aggBuilder.setSplit();
+        }
+        LogicalAggregationOperator newAgg = aggBuilder.build();
         optExpression = OptExpression.create(newAgg, optExpression.getInputs());
         return processChild(optExpression, childContext);
     }
@@ -395,15 +419,16 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         OptExpression result = optExpression;
         // if the aggregation is complex expression, need create project
-        if (context.aggregations.values().stream().map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
+        if (context.aggregations.values().stream().map(PushDownAggregateRewriter::firstArgOfAggFn)
+                .anyMatch(s -> s != null && !s.isColumnRef())) {
             Map<ColumnRefOperator, ScalarOperator> refs = Maps.newHashMap();
             optExpression.getOutputColumns().getStream()
                     .map(factory::getColumnRef)
                     .forEach(c -> refs.put(c, c));
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
-                ScalarOperator input = entry.getValue().getChild(0);
-                if (!input.isColumnRef()) {
+                ScalarOperator input = firstArgOfAggFn(entry.getValue());
+                if (input != null && !input.isColumnRef()) {
                     ColumnRefOperator ref = factory.create(input, input.getType(), input.isNullable());
                     refs.put(ref, input);
                     entry.getValue().setChild(0, ref);
@@ -415,7 +440,12 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         LogicalAggregationOperator aggregate;
         List<ColumnRefOperator> groupBys = Lists.newArrayList(context.groupBys.keySet());
-        if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) ||
+        boolean isNonGroupBy = context.origAggregator != null
+                && context.origAggregator.getGroupingKeys().isEmpty();
+        if (isNonGroupBy) {
+            // Keep LOCAL as a split aggregate so branch outputs serialized intermediate state.
+            aggregate = new LogicalAggregationOperator(AggType.LOCAL, groupBys, context.aggregations);
+        } else if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) ||
                 ("auto".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) && groupBys.size() <= 1)) {
             // local && un-split
             aggregate = new LogicalAggregationOperator(AggType.LOCAL, groupBys, context.aggregations);

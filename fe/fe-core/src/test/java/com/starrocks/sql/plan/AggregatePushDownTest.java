@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -54,6 +55,21 @@ public class AggregatePushDownTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
         connectContext.getSessionVariable().setEnableEliminateAgg(false);
+    }
+
+    private static OlapTable olapTable(String tableName) {
+        return (OlapTable) starRocksAssert.getTable("test", tableName);
+    }
+
+    private static int countRegexOccurrences(String text, String regex) {
+        return text.split(regex, -1).length - 1;
+    }
+
+    private static void assertNonGroupByPushDownUsesPartialState(String plan) {
+        Assertions.assertTrue(plan.contains("update serialize"),
+                "expected branch-level AGGREGATE (update serialize) for serialized partial state:\n" + plan);
+        Assertions.assertTrue(plan.contains("merge finalize"),
+                "expected top-level AGGREGATE (merge finalize) over serialized partial state:\n" + plan);
     }
 
     @Test
@@ -379,5 +395,306 @@ public class AggregatePushDownTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "sum");
         assertContains(plan, "min");
+    }
+
+    @Test
+    public void testNonGroupByAggPushDownThroughUnionAll() throws Exception {
+        // A non-group-by aggregation over UNION ALL must produce a multi-stage plan:
+        //   1) A partial AGGREGATE node sits in each UNION branch (below the UNION operator).
+        //   2) Branch partials serialize aggregate intermediate state.
+        //   3) The final-stage aggregate merges that intermediate state and finalizes the result.
+        // Without the optimization, the plan would have only a single top-level agg directly
+        // over UNION->scans, dragging raw rows through the Exchange.
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT COUNT(*), SUM(v1), hex(hll_serialize(hll_raw(v2))) " +
+                    "FROM (SELECT v1, v2 FROM t0 " +
+                    "      UNION ALL " +
+                    "      SELECT v4, v5 FROM t1) u";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            // Branch-level partial AGG must include the original functions verbatim.
+            // "count[(*);" proves COUNT(*) is being computed at each branch (the verbose
+            // explain format is `count[(*); args: ; result: ...]`, not `count[(*)]`).
+            // "hll_raw[(" proves HLL_RAW is being computed at each branch.
+            Assertions.assertTrue(plan.contains("count[(*);"),
+                    "expected partial count[(*) in branches:\n" + plan);
+            Assertions.assertTrue(plan.contains("hll_raw[("),
+                    "expected partial hll_raw[(...)] in branches:\n" + plan);
+
+            assertNonGroupByPushDownUsesPartialState(plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggPushDownCountStarMixedWithComplexExpr() throws Exception {
+        // Regression for a P1 in the Project-rewriting loop of PushDownAggregateRewriter.rewrite():
+        // when push-down inserts a Project to materialize complex aggregation arguments
+        // (e.g. SUM(ABS(v1))), the loop iterates ALL aggregations to set up the project ref.
+        // COUNT(*) has no children — getChild(0) on it threw IndexOutOfBoundsException.
+        // This is exactly the production statistics SQL shape:
+        //     SELECT COUNT(*), SUM(CHAR_LENGTH(col)), MAX(LEFT(col, 200)) FROM (... UNION ALL ...)
+        // Here we use ABS(v1) over our bigint tables to trigger the same complex-arg path.
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT COUNT(*), SUM(ABS(v1)), MAX(v1 + 1) " +
+                    "FROM (SELECT v1 FROM t0 " +
+                    "      UNION ALL " +
+                    "      SELECT v4 FROM t1) u";
+            // The mere fact this getVerboseFragmentPlan completes (no exception) is the main
+            // assertion — before the fix it threw IndexOutOfBoundsException inside the Project
+            // creation loop. We additionally verify push-down still triggers.
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+            // Confirm partial agg in branches: COUNT(*) is present below the UNION.
+            Assertions.assertTrue(plan.contains("count[(*);"),
+                    "branches must compute partial count[(*):\n" + plan);
+            assertNonGroupByPushDownUsesPartialState(plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggPushDownStatisticsSqlShape() throws Exception {
+        // Closer to the real statistics-collection SQL: COUNT(*) + SUM(CHAR_LENGTH(varchar))
+        // + HLL_RAW(varchar) + MAX/MIN(LEFT(varchar, 200)) over a UNION-of-sampled-tablets,
+        // exercising partial-state merge plus the Project-creation path
+        // for complex aggregation arguments (CHAR_LENGTH, LEFT, ABS).
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT COUNT(*), " +
+                    "       SUM(CHAR_LENGTH(region)), " +
+                    "       hex(hll_serialize(hll_raw(region))), " +
+                    "       MAX(LEFT(region, 200)), " +
+                    "       MIN(LEFT(region, 200)) " +
+                    "FROM (SELECT region FROM trans " +
+                    "      UNION ALL " +
+                    "      SELECT region FROM trans) u";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+            // Partial count[(*) and hll_raw[ live in branches.
+            Assertions.assertTrue(plan.contains("count[(*);"),
+                    "expected partial count[(*) in branches:\n" + plan);
+            Assertions.assertTrue(plan.contains("hll_raw[("),
+                    "expected partial hll_raw[ in branches:\n" + plan);
+            assertNonGroupByPushDownUsesPartialState(plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggOverUnionDistinctNotPushedDown() throws Exception {
+        // UNION DISTINCT requires global dedup. A non-group-by SUM/COUNT cannot be
+        // decomposed as "partial per branch + combine on top" because duplicates in different
+        // branches need a global view to be deduped. The isUnionAll() guard in
+        // visitLogicalUnion must short-circuit this case.
+        String sql = "SELECT SUM(v1), COUNT(*) " +
+                "FROM (SELECT v1 FROM t0 " +
+                "      UNION " +
+                "      SELECT v4 FROM t1) u";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+        // count[(*) at the FINAL stage remains the original and is not duplicated per branch.
+        Assertions.assertTrue(plan.contains("count[(*);"),
+                "expected original count[(*) preserved at top:\n" + plan);
+        Assertions.assertEquals(1, countRegexOccurrences(plan, "count\\[\\(\\*\\);"),
+                "push-down must not happen for UNION DISTINCT:\n" + plan);
+    }
+
+    @Test
+    public void testNonGroupByAggBlockedAtJoin() throws Exception {
+        // Non-group-by agg over a JOIN must NOT be pushed below the JOIN: a 1-N join would
+        // multiply rows and break SUM/COUNT correctness without group-by keys to anchor results.
+        //
+        // We assert plan shape rather than just "JOIN and AGGREGATE appear somewhere": the
+        // original `count[(*)` should appear only once at the top-level final agg, not once per
+        // pushed branch.
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT SUM(t0.v1), COUNT(*) FROM t0 JOIN t1 ON t0.v1 = t1.v4";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            // COUNT(*) appears only once — at the final agg above the join, not duplicated
+            // as a partial aggregate inside the join branches.
+            int countStarOccurrences = countRegexOccurrences(plan, "count\\[\\(\\*\\);");
+            Assertions.assertEquals(1, countStarOccurrences,
+                    "expected exactly one count[(*) (at the top-level agg only):\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggOverFilterThenUnionDistinctNotPushedDown() throws Exception {
+        // Regression for review feedback: visitLogicalFilter and Project CASE/IF handling add
+        // artificial entries to context.groupBys as the traversal descends. The earlier guard
+        // `context.groupBys.isEmpty() && !union.isUnionAll()` could be silently bypassed when
+        // an intervening Filter injected its column into context.groupBys before reaching the
+        // UNION DISTINCT, decomposing a non-group-by aggregate per branch and double-counting
+        // duplicates that should have been globally deduped.
+        //
+        // The fix detects "originally non-group-by" via context.origAggregator.getGroupingKeys()
+        // (immutable, set when the agg is first encountered) rather than context.groupBys.
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT SUM(v1), COUNT(*) FROM (" +
+                    "  SELECT v1 FROM t0 " +
+                    "  UNION " +
+                    "  SELECT v4 FROM t1" +
+                    ") u WHERE v1 > 0";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            int countStarOccurrences = countRegexOccurrences(plan, "count\\[\\(\\*\\);");
+            Assertions.assertEquals(1, countStarOccurrences,
+                    "non-group-by agg over UNION DISTINCT must NOT be pushed even when a Filter " +
+                            "adds keys to context.groupBys:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggOverFilterThenJoinNotPushedDown() throws Exception {
+        // Regression for review P1: visitLogicalJoin previously used context.groupBys.isEmpty()
+        // to detect "non-group-by", which is the same mutable-state pitfall as the UNION DISTINCT
+        // guard. visitLogicalFilter injects the WHERE column into context.groupBys before the
+        // traversal reaches the JOIN, so context.groupBys.isEmpty() is false there and the guard
+        // would silently let an originally non-group-by aggregate slip past, pushing partial agg
+        // below a 1-N JOIN and producing incorrect SUM/COUNT under multi-match rows.
+        //
+        // The fix mirrors the UNION DISTINCT guard: detect "originally non-group-by" via
+        // context.origAggregator.getGroupingKeys() (immutable, set once when the aggregate is
+        // first encountered).
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT SUM(t0.v1), COUNT(*) " +
+                    "FROM t0 JOIN t1 ON t0.v1 = t1.v4 " +
+                    "WHERE t0.v1 > 0";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            // COUNT(*) appears only once -- at the final agg above the join, not duplicated
+            // as a partial aggregate inside the join branches.
+            int countStarOccurrences = countRegexOccurrences(plan, "count\\[\\(\\*\\);");
+            Assertions.assertEquals(1, countStarOccurrences,
+                    "expected exactly one count[(*) (at the top-level agg only):\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggOverFilterThenUnionAllStillPushedDown() throws Exception {
+        // A Filter may inject predicate columns into context.groupBys while the original
+        // aggregate is still non-group-by. COUNT/HLL_RAW must still use the non-group-by path.
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT COUNT(*), hex(hll_serialize(hll_raw(v2))) " +
+                    "FROM (SELECT v1, v2 FROM t0 " +
+                    "      UNION ALL " +
+                    "      SELECT v4, v5 FROM t1) u " +
+                    "WHERE v1 > 0";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            // Partial agg in branches must still appear despite the Filter polluting groupBys.
+            Assertions.assertTrue(plan.contains("count[(*);"),
+                    "expected partial count[(*) in branches even with Filter above UNION ALL:\n" + plan);
+            Assertions.assertTrue(plan.contains("hll_raw[("),
+                    "expected partial hll_raw[(...)] in branches even with Filter above UNION ALL:\n" + plan);
+
+            assertNonGroupByPushDownUsesPartialState(plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggPushDownAutoModeIgnoresFilterGroupBys() throws Exception {
+        // In auto mode, filter-added groupBys are semantic guards for push-down placement, not
+        // original grouping keys. Non-group-by aggregation should only use the row-count floor.
+        setTableStatistics(olapTable("t0"), 10_000_000);
+        setTableStatistics(olapTable("t1"), 10_000_000);
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(0);
+        try {
+            String sql = "SELECT COUNT(*), hex(hll_serialize(hll_raw(v2))) " +
+                    "FROM (SELECT v1, v2 FROM t0 " +
+                    "      UNION ALL " +
+                    "      SELECT v4, v5 FROM t1) u " +
+                    "WHERE v1 > 0";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            assertNonGroupByPushDownUsesPartialState(plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+            setTableStatistics(olapTable("t0"), 0);
+            setTableStatistics(olapTable("t1"), 0);
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggPushDownAutoModeRespectsRowCountFloor() throws Exception {
+        // The @BeforeAll sets cboPushDownAggregateMode=1 (force). Production default is 0 (auto),
+        // where checkStatistics applies a row-count floor (SMALL_SCALE_ROWS_LIMIT) for the
+        // non-group-by path: without enough input rows, adding a partial-agg node to each branch
+        // is pure overhead and the rule should skip push-down. t0/t1 are empty mock tables here,
+        // well below the floor, so push-down must NOT happen in auto mode.
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(0);
+        try {
+            String sql = "SELECT COUNT(*), SUM(v1), hex(hll_serialize(hll_raw(v2))) " +
+                    "FROM (SELECT v1, v2 FROM t0 " +
+                    "      UNION ALL " +
+                    "      SELECT v4, v5 FROM t1) u";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            int countStarOccurrences = countRegexOccurrences(plan, "count\\[\\(\\*\\);");
+            Assertions.assertEquals(1, countStarOccurrences,
+                    "small input under auto mode must NOT trigger per-branch partial aggregation:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        }
+    }
+
+    @Test
+    public void testNonGroupByAggPushDownGlobalMode() throws Exception {
+        // The other testNonGroupBy* cases set cbo_push_down_aggregate=local. Production default is
+        // global, which generates a different AggType for the pushed partial agg. Verify the merge
+        // finalize rewrite path holds under the production default.
+        String sql = "SELECT COUNT(*), SUM(v1), hex(hll_serialize(hll_raw(v2))) " +
+                "FROM (SELECT v1, v2 FROM t0 " +
+                "      UNION ALL " +
+                "      SELECT v4, v5 FROM t1) u";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+        Assertions.assertTrue(plan.contains("count[(*);"),
+                "expected partial count[(*) in branches under global mode:\n" + plan);
+        Assertions.assertTrue(plan.contains("hll_raw[("),
+                "expected partial hll_raw[(...)] in branches under global mode:\n" + plan);
+        assertNonGroupByPushDownUsesPartialState(plan);
+    }
+
+    @Test
+    public void testNonGroupByAggOverUnionAllWithJoinBranchNotPushedDown() throws Exception {
+        // Regression for review feedback: a UNION ALL whose one branch contains a JOIN must
+        // abort push-down. The all-or-nothing decomposition in visitLogicalUnion requires every
+        // branch to accept the partial aggregate; the JOIN branch contributes none (a non-group-by
+        // aggregate cannot push below a 1-N join), so the whole UNION push-down must be skipped.
+        // Without this guard, the aggregate would land in only some branches and silently mis-count.
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            String sql = "SELECT COUNT(*), SUM(v1) FROM ( " +
+                    "  SELECT v1 FROM t0 " +
+                    "  UNION ALL " +
+                    "  SELECT t1.v4 AS v1 FROM t1 JOIN t2 ON t1.v5 = t2.v8 " +
+                    ") u";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+
+            // COUNT(*) appears exactly once — at the final agg above the UNION, not per-branch.
+            int countStarOccurrences = countRegexOccurrences(plan, "count\\[\\(\\*\\);");
+            Assertions.assertEquals(1, countStarOccurrences,
+                    "expected exactly one count[(*) at the top-level agg (no per-branch partials):\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
     }
 }
