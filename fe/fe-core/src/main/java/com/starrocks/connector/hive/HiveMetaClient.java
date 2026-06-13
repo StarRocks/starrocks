@@ -20,6 +20,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -45,12 +46,14 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
@@ -67,12 +70,20 @@ public class HiveMetaClient {
     private final Object clientPoolLock = new Object();
 
     private final HiveConf conf;
+    // Catalog-level hadoop.kerberos.principal/keytab. If either is empty, fall back to the
+    // system UGI (original behavior). HadoopExt.doAsWithSwap briefly swaps the process
+    // loginUser to the catalog keytab around each RPC so that the HMS thrift SASL handshake
+    // authenticates with the catalog credential.
+    private final String catalogPrincipal;
+    private final String catalogKeytab;
 
     // Required for creating an instance of RetryingMetaStoreClient.
     private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(HiveConf conf) {
         this.conf = conf;
+        this.catalogPrincipal = conf.get(HadoopExt.HADOOP_KERBEROS_PRINCIPAL);
+        this.catalogKeytab = conf.get(HadoopExt.HADOOP_KERBEROS_KEYTAB);
         this.maxPoolSize = conf.getInt(HIVE_METASTORE_CONNECTION_POOL_SIZE, MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT);
     }
 
@@ -110,18 +121,14 @@ public class HiveMetaClient {
         // When the number of currently used clients is less than maxPoolSize,
         // the client will be recycled and reused. If it does, we close the client.
         public void finish() {
-            boolean shouldClose = false;
             synchronized (clientPoolLock) {
                 if (clientPool.size() >= maxPoolSize) {
-                    shouldClose = true;
+                    LOG.warn("There are more than {} connections currently accessing the metastore",
+                            maxPoolSize);
+                    close();
                 } else {
                     clientPool.offer(this);
                 }
-            }
-            if (shouldClose) {
-                LOG.warn("There are more than {} connections currently accessing the metastore",
-                        maxPoolSize);
-                close();
             }
         }
 
@@ -148,12 +155,17 @@ public class HiveMetaClient {
             Thread.currentThread().setContextClassLoader(ClassLoader.getSystemClassLoader());
         }
 
-        RecyclableClient client = null;
         synchronized (clientPoolLock) {
-            client = clientPool.poll();
+            RecyclableClient client = clientPool.poll();
+            // The pool was empty so create a new client and return that.
+            // Serialize client creation to defend against possible race conditions accessing
+            // local Kerberos state
+            if (client == null) {
+                return new RecyclableClient(conf);
+            } else {
+                return client;
+            }
         }
-
-        return client != null ? client : new RecyclableClient(conf);
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
@@ -161,12 +173,17 @@ public class HiveMetaClient {
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
+        final Class<?>[] finalArgClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
+        return HadoopExt.getInstance().doAsWithSwap(catalogPrincipal, catalogKeytab,
+                () -> callRPCInternal(methodName, messageIfError, finalArgClasses, args));
+    }
+
+    private <T> T callRPCInternal(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
         RecyclableClient client = null;
         StarRocksConnectorException connectionException = null;
 
         try {
             client = getClient();
-            argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
             Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
             return (T) method.invoke(client.hiveClient, args);
         } catch (Throwable e) {
@@ -314,8 +331,10 @@ public class HiveMetaClient {
             RecyclableClient client = null;
             StarRocksConnectorException connectionException = null;
             try {
+                List<String> decodedPartitionNames = partitionNames.stream().
+                        map(name -> unescapePathName(name)).collect(Collectors.toList());
                 client = getClient();
-                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
+                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, decodedPartitionNames);
                 if (partitions.size() != partitionNames.size()) {
                     LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
                             partitionNames.size(), dbName, tblName, partitions.size());
