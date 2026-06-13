@@ -201,7 +201,11 @@ public class KuduMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
         if (metastore.isPresent()) {
-            return metastore.get().getTable(dbName, tblName);
+            Table table = metastore.get().getTable(dbName, tblName);
+            if (table instanceof KuduTable) {
+                ((KuduTable) table).setMasterAddresses(masterAddresses);
+            }
+            return table;
         }
         String fullTableName = getKuduFullTableName(dbName, tblName);
         try {
