@@ -31,12 +31,24 @@
 #endif
 
 #include <boost/algorithm/string.hpp>
+#include <cerrno>
+#include <climits>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 #include "gutil/strings/split.h"
 
 namespace starrocks {
+
+#ifdef BE_TEST
+const char* k_ut_partitions_path = nullptr; // NOLINT
+const char* k_ut_mounts_path = nullptr;     // NOLINT
+#endif
 
 bool DiskInfo::_s_initialized;
 std::vector<DiskInfo::Disk> DiskInfo::_s_disks;
@@ -50,7 +62,12 @@ int DiskInfo::_s_num_datanode_dirs;
 void DiskInfo::get_device_names() {
     // Format of this file is:
     //    major, minor, #blocks, name
-    std::ifstream partitions("/proc/partitions", std::ios::in);
+#ifdef BE_TEST
+    const char* partitions_path = (k_ut_partitions_path != nullptr) ? k_ut_partitions_path : "/proc/partitions";
+#else
+    const char* partitions_path = "/proc/partitions";
+#endif
+    std::ifstream partitions(partitions_path, std::ios::in);
 
     while (partitions.good() && !partitions.eof()) {
         std::string line;
@@ -128,7 +145,9 @@ void DiskInfo::init() {
 
 int DiskInfo::disk_id(const char* path) {
     struct stat s;
-    stat(path, &s);
+    if (stat(path, &s) != 0) {
+        return -1;
+    }
     auto it = _s_device_id_to_disk_id.find(s.st_dev);
 
     if (it == _s_device_id_to_disk_id.end()) {
@@ -154,6 +173,109 @@ std::string DiskInfo::debug_string() {
 
     stream << std::endl;
     return stream.str();
+}
+
+bool DiskInfo::is_known_disk_device_name(const std::string& dev) {
+    for (int i = 0; i < num_disks(); ++i) {
+        if (device_name(i) == dev) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::set<std::string>* devices) {
+    std::vector<std::string> real_paths;
+    real_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        char real_path[PATH_MAX];
+        if (realpath(path.c_str(), real_path) == nullptr) {
+            PLOG(WARNING) << "canonicalize path " << path << " failed, skip disk monitoring of this path";
+            continue;
+        }
+        real_paths.emplace_back(real_path);
+    }
+
+#ifdef BE_TEST
+    FILE* fp = fopen(k_ut_mounts_path ? k_ut_mounts_path : "/proc/mounts", "r");
+#else
+    FILE* fp = fopen("/proc/mounts", "r");
+#endif
+    if (fp == nullptr) {
+        std::stringstream ss;
+        char buf[64];
+        ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    Status status;
+    char* line_ptr = nullptr;
+    size_t line_buf_size = 0;
+    for (const auto& path : real_paths) {
+        size_t max_mount_size = 0;
+        std::string match_dev;
+        rewind(fp);
+        while (getline(&line_ptr, &line_buf_size, fp) > 0) {
+            char dev_path[4096];
+            char mount_path[4096];
+            int num = sscanf(line_ptr, "%4095s %4095s", dev_path, mount_path);
+            if (num < 2) {
+                continue;
+            }
+            size_t mount_size = strlen(mount_path);
+            if (mount_size < max_mount_size || path.size() < mount_size ||
+                strncmp(path.c_str(), mount_path, mount_size) != 0) {
+                continue;
+            }
+            // Longest-prefix match: pick the most specific mount point for the
+            // storage path. However, a pure prefix match can produce a false
+            // positive when the storage path shares a string prefix with a mount
+            // point but is not actually under it. For example, given:
+            //   /proc/mounts:  "/" -> sda
+            //                  "/data" -> sdb
+            //   storage path:  "/data2/starrocks"
+            // strncmp would match "/data" (len=5) and select sdb, even though
+            // "/data2" is not a child of "/data" — the correct mount is "/" (sda).
+            // Guard against this by requiring that the character immediately after
+            // the mount prefix in the storage path is either '/' or '\0'.
+            if (path.size() > mount_size && path[mount_size] != '/') {
+                continue;
+            }
+            std::string dev = std::filesystem::path(dev_path).filename().string();
+            if (is_known_disk_device_name(dev)) {
+                max_mount_size = mount_size;
+                match_dev = std::move(dev);
+            } else {
+                // Fallback for LVM and other device-mapper setups where basename of the
+                // device path (e.g. "/dev/mapper/localssd-localssd--lv") does not appear in _s_disk_name_to_disk_id.
+                // stat() the mount point to obtain the kernel device number (major:minor),
+                // then look it up in _s_device_id_to_disk_id which is keyed by dev_t
+                // and covers dm-* entries from /proc/partitions.
+                int id = disk_id(mount_path);
+                if (id >= 0) {
+                    max_mount_size = mount_size;
+                    match_dev = device_name(id);
+                }
+            }
+        }
+        if (ferror(fp) != 0) {
+            std::stringstream ss;
+            char buf[64];
+            ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+            LOG(WARNING) << ss.str();
+            status = Status::InternalError(ss.str());
+            break;
+        }
+        if (max_mount_size > 0) {
+            devices->emplace(match_dev);
+        }
+    }
+    if (line_ptr != nullptr) {
+        free(line_ptr);
+    }
+    fclose(fp);
+    return status;
 }
 
 } // namespace starrocks
