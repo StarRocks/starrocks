@@ -544,14 +544,51 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
         } else if (!stmt.containsExternalCatalog()) {
             for (FunctionRef fnRef : stmt.getFnRefs()) {
                 String functionName = fnRef.getFunctionName();
+                String qualifierDbName = fnRef.getDbName();
 
-                List<Function> functionList = db.getFunctionsByName(functionName);
+                // When a DB qualifier is specified (e.g. fn_db2.my_func), resolve and use that DB
+                // rather than the backup target DB, mirroring the fix in FunctionNameAnalyzer.
+                Database lookupDb;
+                if (qualifierDbName != null) {
+                    lookupDb = globalStateMgr.getLocalMetastore().getDb(qualifierDbName);
+                    if (lookupDb == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, qualifierDbName);
+                    }
+                } else {
+                    lookupDb = db;
+                }
+
+                List<Function> functionList = lookupDb.getFunctionsByName(functionName);
                 if (functionList.isEmpty()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Invalid backup function(s), function name: " + functionName);
                 }
 
-                allFunctions.addAll(functionList);
+                // When the function is sourced from a different DB (cross-DB qualified reference),
+                // rewrite its FunctionName.db to the snapshot target DB on a shallow copy.
+                // Rewriting is required so that restore/replayCreateFunctionLog routes the
+                // function into the correct target DB rather than the qualifier DB.
+                // We copy the Function rather than mutating the live catalog object.
+                if (qualifierDbName != null && !qualifierDbName.equals(dbName)) {
+                    for (Function fn : functionList) {
+                        Function fnCopy = fn.copy();
+                        fnCopy.setFunctionName(new FunctionName(dbName, fn.getFunctionName().getFunction()));
+                        // Guard against signature collision: reject if a function with the same
+                        // name and signature is already in allFunctions (e.g. a local function
+                        // and a cross-DB function that share a signature).
+                        boolean collision = allFunctions.stream().anyMatch(
+                                existing -> fnCopy.compare(existing, Function.CompareMode.IS_IDENTICAL));
+                        if (collision) {
+                            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                    "Backup function conflict: cross-DB function " + qualifierDbName + "."
+                                            + functionName + " has the same signature as a function already "
+                                            + "selected for backup in database " + dbName);
+                        }
+                        allFunctions.add(fnCopy);
+                    }
+                } else {
+                    allFunctions.addAll(functionList);
+                }
             }
         }
         backupJob.setBackupFunctions(allFunctions);

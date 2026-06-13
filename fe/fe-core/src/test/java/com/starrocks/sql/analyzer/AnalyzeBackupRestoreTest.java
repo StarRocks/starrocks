@@ -59,6 +59,13 @@ public class AnalyzeBackupRestoreTest {
         AnalyzeTestUtil.getStarRocksAssert().withFunction("CREATE FUNCTION Echostring(string) RETURNS string properties" +
                         "(\"symbol\" = \"Echostring\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
 
+        // Set up a second database with a function for cross-DB qualified name tests (issue #70949)
+        AnalyzeTestUtil.getStarRocksAssert().withDatabase("fn_db2").useDatabase("fn_db2");
+        AnalyzeTestUtil.getStarRocksAssert().withFunction("CREATE FUNCTION fn_db2_func(string) RETURNS string properties" +
+                        "(\"symbol\" = \"fn_db2_func\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
+        // Switch back to default test db
+        AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
+
         AnalyzeTestUtil.getStarRocksAssert().withView("CREATE VIEW v1 AS select 1;");
         AnalyzeTestUtil.getStarRocksAssert().withView("CREATE VIEW v2 AS select 2;");
 
@@ -284,6 +291,32 @@ public class AnalyzeBackupRestoreTest {
         analyzeFail("CANCEL RESTORE;");
         analyzeSuccess("CANCEL BACKUP FOR EXTERNAL CATALOG;");
         analyzeSuccess("CANCEL RESTORE FOR EXTERNAL CATALOG;");
+    }
+
+    /**
+     * Tests for issue #70949: qualified backup/restore function names should be validated
+     * against the qualifier's DB, not the BACKUP target DB (defaultDb).
+     */
+    @Test
+    public void testBackupFunctionWithQualifiedDbName() {
+        // Bug case 1: function exists in fn_db2 but not in test (backup target DB).
+        // Before fix: false rejection — "Invalid backup function(s)".
+        // After fix: should succeed because fn_db2.fn_db2_func exists in fn_db2.
+        analyzeSuccess("BACKUP SNAPSHOT test.snapshot_cross_db TO `repo` ON " +
+                "(FUNCTION fn_db2.fn_db2_func) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+
+        // Unqualified reference to a function in the backup target DB still works.
+        analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON (FUNCTION Echostring) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+
+        // Qualified reference to a non-existent function in an existing DB should fail.
+        analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON (FUNCTION fn_db2.no_such_func) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+
+        // Qualified reference to a function in a non-existent DB should fail.
+        analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON (FUNCTION no_such_db.some_func) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
     }
 
 }
