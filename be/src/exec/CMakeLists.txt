@@ -184,6 +184,7 @@ set(PIPELINE_ADAPTERS_SRCS
     pipeline/exec_node_pipeline_adapter.cpp
     pipeline/fragment_executor.cpp
     pipeline/pipeline_builder.cpp
+    pipeline/pipeline_driver_instantiator.cpp
 )
 
 set(PIPELINE_OPERATORS_BATCH_SRCS

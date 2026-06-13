@@ -28,6 +28,7 @@
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/source_operator.h"
@@ -65,7 +66,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
 
     for (auto* pipeline : _pipelines) {
         pipeline->source_operator_factory()->adjust_dop();
-        fragment_ctx->instantiate_drivers(pipeline);
+        instantiate_pipeline_drivers(fragment_ctx, pipeline);
     }
 
     auto prepare_drivers = [state, &pipelines = _pipelines]() {

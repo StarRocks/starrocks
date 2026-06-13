@@ -37,7 +37,7 @@
 #include "exec/pipeline/primitives/execution_group_lifecycle.h"
 #include "exec/pipeline/primitives/fragment_lifecycle.h"
 #include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/pipeline/scan/morsel_queue.h"
+#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 #include "exec/runtime/fragment_runtime_state.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -119,8 +119,6 @@ public:
     void set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines);
 
     Status prepare_all_pipelines();
-
-    void instantiate_drivers(Pipeline* pipeline);
 
     void iterate_drivers(const std::function<void(const DriverPtr&)>& call);
 

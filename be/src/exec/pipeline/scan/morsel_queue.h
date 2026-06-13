@@ -17,7 +17,6 @@
 #include <atomic>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -29,10 +28,6 @@ namespace starrocks::pipeline {
 class MorselQueue;
 class SplitMorselQueue;
 using MorselQueuePtr = std::unique_ptr<MorselQueue>;
-using MorselQueueMap = std::unordered_map<int32_t, MorselQueuePtr>;
-class MorselQueueFactory;
-using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
-using MorselQueueFactoryMap = std::unordered_map<int32_t, MorselQueueFactoryPtr>;
 
 /// MorselQueue.
 class MorselQueue {

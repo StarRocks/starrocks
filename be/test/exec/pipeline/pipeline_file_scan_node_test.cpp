@@ -42,6 +42,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
@@ -251,7 +252,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
         }
     });
 
-    _fragment_ctx->iterate_pipeline([this](auto pipeline) { _fragment_ctx->instantiate_drivers(pipeline); });
+    _fragment_ctx->iterate_pipeline([this](auto pipeline) { instantiate_pipeline_drivers(_fragment_ctx, pipeline); });
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {

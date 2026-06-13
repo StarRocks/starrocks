@@ -40,7 +40,6 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "platform/thrift_rpc_helper.h"
@@ -342,65 +341,6 @@ Status FragmentContext::prepare_all_pipelines() {
         RETURN_IF_ERROR(group->prepare_pipelines(_runtime_state.get()));
     }
     return Status::OK();
-}
-
-void FragmentContext::instantiate_drivers(Pipeline* pipeline) {
-    auto* state = runtime_state();
-    auto* query_ctx = state->query_ctx();
-    auto* query_runtime_state = state->query_runtime_state();
-    auto* fragment_runtime_state = state->fragment_runtime_state();
-    if (fragment_runtime_state == nullptr) {
-        fragment_runtime_state = &this->fragment_runtime_state();
-    }
-    auto pipeline_timer_context = this->pipeline_timer_context();
-    auto workgroup = this->workgroup();
-
-    size_t dop = pipeline->degree_of_parallelism();
-
-    VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << dop
-             << " fragment_instance_id=" << print_id(fragment_instance_id());
-
-    pipeline->setup_pipeline_profile(state);
-    auto& drivers = pipeline->mutable_drivers();
-    drivers.reserve(dop);
-    for (size_t i = 0; i < dop; ++i) {
-        auto&& operators = pipeline->create_operators(dop, i);
-        DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), query_runtime_state,
-                                                            fragment_runtime_state, pipeline->pipeline_event(),
-                                                            pipeline, pipeline_timer_context, next_driver_id());
-
-        if (state->enable_event_scheduler()) {
-            auto* scheduler = event_scheduler();
-            DCHECK(scheduler != nullptr);
-            driver->set_observer(scheduler->create_driver_observer(driver.get()));
-            driver->assign_observer();
-        }
-
-        pipeline->setup_drivers_profile(driver);
-        driver->set_workgroup(workgroup);
-        drivers.emplace_back(std::move(driver));
-    }
-
-    if (!pipeline->source_operator_factory()->with_morsels()) {
-        return;
-    }
-
-    auto* morsel_queue_factory = pipeline->source_operator_factory()->morsel_queue_factory();
-    DCHECK(morsel_queue_factory != nullptr);
-    DCHECK(dop == 1 || dop == morsel_queue_factory->size());
-    for (size_t i = 0; i < dop; ++i) {
-        auto& driver = drivers[i];
-        driver->set_morsel_queue(morsel_queue_factory->create(i));
-        if (auto* scan_operator = driver->source_driver_scan_operator()) {
-            scan_operator->set_workgroup(workgroup);
-            scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
-            if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
-                scan_operator->set_scan_executor(workgroup->executors()->connector_scan_executor());
-            } else {
-                scan_operator->set_scan_executor(workgroup->executors()->scan_executor());
-            }
-        }
-    }
 }
 
 void FragmentContext::_set_default_workgroup() {
