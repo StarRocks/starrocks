@@ -271,10 +271,10 @@ CROARINGBITMAP_SOURCE=CRoaring-4.2.1
 CROARINGBITMAP_MD5SUM="00667266a60709978368cf867fb3a3aa"
 
 # jemalloc
-JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2"
-JEMALLOC_NAME="jemalloc-5.3.0.tar.bz2"
-JEMALLOC_SOURCE="jemalloc-5.3.0"
-JEMALLOC_MD5SUM="09a8328574dab22a7df848eae6dbbf53"
+JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.3.1/jemalloc-5.3.1.tar.bz2"
+JEMALLOC_NAME="jemalloc-5.3.1.tar.bz2"
+JEMALLOC_SOURCE="jemalloc-5.3.1"
+JEMALLOC_MD5SUM="2b183326fcff2c087efd7efc0a808ba2"
 
 # CCTZ
 CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.3.tar.gz"
