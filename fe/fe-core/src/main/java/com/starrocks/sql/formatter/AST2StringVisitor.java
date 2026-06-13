@@ -157,6 +157,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     //   printLevelCompound
     protected FormatOptions options = FormatOptions.allEnable();
 
+    protected String tableNameToSql(TableName tableName) {
+        return tableName.toSql();
+    }
+
     public static AST2StringVisitor withOptions(FormatOptions options) {
         AST2StringVisitor visitor = new AST2StringVisitor();
         visitor.options = options;
@@ -498,7 +502,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         } else {
             TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
                     stmt.getTableName(), stmt.getTableRef().getPos());
-            sb.append(tableName.toSql());
+            sb.append(tableNameToSql(tableName));
         }
 
         if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
@@ -999,7 +1003,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             TableRef tableRef = insert.getTableRef();
             TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                     tableRef.getTableName(), tableRef.getPos());
-            sb.append(tableName.toSql());
+            sb.append(tableNameToSql(tableName));
         }
         sb.append(" ");
 
@@ -1066,7 +1070,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         TableRef tableRef = delete.getTableRef();
         TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                 tableRef.getTableName(), tableRef.getPos());
-        sb.append(tableName.toSql());
+        sb.append(tableNameToSql(tableName));
 
         if (delete.getWherePredicate() != null) {
             sb.append(" WHERE ");

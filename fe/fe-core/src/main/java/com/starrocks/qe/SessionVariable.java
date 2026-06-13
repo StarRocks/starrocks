@@ -512,6 +512,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY =
             "cbo_cte_force_reuse_limit_without_order_by";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
+    public static final String SQL_DIGEST_EXCLUDE_DB = "sql_digest_exclude_db";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
@@ -1565,6 +1566,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
+
+    @VarAttr(name = SQL_DIGEST_EXCLUDE_DB)
+    private boolean sqlDigestExcludeDb = false;
 
     @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
     private boolean cboUseDBLock = false;
@@ -5102,6 +5106,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableSQLDigest() {
         return enableSQLDigest;
+    }
+
+    public boolean isSqlDigestExcludeDb() {
+        return sqlDigestExcludeDb;
     }
 
     public void enableJoinReorder(boolean value) {

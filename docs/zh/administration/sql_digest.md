@@ -95,3 +95,41 @@ WHERE digest IN (SELECT digest FROM top_sql);
 - SQL 中的常量值会被归一化。例如，包含 `WHERE a = 1` 和 `WHERE a = 2` 的相同类型 SQL 会生成相同的 Digest。
 - 对于 IN 谓词会进行归一化。例如，包含 `IN (1,2,3)` 和 `IN (1,2)` 的相同类型 SQL 会生成相同的 Digest。
 - 对于 `LIMIT N` 会进行归一化。例如，包含 `LIMIT 10` 和 `LIMIT 30` 的相同类型 SQL 会生成相同的 Digest。
+
+## 跨库 Digest
+
+默认情况下，SQL Digest 的计算包含数据库名。这意味着相同模式的 SQL 在不同数据库中执行会产生不同的 Digest。例如：
+
+```SQL
+USE db1;
+SELECT * FROM t WHERE id = 1;
+-- Digest: aaa...
+
+USE db2;
+SELECT * FROM t WHERE id = 1;
+-- Digest: bbb...（与上面不同）
+```
+
+如果希望相同模式的 SQL 无论在哪个数据库执行都产生相同的 Digest，可以设置会话变量 `sql_digest_exclude_db` 为 `true`：
+
+```SQL
+SET sql_digest_exclude_db = true;
+```
+
+启用后，数据库名将从 Digest 计算中排除，从而支持跨库聚合相同模式的 SQL。
+
+```SQL
+USE db1;
+SELECT * FROM t WHERE id = 1;
+-- Digest: ccc...
+
+USE db2;
+SELECT * FROM t WHERE id = 1;
+-- Digest: ccc...（与上面相同）
+```
+
+:::note
+
+无论是否启用此选项，外部 Catalog 名称始终会包含在 Digest 中。
+
+:::

@@ -221,6 +221,15 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         return stringBuilder.toString();
     }
 
+    public String toSqlWithoutDb() {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (catalog != null && !CatalogMgr.isInternalCatalog(catalog)) {
+            stringBuilder.append("`").append(catalog).append("`.");
+        }
+        stringBuilder.append("`").append(tbl).append("`");
+        return stringBuilder.toString();
+    }
+
 
 
 

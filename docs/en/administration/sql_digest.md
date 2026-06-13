@@ -99,3 +99,41 @@ WHERE digest IN (SELECT digest FROM top_sql);
 - Constant values in SQL will be normalized. For example, similar SQL statements with `WHERE a = 1` and `WHERE a = 2` will have the same Digest.
 - IN predicates will be normalized. For example, similar SQL statements with `IN (1,2,3)` and `IN (1,2)` will have the same Digest.
 - `LIMIT N` clauses will be normalized. For example, similar SQL statements with `LIMIT 10` and `LIMIT 30` will have the same Digest.
+
+## Cross-database Digest
+
+By default, SQL Digest includes the database name in the computation. This means the same SQL pattern executed in different databases will produce different Digests. For example:
+
+```SQL
+USE db1;
+SELECT * FROM t WHERE id = 1;
+-- Digest: aaa...
+
+USE db2;
+SELECT * FROM t WHERE id = 1;
+-- Digest: bbb... (different from above)
+```
+
+If you want the same SQL pattern to produce the same Digest regardless of which database it runs in, you can set the session variable `sql_digest_exclude_db` to `true`:
+
+```SQL
+SET sql_digest_exclude_db = true;
+```
+
+After enabling this option, the database name will be excluded from the Digest computation, allowing you to aggregate SQL patterns across different databases.
+
+```SQL
+USE db1;
+SELECT * FROM t WHERE id = 1;
+-- Digest: ccc...
+
+USE db2;
+SELECT * FROM t WHERE id = 1;
+-- Digest: ccc... (same as above)
+```
+
+:::note
+
+External catalog names are always included in the Digest regardless of this setting.
+
+:::

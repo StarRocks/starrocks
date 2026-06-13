@@ -41,6 +41,8 @@ public class FormatOptions {
 
     private boolean enableHints = true;
 
+    private boolean excludeDbFromDigest = false;
+
     private boolean enablePrettyFormat = false;
 
     private int indentLevel = 0;
@@ -92,6 +94,10 @@ public class FormatOptions {
 
     public boolean isEnableHints() {
         return enableHints;
+    }
+
+    public boolean isExcludeDbFromDigest() {
+        return excludeDbFromDigest;
     }
 
     public boolean isEnablePrettyFormat() {
@@ -150,6 +156,11 @@ public class FormatOptions {
 
     public FormatOptions setEnableHints(boolean enableHints) {
         this.enableHints = enableHints;
+        return this;
+    }
+
+    public FormatOptions setExcludeDbFromDigest(boolean excludeDbFromDigest) {
+        this.excludeDbFromDigest = excludeDbFromDigest;
         return this;
     }
 

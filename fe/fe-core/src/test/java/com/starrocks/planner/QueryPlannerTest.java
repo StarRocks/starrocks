@@ -421,7 +421,7 @@ public class QueryPlannerTest {
             Assertions.assertEquals(digest, d);
         }
         try (MockedStatic<ConnectProcessor> digestMethod = Mockito.mockStatic(ConnectProcessor.class)) {
-            digestMethod.when(() -> ConnectProcessor.computeStatementDigest(Mockito.any())).thenReturn(digest);
+            digestMethod.when(() -> ConnectProcessor.computeStatementDigest(Mockito.any(), Mockito.anyBoolean())).thenReturn(digest);
 
             StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sqlStmt);
             stmtExecutor2.execute();
