@@ -298,6 +298,15 @@ This topic introduces the following types of BE configurations:
 - Description: Target uncompressed page size (in bytes) used when building column data and index pages. This value is copied into ColumnWriterOptions.data_page_size and IndexedColumnWriterOptions.index_page_size and is consulted by page builders (e.g., BinaryPlainPageBuilder::is_page_full and buffer reservation logic) to decide when to finish a page and how much memory to reserve. A value of 0 disables the page-size limit in builders. Changing this value affects page count, metadata overhead, memory reservation and I/O/compression trade-offs (smaller pages → more pages and metadata; larger pages → fewer pages, potentially better compression but larger memory spikes).
 - Introduced in: v3.2.4
 
+### enable_binary_plain_delta_offset
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to store the offset trailer of a BinaryPlainPage (used by string/varchar columns and dictionary pages) as per-value deltas (string lengths) instead of absolute offsets. Absolute offsets increase monotonically and compress poorly under LZ4; deltas are near-constant for fixed-ish strings and compress much better, while the uncompressed trailer keeps the same size. The reduction in compressed column size is roughly the size of the offset trailer (about 4 bytes per row), which is more significant for high-cardinality string columns. Delta pages are self-identified via a flag bit in the trailer, so pages written before this is enabled (absolute offsets) keep the original zero-copy read path and remain readable after toggling. Only the write side is affected; reads auto-detect the format per page.
+- Introduced in: v4.2.0
+
 ### default_num_rows_per_column_file_block
 
 - Default: 1024
