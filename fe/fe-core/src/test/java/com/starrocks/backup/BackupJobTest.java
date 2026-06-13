@@ -787,4 +787,40 @@ public class BackupJobTest {
             Assertions.fail("Failed to test chooseReplica: " + e.getMessage());
         }
     }
+
+    @Test
+    public void testCancelInternalClearsState() {
+        // Setup a pending job
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
+        BackupJob cancelJob = new BackupJob("label_cancel", dbId, UnitTestUtil.DB_NAME, tableRefs, 
+                13600 * 1000, globalStateMgr, repo.getId());
+
+        // Fill in states mapping
+        Map<Long, SnapshotInfo> snapshotInfos = Maps.newConcurrentMap();
+        snapshotInfos.put(1L, new SnapshotInfo(dbId, tblId, partId, idxId, 1L,
+                backendId, schemaHash, "path", Lists.newArrayList()));
+        Deencapsulation.setField(cancelJob, "snapshotInfos", snapshotInfos);
+        
+        BackupMeta backupMeta = new BackupMeta(Lists.newArrayList());
+        Deencapsulation.setField(cancelJob, "backupMeta", backupMeta);
+        
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        Deencapsulation.setField(cancelJob, "jobInfo", jobInfo);
+
+        // Verify they are set before cancellation
+        Map<Long, SnapshotInfo> retrievedSnapshotInfos = Deencapsulation.getField(cancelJob, "snapshotInfos");
+        Assertions.assertFalse(retrievedSnapshotInfos.isEmpty());
+        Assertions.assertNotNull((Object) Deencapsulation.getField(cancelJob, "backupMeta"));
+        Assertions.assertNotNull((Object) Deencapsulation.getField(cancelJob, "jobInfo"));
+
+        // Cancel the job, this will trigger cancelInternal
+        cancelJob.cancel();
+
+        // Verify they are cleared after cancellation
+        retrievedSnapshotInfos = Deencapsulation.getField(cancelJob, "snapshotInfos");
+        Assertions.assertTrue(retrievedSnapshotInfos.isEmpty());
+        Assertions.assertNull((Object) Deencapsulation.getField(cancelJob, "backupMeta"));
+        Assertions.assertNull((Object) Deencapsulation.getField(cancelJob, "jobInfo"));
+    }
 }
