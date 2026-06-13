@@ -335,6 +335,9 @@ public class TableObjectCaseInsensitiveTest {
         analyzeSuccess("SET CATALOG Test_Catalog");
         analyzeSuccess("set catalog TEST_catalog");
 
+        analyzeSuccess("SET CATALOG = Test_Catalog");
+        analyzeSuccess("set catalog = TEST_catalog");
+
         analyzeSuccess("DROP CATALOG IF EXISTS Test_Catalog");
         analyzeSuccess("drop catalog TEST_catalog");
     }
