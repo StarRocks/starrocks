@@ -3245,8 +3245,8 @@ baseType
     | FLOAT
     | DOUBLE
     | DATE
-    | DATETIME
-    | TIME
+    | DATETIME typeParameter?
+    | TIME typeParameter?
     | CHAR typeParameter?
     | VARCHAR typeParameter?
     | STRING
