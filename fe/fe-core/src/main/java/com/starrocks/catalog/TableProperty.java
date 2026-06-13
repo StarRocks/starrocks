@@ -585,6 +585,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                         PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
                 flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
                         flatJsonSparsityFactory, flatJsonColumnMax);
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION)) {
+                    flatJsonConfig.setVersion(Long.parseLong(properties.get(
+                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION)));
+                }
             } catch (AnalysisException e) {
                 throw new RuntimeException("Failed to analyze flat JSON properties: " + e.getMessage(), e);
             }

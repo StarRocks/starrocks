@@ -38,6 +38,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
+#include "storage/primitive/flat_json_config.h"
 #include "storage/schema_change_utils.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
@@ -573,6 +574,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
                                                            ? CompactionStrategyPB::DEFAULT
                                                            : CompactionStrategyPB::REAL_TIME;
         metadata_update_info->set_compaction_strategy(compaction_strategy);
+    }
+
+    if (tablet_meta_info.__isset.flat_json_config) {
+        FlatJsonConfig cfg;
+        cfg.update(tablet_meta_info.flat_json_config);
+        cfg.to_pb(metadata_update_info->mutable_flat_json_config());
     }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
