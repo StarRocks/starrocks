@@ -176,12 +176,43 @@ WHERE target_database = 'mydb'
   }
   ```
 
-  `raw_record` 本身已足以逐列排查原因。完整行回放需要等后续
-  `parquet_read_rows(file, anchors)` TVF 落地——它会根据锚点重读源
-  Parquet 文件还原完整行。TVF 落地前，锚点仍然有用：
-  `row_in_file`（0-based）能把用户直接指到原始 Parquet 文件里的具体
-  行；`file_size` / `file_mtime_ms` 是扫描打开时的快照，手动回放前
-  要先比对这两个字段，确认源文件没有被改动。
+  `raw_record` 本身已足以逐列排查原因。完整行回放使用
+  `parquet_read_rows(source_info)` 表值函数，它把锚点作为输入并以
+  lateral 形式接在 `_statistics_.rejected_records` 右侧：
+
+  ```sql
+  -- 目标表：id INT NOT NULL, val INT NOT NULL, name VARCHAR(8)。
+  -- 文件里 name='bobby_too_long_name' 那行被 parquet scanner 因超过
+  -- VARCHAR(8) 拒绝，scanner 会写完整的 source_info 锚点。下面把整
+  -- 行还原、截断超长字段后重导。
+  INSERT INTO db.t
+  SELECT cast(json_query(p.raw_record, '$.id') AS INT),
+         cast(json_query(p.raw_record, '$.val') AS INT),
+         left(cast(json_query(p.raw_record, '$.name') AS varchar), 8)
+  FROM _statistics_.rejected_records r,
+       parquet_read_rows(r.source_info) p
+  WHERE r.target_database = 'db' AND r.target_table = 't'
+    AND cast(json_query(r.source_info, '$.format') AS varchar) = 'parquet';
+  ```
+
+  `parquet_read_rows` 每个锚点输出一行，列为
+  `(file VARCHAR, row_in_file BIGINT, raw_record JSON)`。
+  `raw_record` 是按 Parquet 列名为键的 JSON 对象，值保留 Parquet 中
+  的原始内容。当 `source_info` 携带 `file_size` / `file_mtime_ms` 时，
+  BE 会在打开文件后做 fail-closed 校验，大小或修改时间漂移则整条查
+  询失败；若底层文件系统不暴露修改时间（S3 / OSS），mtime 校验自动
+  跳过。单个 chunk 处理的锚点数受 BE 配置
+  `parquet_read_rows_max_anchors` 限制（默认 10000）。
+
+  **`source_info` 锚点的作用范围。** 锚点只会在 **parquet scanner 的
+  逐行拒绝路径**（字符串超长、decimal 精度溢出、scanner 端类型不匹
+  配）下被写入。来自下游 **tablet sink** 的拒绝（NULL_VIOLATION、
+  分区超界等）—— 包括常见的
+  `INSERT INTO ... SELECT cast(...) FROM FILES('parquet')` 模式（SQL
+  `cast` 把异常值转成 `NULL` 后被 sink 拒绝）——会让 `source_info`
+  为 `NULL`。这类拒绝里 `raw_record` 仍然保留 sink 渲染过的行，但
+  `parquet_read_rows()` 没有可回放的锚点。要触发 TVF，导入时不要在
+  SQL 里加 `cast` 把异常值掩盖为 NULL，让 scanner 直接拒。
 - **`information_schema.loads.rejected_record_path` 已弃用。** 它此前
   指向的 BE 本地 tab 分隔拒绝文件已被移除；列本身保留用于升级兼容，取值
   恒为 `NULL`。改用 `_statistics_.rejected_records`，按 `load_label`
