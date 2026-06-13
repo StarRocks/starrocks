@@ -3234,6 +3234,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
+    // OBSOLETE: no longer read by any code. It used to gate reads of tables whose equality-delete
+    // files span multiple partition specs (throwing unless set true, then scoping the join by $spec_id
+    // only). Equality-delete reads are now partition-scoped correctly via $partition_id for every spec,
+    // so this flag is a no-op. Kept defined so existing SET statements / dump-replay don't fail; remove
+    // in a follow-up.
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
     private boolean enableReadIcebergEqDeleteWithPartitionEvolution = false;
 
