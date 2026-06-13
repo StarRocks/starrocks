@@ -101,7 +101,7 @@ CREATE TABLE products (
     product VARCHAR(50),
     category VARCHAR(50),
     brand VARCHAR(30)
-) properties("replication_num" = "1");;
+) properties("replication_num" = "1");
 
 CREATE TABLE customers (
     id INT,

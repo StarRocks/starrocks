@@ -57,11 +57,11 @@ group by id
 order by id;
 -- result:
 100.00000000	0	None	None	None	["A"]	["A"]	["A"]	1	0	None
-None	1	150.00	150.00	None	[null]	[null]	[null]	1	0	None
+None	1	150.00	150.00	None	None	None	None	1	0	None
 200.00000000	0	None	200.00	None	["A"]	["A"]	["A"]	1	0	None
-None	1	250.00	250.00	None	[null]	[null]	[null]	1	0	None
-None	1	None	300.00	300.00	[null]	[null]	[null]	1	1	None
-None	1	None	500.00	None	[null]	[null]	[null]	1	1	500.00
+None	1	250.00	250.00	None	None	None	None	1	0	None
+None	1	None	300.00	300.00	None	None	None	1	1	None
+None	1	None	500.00	None	None	None	None	1	1	500.00
 -- !result
 set sql_dialect='Trino';
 -- result:
@@ -82,11 +82,11 @@ group by id
 order by id;
 -- result:
 100.00000000	0	None	None	None	["A"]	["A"]	1	0	None
-None	1	150.00	150.00	None	[null]	[null]	1	0	None
+None	1	150.00	150.00	None	None	None	1	0	None
 200.00000000	0	None	200.00	None	["A"]	["A"]	1	0	None
-None	1	250.00	250.00	None	[null]	[null]	1	0	None
-None	1	None	300.00	300.00	[null]	[null]	1	1	None
-None	1	None	500.00	None	[null]	[null]	1	1	500.00
+None	1	250.00	250.00	None	None	None	1	0	None
+None	1	None	300.00	300.00	None	None	1	1	None
+None	1	None	500.00	None	None	None	1	1	500.00
 -- !result
 set sql_dialect='StarRocks';
 -- result:
@@ -108,11 +108,11 @@ group by id
 order by id;
 -- result:
 100.00000000	0	None	None	None	["A"]	["A"]	["A"]	1	0	None
-None	1	150.00	150.00	None	[null]	[null]	[null]	1	0	None
+None	1	150.00	150.00	None	None	None	None	1	0	None
 200.00000000	0	None	200.00	None	["A"]	["A"]	["A"]	1	0	None
-None	1	250.00	250.00	None	[null]	[null]	[null]	1	0	None
-None	1	None	300.00	300.00	[null]	[null]	[null]	1	1	None
-None	1	None	500.00	None	[null]	[null]	[null]	1	1	500.00
+None	1	250.00	250.00	None	None	None	None	1	0	None
+None	1	None	300.00	300.00	None	None	None	1	1	None
+None	1	None	500.00	None	None	None	None	1	1	500.00
 -- !result
 drop table sales;
 -- result:
@@ -136,7 +136,7 @@ CREATE TABLE products (
     product VARCHAR(50),
     category VARCHAR(50),
     brand VARCHAR(30)
-) properties("replication_num" = "1");;
+) properties("replication_num" = "1");
 -- result:
 -- !result
 CREATE TABLE customers (
@@ -360,9 +360,9 @@ FROM (SELECT * FROM sales ORDER BY id) AS sorted_sales
 GROUP BY category
 ORDER BY category;
 -- result:
-None	[null]	["South"]	[null]	[null]
-Clothing	[null,null,null,null,null,null,"Dress","Jacket","Shoes"]	[null,"North","South","West"]	[null,null,null,null,null,null,null,null,"Shirt"]	[null,"Clothing"]
-Electronics	[null,null,"Headphones","Laptop","MacBook","Monitor","Tablet","Watch","iPad","iPhone"]	[null,"East","South","West"]	[null,"Headphones","Keyboard","Laptop","Monitor","Phone Case","Tablet","Watch","iPad","iPhone"]	[null,"Electronics"]
+None	None	["South"]	None	[null]
+Clothing	["Dress","Jacket","Shoes"]	["North","South","West"]	["Shirt"]	["Clothing"]
+Electronics	["Headphones","Laptop","MacBook","Monitor","Tablet","Watch","iPad","iPhone"]	["East","South","West"]	["Headphones","Keyboard","Laptop","Monitor","Phone Case","Tablet","Watch","iPad","iPhone"]	["Electronics"]
 -- !result
 SELECT
     region,
@@ -374,10 +374,10 @@ FROM (SELECT * FROM sales ORDER BY id) AS sorted_sales
 GROUP BY region
 ORDER BY region;
 -- result:
-East	[null,null,null,"Monitor"]	[null,"Clothing"]	[null,null,"Jacket(199.99)","Monitor(299.99)"]	[null,null,null,"Phone Case"]
-North	[null,null,null,null,"Laptop","Tablet","iPhone"]	[null,"Clothing","Electronics"]	[null,null,null,null,"Laptop(1599.99)","Tablet(399.99)","iPhone(999.99)"]	[null,null,null,null,null,"Laptop","iPhone"]
-South	[null,null,null,"MacBook","Watch"]	[null,"Electronics"]	[null,null,"Dress(159.99)","MacBook(1299.99)","Watch(299.99)"]	[null,null,null,null,null]
-West	[null,null,null,"iPad"]	[null,"Clothing","Electronics"]	[null,null,"Headphones(199.99)","iPad(599.99)"]	[null,null,null,null]
+East	["Monitor"]	["Clothing"]	["Jacket(199.99)","Monitor(299.99)"]	["Phone Case"]
+North	["Laptop","Tablet","iPhone"]	["Clothing","Electronics"]	["Laptop(1599.99)","Tablet(399.99)","iPhone(999.99)"]	["Laptop","iPhone"]
+South	["MacBook","Watch"]	["Electronics"]	["Dress(159.99)","MacBook(1299.99)","Watch(299.99)"]	None
+West	["iPad"]	["Clothing","Electronics"]	["Headphones(199.99)","iPad(599.99)"]	None
 -- !result
 SELECT
     gender,
@@ -389,8 +389,8 @@ FROM (SELECT * FROM sales ORDER BY id) AS sorted_sales
 GROUP BY gender
 ORDER BY gender;
 -- result:
-F	[null,"Bag","Dress","Hat","Jacket","Jeans","MacBook","Scarf","Shoes","Sneakers"]	[null,"Clothing","Clothing","Clothing","Clothing","Clothing","Clothing","Clothing","Clothing","Electronics"]	["East","North","South","West"]	[null,null,null,null,null,null,null,null,null,null]
-M	["Headphones","Keyboard","Laptop","Monitor","Phone Case","Shirt","Tablet","Watch","iPad","iPhone"]	[null,"Clothing","Electronics","Electronics","Electronics","Electronics","Electronics","Electronics","Electronics","Electronics"]	["East","North","South","West"]	[null,null,null,null,null,null,null,null,null,null]
+F	["Bag","Dress","Hat","Jacket","Jeans","MacBook","Scarf","Shoes","Sneakers"]	["Clothing","Clothing","Clothing","Clothing","Clothing","Clothing","Clothing","Clothing","Electronics"]	["East","North","South","West"]	[null]
+M	["Headphones","Keyboard","Laptop","Monitor","Phone Case","Shirt","Tablet","Watch","iPad","iPhone"]	["Clothing","Electronics","Electronics","Electronics","Electronics","Electronics","Electronics","Electronics","Electronics"]	["East","North","South","West"]	None
 -- !result
 SELECT
     MONTH(sale_date) AS sale_month,
@@ -402,8 +402,8 @@ FROM (SELECT * FROM sales ORDER BY id) AS sorted_sales
 GROUP BY MONTH(sale_date)
 ORDER BY sale_month;
 -- result:
-1	[null,null,null,null,null,null,null,null,"Shoes","Watch"]	[null]	[null,null,null,null,null,null,null,null,null,null]	[null,null,null,null,null,null,null,null,null,"Electronics"]
-2	[null,null,null,null,null,null,null,"Hat","Phone Case","Sneakers"]	["East","North","South","West"]	[null,null,null,null,null,null,null,null,null,null]	[null,"Clothing","Clothing","Clothing","Clothing","Electronics","Electronics","Electronics","Electronics","Electronics"]
+1	["Shoes","Watch"]	None	None	["Electronics"]
+2	["Hat","Phone Case","Sneakers"]	["East","North","South","West"]	None	[null,"Clothing","Clothing","Clothing","Clothing","Electronics","Electronics","Electronics","Electronics","Electronics"]
 -- !result
 SELECT
     category,
@@ -415,9 +415,9 @@ FROM (SELECT * FROM sales ORDER BY id) AS sorted_sales
 GROUP BY category
 ORDER BY category;
 -- result:
-None	[null]	["HAT"]	["Hat"]	[null]
-Clothing	[null,null,null,null,null,null,null,"Jacket","Sneakers"]	[null,null,null,null,null,null,null,"BAG","DRESS"]	[null,"Bag","Dre","Jac","Jea","Sca","Shi","Sho","Sne"]	[null,null,null,null,"Dress","Jacket","Jeans","Shoes","Sneakers"]
-Electronics	[null,null,"Headphones","Keyboard","Laptop","MacBook","Monitor","Phone Case","Tablet","iPhone"]	[null,null,null,null,null,null,null,null,null,"HEADPHONES"]	["Hea","Key","Lap","Mac","Mon","Pho","Tab","Wat","iPa","iPh"]	[null,null,null,null,null,"Headphones","Keyboard","Phone Case","Tablet","iPhone"]
+None	None	["HAT"]	["Hat"]	None
+Clothing	["Jacket","Sneakers"]	["BAG","DRESS"]	["Bag","Dre","Jac","Jea","Sca","Shi","Sho","Sne"]	["Dress","Jacket","Jeans","Shoes","Sneakers"]
+Electronics	["Headphones","Keyboard","Laptop","MacBook","Monitor","Phone Case","Tablet","iPhone"]	["HEADPHONES"]	["Hea","Key","Lap","Mac","Mon","Pho","Tab","Wat","iPa","iPh"]	["Headphones","Keyboard","Phone Case","Tablet","iPhone"]
 -- !result
 SELECT
     region,
@@ -429,10 +429,10 @@ FROM (SELECT * FROM sales ORDER BY id) AS sorted_sales
 GROUP BY region
 ORDER BY region;
 -- result:
-East	[null,"Jacket","Jeans","Monitor"]	[null]	[null,null,null,"Jeans"]	["Jacket:33.33","Jeans:5.33","Monitor:42.86","Phone Case:0.40"]
-North	[null,null,null,"Bag","Laptop","Shoes","iPhone"]	[null]	[null,null,null,null,null,"Bag","Shoes"]	[null,null,"Bag:5.00","Laptop:533.33","Shirt:1.20","Shoes:10.83","iPhone:100.00"]
-South	["Dress","Hat","MacBook","Scarf","Watch"]	[null]	[null,null,null,null,null]	["Dress:20.00","Hat:0.75","MacBook:260.00","Scarf:1.14","Watch:15.00"]
-West	[null,"Headphones","Sneakers","iPad"]	[null]	[null,null,null,null]	[null,"Headphones:6.67","Sneakers:4.09","iPad:75.00"]
+East	["Jacket","Jeans","Monitor"]	None	["Jeans"]	["Jacket:33.33","Jeans:5.33","Monitor:42.86","Phone Case:0.40"]
+North	["Bag","Laptop","Shoes","iPhone"]	None	["Bag","Shoes"]	["Bag:5.00","Laptop:533.33","Shirt:1.20","Shoes:10.83","iPhone:100.00"]
+South	["Dress","Hat","MacBook","Scarf","Watch"]	None	None	["Dress:20.00","Hat:0.75","MacBook:260.00","Scarf:1.14","Watch:15.00"]
+West	[null,"Headphones","Sneakers","iPad"]	None	[null]	[null,"Headphones:6.67","Sneakers:4.09","iPad:75.00"]
 -- !result
 SELECT
     -- Always false condition (should return empty arrays)
@@ -452,5 +452,5 @@ SELECT
     ARRAY_SORT(ARRAY_AGG(DISTINCT category) FILTER (WHERE (category = 'Electronics' AND amount > 100) OR (category = 'Clothing' AND quantity > 20))) AS complex_categories
 FROM (SELECT * FROM sales ORDER BY id) AS sorted_sales;
 -- result:
-[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]	[null,"Bag","Dress","Hat","Headphones","Jacket","Jeans","Keyboard","Laptop","MacBook","Monitor","Phone Case","Scarf","Shirt","Shoes","Sneakers","Tablet","Watch","iPad","iPhone"]	[null,"Bag","Dress","Hat","Headphones","Jacket","Jeans","Keyboard","Laptop","MacBook","Monitor","Phone Case","Scarf","Shirt","Shoes","Sneakers","Tablet","Watch","iPad","iPhone"]	[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"Tablet"]	[null,"Bag","Dress","Hat","Headphones","Jacket","Jeans","Keyboard","Laptop","MacBook","Monitor","Phone Case","Scarf","Shirt","Shoes","Sneakers","Tablet","Watch","iPad","iPhone"]	[null,"Clothing","Electronics"]
+None	[null,"Bag","Dress","Hat","Headphones","Jacket","Jeans","Keyboard","Laptop","MacBook","Monitor","Phone Case","Scarf","Shirt","Shoes","Sneakers","Tablet","Watch","iPad","iPhone"]	["Bag","Dress","Hat","Headphones","Jacket","Jeans","Keyboard","Laptop","MacBook","Monitor","Phone Case","Scarf","Shirt","Shoes","Sneakers","Tablet","Watch","iPad","iPhone"]	["Tablet"]	[null,"Bag","Dress","Hat","Headphones","Jacket","Jeans","Keyboard","Laptop","MacBook","Monitor","Phone Case","Scarf","Shirt","Shoes","Sneakers","Tablet","Watch","iPad","iPhone"]	["Clothing","Electronics"]
 -- !result
