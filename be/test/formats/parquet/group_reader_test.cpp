@@ -31,6 +31,8 @@
 #include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "formats/parquet/lazy_materialization_context.h"
+#include "formats/parquet/read_range_planner.h"
 #include "formats/parquet/utils.h"
 #include "formats/parquet/variant_projection.h"
 #include "fs/fs.h"
@@ -4132,6 +4134,449 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnOverflowBecomesN
     ASSERT_EQ(2, result->size());
     EXPECT_EQ(500, result->get(0).get_int32()); // 5 × 100 = 500
     EXPECT_TRUE(result->is_null(1));            // 21474837 × 100 overflows int32_t → NULL
+}
+
+// ── LazyMaterializationContext tests ─────────────────────────────────────────
+
+// Covers: LazyMaterializationContext::provides MissingColumnProvider
+//         interface for physical lazy slots.
+TEST_F(GroupReaderTest, LazyMaterializationContextCanMaterializeAndProvidePhysicalSlots) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot = _pool.add(
+            new SlotDescriptor(200, "active_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(201, "lazy_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* unrelated_slot = _pool.add(
+            new SlotDescriptor(202, "other_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Wire mock readers: active slot has data, lazy slot has mock that records reads.
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    // Verify classification: active_slot in active, lazy_slot in lazy.
+    const auto& lazy_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_TRUE(std::find(lazy_ids.begin(), lazy_ids.end(), lazy_slot->id()) != lazy_ids.end());
+
+    // Init read_chunk so materialize_slot has a valid _read_chunk.
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 2);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+
+    // can_materialize: true for lazy slot, false for active and unrelated.
+    EXPECT_TRUE(ctx.can_materialize(lazy_slot->id()));
+    EXPECT_FALSE(ctx.can_materialize(active_slot->id()));
+    EXPECT_FALSE(ctx.can_materialize(unrelated_slot->id()));
+
+    // can_provide (MissingColumnProvider interface) mirrors can_materialize.
+    EXPECT_TRUE(ctx.can_provide(lazy_slot->id()));
+    EXPECT_FALSE(ctx.can_provide(unrelated_slot->id()));
+
+    // provide: materializes the lazy slot and returns its column.
+    auto result = ctx.provide(lazy_slot->id());
+    ASSERT_TRUE(result.ok());
+    auto col = result.value();
+    ASSERT_NE(nullptr, col);
+    EXPECT_EQ(2u, col->size());
+
+    // Second provide is idempotent (slot already cached).
+    auto result2 = ctx.provide(lazy_slot->id());
+    ASSERT_TRUE(result2.ok());
+}
+
+// Covers: LazyMaterializationContext::has_slot for both
+//         slot_cache (physical) and active_chunk paths.
+TEST_F(GroupReaderTest, LazyMaterializationContextHasSlotReturnsTrueForCachedAndActiveChunkSlots) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(210, "ac", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(211, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 1);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+
+    // has_slot: active_chunk has active_slot → true
+    EXPECT_TRUE(ctx.has_slot(active_slot->id()));
+    // has_slot: lazy_slot not in active_chunk or slot_cache → false
+    EXPECT_FALSE(ctx.has_slot(lazy_slot->id()));
+
+    // materialize the lazy slot → populates slot_cache
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_TRUE(ctx.has_slot(lazy_slot->id()));
+}
+
+// Covers: LazyMaterializationContext::materialize_slot dispatches to
+//         ColumnMaterializer for physical lazy slots (variant is nullptr).
+TEST_F(GroupReaderTest, LazyMaterializationContextMaterializeSlotDelegatesToColumnMaterializer) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(220, "aa", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(221, "bb", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 1);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+
+    // Trigger count starts at 0.
+    EXPECT_EQ(0, group_reader->_column_materializer->lazy_triggered_count());
+
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_EQ(1, group_reader->_column_materializer->lazy_triggered_count());
+
+    // Idempotent: second materialize is a no-op.
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_EQ(1, group_reader->_column_materializer->lazy_triggered_count());
+
+    // After reset, materialize increments again.
+    group_reader->_column_materializer->reset_triggered_lazy_count();
+    EXPECT_EQ(0, group_reader->_column_materializer->lazy_triggered_count());
+    // Need to clear slot_cache too so materialize_slot actually reads again.
+    group_reader->_column_materializer->reset_read_chunk();
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_EQ(1, group_reader->_column_materializer->lazy_triggered_count());
+}
+
+// Covers: LazyMaterializationContext::get_column returns nullptr for
+//         slots that can't be materialized and returns valid column
+//         after materialize_slot (physical path).
+TEST_F(GroupReaderTest, LazyMaterializationContextGetColumnReturnsNullForUnknownSlots) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(230, "x", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(231, "y", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* unknown_slot =
+            _pool.add(new SlotDescriptor(999, "zz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 1);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+
+    // Unknown slot → nullptr (not in lazy_slots, can't materialize).
+    EXPECT_EQ(nullptr, ctx.get_column(unknown_slot->id()));
+
+    // get_column materializes on demand and returns result.
+    auto col = ctx.get_column(lazy_slot->id());
+    ASSERT_NE(nullptr, col);
+    EXPECT_EQ(1u, col->size());
+
+    // Active slot from active_chunk → returns existing column.
+    auto active_col = ctx.get_column(active_slot->id());
+    ASSERT_NE(nullptr, active_col);
+}
+
+// Covers: ColumnMaterializer::read_lazy_columns separates triggered
+//         (in slot_cache) from untriggered lazy columns.
+TEST_F(GroupReaderTest, ReadLazyColumnsSeparatesTriggeredFromUntriggered) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(240, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_a_slot =
+            _pool.add(new SlotDescriptor(241, "la", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_b_slot =
+            _pool.add(new SlotDescriptor(242, "lb", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cla{};
+    cla.slot_desc = lazy_a_slot;
+    GroupReaderParam::Column clb{};
+    clb.slot_desc = lazy_b_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cla);
+    param->read_cols.emplace_back(clb);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_a_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_b_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    const auto& lazy_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_EQ(2u, lazy_ids.size());
+
+    // Build active_chunk manually with the active slot pre-filled to 2 rows.
+    size_t num_rows = 2;
+    Range<uint64_t> full_range(0, num_rows);
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    active_col->append_datum(Datum(int64_t(1)));
+    active_col->append_datum(Datum(int64_t(2)));
+    active_chunk->append_column(active_col, active_slot->id());
+
+    // Simulate: lazy_a was triggered during predicate eval → in slot_cache.
+    // lazy_b was NOT triggered → not in slot_cache.
+    group_reader->_column_materializer->reset_read_chunk();
+    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, full_range, nullptr, active_chunk);
+    ASSERT_OK(ctx.materialize_slot(lazy_a_slot->id()));
+    EXPECT_NE(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_a_slot->id()));
+    EXPECT_EQ(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_b_slot->id()));
+
+    // read_lazy_columns should:
+    // - Move lazy_a (triggered) from _read_chunk → append → active_chunk
+    // - Read lazy_b (untriggered) via full_range → merge → active_chunk
+    Range<uint64_t> post_filter_range = full_range;
+    Filter empty_filter{};
+    Filter chunk_filter(num_rows, 1);
+    ASSERT_OK(group_reader->_column_materializer->read_lazy_columns(full_range, post_filter_range, empty_filter,
+                                                                    chunk_filter, false, active_chunk));
+
+    // Both lazy columns should now be in active_chunk (3 total: active + lazy_a + lazy_b).
+    EXPECT_TRUE(active_chunk->is_slot_exist(lazy_a_slot->id()));
+    EXPECT_TRUE(active_chunk->is_slot_exist(lazy_b_slot->id()));
+    EXPECT_EQ(3u, active_chunk->num_columns());
+}
+
+// Covers: ColumnMaterializer::read_lazy_columns filters triggered columns
+//         with chunk_filter when has_filter is true.
+TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(250, "act", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(251, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(10)));
+    bigint_col->append_datum(Datum(int64_t(20)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    size_t num_rows = 2;
+    Range<uint64_t> full_range(0, num_rows);
+
+    // Build active_chunk manually: 2 surviving rows for active_slot.
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    active_col->append_datum(Datum(int64_t(1)));
+    active_col->append_datum(Datum(int64_t(2)));
+    active_chunk->append_column(active_col, active_slot->id());
+
+    // Trigger lazy_slot so it is in slot_cache with full_range data.
+    group_reader->_column_materializer->reset_read_chunk();
+    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, full_range, nullptr, active_chunk);
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+
+    // chunk_filter has 1s for all rows (row 0 and 1 survive).
+    Filter chunk_filter(num_rows, 1);
+    Range<uint64_t> post_filter_range = full_range;
+    Filter empty_filter{};
+    ASSERT_OK(group_reader->_column_materializer->read_lazy_columns(full_range, post_filter_range, empty_filter,
+                                                                    chunk_filter, true, active_chunk));
+
+    EXPECT_TRUE(active_chunk->is_slot_exist(lazy_slot->id()));
+    auto& col = active_chunk->get_column_by_slot_id(lazy_slot->id());
+    EXPECT_EQ(num_rows, col->size());
+}
+
+// Covers: ReadRangePlanner::deduplicate merges duplicate IORanges.
+TEST_F(GroupReaderTest, ReadRangePlannerDeduplicateMergesIdenticalRanges) {
+    using IORange = SharedBufferedInputStream::IORange;
+    std::vector<IORange> ranges;
+    ranges.emplace_back(100, 50, true);
+    ranges.emplace_back(100, 50, false);
+    ranges.emplace_back(200, 30, true);
+    ranges.emplace_back(200, 30, true);
+
+    ReadRangePlanner::deduplicate(&ranges);
+
+    // Two duplicates: (100,50) merged → is_active = true, (200,30) merged → is_active = true.
+    ASSERT_EQ(2u, ranges.size());
+    EXPECT_EQ(100, ranges[0].offset);
+    EXPECT_EQ(50, ranges[0].size);
+    EXPECT_TRUE(ranges[0].is_active);
+    EXPECT_EQ(200, ranges[1].offset);
+    EXPECT_EQ(30, ranges[1].size);
+    EXPECT_TRUE(ranges[1].is_active);
+}
+
+// Covers: ReadRangePlanner::should_coalesce_active_lazy returns true
+//         when counter is nullptr (default).
+TEST_F(GroupReaderTest, ReadRangePlannerShouldCoalesceReturnsTrueWhenCounterIsNull) {
+    auto* param = _create_group_reader_param();
+    param->lazy_column_coalesce_counter = nullptr;
+
+    std::unordered_map<int32_t, std::unique_ptr<ColumnReader>> readers;
+    ReadRangePlanner planner(*param, &readers);
+
+    EXPECT_TRUE(planner.should_coalesce_active_lazy());
+}
+
+// Covers: ReadRangePlanner::should_coalesce_active_lazy reads
+//         the adaptive counter.
+TEST_F(GroupReaderTest, ReadRangePlannerShouldCoalesceReadsCounter) {
+    auto* param = _create_group_reader_param();
+    std::atomic<int32_t> counter = -1;
+    param->lazy_column_coalesce_counter = &counter;
+
+    std::unordered_map<int32_t, std::unique_ptr<ColumnReader>> readers;
+    ReadRangePlanner planner(*param, &readers);
+
+    EXPECT_FALSE(planner.should_coalesce_active_lazy());
+
+    counter.store(0, std::memory_order_relaxed);
+    EXPECT_TRUE(planner.should_coalesce_active_lazy());
 }
 
 } // namespace starrocks::parquet

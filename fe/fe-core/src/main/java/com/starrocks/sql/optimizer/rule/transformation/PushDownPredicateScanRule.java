@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rewrite.TimeDriftConstraint;
+import com.starrocks.sql.optimizer.rewrite.scalar.DeriveGuardPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -89,6 +90,11 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         predicates = TimeDriftConstraint.tryAddDerivedPredicates(predicates, logicalScanOperator.getTable(),
                 logicalScanOperator.getColumnNameToColRefMap());
+
+        // Derive guard predicates from OR branches to help BE column loading.
+        // Called once here (not in the scalar rewrite fixpoint loop) to avoid
+        // redundant re-processing.
+        predicates = DeriveGuardPredicateRule.apply(predicates);
 
         // clone a new scan operator and rewrite predicate.
         Operator.Builder builder = OperatorBuilderFactory.build(logicalScanOperator);

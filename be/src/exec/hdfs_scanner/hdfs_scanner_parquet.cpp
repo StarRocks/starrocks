@@ -99,6 +99,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile::Counter* group_chunk_read_timer = nullptr;
     RuntimeProfile::Counter* group_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
+    RuntimeProfile::Counter* dict_code_predicate_eval_count = nullptr;
 
     // io coalesce
     RuntimeProfile::Counter* active_lazy_coalesce_together = nullptr;
@@ -158,6 +159,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
+    dict_code_predicate_eval_count =
+            ADD_CHILD_COUNTER(root, "DictCodePredicateEvalCount", TUnit::UNIT, kParquetProfileSectionPrefix);
 
     active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
                                                       kParquetProfileSectionPrefix);
@@ -207,6 +210,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
     COUNTER_UPDATE(active_lazy_coalesce_together, _app_stats.active_lazy_coalesce_together);
     COUNTER_UPDATE(active_lazy_coalesce_seperately, _app_stats.active_lazy_coalesce_seperately);
+    COUNTER_UPDATE(dict_code_predicate_eval_count, _app_stats.parquet_dict_code_predicate_eval_count);
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
