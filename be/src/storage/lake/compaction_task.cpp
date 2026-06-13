@@ -21,6 +21,7 @@
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h" // config::enable_transparent_data_encryption
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
