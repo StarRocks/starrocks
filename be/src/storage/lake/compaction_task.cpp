@@ -31,11 +31,11 @@
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
-#include "storage/lake/sdcg_overlay_merge.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/sdcg_overlay_merge.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -211,8 +211,8 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
             // Open a read file for this `.spcols` (its own physical file), honoring its encryption meta.
             RandomAccessFileOptions ropts;
             if (spcols_seg->encryption_info() != nullptr && !spcols_seg->file_info().encryption_meta.empty()) {
-                ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(
-                                                    spcols_seg->file_info().encryption_meta));
+                ASSIGN_OR_RETURN(auto info,
+                                 KeyCache::instance().unwrap_encryption_meta(spcols_seg->file_info().encryption_meta));
                 ropts.encryption_info = std::move(info);
             }
             ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(ropts, spcols_seg->file_info()));
@@ -246,9 +246,8 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
                         remaining -= n;
                     }
                     if (static_cast<int64_t>(holder->size()) != k) {
-                        return Status::Corruption(fmt::format(
-                                "sdcg merge: source_rowid count {} != K {} in {}", holder->size(), k,
-                                spcols_seg->file_name()));
+                        return Status::Corruption(fmt::format("sdcg merge: source_rowid count {} != K {} in {}",
+                                                              holder->size(), k, spcols_seg->file_name()));
                     }
                     source_rowids.resize(k);
                     const auto& data = holder->immutable_data();
@@ -266,9 +265,9 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
                         remaining -= n;
                     }
                     if (static_cast<int64_t>(value_col->size()) != k) {
-                        return Status::Corruption(fmt::format(
-                                "sdcg merge: value count {} != K {} (uid {}) in {}", value_col->size(), k,
-                                col.unique_id(), spcols_seg->file_name()));
+                        return Status::Corruption(fmt::format("sdcg merge: value count {} != K {} (uid {}) in {}",
+                                                              value_col->size(), k, col.unique_id(),
+                                                              spcols_seg->file_name()));
                     }
                     column_uids.push_back(static_cast<int32_t>(col.unique_id()));
                     values.emplace_back(std::move(value_col));
