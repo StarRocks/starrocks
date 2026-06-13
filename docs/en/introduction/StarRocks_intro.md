@@ -13,7 +13,7 @@ StarRocks is compatible with MySQL protocols and can be easily connected using M
 
 [StarRocks](https://github.com/StarRocks/starrocks/tree/main) is licensed under Apache 2.0, available at the StarRocks GitHub repository (see the [StarRocks license](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)). StarRocks (i) links to or calls functions from third party software libraries, the licenses of which are available in the folder [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary); and (ii) incorporates third party software code, the licenses of which are available in the folder [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses).
 
-Join our [Slack channel](https://try.starrocks.com/join-starrocks-on-slack) for asking general questions and for chat. For community news, read the [StarRocks.io Blog](https://www.starrocks.io/blog). You can also follow us on [LinkedIn](https://www.linkedin.com/company/starrocks) to get first-hand updates on new features, events, and sharing.
+Join our [Slack channel](https://docs.starrocks.com/join/) for asking general questions and for chat. For community news, read the [StarRocks.io Blog](https://www.starrocks.io/blog). You can also follow us on [LinkedIn](https://www.linkedin.com/company/starrocks) to get first-hand updates on new features, events, and sharing.
 
 ---
 
