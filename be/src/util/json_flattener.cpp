@@ -295,18 +295,36 @@ double estimate_filter_fpp(uint64_t element_nums) {
 }
 
 std::pair<std::string_view, std::string_view> JsonFlatPath::split_path(const std::string_view& path) {
-    size_t pos = 0;
-    pos = path.find('.', pos);
-    std::string_view key;
-    std::string_view next;
-    if (pos == std::string::npos) {
-        key = path;
-    } else {
-        key = path.substr(0, pos);
-        next = path.substr(pos + 1);
+    if (path.empty()) {
+        return {path, {}};
     }
 
-    return {key, next};
+    if (path[0] == '"') {
+        // Quoted key: find the matching closing quote.
+        // The entire quoted segment (including quotes) is the key.
+        // e.g. "my.inner.term".baz -> key="my.inner.term", next=baz
+        size_t end_quote = path.find('"', 1);
+        if (end_quote == std::string_view::npos) {
+            // Unmatched quote, treat the whole thing as the key
+            return {path, {}};
+        }
+        std::string_view key = path.substr(0, end_quote + 1);
+        if (end_quote + 1 >= path.size()) {
+            return {key, {}};
+        }
+        // Skip the '.' separator after the closing quote
+        if (path[end_quote + 1] == '.') {
+            return {key, path.substr(end_quote + 2)};
+        }
+        return {key, path.substr(end_quote + 1)};
+    }
+
+    // Unquoted key: find the first '.'
+    size_t pos = path.find('.');
+    if (pos == std::string_view::npos) {
+        return {path, {}};
+    }
+    return {path.substr(0, pos), path.substr(pos + 1)};
 }
 
 JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string_view& path, JsonFlatPath* root) {
