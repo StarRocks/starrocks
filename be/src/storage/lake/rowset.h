@@ -80,8 +80,26 @@ public:
     // if the segment is empty, it wouln't add this iterator to iterator list
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
+    // |tablet_schema|: optional read schema override. When non-null it is set on the per-segment
+    // SegmentReadOptions so the segment iterator resolves output columns (by positional cid) against
+    // it instead of the segment's base schema. Required when |schema| carries a synthetic column not
+    // present in the base tablet schema (e.g. the SDCG "__cset__" reserved-uid column); otherwise the
+    // iterator resolves cid against the base schema and reads the wrong physical column (type mismatch).
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                      OlapReaderStatistics* stats);
+                                                                      OlapReaderStatistics* stats,
+                                                                      const TabletSchemaCSPtr& tablet_schema = nullptr);
+
+    // Like get_each_segment_iterator, but opens each segment with a FRESH, cache-bypassing
+    // Segment::open bound to |segment_schema|, so Segment::_create_column_readers builds a
+    // ColumnReader for a reserved-uid footer column that is absent from the base tablet schema
+    // (the SDCG "__cset__" column). The metacache holds the base-schema Segment for the same .upt
+    // path (it was loaded earlier in apply with the base/partial schema), and that shared, immutable
+    // object has no reader for the synthetic column -- a read-time tablet_schema override alone
+    // cannot add one. Used ONLY by SDCG flexible-partial-update apply to read "__cset__"; not on any
+    // normal scan path.
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_schema(
+            const Schema& schema, const TabletSchemaCSPtr& segment_schema, bool file_data_cache,
+            OlapReaderStatistics* stats);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates

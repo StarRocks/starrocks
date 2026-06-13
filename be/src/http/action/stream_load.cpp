@@ -609,6 +609,12 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
         } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible") {
+            // SDCG flexible partial update: per-row heterogeneous column sets. The write path is
+            // column mode; the flexible bit is carried separately so FE builds the flexible plan
+            // (hidden __cset__ slot + distinct_column_sets) instead of a homogeneous union update.
+            request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPDATE_MODE);
+            request.__set_flexible_partial_update(true);
         }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {

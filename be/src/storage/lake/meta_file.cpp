@@ -115,30 +115,92 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                                  const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                                  const std::vector<int64_t>& file_sizes) {
+    // Back-compat: dense-only callers get all-DENSE kinds, zero sparse counts and empty presences. The
+    // density-aware form below detects this case and emits NO SDCG arrays, so the produced
+    // DeltaColumnGroupVerPB stays byte-identical to the pre-SDCG behavior (zero-regression hinge).
+    append_dcg(rssid, file_with_encryption_metas, unique_column_id_list, file_sizes,
+               std::vector<DeltaColumnFileKindPB>(file_with_encryption_metas.size(), DENSE_COLS),
+               std::vector<int64_t>(file_with_encryption_metas.size(), 0),
+               std::vector<SparsePresencePB>(file_with_encryption_metas.size()), /*source_segment_num_rows=*/0);
+}
+
+void MetaFileBuilder::append_dcg(uint32_t rssid,
+                                 const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
+                                 const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                                 const std::vector<int64_t>& file_sizes,
+                                 const std::vector<DeltaColumnFileKindPB>& file_kinds,
+                                 const std::vector<int64_t>& sparse_row_counts,
+                                 const std::vector<SparsePresencePB>& presences, int64_t source_segment_num_rows,
+                                 const std::vector<InlineSparsePatchPB>& inline_patches,
+                                 const std::vector<ColumnPresenceListPB>& column_presence_lists) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
+    // SDCG semantics: only a DENSE new file supersedes (strips + orphans) older layers of its columns.
+    // A SPARSE new file is an overlay; its columns are NOT added to this filter, so older entries
+    // (dense or sparse) of those columns are carried forward and remain reachable for the layered reader.
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
+
+    // Accumulate the SDCG kinds/counts for every emitted entry (new first, then surviving old) in the
+    // exact order entries are appended to new_dcg_ver. We only attach them at the end if this message is
+    // "SDCG-active" (any sparse file present, or a source row count to record). When everything is dense
+    // and there is nothing sparse to track, the arrays are omitted entirely so legacy tablets keep their
+    // byte-identical meta — DENSE_COLS=0 is the proto default but an explicitly-present repeated field is
+    // NOT byte-identical to an absent one.
+    std::vector<DeltaColumnFileKindPB> emitted_kinds;
+    std::vector<int64_t> emitted_sparse_counts;
+    // Presence summary per emitted entry, kept in lockstep with emitted_kinds. Dense / unknown entries
+    // get a default (empty) SparsePresencePB so the array stays 1:1 with column_files.
+    std::vector<SparsePresencePB> emitted_presences;
+    // Per-COLUMN presence list per emitted entry (packed flexible files), in lockstep with emitted_kinds.
+    // Dense / homogeneous entries get an empty ColumnPresenceListPB. Emitted into the VerPB only when at
+    // least one is non-empty (homogeneous tablets keep absent column_presence_lists => byte-identical).
+    std::vector<ColumnPresenceListPB> emitted_column_presence_lists;
+    bool any_column_presence = false;
+    bool sdcg_active = source_segment_num_rows > 0 || dcg_ver.has_source_segment_num_rows() ||
+                       !inline_patches.empty() || dcg_ver.inline_patches_size() > 0;
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
     DCHECK(file_with_encryption_metas.size() == file_sizes.size());
+    DCHECK(file_with_encryption_metas.size() == file_kinds.size());
+    DCHECK(file_with_encryption_metas.size() == sparse_row_counts.size());
+    DCHECK(file_with_encryption_metas.size() == presences.size());
+    // column_presence_lists is either empty (no packed file in this call) or 1:1 with the file list.
+    DCHECK(column_presence_lists.empty() || file_with_encryption_metas.size() == column_presence_lists.size());
     for (int i = 0; i < file_with_encryption_metas.size(); i++) {
+        const DeltaColumnFileKindPB kind = file_kinds[i];
         new_dcg_ver.add_column_files(file_with_encryption_metas[i].first);
         // Keep column_file_sizes strictly 1:1 with column_files so readers can index by position.
         new_dcg_ver.add_column_file_sizes(file_sizes[i]);
+        emitted_kinds.push_back(kind);
+        emitted_sparse_counts.push_back(kind == SPARSE_PERCOL ? sparse_row_counts[i] : 0);
+        // A presence summary only makes sense for a sparse overlay; dense entries pad with empty.
+        emitted_presences.push_back(kind == SPARSE_PERCOL ? presences[i] : SparsePresencePB());
+        // Per-column presence list: only a packed sparse file carries one; pad otherwise.
+        ColumnPresenceListPB cpl = (kind == SPARSE_PERCOL && i < static_cast<int>(column_presence_lists.size()))
+                                           ? column_presence_lists[i]
+                                           : ColumnPresenceListPB();
+        if (cpl.entries_size() > 0) any_column_presence = true;
+        emitted_column_presence_lists.push_back(std::move(cpl));
+        if (kind == SPARSE_PERCOL) {
+            sdcg_active = true;
+        }
         if (!file_with_encryption_metas[i].second.empty()) {
             new_dcg_ver.add_encryption_metas(file_with_encryption_metas[i].second);
         }
         DeltaColumnGroupColumnIdsPB unique_cids;
         for (const ColumnUID uid : unique_column_id_list[i]) {
             unique_cids.add_column_ids(uid);
-            // Build filter so we can remove old columns at second step.
-            need_to_remove_cuids_filter.insert(uid);
+            // Only a DENSE new file fully replaces older layers of its columns; build the strip filter
+            // from dense uids only. SPARSE files are layers and must not strip anything.
+            if (kind == DENSE_COLS) {
+                need_to_remove_cuids_filter.insert(uid);
+            }
         }
         new_dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
         new_dcg_ver.add_versions(_tablet_meta->version());
     }
-    // 2. remove old dcgs
+    // 2. carry forward old dcgs, stripping only columns superseded by a DENSE new file.
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.column_files_size());
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.versions_size());
     for (int i = 0; i < dcg_ver.unique_column_ids_size(); i++) {
@@ -152,18 +214,94 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Carry forward the old size, or 0 (unknown) for data written before this field existed,
             // so column_file_sizes stays aligned with column_files.
             new_dcg_ver.add_column_file_sizes(i < dcg_ver.column_file_sizes_size() ? dcg_ver.column_file_sizes(i) : 0);
+            // Carry forward the SDCG arrays in lockstep; normalize absent -> DENSE/0/empty (legacy entries).
+            const DeltaColumnFileKindPB old_kind = i < dcg_ver.file_kinds_size() ? dcg_ver.file_kinds(i) : DENSE_COLS;
+            const int64_t old_count = i < dcg_ver.sparse_row_counts_size() ? dcg_ver.sparse_row_counts(i) : 0;
+            emitted_kinds.push_back(old_kind);
+            emitted_sparse_counts.push_back(old_count);
+            // Carry the old presence summary (or empty if the old meta predates the presences field).
+            emitted_presences.push_back(i < dcg_ver.presences_size() ? dcg_ver.presences(i) : SparsePresencePB());
+            // Carry the old per-column presence list (or empty if absent / predates the field). A packed
+            // file keeps its per-column gate intact as long as the file survives (only a DENSE supersede of
+            // ALL its uids drops the whole entry below).
+            ColumnPresenceListPB old_cpl = i < dcg_ver.column_presence_lists_size() ? dcg_ver.column_presence_lists(i)
+                                                                                    : ColumnPresenceListPB();
+            if (old_cpl.entries_size() > 0) any_column_presence = true;
+            emitted_column_presence_lists.push_back(std::move(old_cpl));
+            if (old_kind == SPARSE_PERCOL) {
+                sdcg_active = true;
+            }
             new_dcg_ver.add_versions(dcg_ver.versions(i));
             if (i < dcg_ver.encryption_metas_size()) {
                 new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));
             }
         } else {
-            // Put this `.cols` files into orphan files
+            // The old entry's columns were all superseded by a DENSE new file (its uid set emptied).
+            // Orphan its file. With SDCG this may now orphan a `.spcols` too, which is correct: a
+            // superseding dense layer makes the older sparse layers of those columns dead.
             FileMetaPB file_meta;
             file_meta.set_name(dcg_ver.column_files(i));
             if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+    }
+
+    // 3. carry forward old inline patches (separate axis from files), then append the new ones. Inline
+    //    patches are `.spcols`-equivalent overlays in meta. A new DENSE file that FULLY covers a patch's
+    //    uid set supersedes it (drop). A patch only PARTIALLY covered is kept intact: the reader applies
+    //    it version-ascending under the newer dense layer for the uncovered uids (dense base wins for the
+    //    covered ones), so the chain stays correct without per-uid inline splitting (a deliberate PoC
+    //    simplification — splitting inline patches per-uid is not worth the complexity).
+    for (const auto& old_patch : dcg_ver.inline_patches()) {
+        bool all_covered = old_patch.column_uids_size() > 0;
+        for (uint32_t uid : old_patch.column_uids()) {
+            if (need_to_remove_cuids_filter.count(uid) == 0) {
+                all_covered = false;
+                break;
+            }
+        }
+        if (all_covered) {
+            // Every uid of this inline patch was superseded by a DENSE new file -> drop it entirely. No
+            // file to orphan (inline patches own no object); it simply stops being re-uploaded next publish.
+            continue;
+        }
+        new_dcg_ver.add_inline_patches()->CopyFrom(old_patch);
+    }
+    for (const auto& patch : inline_patches) {
+        auto* added = new_dcg_ver.add_inline_patches();
+        added->CopyFrom(patch);
+        // Stamp the publish version so the new inline patch interleaves with the new file entries'
+        // versions[] (both == _tablet_meta->version()). The writer leaves it unset on purpose.
+        added->set_version(_tablet_meta->version());
+    }
+
+    // Attach the SDCG arrays only when this message actually carries sparse content (or a base row
+    // count, or inline patches). Dense-only tablets keep absent arrays => byte-identical to pre-SDCG meta.
+    if (sdcg_active) {
+        DCHECK_EQ(static_cast<int>(emitted_kinds.size()), new_dcg_ver.column_files_size());
+        DCHECK_EQ(emitted_presences.size(), emitted_kinds.size());
+        DCHECK_EQ(emitted_column_presence_lists.size(), emitted_kinds.size());
+        for (size_t i = 0; i < emitted_kinds.size(); ++i) {
+            new_dcg_ver.add_file_kinds(emitted_kinds[i]);
+            new_dcg_ver.add_sparse_row_counts(emitted_sparse_counts[i]);
+            new_dcg_ver.add_presences()->CopyFrom(emitted_presences[i]);
+        }
+        // Per-column presence lists are emitted (1:1 with column_files) ONLY when at least one packed file
+        // carries a non-empty list. Homogeneous tablets keep the field absent => byte-identical meta, and
+        // the reader then falls back to file-level presence for every entry.
+        if (any_column_presence) {
+            for (size_t i = 0; i < emitted_column_presence_lists.size(); ++i) {
+                new_dcg_ver.add_column_presence_lists()->CopyFrom(emitted_column_presence_lists[i]);
+            }
+        }
+        // Record the base segment row count (fingerprint) once. Carry forward any previously stored
+        // value when this call doesn't supply one.
+        if (source_segment_num_rows > 0) {
+            new_dcg_ver.set_source_segment_num_rows(source_segment_num_rows);
+        } else if (dcg_ver.has_source_segment_num_rows()) {
+            new_dcg_ver.set_source_segment_num_rows(dcg_ver.source_segment_num_rows());
         }
     }
 
@@ -812,6 +950,120 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
             file_meta.set_shared(segment_meta.shared());
         }
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+    }
+}
+
+void MetaFileBuilder::apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op) {
+    auto* dcgs = _tablet_meta->mutable_dcg_meta()->mutable_dcgs();
+    for (const auto& entry : op.entries()) {
+        const uint32_t rssid = entry.rssid();
+        auto it = dcgs->find(rssid);
+        if (it == dcgs->end()) {
+            // The rssid's DCG entry no longer exists (e.g. a full compaction converged it first). The
+            // merge is moot; orphan the merged file we wrote so it's GC'd, then skip.
+            FileMetaPB fm;
+            fm.set_name(entry.merged_file().name());
+            if (entry.merged_file().shared()) fm.set_shared(true);
+            _tablet_meta->mutable_orphan_files()->Add(std::move(fm));
+            continue;
+        }
+        DeltaColumnGroupVerPB& old_ver = it->second;
+
+        std::unordered_set<int64_t> merged_set(entry.merged_versions().begin(), entry.merged_versions().end());
+        int64_t merged_file_version = 0;
+        for (int64_t v : entry.merged_versions()) {
+            merged_file_version = std::max(merged_file_version, v);
+        }
+
+        // Buffer every EMITTED file's fields so the parallel arrays stay strictly 1:1; the optional
+        // encryption_metas / shared_files arrays are emitted only if any entry is non-trivial (matching
+        // the reader's `j < size` prefix-guard and the all-or-nothing convention).
+        DeltaColumnGroupVerPB neo;
+        std::vector<std::string> enc_metas;     // per emitted file ("" if none)
+        std::vector<bool> shareds;              // per emitted file
+        std::vector<ColumnPresenceListPB> cpls; // per emitted file (empty if homogeneous)
+        bool any_enc = false;
+        bool any_shared = false;
+        bool any_column_presence = false;
+
+        auto emit = [&](const std::string& file, int64_t version, const DeltaColumnGroupColumnIdsPB& cids,
+                        int64_t file_size, DeltaColumnFileKindPB kind, int64_t sparse_row_count,
+                        const SparsePresencePB& presence, const ColumnPresenceListPB& cpl, const std::string& enc,
+                        bool shared) {
+            neo.add_column_files(file);
+            neo.add_versions(version);
+            neo.add_unique_column_ids()->CopyFrom(cids);
+            neo.add_column_file_sizes(file_size);
+            neo.add_file_kinds(kind);
+            neo.add_sparse_row_counts(kind == SPARSE_PERCOL ? sparse_row_count : 0);
+            neo.add_presences()->CopyFrom(presence);
+            cpls.push_back(cpl);
+            enc_metas.push_back(enc);
+            shareds.push_back(shared);
+            if (cpl.entries_size() > 0) any_column_presence = true;
+            if (!enc.empty()) any_enc = true;
+            if (shared) any_shared = true;
+        };
+
+        // 1. Carry forward surviving layers (version NOT in merged_set); orphan the merged-away files.
+        for (int i = 0; i < old_ver.column_files_size(); ++i) {
+            const int64_t ver = i < old_ver.versions_size() ? old_ver.versions(i) : 0;
+            if (merged_set.count(ver) > 0) {
+                FileMetaPB fm;
+                fm.set_name(old_ver.column_files(i));
+                if (i < old_ver.shared_files_size() && old_ver.shared_files(i)) fm.set_shared(true);
+                _tablet_meta->mutable_orphan_files()->Add(std::move(fm));
+                continue;
+            }
+            const DeltaColumnFileKindPB kind = i < old_ver.file_kinds_size() ? old_ver.file_kinds(i) : DENSE_COLS;
+            emit(old_ver.column_files(i), ver, old_ver.unique_column_ids(i),
+                 i < old_ver.column_file_sizes_size() ? old_ver.column_file_sizes(i) : 0, kind,
+                 i < old_ver.sparse_row_counts_size() ? old_ver.sparse_row_counts(i) : 0,
+                 i < old_ver.presences_size() ? old_ver.presences(i) : SparsePresencePB(),
+                 i < old_ver.column_presence_lists_size() ? old_ver.column_presence_lists(i) : ColumnPresenceListPB(),
+                 i < old_ver.encryption_metas_size() ? old_ver.encryption_metas(i) : std::string(),
+                 i < old_ver.shared_files_size() ? old_ver.shared_files(i) : false);
+        }
+
+        // 2. Insert the merged packed `.spcols` at version = max(merged_versions) (<= compact_version),
+        //    so concurrent layers (version > compact_version) carried forward above stay newer.
+        DeltaColumnGroupColumnIdsPB merged_cids;
+        for (uint32_t uid : entry.column_uids()) {
+            merged_cids.add_column_ids(uid);
+        }
+        emit(entry.merged_file().name(), merged_file_version, merged_cids, entry.merged_file().size(), SPARSE_PERCOL,
+             entry.presence().row_count(), entry.presence(), entry.column_presence(),
+             entry.merged_file().encryption_meta(), entry.merged_file().shared());
+
+        // 3. Optional 1:1 arrays: emit only when any entry is non-trivial (preserve absence otherwise).
+        //    Keeping column_presence_lists ABSENT for a homogeneous merged DCG is REQUIRED, not cosmetic:
+        //    both dcg_conflict_is_replayable() and the overlay-merge exclusion key on the ARRAY size
+        //    (column_presence_lists_size() > 0), so a full all-empty array would wrongly mark the segment
+        //    packed -- making it non-replayable on a normal-compaction conflict AND non-re-mergeable.
+        if (any_column_presence) {
+            for (auto& c : cpls) neo.add_column_presence_lists()->CopyFrom(c);
+        }
+        if (any_enc) {
+            for (auto& e : enc_metas) neo.add_encryption_metas(e);
+        }
+        if (any_shared) {
+            for (bool s : shareds) neo.add_shared_files(s);
+        }
+
+        // 4. Carry forward inline patches not folded by the merge (v1 CN excludes inline, so all survive).
+        for (const auto& ip : old_ver.inline_patches()) {
+            if (merged_set.count(ip.version()) > 0) continue;
+            neo.add_inline_patches()->CopyFrom(ip);
+        }
+
+        // 5. Base segment row count M is unchanged by the merge.
+        if (old_ver.has_source_segment_num_rows()) {
+            neo.set_source_segment_num_rows(old_ver.source_segment_num_rows());
+        } else if (entry.has_source_segment_num_rows()) {
+            neo.set_source_segment_num_rows(entry.source_segment_num_rows());
+        }
+
+        old_ver = std::move(neo);
     }
 }
 

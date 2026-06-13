@@ -437,6 +437,62 @@ CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
+// === SDCG (Sparse Delta Column Group) ===
+// Master gate for the sparse delta column group write path (lake / shared-data only).
+// When false the behavior is byte-identical to today: column-mode partial update
+// always writes dense `.cols`, and no `.spcols` files are produced or referenced.
+CONF_mBool(enable_sparse_dcg, "false");
+// Density decision threshold: when (K updated rows / M source-segment rows) is at
+// least this ratio, take the dense `.cols` path instead of writing a sparse `.spcols`.
+CONF_mDouble(sdcg_dense_threshold, "0.3");
+// Absolute cap on K (updated rows in one source segment) for the sparse path: at or
+// above this many rows, fall back to dense even if the density ratio is below
+// sdcg_dense_threshold (large K makes per-ordinal random seeks costlier than a full
+// sequential scan; lake/object-storage favors the conservative cap).
+CONF_mInt64(sdcg_sparse_max_rows, "50000");
+// SAFETY-VALVE cap on sparse overlay-chain depth. Convergence of the chain is normally done by
+// BACKGROUND lake PK compaction (it reads input segments through the DCG overlay and emits fresh dense
+// segments, dropping the sparse chain). Only if a chain reaches this HIGH cap before compaction
+// converges it does the writer fall back to a synchronous in-place dense rewrite -- a rare safety net,
+// no longer a per-batch convergence mechanism, so it does not inflate publish-time p95. (Was 16, which
+// fired a depth-16 dense rewrite on the load's critical path every ~16 partial-update batches.)
+CONF_mInt32(sdcg_promotion_hard_count, "256");
+// DEPRECATED (no longer drives the write path): the old in-place-promotion threshold as a fraction of
+// the base segment row count M. Kept for config compatibility only; convergence is now
+// background-compaction-driven, not cum_K/M-threshold-driven.
+CONF_mDouble(sdcg_promotion_threshold, "0.3");
+// Per-column segment-level zone-map gate refinement. Historically, when a segment has ANY delta
+// column group, segment-level zone-map pruning is disabled for ALL non-key columns, because a DCG
+// rewrites some columns and the base segment's zone maps are stale for them. That is overly broad:
+// a column NOT present in any DCG still has fully valid base zone maps and can be pruned safely.
+// When true, segment-level zone-map pruning is restored per-column for columns absent from every
+// DCG (and for columns whose DCG layer stack contains no SPARSE overlay -- the dense `.cols` file's
+// own zone map already governs page-level pruning, see SegmentZoneMapPruner). Columns covered by a
+// SPARSE overlay are never segment-pruned (the overlay carries newer values). This refinement also
+// benefits stock dense-DCG tables (flag enable_sparse_dcg off), so it is gated separately; set to
+// false to restore the historical all-or-nothing behavior.
+CONF_mBool(sdcg_enable_per_column_zone_map, "true");
+// Inline sparse patch byte budget (per patch). A sparse-eligible (column-batch, rssid) whose
+// serialized inline patch (ascending source_rowids + ColumnArraySerde value blobs) is at or
+// below this many bytes is carried INSIDE the tablet metadata (no `.spcols` file), riding the
+// per-publish TabletMetadataPB PUT instead of paying a separate small-object PUT. Above the
+// budget the writer falls back to a `.spcols` file (a one-time immutable object), because the
+// enclosing meta is re-uploaded every publish for the patch's whole lifetime.
+//
+// EXPERIMENTAL, DISABLED BY DEFAULT (0 = never inline; the writer always emits a .spcols file).
+// The inline read path crashes the promotion (dense-rewrite) source read under a high-concurrency
+// 100M-row micro-batch workload: a column reader's ordinal index null-derefs inside
+// LayeredOverlayColumnIterator::seek_to_ordinal with the signature of delayed heap corruption (the
+// faulting column is unrelated to the inline data being applied). The file-based sparse tier is
+// unaffected and remains the validated path. Set > 0 only to reproduce/debug under ASAN.
+CONF_mInt64(sdcg_inline_patch_max_bytes, "0");
+// Cumulative ceiling on the inline-patch bytes carried in one segment's DCG meta. Because the
+// TabletMetadataPB is re-uploaded every publish, unbounded inline accumulation would amplify the
+// per-version meta transfer. When an existing entry's serialized size plus the new patch would
+// exceed this, the writer biases to a `.spcols` FILE (and the promotion accounting still applies),
+// converting "re-transmitted-every-version meta bytes" into a one-time immutable object.
+CONF_mInt64(sdcg_dcg_meta_max_bytes_per_segment, "262144");
+
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
 

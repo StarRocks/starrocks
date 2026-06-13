@@ -161,9 +161,11 @@ public class StreamLoadPlanner {
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
         List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
+        boolean flexible = isPrimaryKey && streamLoadInfo.isPartialUpdate()
+                && streamLoadInfo.isFlexiblePartialUpdate();
         if (streamLoadInfo.isPartialUpdate()) {
             destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(),
-                    missAutoIncrementColumn);
+                    missAutoIncrementColumn, flexible, streamLoadInfo.getMergeConditionStr());
         } else {
             destColumns = destTable.getFullSchema();
         }
@@ -184,6 +186,15 @@ public class StreamLoadPlanner {
             }
         }
         if (isPrimaryKey) {
+            // SDCG flexible partial update: inject the hidden per-row column-set id slot
+            // IMMEDIATELY BEFORE the __op slot so __op stays the last column (BE reads
+            // __op positionally as num_columns()-1).
+            if (flexible) {
+                SlotDescriptor csetSlot = descTable.addSlotDescriptor(tupleDesc);
+                csetSlot.setIsMaterialized(true);
+                csetSlot.setColumn(new Column(Load.LOAD_CSET_COLUMN, IntegerType.SMALLINT));
+                csetSlot.setIsNullable(false);
+            }
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
@@ -225,6 +236,7 @@ public class StreamLoadPlanner {
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
                 olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+        olapTableSink.setFlexiblePartialUpdate(flexible);
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.

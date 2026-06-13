@@ -420,7 +420,8 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                          OlapReaderStatistics* stats) {
+                                                                          OlapReaderStatistics* stats,
+                                                                          const TabletSchemaCSPtr& tablet_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
@@ -430,6 +431,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
+    // When the read |schema| carries a synthetic column absent from the segment's base schema
+    // (SDCG "__cset__", reserved uid), the iterator must resolve the column descriptor against
+    // this override schema rather than the base schema (segment_iterator resolves by positional
+    // cid). Without it, cid 0 maps to the base key column and a wrong-width decoder corrupts the
+    // destination chunk.
+    if (tablet_schema != nullptr) {
+        seg_options.tablet_schema = tablet_schema;
+    }
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
@@ -454,6 +463,70 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
         auto& seg_ptr = segments[i];
         seg_options.tablet_range = std::nullopt;
         if (i < _metadata->segment_metas_size() && _metadata->segment_metas(i).shared() &&
+            shared_segment_range.has_value()) {
+            seg_options.tablet_range = *shared_segment_range;
+        }
+        auto res = seg_ptr->new_iterator(schema, seg_options);
+        if (res.status().is_end_of_file()) {
+            continue;
+        }
+        if (!res.ok()) {
+            return res.status();
+        }
+        seg_iterators.push_back(std::move(res).value());
+    }
+    return seg_iterators;
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_schema(
+        const Schema& schema, const TabletSchemaCSPtr& segment_schema, bool file_data_cache,
+        OlapReaderStatistics* stats) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_with_schema_us");
+    auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
+    LakeIOOptions lake_io_opts{.fill_data_cache = file_data_cache, .fill_metadata_cache = file_data_cache};
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
+    seg_options.stats = stats;
+    seg_options.lake_io_opts = lake_io_opts;
+    // The read |schema| carries the reserved-uid synthetic column at cid 0; resolve descriptors
+    // against |segment_schema| (the same schema each one-off Segment below is opened with).
+    seg_options.tablet_schema = segment_schema;
+
+    // Shared (range-distributed / resharded) segments expose only the rows in
+    // [range_start, range_end) to this child tablet. get_each_segment_iterator() applies this
+    // tablet_range; this overload MUST apply the SAME range so the rows it emits line up 1:1 (by
+    // logical position) with the value-column read. The SDCG flexible apply indexes the per-row
+    // "__cset__" set-ids read here by the LOGICAL upt_rowid (0-based within the range, see
+    // ColumnPartialUpdateState::build_rss_rowid_to_update_rowid); without the range, set_ids would
+    // be in full-segment physical space and shift by range_start, mis-assigning column-sets to a
+    // suffix of rows and corrupting per-column presence for a subset of base rows.
+    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
+
+    std::vector<ChunkIteratorPtr> seg_iterators;
+    seg_iterators.reserve(metadata().segment_metas_size());
+    size_t footer_size_hint = 16 * 1024;
+    for (int index = 0; index < metadata().segment_metas_size(); index++) {
+        const auto& segment_meta = metadata().segment_metas(index);
+        const auto& seg_name = segment_meta.filename();
+        std::string segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
+        FileInfo segment_info{.path = segment_path, .fs = seg_options.fs};
+        if (LIKELY(segment_meta.has_size())) {
+            segment_info.size = segment_meta.size();
+        }
+        if (segment_meta.has_bundle_file_offset()) {
+            segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
+        }
+        if (segment_meta.has_encryption_meta()) {
+            segment_info.encryption_meta = segment_meta.encryption_meta();
+        }
+        // Cache-bypassing one-off open bound to |segment_schema| so Segment::_create_column_readers
+        // builds a reader for the reserved-uid footer column. _tablet_mgr->load_segment() would
+        // instead return the metacache's base-schema Segment for this path (reader-less for it).
+        ASSIGN_OR_RETURN(auto seg_ptr,
+                         Segment::open(seg_options.fs, segment_info, get_segment_idx(metadata(), index), segment_schema,
+                                       &footer_size_hint, nullptr, lake_io_opts, _tablet_mgr));
+        seg_options.tablet_range = std::nullopt;
+        if (index < _metadata->segment_metas_size() && _metadata->segment_metas(index).shared() &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }

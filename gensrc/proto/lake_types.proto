@@ -92,6 +92,119 @@ message DelvecMetadataPB {
     map<uint32, DelvecPagePB> delvecs = 2;
 }
 
+// Physical layout of a delta-column-group file (parallel to column_files).
+// DENSE_COLS  : the historical `.cols` file — one rewritten column per uid,
+//               row-complete against the source segment (ordinal == base rowid).
+// SPARSE_PERCOL: a `.spcols` Sparse Delta Column Group file — a standard
+//               Segment v2 carrying a leading source_rowid column plus the
+//               update value columns, covering only K updated rows. Read as an
+//               overlay layer (version-ascending, last-write-wins).
+// Default 0 == DENSE_COLS so legacy metadata (no file_kinds) reads as all-dense.
+enum DeltaColumnFileKindPB {
+    DENSE_COLS = 0;
+    SPARSE_PERCOL = 1;
+}
+
+// Per-file presence summary for a SPARSE_PERCOL `.spcols` overlay. Describes which
+// base segment rows the sparse file touches, as the [min, max] closed range of the
+// sorted source_rowid column plus the row count K. This is a coarse summary (range,
+// not a full bitmap): a reader can skip a sparse layer entirely when the rowid it is
+// resolving falls outside [min_source_rowid, max_source_rowid], without opening the
+// `.spcols` file. min/max are base-segment ordinals (0-based); row_count == K ==
+// footer.num_rows of the sparse file. For DENSE_COLS entries / legacy metadata the
+// parallel slot is padded with an empty SparsePresencePB (all fields absent ==
+// unknown), so the `presences` array stays strictly 1:1 with column_files (mirroring
+// the file_kinds normalization rule). An absent/empty message means "unknown": the
+// reader must fall back to opening the file (no skip).
+message SparsePresencePB {
+    optional int64 min_source_rowid = 1;
+    optional int64 max_source_rowid = 2;
+    optional int64 row_count = 3;
+}
+
+// Per-COLUMN presence inside a PACKED SPARSE_PERCOL `.spcols` file (flexible / per-row
+// heterogeneous partial update). A packed file is a UNION over several rowid equivalence
+// classes: column 0 is the ascending union source_rowid vector (K_union rows), and every
+// value column physically has K_union rows -- real values at the union ordinals that column
+// actually covers, append_default placeholders elsewhere. The placeholder rows are PHYSICAL
+// NULLs that MUST NEVER be applied: a [min,max] range is INSUFFICIENT to gate them because
+// columns interleave within the union (applying at a placeholder ordinal would overwrite a
+// real base value with NULL == silent corruption). Therefore each entry carries the EXACT
+// covered base-segment rowid set as a serialized 32-bit CRoaring bitmap so the reader applies
+// a column's overlay ONLY at the rows that column truly covers. min/max/count still serve the
+// cheap zero-IO range skip; `roaring` is the authoritative apply gate.
+//
+// One entry per UPDATE column uid carried by the packed file (NOT the reserved source_rowid
+// uid). For a HOMOGENEOUS (single equivalence class) `.spcols` the packing degenerates to one
+// class with no placeholders: the per-file SparsePresencePB already describes every column, so
+// the writer OMITS the ColumnPresenceListPB for that file (an empty entry => "no per-column
+// override; the whole file's source_rowid column is each column's covered set"). The reader
+// falls back to the file-level presence when this list is absent/empty.
+message ColumnSparsePresencePB {
+    optional uint32 column_uid = 1;
+    // Cheap pre-filter: [min, max] closed range of THIS column's covered source_rowids
+    // (== first/last of its covered set). Used for the zero-IO range skip; NOT sufficient
+    // as the apply gate (see `roaring`).
+    optional int64 min_source_rowid = 2;
+    optional int64 max_source_rowid = 3;
+    // Exact number of union rows this column covers (== set bits in `roaring`). Differs from
+    // the packed file's K_union when the column does not cover the whole union.
+    optional int64 count = 4;
+    // Serialized 32-bit CRoaring portable bitmap of the EXACT base-segment rowids this column
+    // covers. The authoritative apply gate: the reader applies the column's overlay only at
+    // these rowids, never at the union placeholders. Absent => fall back to the file-level
+    // presence (homogeneous / single-class file).
+    optional bytes roaring = 5;
+}
+
+// Per-column presence for ONE packed `.spcols` file: a list with one ColumnSparsePresencePB
+// per UPDATE column uid the file carries. This is the transposed (column-view) form of the
+// row-view `__cset__` set-id dictionary that the `.upt` carries: the finalize handler reads
+// `__cset__` from the `.upt`, decodes each upt row's set-id into a column-uid mask via the
+// RowsetTxnMetaPB.distinct_column_sets dictionary, groups columns into equivalence classes by
+// identical covered rowid set, packs all sparse classes into one union file, and emits this
+// list so the reader can gate each column independently.
+message ColumnPresenceListPB {
+    repeated ColumnSparsePresencePB entries = 1;
+}
+
+// An inline sparse patch is a `.spcols`-equivalent overlay carried INSIDE the tablet
+// metadata instead of in a separate file. It rides the per-publish TabletMetadataPB PUT
+// that lake already does, so micro-batches pay ZERO new object PUTs (no .spcols file, no
+// extra meta-cost object). It is semantically identical to a SPARSE_PERCOL `.spcols`
+// layer: K updated rows of a fixed column set, keyed by an ascending source_rowid list,
+// applied version-ascending as a last-write-wins overlay. It interleaves with the
+// file-backed entries by `version`: a reader merges file layers (versions[]) and inline
+// patches (this version) into one version-ordered stack.
+//
+// Sizing: inline patches are byte-budgeted (config sdcg_inline_patch_max_bytes per patch
+// and sdcg_dcg_meta_max_bytes_per_segment for the cumulative per-segment meta), because
+// the enclosing TabletMetadataPB is RE-UPLOADED every publish for its whole lifetime; a
+// large/long-lived inline patch would be retransmitted O(versions) times. Exceeding the
+// budget biases the writer to a `.spcols` FILE instead (a one-time immutable object).
+message InlineSparsePatchPB {
+    // Publish version this patch was produced at. Interleaves with DeltaColumnGroupVerPB
+    // file entries' versions[] to give the version-ordered (ascending-apply) overlay stack.
+    optional int64 version = 1;
+    // The UPDATE column unique ids this patch carries. Parallel to column_values: the i-th
+    // blob in column_values is the value column for column_uids[i]. Must be non-empty.
+    repeated uint32 column_uids = 2;
+    // K = number of rows in this patch (== source_rowids length == each column_values
+    // column's row count). Must be > 0.
+    optional int64 row_count = 3;
+    // K x uint32 little-endian, ascending. Base-segment ordinals (source rowids) the patch
+    // touches. Same role as the source_rowid column of a `.spcols` file.
+    optional bytes source_rowids = 4;
+    // One serialized value column per column_uids entry (same order). Each blob is the K-row
+    // value column serialized via serde::ColumnArraySerde. The reader deserializes into the
+    // column type taken from the read schema for that uid.
+    repeated bytes column_values = 5;
+    // Presence pre-filter: the [min, max] closed range of source_rowids (== first/last of the
+    // ascending list). Lets a reader skip an out-of-range inline layer with zero work.
+    optional int64 min_source_rowid = 6;
+    optional int64 max_source_rowid = 7;
+}
+
 message DeltaColumnGroupVerPB {
     repeated DeltaColumnGroupColumnIdsPB unique_column_ids = 1;
     repeated string column_files = 2;
@@ -104,6 +217,51 @@ message DeltaColumnGroupVerPB {
     // 0 means unknown (data written before this field existed); readers then
     // fall back to stat/HeadObject to discover the file size.
     repeated int64 column_file_sizes = 6 [packed = true];
+    // === SDCG (Sparse Delta Column Group) ===
+    // Per-file kind, parallel to column_files. Empty (legacy) => every entry is
+    // DENSE_COLS. Readers treat an out-of-range index as DENSE_COLS, so the
+    // array is only emitted when at least one SPARSE_PERCOL file exists.
+    repeated DeltaColumnFileKindPB file_kinds = 7;
+    // Per-file presence summary, parallel to column_files (1:1 when present). Each
+    // SPARSE_PERCOL entry carries the [min, max] source_rowid range and K of its
+    // `.spcols` file so a reader can skip the layer when the requested rowid is out
+    // of range without opening the file. DENSE_COLS entries / legacy slots are padded
+    // with an empty SparsePresencePB (all fields absent == unknown), keeping the array
+    // strictly 1:1 with column_files (same normalization rule as file_kinds). The
+    // array is only emitted when at least one SPARSE_PERCOL file is present; otherwise
+    // it is absent and readers treat every entry as unknown (== legacy, no skip).
+    // NOTE: ordinal 8 was previously documented as "reserved by convention"; it is now
+    // claimed for this field. NEVER reuse it for anything else.
+    repeated SparsePresencePB presences = 8;
+    // Number of rows stored in each SPARSE_PERCOL file (== footer.num_rows == K),
+    // parallel to column_files. 0 for DENSE_COLS entries / when unknown.
+    repeated int64 sparse_row_counts = 9 [packed = true];
+    // Row count (M) of the base segment that the sparse files in this entry list
+    // were derived from. Used as a fingerprint guard (max(source_rowid) < M).
+    // 0 / absent == unknown (legacy or dense-only metadata).
+    optional int64 source_segment_num_rows = 10;
+    // Inline sparse patches: `.spcols`-equivalent overlays carried in meta (no file). A
+    // SEPARATE AXIS from column_files (they are not files; do NOT count toward the file
+    // parallel arrays above). Each rides the per-publish meta PUT (zero new objects). The
+    // reader merges these with the file entries ordered by version (ascending apply,
+    // last-write-wins); a DENSE file below an inline layer still terminates the walk for
+    // its covered uids. Empty (legacy / no micro-batch inline) => behaves exactly as before.
+    repeated InlineSparsePatchPB inline_patches = 11;
+    // Per-COLUMN presence for PACKED SPARSE_PERCOL files (flexible / per-row heterogeneous
+    // partial update). Parallel to column_files (1:1 when present, same normalization rule as
+    // file_kinds / presences). Each slot is the per-column presence list of the corresponding
+    // packed `.spcols` file: one ColumnSparsePresencePB per UPDATE column uid the file carries,
+    // each carrying the EXACT covered base-segment rowid set (roaring) so the reader applies a
+    // column's overlay ONLY at the rows it truly covers and never at a union placeholder.
+    //
+    // A DENSE entry, a legacy slot, or a HOMOGENEOUS (single equivalence class) sparse file
+    // carries an EMPTY ColumnPresenceListPB (entries_size() == 0): the reader then falls back
+    // to the file-level SparsePresencePB (whose source_rowid column IS every column's covered
+    // set, since a single-class file has no placeholders). The array is only emitted when at
+    // least one packed sparse file carries a non-empty per-column list; otherwise it is absent
+    // and every entry is treated as "fall back to file-level presence" (== homogeneous, no
+    // regression). NEVER reuse ordinal 12 for anything else.
+    repeated ColumnPresenceListPB column_presence_lists = 12;
 }
 
 message DeltaColumnGroupMetadataPB {
@@ -496,6 +654,38 @@ message TxnLogPB {
         optional int64 drop_version = 2;
     }
 
+    // SDCG lightweight overlay-chain merge (minor compaction): collapse a base segment's deep sparse
+    // overlay chain into ONE packed `.spcols`, WITHOUT reading the base segment and WITHOUT a rows
+    // mapper (the base rowset is untouched, so source_rowid coordinates stay valid). Emitted by the CN
+    // in place of OpCompaction when a scheduled compaction's input is a convergence-only deep-chain
+    // rowset; applied by orphaning the merged layers and appending the merged packed layer to the same
+    // rssid's DCG. Bounds read amplification off the publish critical path. (lake-only)
+    message OpDcgCompaction {
+        // Snapshot version the merge read at (mirrors OpCompaction.compact_version). A DCG layer whose
+        // version > compact_version raced the merge: it is NOT dropped (kept on top of the merged layer),
+        // so the merge never discards concurrent writes -- it just leaves the chain at depth 2.
+        optional int64 compact_version = 1;
+        message Entry {
+            // Base segment (rssid) whose overlay layers are merged.
+            optional uint32 rssid = 1;
+            // The merged packed `.spcols` (its DCG entry's file_kind == SPARSE_PERCOL).
+            optional FileMetaPB merged_file = 2;
+            // Update column uids the merged file carries (NOT the reserved source_rowid uid).
+            repeated uint32 column_uids = 3;
+            // File-level presence summary [min,max]+K of the merged file.
+            optional SparsePresencePB presence = 4;
+            // Per-column exact covered-rowid presence (roaring) for the packed merged file.
+            optional ColumnPresenceListPB column_presence = 5;
+            // Base segment row count M (fingerprint guard for the merged overlay).
+            optional int64 source_segment_num_rows = 6;
+            // Versions of the DCG layers folded into this merged file. At apply, layers on |rssid| whose
+            // version is in this set are orphaned + removed; higher-version layers (concurrent writes that
+            // raced the merge) are preserved on top.
+            repeated int64 merged_versions = 7;
+        }
+        repeated Entry entries = 2;
+    }
+
     optional int64 tablet_id = 1;
     optional int64 txn_id = 2;
     optional OpWrite op_write = 3;
@@ -510,6 +700,8 @@ message TxnLogPB {
     optional OpAddIndex op_add_index = 11;
     // DROP INDEX fast-path op (lake-only).
     optional OpDropIndex op_drop_index = 12;
+    // SDCG overlay-chain merge op (lake-only); see OpDcgCompaction.
+    optional OpDcgCompaction op_dcg_compaction = 13;
 }
 
 message CombinedTxnLogPB {

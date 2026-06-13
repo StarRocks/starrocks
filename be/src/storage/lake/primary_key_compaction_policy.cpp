@@ -14,15 +14,62 @@
 
 #include "storage/lake/primary_key_compaction_policy.h"
 
+#include <unordered_set>
+
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
+int64_t max_sparse_chain_depth_for_rowset(const RowsetMetadataPB& rowset, const DeltaColumnGroupMetadataPB& dcg_meta) {
+    const auto& dcgs = dcg_meta.dcgs();
+    if (dcgs.empty()) {
+        return 0;
+    }
+    int64_t max_depth = 0;
+    // A rowset reserves a contiguous rssid range starting at rowset.id(); probe each segment's rssid.
+    // Fall back to the base rssid for legacy rowsets that carry no segment_metas.
+    int nseg = rowset.segment_metas_size();
+    if (nseg == 0) {
+        nseg = 1;
+    }
+    for (int pos = 0; pos < nseg; ++pos) {
+        const uint32_t rssid = get_rssid(rowset, pos);
+        auto it = dcgs.find(rssid);
+        if (it == dcgs.end()) {
+            continue;
+        }
+        const DeltaColumnGroupVerPB& dcg = it->second;
+        int64_t depth = 0;
+        for (int i = 0; i < dcg.column_files_size(); ++i) {
+            // An absent file_kinds slot is DENSE_COLS; only SPARSE_PERCOL files form the overlay chain.
+            const DeltaColumnFileKindPB kind = i < dcg.file_kinds_size() ? dcg.file_kinds(i) : DENSE_COLS;
+            if (kind == SPARSE_PERCOL) {
+                ++depth;
+            }
+        }
+        // Inline patches are sparse overlays on the same axis as `.spcols` files for convergence.
+        depth += dcg.inline_patches_size();
+        max_depth = std::max(max_depth, depth);
+    }
+    return max_depth;
+}
+
 double RowsetCandidate::io_count() const {
     int64_t large_rowset_threshold = config::lake_compaction_max_rowset_size;
+
+    // SDCG: a deep sparse-overlay chain costs ~one extra file read per layer even on a well-compacted
+    // rowset, so fold it into the rowset's compaction priority. calculate_score() divides io_count() by
+    // read_bytes()/MB, so pre-multiply by that factor to make the chain contribute an *un-normalized*
+    // score addend (== sdcg_chain_score_contribution(depth)) regardless of the rowset's byte size --
+    // a large base rowset's chain would otherwise be diluted to a negligible score and never rise above
+    // other levels in pick_max_level. This only raises selection PRIORITY/ordering; convergence is still
+    // *guaranteed* by the force-include step in pick_rowset_indexes even if this never makes it win a
+    // level. Added on every return path so the priority is consistent across rowset shapes.
+    const double sdcg_io = sdcg_chain_score_contribution(sparse_chain_depth) * read_bytes() / (1024.0 * 1024.0);
 
     // For non-overlapped rowsets that are already large enough, return 0
     // to indicate they don't need compaction. The only exception is if they have deletes,
@@ -30,8 +77,9 @@ double RowsetCandidate::io_count() const {
     if (!rowset_meta_ptr->overlapped() && stat.num_dels == 0) {
         int64_t rowset_size = static_cast<int64_t>(rowset_meta_ptr->data_size());
         if (rowset_size >= large_rowset_threshold) {
-            // Already a large, well-compacted rowset with no deletes - zero priority
-            return 0;
+            // Already a large, well-compacted rowset with no deletes - zero priority,
+            // UNLESS it carries an over-deep sparse chain that background convergence must rewrite.
+            return sdcg_io;
         }
     }
 
@@ -67,7 +115,7 @@ double RowsetCandidate::io_count() const {
         // Bigger update_compaction_delvec_file_io_amp_ratio means high priority about merge rowset with delvec files.
         cnt *= config::update_compaction_delvec_file_io_amp_ratio;
     }
-    return cnt;
+    return cnt + sdcg_io;
 }
 
 StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_level(
@@ -141,6 +189,18 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
 
 // Return true if segment number meet the requirement of min input
 bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
+    // SDCG: an over-deep sparse-overlay chain justifies compaction on its own, even when the raw
+    // (effective) segment count is below the min-input threshold -- background convergence must
+    // materialize the chain regardless. Gate on a non-empty DCG map so non-SDCG tablets are untouched.
+    const auto& dcg_meta = tablet_metadata->dcg_meta();
+    if (!dcg_meta.dcgs().empty()) {
+        for (const auto& rowset : tablet_metadata->rowsets()) {
+            if (max_sparse_chain_depth_for_rowset(rowset, dcg_meta) >= SDCG_COMPACTION_TRIGGER_DEPTH) {
+                return true;
+            }
+        }
+    }
+
     int64_t total_segment_cnt = 0;
     int64_t large_rowset_threshold = config::lake_compaction_max_rowset_size;
     for (const auto& rowset : tablet_metadata->rowsets()) {
@@ -332,6 +392,12 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     std::vector<RowsetCandidate> rowset_vec;
     const int64_t compaction_data_size_threshold =
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
+    // SDCG: precompute the sparse-overlay chain depth per rowset (column-agnostic), so it both raises
+    // the candidate's compaction score (via io_count) and lets us force-include over-deep chains below.
+    const auto& dcg_meta = tablet_metadata->dcg_meta();
+    const bool has_dcg = !dcg_meta.dcgs().empty();
+    std::vector<int64_t> chain_depths(tablet_metadata->rowsets_size(), 0);
+    bool any_deep_chain = false;
     // 1. generate rowset candidate vector
     for (int i = 0, sz = tablet_metadata->rowsets_size(); i < sz; i++) {
         const RowsetMetadataPB& rowset_pb = tablet_metadata->rowsets(i);
@@ -343,11 +409,21 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         } else {
             stat.num_dels = mgr->get_rowset_num_deletes(*tablet_metadata, rowset_pb);
         }
-        rowset_vec.emplace_back(&rowset_pb, stat, i);
+        if (has_dcg) {
+            chain_depths[i] = max_sparse_chain_depth_for_rowset(rowset_pb, dcg_meta);
+            if (chain_depths[i] >= SDCG_COMPACTION_TRIGGER_DEPTH) {
+                any_deep_chain = true;
+            }
+        }
+        rowset_vec.emplace_back(&rowset_pb, stat, i, chain_depths[i]);
     }
     // 2. pick largest score level
     ASSIGN_OR_RETURN(auto pick_level_ptr, pick_max_level(rowset_vec));
-    if (pick_level_ptr == nullptr) {
+    // Track which rowsets the size-tiered selection picked, so the SDCG force-include step below does
+    // not double-add them. A null level means size-tiered found nothing; deep chains may still need
+    // convergence, so we fall through to the force-include rather than returning early.
+    std::unordered_set<int64_t> picked_set;
+    if (pick_level_ptr == nullptr && !any_deep_chain) {
         return rowset_indexes;
     }
 
@@ -359,10 +435,11 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     // 3. pick input rowsets from level
     size_t cur_compaction_result_bytes = 0;
     bool reach_max_input_per_compaction = false;
-    while (!pick_level_ptr->rowsets.empty()) {
+    while (pick_level_ptr != nullptr && !pick_level_ptr->rowsets.empty()) {
         const auto& rowset_candidate = pick_level_ptr->rowsets.top();
         cur_compaction_result_bytes += rowset_candidate.read_bytes();
         rowset_indexes.push_back(rowset_candidate.rowset_index);
+        picked_set.insert(rowset_candidate.rowset_index);
         if (has_dels != nullptr) {
             has_dels->push_back(rowset_candidate.delete_bytes() > 0);
         }
@@ -378,11 +455,12 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         }
         pick_level_ptr->rowsets.pop();
     }
-    if (is_real_time && !reach_max_input_per_compaction) {
+    if (is_real_time && !reach_max_input_per_compaction && pick_level_ptr != nullptr) {
         for (int i = 0; i < pick_level_ptr->other_level_rowsets.size(); i++) {
             const auto& rowset_candidate = pick_level_ptr->other_level_rowsets[i];
             cur_compaction_result_bytes += rowset_candidate.read_bytes();
             rowset_indexes.push_back(rowset_candidate.rowset_index);
+            picked_set.insert(rowset_candidate.rowset_index);
             if (has_dels != nullptr) {
                 has_dels->push_back(rowset_candidate.delete_bytes() > 0);
             }
@@ -394,6 +472,34 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             if (rowset_indexes.size() >= config::lake_pk_compaction_max_input_rowsets) {
                 reach_max_input_per_compaction = true;
                 break;
+            }
+        }
+    }
+
+    // 4. SDCG force-include: a rowset whose sparse-overlay chain has grown past the trigger MUST be
+    // compacted to converge it, even if byte-normalized size-tiered scoring buried it below other
+    // levels (e.g. a large well-compacted base rowset that only accumulates `.spcols` overlays). The
+    // size-tiered score nudges such rowsets up but cannot guarantee selection in a mixed workload;
+    // this guarantees it. Bounded by lake_pk_compaction_max_input_rowsets so the convergence
+    // compaction stays sized like any other. Only active on SDCG tablets (any_deep_chain).
+    if (any_deep_chain) {
+        for (int i = 0, sz = tablet_metadata->rowsets_size(); i < sz; i++) {
+            if (chain_depths[i] < SDCG_COMPACTION_TRIGGER_DEPTH) {
+                continue;
+            }
+            if (picked_set.count(i) > 0) {
+                continue;
+            }
+            if (rowset_indexes.size() >= static_cast<size_t>(config::lake_pk_compaction_max_input_rowsets)) {
+                break;
+            }
+            rowset_indexes.push_back(i);
+            picked_set.insert(i);
+            if (has_dels != nullptr) {
+                const auto& rs = tablet_metadata->rowsets(i);
+                const bool has_del =
+                        rs.has_num_dels() ? rs.num_dels() > 0 : mgr->get_rowset_num_deletes(*tablet_metadata, rs) > 0;
+                has_dels->push_back(has_del);
             }
         }
     }

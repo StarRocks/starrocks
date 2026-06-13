@@ -14,6 +14,7 @@
 
 #include "storage/delta_column_group.h"
 
+#include <cstring>
 #include <memory>
 
 #include "storage/protobuf_file.h"
@@ -47,8 +48,27 @@ void DeltaColumnGroup::_calc_memory_usage() {
         total_encryption_meta_size += encryption_meta.length();
     }
 
+    // Inline patches live in meta (resident); account for their value blobs, source rowids and uids.
+    size_t total_inline_bytes = 0;
+    for (const auto& patch : _inline_patches) {
+        total_inline_bytes += patch.source_rowids.size() * sizeof(uint32_t);
+        total_inline_bytes += patch.column_uids.size() * sizeof(ColumnUID);
+        for (const auto& blob : patch.column_values) {
+            total_inline_bytes += blob.size();
+        }
+    }
+
+    // Per-column presence lists are resident (loaded from the lake VerPB); account for the
+    // roaring blobs (the dominant term) plus the per-entry fixed fields.
+    size_t total_column_presence_bytes = 0;
+    for (const auto& list : _column_presence_lists) {
+        for (const auto& e : list.entries) {
+            total_column_presence_bytes += e.roaring.size() + sizeof(ColumnSparsePresence);
+        }
+    }
+
     _memory_usage = sizeof(size_t) + sizeof(int64_t) + sizeof(uint32_t) * total_ids + total_column_name_size +
-                    total_encryption_meta_size;
+                    total_encryption_meta_size + total_inline_bytes + total_column_presence_bytes;
 }
 
 int DeltaColumnGroup::merge_into_by_version(DeltaColumnGroupList& dcgs, const std::string& dir,
@@ -150,6 +170,110 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
         for (const auto& cid : ucids.column_ids()) {
             _column_uids.back().push_back(cid);
         }
+    }
+    // === SDCG === Fill kinds/counts in lockstep with column_files, normalizing an
+    // absent (legacy) array to all-DENSE / 0 so downstream readers see a strictly
+    // 1:1 view. We only materialize the vectors when the PB actually carries sparse
+    // metadata; otherwise file_kind()/sparse_row_count() fall back to DENSE/0 and
+    // local-engine behavior stays byte-identical.
+    if (dcg_ver_pb.file_kinds_size() > 0 || dcg_ver_pb.sparse_row_counts_size() > 0 ||
+        dcg_ver_pb.presences_size() > 0 || dcg_ver_pb.column_presence_lists_size() > 0 ||
+        dcg_ver_pb.has_source_segment_num_rows()) {
+        std::vector<DeltaColumnFileKind> kinds;
+        std::vector<int64_t> counts;
+        std::vector<SparsePresence> presences;
+        // Per-column presence lists (packed files). Materialized only when the PB carries them;
+        // an absent slot becomes an empty ColumnPresenceList (reader falls back to file-level).
+        std::vector<ColumnPresenceList> column_presence_lists;
+        kinds.reserve(_column_files.size());
+        counts.reserve(_column_files.size());
+        presences.reserve(_column_files.size());
+        const bool has_column_presence = dcg_ver_pb.column_presence_lists_size() > 0;
+        if (has_column_presence) {
+            column_presence_lists.reserve(_column_files.size());
+        }
+        for (size_t i = 0; i < _column_files.size(); ++i) {
+            kinds.push_back(i < static_cast<size_t>(dcg_ver_pb.file_kinds_size()) &&
+                                            dcg_ver_pb.file_kinds(static_cast<int>(i)) == SPARSE_PERCOL
+                                    ? DeltaColumnFileKind::SPARSE_PERCOL
+                                    : DeltaColumnFileKind::DENSE_COLS);
+            counts.push_back(i < static_cast<size_t>(dcg_ver_pb.sparse_row_counts_size())
+                                     ? dcg_ver_pb.sparse_row_counts(static_cast<int>(i))
+                                     : 0);
+            // Normalize presences to 1:1 with column_files. An absent slot (legacy / dense /
+            // a writer that predates the presences field) becomes an all-unknown SparsePresence
+            // (kSDCGPresenceUnknown), which readers treat as "no skip". A present-but-empty
+            // SparsePresencePB (a padded dense slot) also resolves to unknown because its
+            // unset fields default to 0 yet has_* is false -- guard each field with has_*.
+            SparsePresence p;
+            if (i < static_cast<size_t>(dcg_ver_pb.presences_size())) {
+                const auto& pb = dcg_ver_pb.presences(static_cast<int>(i));
+                if (pb.has_min_source_rowid()) p.min_source_rowid = pb.min_source_rowid();
+                if (pb.has_max_source_rowid()) p.max_source_rowid = pb.max_source_rowid();
+                if (pb.has_row_count()) p.row_count = pb.row_count();
+            }
+            presences.push_back(p);
+
+            // Per-column presence (packed files). Decode one ColumnSparsePresence per entry; the
+            // roaring blob is kept opaque (the reader deserializes it via roaring::Roaring::readSafe
+            // when it needs the exact apply gate). An absent / empty list slot stays empty == the
+            // reader gates on the file-level presence above (dense / legacy / homogeneous file).
+            if (has_column_presence) {
+                ColumnPresenceList list;
+                if (i < static_cast<size_t>(dcg_ver_pb.column_presence_lists_size())) {
+                    const auto& list_pb = dcg_ver_pb.column_presence_lists(static_cast<int>(i));
+                    list.entries.reserve(list_pb.entries_size());
+                    for (const auto& entry_pb : list_pb.entries()) {
+                        ColumnSparsePresence e;
+                        e.column_uid = static_cast<ColumnUID>(entry_pb.column_uid());
+                        if (entry_pb.has_min_source_rowid()) e.min_source_rowid = entry_pb.min_source_rowid();
+                        if (entry_pb.has_max_source_rowid()) e.max_source_rowid = entry_pb.max_source_rowid();
+                        if (entry_pb.has_count()) e.count = entry_pb.count();
+                        if (entry_pb.has_roaring()) e.roaring = entry_pb.roaring();
+                        list.entries.push_back(std::move(e));
+                    }
+                }
+                column_presence_lists.push_back(std::move(list));
+            }
+        }
+        if (has_column_presence) {
+            set_sdcg_meta(std::move(kinds), std::move(counts), std::move(presences), std::move(column_presence_lists),
+                          dcg_ver_pb.source_segment_num_rows());
+        } else {
+            set_sdcg_meta(std::move(kinds), std::move(counts), std::move(presences),
+                          dcg_ver_pb.source_segment_num_rows());
+        }
+    }
+    // === SDCG inline patches === a SEPARATE axis from the file lists. Decode each
+    // InlineSparsePatchPB into an InlinePatch, eagerly converting the LE source_rowids bytes into
+    // a uint32 vector (ascending) so the reader consumes them directly. column_values blobs are
+    // kept opaque; the reader deserializes them via ColumnArraySerde into the read-schema type.
+    _inline_patches.reserve(dcg_ver_pb.inline_patches_size());
+    for (const auto& pb : dcg_ver_pb.inline_patches()) {
+        InlinePatch patch;
+        patch.version = pb.version();
+        patch.row_count = pb.row_count();
+        patch.column_uids.reserve(pb.column_uids_size());
+        for (uint32_t uid : pb.column_uids()) {
+            patch.column_uids.push_back(static_cast<ColumnUID>(uid));
+        }
+        patch.column_values.reserve(pb.column_values_size());
+        for (const auto& blob : pb.column_values()) {
+            patch.column_values.push_back(blob);
+        }
+        // source_rowids are K x uint32 little-endian, ascending. memcpy is safe on LE hosts
+        // (StarRocks BE is x86_64/aarch64 LE); decode element-wise to stay byte-order explicit.
+        const std::string& rowid_bytes = pb.source_rowids();
+        const size_t n = rowid_bytes.size() / sizeof(uint32_t);
+        patch.source_rowids.resize(n);
+        for (size_t i = 0; i < n; ++i) {
+            uint32_t v;
+            std::memcpy(&v, rowid_bytes.data() + i * sizeof(uint32_t), sizeof(uint32_t));
+            patch.source_rowids[i] = v;
+        }
+        if (pb.has_min_source_rowid()) patch.min_source_rowid = pb.min_source_rowid();
+        if (pb.has_max_source_rowid()) patch.max_source_rowid = pb.max_source_rowid();
+        _inline_patches.push_back(std::move(patch));
     }
     _calc_memory_usage();
     return Status::OK();

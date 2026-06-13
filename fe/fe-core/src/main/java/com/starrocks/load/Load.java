@@ -116,6 +116,13 @@ public class Load {
     public static final String VERSION = "v1";
 
     public static final String LOAD_OP_COLUMN = "__op";
+    // SDCG flexible partial update: hidden per-row column-set id column. Carries a
+    // SMALLINT set-id that indexes into RowsetTxnMetaPB.distinct_column_sets so that
+    // different rows of one load can update different column subsets. Injected as a
+    // tuple slot immediately BEFORE the "__op" slot (so "__op" stays the last column)
+    // and added to the index column list right before "__op". Only present in flexible
+    // mode. Reserved name on the BE side.
+    public static final String LOAD_CSET_COLUMN = "__cset__";
     // load job meta
     private LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
 
@@ -305,7 +312,7 @@ public class Load {
                                    List<String> columnsFromPath, boolean isLoadJson) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, isLoadJson, false);
+                columnsFromPath, isLoadJson, false, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -315,6 +322,18 @@ public class Load {
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isLoadJson,
                                    boolean partialUpdate) throws StarRocksException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, isLoadJson, partialUpdate, false);
+    }
+
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath, boolean isLoadJson,
+                                   boolean partialUpdate, boolean flexible) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -417,6 +436,16 @@ public class Load {
                 copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
                         isLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
             }
+        }
+
+        // SDCG flexible partial update: declare the hidden per-row column-set id "__cset__"
+        // as a synthetic SOURCE field (mirroring "__op"). The json scanner never reads it from
+        // the JSON object -- it COMPUTES the set-id per row from the present columns and writes
+        // it into this slot. Declaring it here gives the scanner a source slot to fill AND lets
+        // the dest "__cset__" slot map to it in finalizeParams (otherwise the dest slot has no
+        // source field and analysis throws "column has no source field, column=__cset__").
+        if (flexible) {
+            copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_CSET_COLUMN, null));
         }
 
         // generate a map for checking easily
@@ -558,6 +587,12 @@ public class Load {
                         slotDesc.setType(IntegerType.TINYINT);
                         slotDesc.setColumn(new Column(columnName, IntegerType.TINYINT));
                         slotDesc.setIsMaterialized(true);
+                    } else if (columnName.equals(Load.LOAD_CSET_COLUMN)) {
+                        // SDCG flexible partial update: the hidden set-id source slot is a
+                        // materialized SMALLINT, filled per-row by the json scanner.
+                        slotDesc.setType(IntegerType.SMALLINT);
+                        slotDesc.setColumn(new Column(columnName, IntegerType.SMALLINT));
+                        slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(VarcharType.VARCHAR);
                         slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
@@ -659,9 +694,31 @@ public class Load {
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                                       List<Boolean> missAutoIncrementColumn) throws StarRocksException {
+        return getPartialUpateColumns(tbl, columnExprs, missAutoIncrementColumn, false, null);
+    }
+
+    /**
+     * Compute the union of partial-update columns for a load.
+     *
+     * <p>In SDCG flexible mode the per-row column sets are heterogeneous, but a few columns
+     * must be present in EVERY row's set so the storage layer can always arbitrate: the
+     * merge-condition column (so condition evaluation never reads a missing column) and the
+     * auto-increment column (existing force-include). This overload force-includes the
+     * merge-condition column into the returned union when {@code flexible} is true and a
+     * non-empty {@code mergeCondition} column name is given. The auto-increment column is
+     * already force-included by the loop below.
+     */
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                                      List<Boolean> missAutoIncrementColumn,
+                                                      boolean flexible, String mergeCondition)
+            throws StarRocksException {
         Set<String> specified = columnExprs.stream()
                 .map(desc -> desc.getColumnName())
                 .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+        if (flexible && mergeCondition != null && !mergeCondition.isEmpty()) {
+            // Force the merge-condition column into the union so it is present in every set.
+            specified.add(mergeCondition);
+        }
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
             if (specified.contains(col.getName())) {

@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "fs/key_cache.h"
 
 namespace starrocks {
@@ -231,6 +233,274 @@ TEST(TestDeltaColumnGroup, testDeltaColumnGroupVerPBLoad) {
 
     // overflow
     ASSERT_FALSE(dcg.column_file_by_idx("tmp", 100).ok());
+}
+
+// SDCG: a DeltaColumnGroupVerPB that carries NO file_kinds / sparse_row_counts /
+// source_segment_num_rows (legacy / dense-only metadata) must read back as all-dense via the
+// file_kind() out-of-range hinge, and set_sdcg_meta must never be triggered.
+TEST(TestDeltaColumnGroup, testSDCGLegacyHingeAllDense) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(10);
+    dcg_ver.add_versions(11);
+    dcg_ver.add_column_files("aaa.cols");
+    dcg_ver.add_column_files("bbb.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(11, dcg_ver).ok());
+    // No SDCG arrays installed: vectors stay empty, file_kind() OOR hinge => DENSE.
+    ASSERT_TRUE(dcg.file_kinds().empty());
+    ASSERT_TRUE(dcg.sparse_row_counts().empty());
+    ASSERT_EQ(0, dcg.source_segment_num_rows());
+    for (size_t i = 0; i < 3; ++i) {
+        EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(i));
+        EXPECT_TRUE(dcg.is_file_dense(i));
+        EXPECT_EQ(0, dcg.sparse_row_count(i));
+    }
+}
+
+// SDCG: a DeltaColumnGroupVerPB that carries file_kinds / sparse_row_counts /
+// source_segment_num_rows must be loaded into a strictly-1:1 view, normalizing any absent
+// trailing entries to DENSE / 0.
+TEST(TestDeltaColumnGroup, testSDCGLoadKindsAndCounts) {
+    DeltaColumnGroupVerPB dcg_ver;
+    // entry 0: sparse .spcols K=7 ; entry 1: dense .cols
+    dcg_ver.add_versions(20);
+    dcg_ver.add_versions(21);
+    dcg_ver.add_column_files("sp0.spcols");
+    dcg_ver.add_column_files("d1.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_file_kinds(DENSE_COLS);
+    dcg_ver.add_sparse_row_counts(7);
+    dcg_ver.add_sparse_row_counts(0);
+    dcg_ver.set_source_segment_num_rows(1000);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(21, dcg_ver).ok());
+    ASSERT_EQ(2u, dcg.file_kinds().size());
+    EXPECT_EQ(DeltaColumnFileKind::SPARSE_PERCOL, dcg.file_kind(0));
+    EXPECT_FALSE(dcg.is_file_dense(0));
+    EXPECT_EQ(7, dcg.sparse_row_count(0));
+    EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(1));
+    EXPECT_TRUE(dcg.is_file_dense(1));
+    EXPECT_EQ(0, dcg.sparse_row_count(1));
+    EXPECT_EQ(1000, dcg.source_segment_num_rows());
+    // Out-of-range index still hinges to DENSE.
+    EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(2));
+}
+
+// SDCG: only source_segment_num_rows present (no kinds/counts) still materializes a 1:1 all-DENSE
+// view so downstream positional access is uniform.
+TEST(TestDeltaColumnGroup, testSDCGLoadOnlySourceRows) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(30);
+    dcg_ver.add_column_files("d0.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.set_source_segment_num_rows(512);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(30, dcg_ver).ok());
+    ASSERT_EQ(1u, dcg.file_kinds().size());
+    EXPECT_EQ(DeltaColumnFileKind::DENSE_COLS, dcg.file_kind(0));
+    EXPECT_EQ(0, dcg.sparse_row_count(0));
+    EXPECT_EQ(512, dcg.source_segment_num_rows());
+}
+
+// SDCG: a DeltaColumnGroupVerPB that carries a `presences` array (the per-file [min,max]+K range
+// summary) loads back into a 1:1 SparsePresence view: a SPARSE entry with a recorded range is
+// `known()`, and a padded/empty SparsePresencePB (DENSE slot) resolves to kSDCGPresenceUnknown so
+// the reader never skips it.
+TEST(TestDeltaColumnGroup, testSDCGLoadPresences) {
+    DeltaColumnGroupVerPB dcg_ver;
+    // entry 0: sparse .spcols K=7, presence [min=3, max=998] ; entry 1: dense .cols, empty presence
+    dcg_ver.add_versions(40);
+    dcg_ver.add_versions(41);
+    dcg_ver.add_column_files("sp0.spcols");
+    dcg_ver.add_column_files("d1.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_file_kinds(DENSE_COLS);
+    dcg_ver.add_sparse_row_counts(7);
+    dcg_ver.add_sparse_row_counts(0);
+    dcg_ver.set_source_segment_num_rows(1000);
+    // presences strictly 1:1 with column_files: slot 0 carries the sparse range, slot 1 is empty.
+    auto* p0 = dcg_ver.add_presences();
+    p0->set_min_source_rowid(3);
+    p0->set_max_source_rowid(998);
+    p0->set_row_count(7);
+    dcg_ver.add_presences(); // slot 1: empty == unknown (dense)
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(41, dcg_ver).ok());
+    ASSERT_EQ(2u, dcg.presences().size());
+    // Slot 0: sparse, fully known.
+    EXPECT_EQ(3, dcg.presence_min(0));
+    EXPECT_EQ(998, dcg.presence_max(0));
+    EXPECT_EQ(7, dcg.presence_row_count(0));
+    EXPECT_TRUE(dcg.presence_known(0));
+    // Slot 1: dense, padded-empty => unknown, reader must not skip.
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_min(1));
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_max(1));
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_row_count(1));
+    EXPECT_FALSE(dcg.presence_known(1));
+    // Out-of-range index also resolves to unknown.
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_min(2));
+    EXPECT_FALSE(dcg.presence_known(2));
+}
+
+// SDCG: legacy / dense-only metadata that carries NO presences array must read back as every-slot
+// unknown (no skip), exactly like the file_kinds legacy hinge. A partially-recorded presence (only
+// min set, max absent) must also resolve to NOT known() so the reader stays on the safe always-open
+// fallback rather than skipping on a half-range.
+TEST(TestDeltaColumnGroup, testSDCGLegacyPresencesAbsentIsUnknown) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(50);
+    dcg_ver.add_versions(51);
+    dcg_ver.add_column_files("sp0.spcols");
+    dcg_ver.add_column_files("sp1.spcols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_file_kinds(SPARSE_PERCOL);
+    dcg_ver.add_sparse_row_counts(2);
+    dcg_ver.add_sparse_row_counts(3);
+    dcg_ver.set_source_segment_num_rows(1000);
+    // presences array intentionally absent (writer predates the field) for slot 0, and a half-set
+    // presence (only min) for slot 1: both must resolve to NOT known().
+    auto* p1 = dcg_ver.add_presences(); // index 0 in the array maps to file slot 0
+    (void)p1;                           // leave fully empty
+    auto* p2 = dcg_ver.add_presences(); // file slot 1
+    p2->set_min_source_rowid(5);        // max + row_count absent => half-range
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(51, dcg_ver).ok());
+    ASSERT_EQ(2u, dcg.presences().size());
+    // Slot 0: fully empty presence => unknown.
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_min(0));
+    EXPECT_FALSE(dcg.presence_known(0));
+    // Slot 1: only min recorded => still NOT known (must not skip on a half-range).
+    EXPECT_EQ(5, dcg.presence_min(1));
+    EXPECT_EQ(kSDCGPresenceUnknown, dcg.presence_max(1));
+    EXPECT_FALSE(dcg.presence_known(1)) << "a presence with min but no max must not be skippable";
+}
+
+// SDCG: inline patches load on a SEPARATE axis from the file lists. The LE source_rowids bytes decode
+// into an ascending uint32 vector, column_uids / column_values are carried 1:1, and the presence range
+// resolves to known(). Inline patches must NOT appear in column_files() / get_column_idx() (the file
+// axis), and they coexist with file entries.
+TEST(TestDeltaColumnGroup, testSDCGLoadInlinePatches) {
+    DeltaColumnGroupVerPB dcg_ver;
+    // One file entry (a dense .cols for uid 9) plus two inline patches (uids {3,4} and {3}).
+    dcg_ver.add_versions(60);
+    dcg_ver.add_column_files("d0.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(9);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    dcg_ver.add_file_kinds(DENSE_COLS);
+    dcg_ver.add_sparse_row_counts(0);
+    dcg_ver.add_presences();
+    dcg_ver.set_source_segment_num_rows(1000);
+
+    auto le_bytes = [](const std::vector<uint32_t>& rowids) {
+        std::string s;
+        s.resize(rowids.size() * sizeof(uint32_t));
+        for (size_t i = 0; i < rowids.size(); ++i) {
+            uint32_t v = rowids[i];
+            std::memcpy(s.data() + i * sizeof(uint32_t), &v, sizeof(uint32_t));
+        }
+        return s;
+    };
+
+    auto* ip0 = dcg_ver.add_inline_patches();
+    ip0->set_version(61);
+    ip0->add_column_uids(3);
+    ip0->add_column_uids(4);
+    ip0->set_row_count(3);
+    ip0->set_source_rowids(le_bytes({10, 200, 4000}));
+    ip0->add_column_values("blobA"); // opaque to the loader (reader deserializes later)
+    ip0->add_column_values("blobB");
+    ip0->set_min_source_rowid(10);
+    ip0->set_max_source_rowid(4000);
+
+    auto* ip1 = dcg_ver.add_inline_patches();
+    ip1->set_version(62);
+    ip1->add_column_uids(3);
+    ip1->set_row_count(1);
+    ip1->set_source_rowids(le_bytes({200}));
+    ip1->add_column_values("blobC");
+    ip1->set_min_source_rowid(200);
+    ip1->set_max_source_rowid(200);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(62, dcg_ver).ok());
+
+    // File axis is unaffected: one dense file for uid 9; inline uids 3/4 are NOT on the file axis.
+    ASSERT_EQ(1u, dcg.relative_column_files().size());
+    EXPECT_EQ(0, dcg.get_column_idx(9).first);
+    EXPECT_EQ(-1, dcg.get_column_idx(3).first) << "inline-only uid must not resolve on the file axis";
+    EXPECT_EQ(-1, dcg.get_column_idx(4).first);
+
+    // Inline axis decodes correctly.
+    ASSERT_EQ(2u, dcg.inline_patch_count());
+    const auto& p0 = dcg.inline_patch_at(0);
+    EXPECT_EQ(61, p0.version);
+    EXPECT_EQ(3, p0.row_count);
+    ASSERT_EQ(2u, p0.column_uids.size());
+    EXPECT_EQ(3, p0.column_uids[0]);
+    EXPECT_EQ(4, p0.column_uids[1]);
+    ASSERT_EQ(3u, p0.source_rowids.size());
+    EXPECT_EQ(10u, p0.source_rowids[0]);
+    EXPECT_EQ(200u, p0.source_rowids[1]);
+    EXPECT_EQ(4000u, p0.source_rowids[2]);
+    ASSERT_EQ(2u, p0.column_values.size());
+    EXPECT_EQ("blobA", p0.column_values[0]);
+    EXPECT_EQ("blobB", p0.column_values[1]);
+    EXPECT_TRUE(p0.known());
+    EXPECT_EQ(0, p0.value_idx_of(3));
+    EXPECT_EQ(1, p0.value_idx_of(4));
+    EXPECT_EQ(-1, p0.value_idx_of(9));
+
+    const auto& p1 = dcg.inline_patch_at(1);
+    EXPECT_EQ(62, p1.version);
+    EXPECT_EQ(1, p1.row_count);
+    ASSERT_EQ(1u, p1.source_rowids.size());
+    EXPECT_EQ(200u, p1.source_rowids[0]);
+}
+
+// SDCG: a legacy / dense-only DeltaColumnGroupVerPB with no inline_patches loads to an empty inline axis.
+TEST(TestDeltaColumnGroup, testSDCGNoInlinePatchesIsEmpty) {
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(70);
+    dcg_ver.add_column_files("d0.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(9);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(70, dcg_ver).ok());
+    EXPECT_EQ(0u, dcg.inline_patch_count());
 }
 
 } // namespace starrocks

@@ -199,14 +199,24 @@ StatusOr<double> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
             policy.is_real_time_compaction_strategy(metadata) ? 1 : config::update_compaction_delvec_file_io_amp_ratio;
     std::vector<bool> has_dels;
     ASSIGN_OR_RETURN(auto pick_rowset_indexes, policy.pick_rowset_indexes(metadata, &has_dels));
+    const auto& dcg_meta = metadata->dcg_meta();
+    const bool has_dcg = !dcg_meta.dcgs().empty();
     double segment_num_score = 0;
     for (int i = 0; i < pick_rowset_indexes.size(); i++) {
         const auto& pick_rowset = metadata->rowsets(pick_rowset_indexes[i]);
         const bool has_del = has_dels[i];
-        auto current_score = calc_effective_segment_count(pick_rowset);
+        double current_score = calc_effective_segment_count(pick_rowset);
         if (has_del) {
             // if delvec file exist, expand score by config.
             current_score *= update_compaction_delvec_file_io_amp_ratio;
+        }
+        // SDCG: a deep sparse-overlay chain adds read amplification (one extra file read per layer)
+        // that calc_effective_segment_count cannot see -- it would even score a well-compacted large
+        // base rowset as 0. Add the chain's contribution so the tablet score crosses the FE scheduling
+        // threshold (lake_compaction_score_selector_min_score) and background convergence is triggered.
+        // Consistent with RowsetCandidate::io_count(), which folds the same contribution into selection.
+        if (has_dcg) {
+            current_score += sdcg_chain_score_contribution(max_sparse_chain_depth_for_rowset(pick_rowset, dcg_meta));
         }
         segment_num_score += current_score;
     }

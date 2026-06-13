@@ -14,6 +14,9 @@
 
 #include "storage/lake/update_manager.h"
 
+#include <algorithm>
+#include <limits>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -51,6 +54,7 @@
 #include "storage/rows_mapper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/layered_overlay_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
@@ -1533,7 +1537,8 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
 
 static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnContext& ctx, uint32_t ucid,
                                                                int32_t* col_index,
-                                                               const TabletSchemaCSPtr& read_tablet_schema) {
+                                                               const TabletSchemaCSPtr& read_tablet_schema,
+                                                               const LakeIOOptions& lake_io_opts) {
     // iterate dcg from new ver to old ver
     for (const auto& dcg : ctx.dcgs) {
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
@@ -1550,7 +1555,10 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
         const auto& column_file = column_file_result.value();
 
         if (ctx.dcg_segments.count(column_file) == 0) {
-            auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema);
+            // Route through the lake metacache (footer parsed once, reused across apply) with cache
+            // filling; ctx.segment carries the tablet manager because it was loaded via load_segment.
+            auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema, lake_io_opts,
+                                                                   lake_io_opts.fill_metadata_cache);
             if (!dcg_segment_result.ok()) {
                 return Status::InternalError(fmt::format("Failed to create DCG segment for column {}: {}", ucid,
                                                          dcg_segment_result.status().to_string()));
@@ -1568,17 +1576,22 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
 
 static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
         GetDeltaColumnContext& ctx, const std::shared_ptr<FileSystem>& fs, ColumnIteratorOptions& iter_opts,
-        const TabletColumn& column, const TabletSchemaCSPtr& read_tablet_schema) {
+        const TabletColumn& column, const TabletSchemaCSPtr& read_tablet_schema, const LakeIOOptions& lake_io_opts) {
     // build column iter from dcg
     int32_t col_index = 0;
-    auto dcg_segment_result = get_lake_dcg_segment(ctx, column.unique_id(), &col_index, read_tablet_schema);
+    auto dcg_segment_result =
+            get_lake_dcg_segment(ctx, column.unique_id(), &col_index, read_tablet_schema, lake_io_opts);
     if (!dcg_segment_result.ok()) {
         return dcg_segment_result.status();
     }
 
     const auto& dcg_segment = dcg_segment_result.value();
     if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
-        RandomAccessFileOptions ropts;
+        // Fill the data cache and respect disk-cache policy from lake_io_opts so the `.cols` data
+        // pages warm the local cache during apply, mirroring the base-segment read options.
+        RandomAccessFileOptions ropts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size,
+                                      .skip_disk_cache = lake_io_opts.skip_disk_cache};
         if (!dcg_segment->file_info().encryption_meta.empty()) {
             ASSIGN_OR_RETURN(auto info,
                              KeyCache::instance().unwrap_encryption_meta(dcg_segment->file_info().encryption_meta));
@@ -1589,6 +1602,200 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
     }
     iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
     return dcg_segment->new_column_iterator(column, nullptr);
+}
+
+// SDCG lake read path: walk the DCG layer stack for |column|.unique_id() newest -> oldest, stop at
+// the first DENSE file. If any hit is SPARSE, assemble a LayeredOverlayColumnIterator (base = the
+// bottom dense `.cols` column if the walk ended at DENSE, else the original base segment column;
+// overlay layers = the SPARSE `.spcols` files in version-ASCENDING order). Returns NotFound when no
+// DCG entry contains the column, and OK with nullptr `*out` when no SPARSE layer is present (caller
+// then falls back to the legacy first-hit path).
+static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const std::shared_ptr<FileSystem>& fs,
+                                               const ColumnIteratorOptions& iter_opts, const TabletColumn& column,
+                                               const TabletSchemaCSPtr& read_tablet_schema,
+                                               io::SeekableInputStream* base_segment_read_file,
+                                               const LakeIOOptions& lake_io_opts,
+                                               std::unique_ptr<ColumnIterator>* out) {
+    *out = nullptr;
+    const uint32_t ucid = column.unique_id();
+
+    // Collect file hits newest -> oldest, stopping at the first DENSE file. Also collect inline
+    // sparse patches (a separate axis carried in meta, no file) that contain |ucid|: they are read
+    // exactly like SPARSE files but with ZERO file IO, interleaved with the file layers by version.
+    struct Hit {
+        DeltaColumnGroupPtr dcg;
+        int32_t file_idx = -1;
+        DeltaColumnFileKind kind = DeltaColumnFileKind::DENSE_COLS;
+    };
+    struct InlineHit {
+        DeltaColumnGroupPtr dcg; // keeps the InlinePatch alive
+        const InlinePatch* patch = nullptr;
+        int32_t value_idx = -1;
+    };
+    std::vector<Hit> hits;
+    std::vector<InlineHit> inline_hits;
+    bool has_sparse = false;
+    bool has_layer = false; // any file hit OR inline patch carrying |ucid|
+    for (const auto& dcg : ctx.dcgs) {
+        // Inline patches in this dcg that carry |ucid| (newer-or-equal to the file hits visited so
+        // far; the dense-terminate version filter below drops those <= the dense base version).
+        for (size_t i = 0; i < dcg->inline_patch_count(); ++i) {
+            const InlinePatch& patch = dcg->inline_patch_at(i);
+            const int32_t vidx = patch.value_idx_of(static_cast<ColumnUID>(ucid));
+            if (vidx < 0) {
+                continue;
+            }
+            inline_hits.push_back(InlineHit{.dcg = dcg, .patch = &patch, .value_idx = vidx});
+            has_sparse = true;
+            has_layer = true;
+        }
+
+        std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
+        if (idx.first < 0) {
+            continue;
+        }
+        Hit hit{.dcg = dcg, .file_idx = idx.first, .kind = dcg->file_kind(idx.first)};
+        hits.push_back(hit);
+        has_layer = true;
+        if (hit.kind == DeltaColumnFileKind::SPARSE_PERCOL) {
+            has_sparse = true;
+        } else {
+            break; // first DENSE becomes the base
+        }
+    }
+    if (!has_layer) {
+        return Status::NotFound(fmt::format("Column {} not found in any DCG", ucid));
+    }
+    if (!has_sparse) {
+        return Status::OK(); // *out stays nullptr -> caller uses legacy first-hit path
+    }
+
+    // --- base iterator ---
+    // The base is the bottom DENSE `.cols` file when the file walk ended at one; otherwise (no file
+    // hits at all, i.e. inline-only; or the walk ran off the end on SPARSE files) it is the original
+    // segment column. A DENSE base is row-complete at its version: only overlays (file SPARSE or
+    // inline) STRICTLY NEWER than it survive (dense_base_version filter below).
+    const bool has_dense_base = !hits.empty() && hits.back().kind == DeltaColumnFileKind::DENSE_COLS;
+    const int64_t dense_base_version =
+            has_dense_base ? hits.back().dcg->version() : std::numeric_limits<int64_t>::min();
+    std::unique_ptr<ColumnIterator> base_iter;
+    if (has_dense_base) {
+        const Hit& bottom = hits.back();
+        // Route through the metacache (footer parsed once) and fill caches per lake_io_opts.
+        ASSIGN_OR_RETURN(auto dense_seg, ctx.segment->new_dcg_segment(*bottom.dcg, bottom.file_idx, read_tablet_schema,
+                                                                      lake_io_opts, lake_io_opts.fill_metadata_cache));
+        RandomAccessFileOptions ropts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size,
+                                      .skip_disk_cache = lake_io_opts.skip_disk_cache};
+        if (!dense_seg->file_info().encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto info,
+                             KeyCache::instance().unwrap_encryption_meta(dense_seg->file_info().encryption_meta));
+            ropts.encryption_info = std::move(info);
+        }
+        if (ctx.dcg_read_files.count(dense_seg->file_name()) == 0) {
+            ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file_with_bundling(ropts, dense_seg->file_info()));
+            ctx.dcg_read_files[dense_seg->file_name()] = std::move(rf);
+        }
+        ASSIGN_OR_RETURN(base_iter, dense_seg->new_column_iterator(column, nullptr));
+        ColumnIteratorOptions base_opts = iter_opts;
+        base_opts.read_file = ctx.dcg_read_files[dense_seg->file_name()].get();
+        RETURN_IF_ERROR(base_iter->init(base_opts));
+        // cache the dense segment for reuse, mirroring get_lake_dcg_segment
+        ctx.dcg_segments[dense_seg->file_name()] = dense_seg;
+    } else {
+        // Base = original segment column, read through the outer base segment read file.
+        ASSIGN_OR_RETURN(base_iter, ctx.segment->new_column_iterator_or_default(column, nullptr));
+        ColumnIteratorOptions base_opts = iter_opts;
+        base_opts.read_file = base_segment_read_file;
+        RETURN_IF_ERROR(base_iter->init(base_opts));
+    }
+
+    // --- sparse overlay layers ---
+    std::vector<LayeredOverlayColumnIterator::SparseLayer> layers;
+    for (const auto& hit : hits) {
+        if (hit.kind != DeltaColumnFileKind::SPARSE_PERCOL) {
+            continue;
+        }
+        LayeredOverlayColumnIterator::SparseLayer layer;
+        // Route the `.spcols` open through the metacache (footer parsed once) and fill caches.
+        ASSIGN_OR_RETURN(layer.spcols_segment,
+                         ctx.segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, read_tablet_schema, lake_io_opts,
+                                                             lake_io_opts.fill_metadata_cache));
+        layer.value_column = column;
+        layer.version = hit.dcg->version();
+        layer.row_count = hit.dcg->sparse_row_count(hit.file_idx);
+        layer.source_segment_num_rows = hit.dcg->source_segment_num_rows();
+        // === Per-column presence (packed `.spcols`) ===
+        // A packed file carries the UNION of several classes' source_rowids; the value column for
+        // |ucid| covers only a SUBSET, the other union ordinals being placeholders. When Agent C
+        // records an exact per-column roaring for this (file, uid), use it as BOTH
+        //   (a) the zero-IO pre-filter range — the PER-COLUMN [min,max], NOT the file-level union
+        //       range (requirement 3), and
+        //   (b) the exact covered set the apply gate consults (decoded into covered_rowids).
+        // When absent (legacy / homogeneous single-class file: empty roaring), fall back to the
+        // file-level presence range and treat the whole source_rowids as the covered set
+        // (covered_known stays false => column_covers() returns true for every union ordinal).
+        const std::string& col_roaring = hit.dcg->column_presence_roaring(hit.file_idx, static_cast<ColumnUID>(ucid));
+        if (!col_roaring.empty()) {
+            layer.presence_min = hit.dcg->column_presence_min(hit.file_idx, static_cast<ColumnUID>(ucid));
+            layer.presence_max = hit.dcg->column_presence_max(hit.file_idx, static_cast<ColumnUID>(ucid));
+            layer.presence_known = hit.dcg->column_presence_known(hit.file_idx, static_cast<ColumnUID>(ucid));
+            ASSIGN_OR_RETURN(layer.covered_rowids, LayeredOverlayColumnIterator::decode_covered_rowids(col_roaring));
+            layer.covered_known = true;
+        } else {
+            // Carry the file-level presence range for the zero-IO pre-filter (skip a disjoint layer
+            // without opening its `.spcols`). Unknown bounds (legacy/pre-presence writer) => no skip.
+            layer.presence_min = hit.dcg->presence_min(hit.file_idx);
+            layer.presence_max = hit.dcg->presence_max(hit.file_idx);
+            layer.presence_known = hit.dcg->presence_known(hit.file_idx);
+        }
+
+        // Sequential full-K layer loads: fill the data cache and use the scan's buffer size.
+        RandomAccessFileOptions ropts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size,
+                                      .skip_disk_cache = lake_io_opts.skip_disk_cache};
+        if (!layer.spcols_segment->file_info().encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(
+                                                layer.spcols_segment->file_info().encryption_meta));
+            ropts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto spcols_file,
+                         fs->new_random_access_file_with_bundling(ropts, layer.spcols_segment->file_info()));
+        layer.read_file = std::move(spcols_file);
+        layers.push_back(std::move(layer));
+    }
+    // Inline patches: materialized from meta (ZERO file IO). Keep only those strictly newer than a
+    // dense base for this uid (older inline patches are superseded by the row-complete dense).
+    for (const auto& ih : inline_hits) {
+        const InlinePatch& patch = *ih.patch;
+        if (patch.version <= dense_base_version) {
+            continue;
+        }
+        LayeredOverlayColumnIterator::SparseLayer layer;
+        layer.is_inline = true;
+        layer.value_column = column;
+        layer.version = patch.version;
+        layer.row_count = patch.row_count;
+        layer.source_segment_num_rows = ih.dcg->source_segment_num_rows();
+        // Decoded source_rowids are seeded directly (DeltaColumnGroup parsed the LE bytes already);
+        // _ensure_layer_loaded only deserializes this layer's value blob.
+        layer.source_rowids = patch.source_rowids;
+        layer.inline_value_blob = patch.column_values[ih.value_idx];
+        layer.presence_min = patch.min_source_rowid;
+        layer.presence_max = patch.max_source_rowid;
+        layer.presence_known = patch.known();
+        layers.push_back(std::move(layer));
+    }
+    // Sort all overlay layers version-ASCENDING (oldest applied first, newest last => last-write-wins).
+    // Stable keeps any same-version layers in collection order (the writer never emits both an inline
+    // patch and a file for the same uid at the same version, so ties are degenerate).
+    std::stable_sort(layers.begin(), layers.end(),
+                     [](const LayeredOverlayColumnIterator::SparseLayer& a,
+                        const LayeredOverlayColumnIterator::SparseLayer& b) { return a.version < b.version; });
+
+    *out = std::make_unique<LayeredOverlayColumnIterator>(std::move(base_iter), std::move(layers),
+                                                          /*base_initialized=*/true);
+    return Status::OK();
 }
 
 Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,
@@ -1666,7 +1873,21 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         if (segment_info.bundle_file_offset.has_value()) {
             file_info.bundle_file_offset = segment_info.bundle_file_offset;
         }
-        auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
+        // Apply-path cache options: warm the data/metadata caches so subsequent reads are hot.
+        LakeIOOptions dcg_lake_io_opts;
+        dcg_lake_io_opts.fill_data_cache = true;
+        dcg_lake_io_opts.fill_metadata_cache = true;
+        // SDCG: open the base segment through the tablet manager so it carries the metacache
+        // (`_tablet_manager`), letting its `.cols`/`.spcols` DCG opens be footer-parsed once and
+        // reused across apply. Topology-driven (lake has a tablet manager, local does not) rather
+        // than flag-driven, so reads work identically whenever sparse layers exist on disk.
+        StatusOr<std::shared_ptr<Segment>> segment;
+        if (params.tablet->tablet_mgr() != nullptr) {
+            segment = params.tablet->tablet_mgr()->load_segment(file_info, segment_id, dcg_lake_io_opts,
+                                                                /*fill_meta_cache=*/true, tablet_schema);
+        } else {
+            segment = Segment::open(fs, file_info, segment_id, tablet_schema);
+        }
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
                          << segment.status();
@@ -1699,15 +1920,37 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
 
             // try dcg read only if dcg context exists
             if (dcg_ctx != nullptr) {
-                auto dcg_col_iter_result = new_lake_dcg_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema);
-                if (dcg_col_iter_result.ok()) {
-                    col_iter = std::move(dcg_col_iter_result.value());
-                } else if (!dcg_col_iter_result.status().is_not_found()) {
-                    // NotFound is expected when column doesn't exist in DCG, other errors are real issues
-                    return Status::InternalError(fmt::format("Failed to create DCG column iterator for column {}: {}",
-                                                             col.name(), dcg_col_iter_result.status().to_string()));
+                // SDCG: if the column's DCG layer stack contains any SPARSE `.spcols` file,
+                // assemble a LayeredOverlayColumnIterator. METADATA-DRIVEN, not flag-driven: sparse
+                // data on disk must always be read through the overlay even when the flag was later
+                // turned off. All-DENSE stacks return nullptr and fall through to the legacy path.
+                {
+                    std::unique_ptr<ColumnIterator> overlay_iter;
+                    Status ov_st = new_lake_overlay_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema,
+                                                                    read_file.get(), dcg_lake_io_opts, &overlay_iter);
+                    if (ov_st.ok() && overlay_iter != nullptr) {
+                        col_iter = std::move(overlay_iter);
+                    } else if (!ov_st.ok() && !ov_st.is_not_found()) {
+                        return Status::InternalError(
+                                fmt::format("Failed to create SDCG overlay iterator for column {}: {}", col.name(),
+                                            ov_st.to_string()));
+                    }
+                    // ov_st NotFound (column absent from DCG) or OK+nullptr (all dense) => fall through.
                 }
-                // If status is NotFound, col_iter remains nullptr and we'll read from original segment
+
+                if (col_iter == nullptr) {
+                    auto dcg_col_iter_result =
+                            new_lake_dcg_column_iterator(*dcg_ctx, fs, iter_opts, col, tablet_schema, dcg_lake_io_opts);
+                    if (dcg_col_iter_result.ok()) {
+                        col_iter = std::move(dcg_col_iter_result.value());
+                    } else if (!dcg_col_iter_result.status().is_not_found()) {
+                        // NotFound is expected when column doesn't exist in DCG, other errors are real issues
+                        return Status::InternalError(
+                                fmt::format("Failed to create DCG column iterator for column {}: {}", col.name(),
+                                            dcg_col_iter_result.status().to_string()));
+                    }
+                    // If status is NotFound, col_iter remains nullptr and we'll read from original segment
+                }
             }
 
             // read from original segment if no dcg data available

@@ -353,6 +353,9 @@ public:
         if (log.has_op_drop_index()) {
             _builder.apply_drop_index(log.op_drop_index());
         }
+        if (log.has_op_dcg_compaction()) {
+            _builder.apply_dcg_overlay_merge(log.op_dcg_compaction());
+        }
         if (log.has_op_alter_metadata()) {
             DCHECK_EQ(_base_version + 1, _new_version);
             return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
