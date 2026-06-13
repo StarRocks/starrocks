@@ -90,6 +90,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：スキーマ変更操作 (ALTER TABLE) のタイムアウト期間。
 - 導入時期：-
 
+### `enable_concurrent_add_partition_during_alter`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`true` の場合、パーティション作成（手動の `ALTER TABLE ... ADD PARTITION`、ロード中の自動作成、および動的パーティションスケジューラ）は、安全であることが証明されているメタデータのみの ALTER 操作（現在は存算分離モードの ADD/DROP INDEX ファストパスジョブ、および fast schema evolution の一時的な `UPDATING_META` 状態）と並行して実行できます。DDL を拒否したり ALTER ジョブをキャンセルしたりしません。`false` に設定すると、従来の排他的な動作に戻ります。この設定はパーティション作成のみを緩和し、その他のすべての ALTER ジョブと `ADD PARTITION` 以外のすべての DDL は従来の状態チェックを維持します。
+- 導入時期：-
+
 ### `capacity_used_percent_high_water`
 
 - デフォルト：0.75
