@@ -17,12 +17,15 @@
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/server.h>
 #include <arrow/flight/types.h>
+#include <arrow/ipc/options.h>
+#include <arrow/util/compression.h>
 #include <base/utility/arrow_utils.h>
 #include <exec/pipeline/query_context.h>
 
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "compute_env/result/result_buffer_mgr.h"
 #include "exec/arrow_flight_batch_reader.h"
 #include "exprs/base64.h"
 #include "runtime/exec_env.h"
@@ -88,9 +91,21 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlSe
         return arrow::Status::Invalid("Invalid fragment ID format:", result_fragment_id);
     }
 
-    auto reader = std::make_shared<ArrowFlightBatchReader>(ExecEnv::GetInstance()->result_mgr(), resultfragmentid);
+    auto* result_mgr = ExecEnv::GetInstance()->result_mgr();
+    auto reader = std::make_shared<ArrowFlightBatchReader>(result_mgr, resultfragmentid);
     ARROW_RETURN_NOT_OK(reader->init());
-    return std::make_unique<arrow::flight::RecordBatchStream>(reader);
+
+    arrow::ipc::IpcWriteOptions options = arrow::ipc::IpcWriteOptions::Defaults();
+    const auto codec = result_mgr->get_arrow_compression(resultfragmentid);
+    if (codec != arrow::Compression::UNCOMPRESSED) {
+        ARROW_ASSIGN_OR_RAISE(options.codec, arrow::util::Codec::Create(codec));
+        // Skip compression for batches that shrink by less than 5% (e.g. dense numeric
+        // columns) to avoid negative-compression overhead.
+        options.min_space_savings = 0.05;
+    }
+    // options.write_legacy_ipc_format stays false (the default); the legacy IPC format
+    // does not support compression.
+    return std::make_unique<arrow::flight::RecordBatchStream>(reader, options);
 }
 
 arrow::Result<std::pair<std::string, std::string>> ArrowFlightSqlServer::decode_ticket(const std::string& ticket) {

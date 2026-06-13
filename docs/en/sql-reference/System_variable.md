@@ -192,10 +192,18 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 ### array_low_cardinality_optimize
 
 * **Scope**: Session
-* **Description**: Controls whether the optimizer will consider ARRAY&lt;VARCHAR&gt; columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or ARRAY&lt;VARCHAR&gt;. When disabled, only scalar VARCHAR columns are eligible and ARRAY&lt;VARCHAR&gt; types are ignored by those low-cardinality optimizations.
+* **Description**: Controls whether the optimizer will consider ARRAY<VARCHAR> columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or ARRAY<VARCHAR>. When disabled, only scalar VARCHAR columns are eligible and ARRAY<VARCHAR> types are ignored by those low-cardinality optimizations.
 * **Default**: true
 * **Data Type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
+
+### arrow_flight_compression
+
+* **Scope**: Session
+* **Description**: Compression codec for the Arrow IPC record batches that the BE returns over Arrow Flight SQL (`DoGet`). Valid values: `lz4` (Arrow `LZ4_FRAME`), `zstd`, `none`, or empty. When empty, the cluster-wide BE configuration `arrow_flight_ipc_compression` is used; a non-empty value (including `none`) overrides it for the current connection. This only affects large query results streamed from the BE; small results streamed directly from the FE are not affected, and when Arrow Flight proxy mode is enabled, client-visible compression applies only on direct BE connections.
+* **Default**: empty
+* **Data Type**: String
+* **Introduced in**: -
 
 ### authentication_policy
 

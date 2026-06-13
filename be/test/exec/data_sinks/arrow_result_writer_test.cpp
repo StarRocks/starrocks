@@ -26,8 +26,46 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "util/arrow/arrow_flight_compression.h"
 
 namespace starrocks {
+
+TEST(ArrowFlightCompressionTest, from_string_maps_codecs) {
+    EXPECT_EQ(arrow::Compression::LZ4_FRAME, arrow_flight_compression_from_string("lz4"));
+    EXPECT_EQ(arrow::Compression::LZ4_FRAME, arrow_flight_compression_from_string("LZ4"));
+    EXPECT_EQ(arrow::Compression::ZSTD, arrow_flight_compression_from_string("zstd"));
+    EXPECT_EQ(arrow::Compression::ZSTD, arrow_flight_compression_from_string("ZSTD"));
+    EXPECT_EQ(arrow::Compression::UNCOMPRESSED, arrow_flight_compression_from_string("none"));
+    EXPECT_EQ(arrow::Compression::UNCOMPRESSED, arrow_flight_compression_from_string(""));
+    // Unknown values are defensively treated as uncompressed (FE rejects them at SET time).
+    EXPECT_EQ(arrow::Compression::UNCOMPRESSED, arrow_flight_compression_from_string("gzip"));
+}
+
+TEST(ArrowFlightCompressionTest, resolve_session_overrides_config) {
+    // Empty session value falls back to the BE config default.
+    EXPECT_EQ(arrow::Compression::ZSTD, resolve_arrow_flight_compression("", "zstd"));
+    // A non-empty session value wins, including explicit "none" to opt out.
+    EXPECT_EQ(arrow::Compression::LZ4_FRAME, resolve_arrow_flight_compression("lz4", "zstd"));
+    EXPECT_EQ(arrow::Compression::UNCOMPRESSED, resolve_arrow_flight_compression("none", "zstd"));
+    // Both empty => uncompressed.
+    EXPECT_EQ(arrow::Compression::UNCOMPRESSED, resolve_arrow_flight_compression("", ""));
+}
+
+TEST(ResultBufferMgrArrowCompressionTest, set_get_roundtrip) {
+    ResultBufferMgr mgr;
+    TUniqueId fragment_id;
+    fragment_id.hi = 1;
+    fragment_id.lo = 2;
+
+    // Absent entry defaults to uncompressed.
+    EXPECT_EQ(arrow::Compression::UNCOMPRESSED, mgr.get_arrow_compression(fragment_id));
+
+    mgr.set_arrow_compression(fragment_id, arrow::Compression::ZSTD);
+    EXPECT_EQ(arrow::Compression::ZSTD, mgr.get_arrow_compression(fragment_id));
+
+    mgr.set_arrow_compression(fragment_id, arrow::Compression::LZ4_FRAME);
+    EXPECT_EQ(arrow::Compression::LZ4_FRAME, mgr.get_arrow_compression(fragment_id));
+}
 
 TEST(ArrowResultWriterTest, close) {
     BufferControlBlock* sinker = new BufferControlBlock(TUniqueId(), 1024);

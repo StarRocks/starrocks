@@ -169,6 +169,15 @@ This topic introduces the following types of BE configurations:
 - Description: TCP port for the BE Arrow Flight SQL server. `-1` indicaes to disable the Arrow Flight service. On non-macOS builds, BE invokes Arrow Flight SQL Server with this port during startup; if the port is unavailable, the server startup fails and the BE process exits. The configured port is reported to the FE in the heartbeat payload.
 - Introduced in: v3.4.0, v3.5.0
 
+### arrow_flight_ipc_compression
+
+- Default: none
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default Arrow IPC compression codec for the result data that the BE streams over Arrow Flight SQL (`DoGet`). Valid values: `none` (no compression), `lz4` (Arrow `LZ4_FRAME`), or `zstd`. The session variable `arrow_flight_compression` overrides this per connection when it is set to a non-empty value.
+- Introduced in: -
+
 ### be_exit_after_disk_write_hang_second
 
 - Default: 60
@@ -636,7 +645,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Percent
 - Is mutable: Yes
-- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when metadata_cache_memory_limit_percent &gt; 0; set it &lt;= 0 to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
+- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when metadata_cache_memory_limit_percent > 0; set it <= 0 to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
 - Introduced in: v3.2.10
 
 ### retry_apply_interval_second

@@ -399,6 +399,9 @@ struct TQueryOptions {
   // hardcoded "stream-load-pipe" filename. Optional and unused for
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
+  // Arrow IPC compression codec for Arrow Flight SQL DoGet responses:
+  // "" (inherit BE config arrow_flight_ipc_compression), "none", "lz4", or "zstd".
+  219: optional string arrow_flight_compression;
 }
 
 // A scan range plus the parameters needed to execute that scan.

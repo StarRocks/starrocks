@@ -157,6 +157,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：TCP 端口，用于 BE 的 Arrow Flight SQL 服务器。将其设置为 `-1` 以禁用 Arrow Flight 服务。在非 macOS 构建中，BE 在启动期间会调用通过该端口启动 Arrow Flight SQL Server；如果端口不可用，服务器启动会失败并且 BE 进程退出。配置的端口会在心跳负载中上报给 FE。
 - 引入版本：v3.4.0, v3.5.0
 
+### arrow_flight_ipc_compression
+
+- 默认值：none
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：BE 通过 Arrow Flight SQL（`DoGet`）流式返回结果数据时使用的集群级默认 Arrow IPC 压缩编码。有效值：`none`（不压缩）、`lz4`（对应 Arrow `LZ4_FRAME`）或 `zstd`。当会话变量 `arrow_flight_compression` 设置为非空值时，会针对该连接覆盖此默认值。
+- 引入版本：-
+
 ### be_exit_after_disk_write_hang_second
 
 - 默认值：60
