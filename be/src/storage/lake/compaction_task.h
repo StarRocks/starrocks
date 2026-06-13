@@ -35,6 +35,10 @@ namespace starrocks::lake {
 class Rowset;
 class TabletWriter;
 
+// Cumulative number of output segment sizes recorded into the
+// lake_compaction_output_segment_size_bytes distribution metric. Exposed for unit tests.
+int64_t lake_compaction_output_segment_size_recorded_count();
+
 class CompactionTask {
 public:
     // CancelFunc is a function that used to tell the compaction task whether the task

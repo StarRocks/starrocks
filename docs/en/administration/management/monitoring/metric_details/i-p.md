@@ -235,6 +235,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `lake_compaction_object_storage_put_count`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of object-storage PUT calls issued by shared-data (lake) compaction tasks. Applies to any object-storage backend (S3, OSS, GCS, Azure Blob, HDFS, etc.), not only S3. Counted as one PUT per file close — output segment, sst, `.lcrm`, and txn log. This is an approximation: multipart uploads of large files issue several real PUTs, and the publish-time tablet metadata write is not included (it happens outside the compaction task).
+
+## `lake_compaction_output_segment_size_bytes`
+
+- Unit: Bytes
+- Type: Distribution (exposed as gauge series: `_count`, `_latency_80/90/99`, `_max_latency`; suffixes follow the `bvar_latency_p1/p2/p3` BE flags — default p1=80)
+- Description: Distribution of output segment file sizes produced by shared-data (lake) compaction tasks. Use the percentiles to spot wasteful small-file compactions that drive object-storage API cost. Note: this metric is backed by a bvar `LatencyRecorder`, so its percentile series carry a `_latency` suffix even though the unit is bytes.
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - Unit: Count (files per batch)
