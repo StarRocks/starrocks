@@ -713,14 +713,9 @@ public class ArrowFlightSqlServiceImplTest {
 
     @Test
     public void testUnimplementedFlightSqlMethods() {
+        // acceptPut* remain unimplemented: the Flight SQL surface is read-only.
         FlightStream mockStream = mock(FlightStream.class);
-        FlightProducer.ServerStreamListener mockServerListener = mock(FlightProducer.ServerStreamListener.class);
         FlightProducer.StreamListener<PutResult> mockPutListener = mock(FlightProducer.StreamListener.class);
-        FlightDescriptor mockDescriptor = FlightDescriptor.command("SELECT 1".getBytes());
-        Criteria mockCriteria = mock(Criteria.class);
-
-        assertThrows(FlightRuntimeException.class, () -> service.getSchemaStatement(FlightSql.CommandStatementQuery
-                .getDefaultInstance(), mockCallContext, mockDescriptor));
 
         assertThrows(FlightRuntimeException.class, () -> service.acceptPutStatement(FlightSql.CommandStatementUpdate
                 .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
@@ -732,35 +727,70 @@ public class ArrowFlightSqlServiceImplTest {
         assertThrows(FlightRuntimeException.class,
                 () -> service.acceptPutPreparedStatementQuery(FlightSql.CommandPreparedStatementQuery
                         .getDefaultInstance(), mockCallContext, mockStream, mockPutListener));
+    }
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamTypeInfo(FlightSql.CommandGetXdbcTypeInfo
-                .getDefaultInstance(), mockCallContext, mockServerListener));
+    @Test
+    public void testListFlightsCompletesEmpty() {
+        Criteria mockCriteria = mock(Criteria.class);
+        FlightProducer.StreamListener<FlightInfo> listener = mock(FlightProducer.StreamListener.class);
+        service.listFlights(mockCallContext, mockCriteria, listener);
+        verify(listener).onCompleted();
+        verify(listener, org.mockito.Mockito.never()).onNext(any());
+    }
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamCatalogs(mockCallContext, mockServerListener));
+    @Test
+    public void testGetSchemaStatementReturnsSchema() {
+        ArrowFlightSqlConnectContext realContext = new ArrowFlightSqlConnectContext("token123");
+        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(realContext);
+        try {
+            org.apache.arrow.flight.SchemaResult result = service.getSchemaStatement(
+                    FlightSql.CommandStatementQuery.newBuilder().setQuery("SELECT 1 AS c1").build(),
+                    mockCallContext, FlightDescriptor.command("".getBytes()));
+            assertNotNull(result);
+            assertNotNull(result.getSchema());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamSchemas(FlightSql.CommandGetDbSchemas
-                .getDefaultInstance(), mockCallContext, mockServerListener));
+    @Test
+    public void testGetStreamTableTypesEmitsStaticTypes() {
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+        ArgumentCaptor<VectorSchemaRoot> rootCaptor = ArgumentCaptor.forClass(VectorSchemaRoot.class);
 
-        assertThrows(FlightRuntimeException.class,
-                () -> service.getStreamTables(FlightSql.CommandGetTables.getDefaultInstance(), mockCallContext,
-                        mockServerListener));
+        service.getStreamTableTypes(mockCallContext, listener);
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamTableTypes(mockCallContext, mockServerListener));
+        verify(listener).start(rootCaptor.capture());
+        verify(listener).putNext();
+        verify(listener).completed();
+        assertEquals(FlightSqlProducer.Schemas.GET_TABLE_TYPES_SCHEMA, rootCaptor.getValue().getSchema());
+        assertEquals(3, rootCaptor.getValue().getRowCount());
+    }
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamPrimaryKeys(FlightSql.CommandGetPrimaryKeys
-                .getDefaultInstance(), mockCallContext, mockServerListener));
+    @Test
+    public void testGetStreamTypeInfoEmitsTypeTable() {
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+        ArgumentCaptor<VectorSchemaRoot> rootCaptor = ArgumentCaptor.forClass(VectorSchemaRoot.class);
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamExportedKeys(FlightSql.CommandGetExportedKeys
-                .getDefaultInstance(), mockCallContext, mockServerListener));
+        service.getStreamTypeInfo(FlightSql.CommandGetXdbcTypeInfo.getDefaultInstance(), mockCallContext, listener);
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamImportedKeys(FlightSql.CommandGetImportedKeys
-                .getDefaultInstance(), mockCallContext, mockServerListener));
+        verify(listener).start(rootCaptor.capture());
+        verify(listener).completed();
+        assertEquals(FlightSqlProducer.Schemas.GET_TYPE_INFO_SCHEMA, rootCaptor.getValue().getSchema());
+        assertTrue(rootCaptor.getValue().getRowCount() > 0);
+    }
 
-        assertThrows(FlightRuntimeException.class, () -> service.getStreamCrossReference(FlightSql.CommandGetCrossReference
-                .getDefaultInstance(), mockCallContext, mockServerListener));
+    @Test
+    public void testGetStreamExportedKeysEmitsEmptyStream() {
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+        ArgumentCaptor<VectorSchemaRoot> rootCaptor = ArgumentCaptor.forClass(VectorSchemaRoot.class);
 
-        assertThrows(FlightRuntimeException.class,
-                () -> service.listFlights(mockCallContext, mockCriteria, mock(FlightProducer.StreamListener.class)));
+        service.getStreamExportedKeys(FlightSql.CommandGetExportedKeys.getDefaultInstance(), mockCallContext, listener);
+
+        verify(listener).start(rootCaptor.capture());
+        verify(listener).completed();
+        assertEquals(FlightSqlProducer.Schemas.GET_EXPORTED_KEYS_SCHEMA, rootCaptor.getValue().getSchema());
+        assertEquals(0, rootCaptor.getValue().getRowCount());
     }
 
     @Test

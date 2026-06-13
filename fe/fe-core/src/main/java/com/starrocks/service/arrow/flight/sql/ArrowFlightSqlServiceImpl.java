@@ -439,7 +439,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public SchemaResult getSchemaStatement(FlightSql.CommandStatementQuery command, CallContext context,
                                            FlightDescriptor descriptor) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getSchemaStatement unimplemented").toRuntimeException();
+        // Only semantic analysis is needed to derive the result schema, which any FE can do locally from its
+        // catalog metadata. Unlike prepared statements, a raw statement query carries no FE-pinned state, so
+        // there is no need to forward to the issuing FE even when proxy is enabled.
+        ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(context.peerIdentity());
+        Schema schema = buildSchemaFromQuery(ctx, command.getQuery());
+        return new SchemaResult(schema);
     }
 
     @Override
@@ -463,60 +468,93 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     @Override
     public void getStreamTypeInfo(FlightSql.CommandGetXdbcTypeInfo command, CallContext context, ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamTypeInfo unimplemented").toRuntimeException();
+        streamMetadata(context, listener, (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildTypeInfo(command, allocator));
     }
 
     @Override
     public void getStreamCatalogs(CallContext context, ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamCatalogs unimplemented").toRuntimeException();
-
+        streamMetadata(context, listener, (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildCatalogs(allocator));
     }
 
     @Override
     public void getStreamSchemas(FlightSql.CommandGetDbSchemas command, CallContext context, ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamSchemas unimplemented").toRuntimeException();
-
+        streamMetadata(context, listener,
+                (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildSchemas(command, allocator, ctx));
     }
 
     @Override
     public void getStreamTables(FlightSql.CommandGetTables command, CallContext context, ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamTables unimplemented").toRuntimeException();
-
+        streamMetadata(context, listener,
+                (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildTables(command, allocator, ctx));
     }
 
     @Override
     public void getStreamTableTypes(CallContext context, ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamTableTypes unimplemented").toRuntimeException();
-
+        streamMetadata(context, listener, (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildTableTypes(allocator));
     }
 
     @Override
     public void getStreamPrimaryKeys(FlightSql.CommandGetPrimaryKeys command, CallContext context,
                                      ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamPrimaryKeys unimplemented").toRuntimeException();
+        streamMetadata(context, listener,
+                (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildPrimaryKeys(command, allocator, ctx));
     }
 
     @Override
     public void getStreamExportedKeys(FlightSql.CommandGetExportedKeys command, CallContext context,
                                       ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamExportedKeys unimplemented").toRuntimeException();
+        streamMetadata(context, listener, (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildExportedKeys(allocator));
     }
 
     @Override
     public void getStreamImportedKeys(FlightSql.CommandGetImportedKeys command, CallContext context,
                                       ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamImportedKeys unimplemented").toRuntimeException();
+        streamMetadata(context, listener, (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildImportedKeys(allocator));
     }
 
     @Override
     public void getStreamCrossReference(FlightSql.CommandGetCrossReference command, CallContext context,
                                         ServerStreamListener listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("getStreamCrossReference unimplemented").toRuntimeException();
+        streamMetadata(context, listener, (ctx, allocator) -> ArrowFlightSqlMetadataHandler.buildCrossReference(allocator));
     }
 
     @Override
     public void listFlights(CallContext context, Criteria criteria, StreamListener<FlightInfo> listener) {
-        throw CallStatus.UNIMPLEMENTED.withDescription("listFlights unimplemented").toRuntimeException();
+        // StarRocks does not expose a discoverable list of flights; metadata and statement flights are obtained
+        // through the dedicated getFlightInfo* commands. Return an empty list rather than failing the call so
+        // clients that probe listFlights on connect can proceed.
+        listener.onCompleted();
+    }
+
+    /**
+     * Build a metadata result locally from the FE's in-memory catalog state and stream it to the client.
+     *
+     * <p>The handler emits a single {@link VectorSchemaRoot} conforming to the matching
+     * {@code Schemas.GET_*_SCHEMA}. This service owns that root and closes it once streaming finishes.
+     * The {@link ConnectContext} is bound to the current thread for the duration of the build so metadata
+     * lookups that consult the thread-local context (e.g. external connectors, authorization) work correctly.
+     */
+    private void streamMetadata(CallContext context, ServerStreamListener listener,
+                                java.util.function.BiFunction<ArrowFlightSqlConnectContext,
+                                        BufferAllocator, VectorSchemaRoot> builder) {
+        ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(context.peerIdentity());
+        VectorSchemaRoot root = null;
+        try (var scope = ctx.bindScope()) {
+            root = builder.apply(ctx, rootAllocator);
+            listener.start(root);
+            listener.putNext();
+            listener.completed();
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Failed to stream metadata", e);
+            listener.error(CallStatus.INTERNAL
+                    .withDescription("Failed to stream metadata: " + e.getMessage())
+                    .withCause(e)
+                    .toRuntimeException());
+        } finally {
+            if (root != null) {
+                root.close();
+            }
+        }
     }
 
     protected static ByteBuffer serializeMetadata(final Schema schema) {
