@@ -24,7 +24,7 @@ Map the boundary between internal engineering knowledge in `handbook/` and publi
 
 ## Test and Validation
 
-- Add new public pages to `docs/docusaurus/sidebars.js`.
+- Add new public pages to `docs/docusaurus/sidebars.json`.
 - Keep cross-links relative and keep assets in `docs/_assets/`.
 - When docs describe code behavior, validate the code path before updating prose.
 
