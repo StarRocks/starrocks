@@ -39,8 +39,10 @@ TEST_F(StatisticsHelperTest, DecodeBooleanMinMax) {
     std::vector<std::string> max_values{std::string("\x01", 1), std::string("\x01", 1)};
     std::vector<bool> null_pages{false, false};
 
-    ASSERT_TRUE(StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, type, &field, "UTC").ok());
-    ASSERT_TRUE(StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, type, &field, "UTC").ok());
+    ASSERT_TRUE(
+            StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, type, &field, "UTC").ok());
+    ASSERT_TRUE(
+            StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, type, &field, "UTC").ok());
 
     ASSERT_EQ(2, min_column->size());
     ASSERT_EQ(2, max_column->size());
