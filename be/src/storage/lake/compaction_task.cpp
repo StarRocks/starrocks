@@ -146,11 +146,14 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
         }
         const DeltaColumnGroupVerPB& ver = dcg_it->second;
 
-        // v1 EXCLUSIONS: anything we cannot losslessly fold here is left unmerged (always correct -- the
-        // reader keeps walking the original chain). Inline patches and encrypted DCGs are out of scope.
-        if (ver.inline_patches_size() > 0 || ver.encryption_metas_size() > 0) {
-            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} inline={} enc={}", _tablet.id(),
-                                     rssid, ver.inline_patches_size(), ver.encryption_metas_size());
+        // v1 EXCLUSION: inline patches are `.spcols`-equivalent overlays carried in metadata (no file to
+        // read+rewrite), so a segment with any inline patch is left unmerged (always correct -- the reader
+        // keeps walking the original chain). Encryption IS supported end-to-end: the read path unwraps each
+        // layer's per-file encryption_meta, the writer re-encrypts the merged `.spcols` under the current
+        // KEK, and the apply side carries the merged file's encryption_meta.
+        if (ver.inline_patches_size() > 0) {
+            LOG(INFO) << fmt::format("sdcg overlay-merge skip seg: tablet {} rssid {} inline_patches={}",
+                                     _tablet.id(), rssid, ver.inline_patches_size());
             continue;
         }
         bool skip_segment = false;
