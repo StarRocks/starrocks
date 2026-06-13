@@ -91,9 +91,14 @@ TEST(HashMapTest, Basic) {
         AggHashMapVariant variant;
         variant.init(&dummy, hash_map_type, &statis);
         variant.visit([](auto& hash_map_with_key) {
-            if constexpr (std::is_same_v<typename decltype(hash_map_with_key->hash_map)::key_type, int32_t>) {
+            using MapT = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+            // The pack flavors hold a 32-byte cell value, not an AggDataPtr; this test's
+            // type list never selects them, so they only need to compile past the visit.
+            if constexpr (!std::is_same_v<typename MapT::mapped_type, AggDataPtr>) {
+                ASSERT_TRUE(false);
+            } else if constexpr (std::is_same_v<typename MapT::key_type, int32_t>) {
                 exec(hash_map_with_key->hash_map, get_keys<int32_t>());
-            } else if constexpr (std::is_same_v<typename decltype(hash_map_with_key->hash_map)::key_type, Slice>) {
+            } else if constexpr (std::is_same_v<typename MapT::key_type, Slice>) {
                 exec(hash_map_with_key->hash_map, get_keys<Slice>());
             } else {
                 ASSERT_TRUE(false);

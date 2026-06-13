@@ -15,6 +15,7 @@
 package com.starrocks.planner.expression;
 
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -128,7 +129,10 @@ public class ExecFunctionCall extends ExecExpr {
 
     @Override
     public boolean hasNullableChild() {
-        if (isMergeAggFn) {
+        // Mirrors FunctionCallExpr#hasNullableChild: a merge-stage call of the whitelisted
+        // aggregates trusts its child slot's honest nullability instead of the blanket
+        // "nullable", so the BE can resolve the non-nullable variant on the merge stage.
+        if (isMergeAggFn && !FunctionSet.MERGE_HONEST_NULLABLE_CHILD_FUNCTIONS.contains(fnName)) {
             return true;
         }
         return super.hasNullableChild();

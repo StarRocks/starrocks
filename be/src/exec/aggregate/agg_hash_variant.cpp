@@ -100,6 +100,33 @@
     M(phase2_slice_cx8)              \
     M(phase2_slice_cx16)
 
+// Multi-aggregate pack flavors exist for the hash MAP variant only (a hash set has no
+// aggregate value to widen), so they live outside APPLY_FOR_AGG_VARIANT_ALL, which also
+// feeds the set variant's switch.
+#define APPLY_FOR_AGG_MAP_PACK(M) \
+    M(phase1_int32_pack)          \
+    M(phase1_int64_pack)          \
+    M(phase1_date_pack)           \
+    M(phase1_timestamp_pack)      \
+    M(phase1_null_int32_pack)     \
+    M(phase1_null_int64_pack)     \
+    M(phase1_null_date_pack)      \
+    M(phase1_null_timestamp_pack) \
+    M(phase1_slice_fx4_pack)      \
+    M(phase1_slice_fx8_pack)      \
+    M(phase1_slice_fx16_pack)     \
+    M(phase2_int32_pack)          \
+    M(phase2_int64_pack)          \
+    M(phase2_date_pack)           \
+    M(phase2_timestamp_pack)      \
+    M(phase2_null_int32_pack)     \
+    M(phase2_null_int64_pack)     \
+    M(phase2_null_date_pack)      \
+    M(phase2_null_timestamp_pack) \
+    M(phase2_slice_fx4_pack)      \
+    M(phase2_slice_fx8_pack)      \
+    M(phase2_slice_fx16_pack)
+
 namespace starrocks {
 namespace detail {
 template <AggHashMapVariant::Type>
@@ -277,6 +304,31 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx4, CompressedAggHashSetF
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx8, CompressedAggHashSetFixedSize8<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx16, CompressedAggHashSetFixedSize16<PhmapSeed2>);
 
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_int32_pack, Int32PackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_int64_pack, Int64PackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_date_pack, DatePackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_timestamp_pack, TimeStampPackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_int32_pack, NullInt32PackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_int64_pack, NullInt64PackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_date_pack, NullDatePackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_timestamp_pack,
+                NullTimeStampPackAggHashMapWithOneNumberKey<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx4_pack, SerializedKeyFixedSize4PackAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx8_pack, SerializedKeyFixedSize8PackAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx16_pack, SerializedKeyFixedSize16PackAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int32_pack, Int32PackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int64_pack, Int64PackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_date_pack, DatePackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_timestamp_pack, TimeStampPackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_int32_pack, NullInt32PackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_int64_pack, NullInt64PackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_date_pack, NullDatePackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_timestamp_pack,
+                NullTimeStampPackAggHashMapWithOneNumberKey<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx4_pack, SerializedKeyFixedSize4PackAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx8_pack, SerializedKeyFixedSize8PackAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx16_pack, SerializedKeyFixedSize16PackAggHashMap<PhmapSeed2>);
+
 } // namespace detail
 void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
     _type = type;
@@ -288,7 +340,62 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                 state->chunk_size(), _agg_stat);                                                                   \
         break;
         APPLY_FOR_AGG_VARIANT_ALL(M)
+        APPLY_FOR_AGG_MAP_PACK(M)
 #undef M
+    }
+}
+
+// Map a chosen single-op variant type onto its pack twin (same key handling, 32-byte pack
+// cell value). Returns the input unchanged when no pack flavor exists for the key -- the
+// caller treats that as "the pack gate does not apply".
+AggHashMapVariant::Type AggHashMapVariant::pack_type_for(Type type) {
+    switch (type) {
+    case Type::phase1_int32:
+        return Type::phase1_int32_pack;
+    case Type::phase1_int64:
+        return Type::phase1_int64_pack;
+    case Type::phase1_date:
+        return Type::phase1_date_pack;
+    case Type::phase1_timestamp:
+        return Type::phase1_timestamp_pack;
+    case Type::phase1_null_int32:
+        return Type::phase1_null_int32_pack;
+    case Type::phase1_null_int64:
+        return Type::phase1_null_int64_pack;
+    case Type::phase1_null_date:
+        return Type::phase1_null_date_pack;
+    case Type::phase1_null_timestamp:
+        return Type::phase1_null_timestamp_pack;
+    case Type::phase1_slice_fx4:
+        return Type::phase1_slice_fx4_pack;
+    case Type::phase1_slice_fx8:
+        return Type::phase1_slice_fx8_pack;
+    case Type::phase1_slice_fx16:
+        return Type::phase1_slice_fx16_pack;
+    case Type::phase2_int32:
+        return Type::phase2_int32_pack;
+    case Type::phase2_int64:
+        return Type::phase2_int64_pack;
+    case Type::phase2_date:
+        return Type::phase2_date_pack;
+    case Type::phase2_timestamp:
+        return Type::phase2_timestamp_pack;
+    case Type::phase2_null_int32:
+        return Type::phase2_null_int32_pack;
+    case Type::phase2_null_int64:
+        return Type::phase2_null_int64_pack;
+    case Type::phase2_null_date:
+        return Type::phase2_null_date_pack;
+    case Type::phase2_null_timestamp:
+        return Type::phase2_null_timestamp_pack;
+    case Type::phase2_slice_fx4:
+        return Type::phase2_slice_fx4_pack;
+    case Type::phase2_slice_fx8:
+        return Type::phase2_slice_fx8_pack;
+    case Type::phase2_slice_fx16:
+        return Type::phase2_slice_fx16_pack;
+    default:
+        return type;
     }
 }
 
@@ -306,6 +413,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                         if (null_data_ptr != nullptr) {                                                               \
                             dst->set_null_key_data(null_data_ptr);                                                    \
                         }                                                                                             \
+                        agg_inline_transfer_null_state(*dst, *hash_map_with_key);                                     \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \
@@ -337,7 +445,7 @@ size_t AggHashMapVariant::capacity() const {
 
 size_t AggHashMapVariant::size() const {
     return visit([](const auto& hash_map_with_key) {
-        return hash_map_with_key->hash_map.size() + (hash_map_with_key->get_null_key_data() != nullptr);
+        return hash_map_with_key->hash_map.size() + hash_map_with_key->has_null_key();
     });
 }
 

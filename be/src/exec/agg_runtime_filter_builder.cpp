@@ -56,7 +56,9 @@ MutableColumns extract_group_by_columns(Aggregator* aggregator) {
                 hash_map_with_key.insert_keys_to_columns(result_vector, group_by_columns, read_index);
             }
             if constexpr (HashMapWithKey::has_single_null_key) {
-                if (hash_map_with_key.null_key_data != nullptr) {
+                // has_null_key() covers both sentinels: the general path's state pointer and
+                // the inline path's existence bit (whose accumulator may legally be 0).
+                if (hash_map_with_key.has_null_key()) {
                     DCHECK(group_by_columns.size() == 1);
                     group_by_columns[0]->append_default();
                 }

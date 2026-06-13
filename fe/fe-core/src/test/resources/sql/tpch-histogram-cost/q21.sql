@@ -28,7 +28,7 @@ OutPut Exchange Id: 27
 |  * count-->[0.0, 2334116.9317591335, 0.0, 8.0, 40000.0] ESTIMATE
 |
 25:AGGREGATE (merge finalize)
-|  aggregate: count[([77: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
+|  aggregate: count[([77: count, BIGINT, false]); args: ; result: BIGINT; args nullable: false; result nullable: false]
 |  group by: [2: S_NAME, VARCHAR, false]
 |  cardinality: 40000
 |  column statistics:

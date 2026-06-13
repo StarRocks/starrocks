@@ -171,7 +171,7 @@ OutPut Exchange Id: 14
 |       cardinality: 20000000
 |
 4:AGGREGATE (merge finalize)
-|  aggregate: sum[([48: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([48: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [33: L_SUPPKEY, INT, false], [32: L_PARTKEY, INT, false]
 |  cardinality: 90804734
 |  column statistics:

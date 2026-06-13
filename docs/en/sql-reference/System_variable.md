@@ -554,6 +554,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v2.5
 
+### enable_agg_inline_accumulator
+
+* **Description**: Controls an execution optimization for `GROUP BY` aggregations that compute `count`, `sum`, `min`, or `max`. When enabled, the aggregate value is maintained inline in the group-by hash table, avoiding a separate per-group state allocation.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v4.0
+
 ### enable_bucket_aware_execution_on_lake
 
 * **Description**: Whether to enable bucket-aware execution for queries against data lakes (such as Iceberg tables). When this feature is enabled, the system optimizes query execution by leveraging bucketing information to reduce data shuffling and improve performance. This optimization is particularly effective for join operations and aggregations on bucketed tables.
