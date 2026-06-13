@@ -41,6 +41,22 @@ namespace starrocks {
 class HiveTableDescriptor;
 class RuntimeFilterProbeCollector;
 
+// META is Parquet footer metadata; ORC_META is ORC footer/tail. They must use
+// distinct prefixes because they share the same global page cache keyed only on
+// path + mtime/size: Parquet stores a FileMetaDataPtr while ORC stores a
+// std::string under the same key, so a shared namespace would let one format
+// reinterpret the other format's cached object (type confusion / crash).
+enum CacheType { META, PAGE, ORC_META };
+inline static const std::vector<std::string> cache_key_prefix{"ft", "pg", "ot"};
+
+// Build a metacache key for file footer caching
+// Format: hash(filename) + prefix + mtime_or_size
+// - hash(filename): 8 bytes hash of the file path
+// - prefix: 2 bytes cache-type suffix (see cache_key_prefix)
+// - mtime_or_size: 4 bytes modification time (if available) or file size
+std::string get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
+                               uint64_t file_size);
+
 struct HdfsSplitContext : public pipeline::ScanSplitContext {
     size_t split_start = 0;
     size_t split_end = 0;

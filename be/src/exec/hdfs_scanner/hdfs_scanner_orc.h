@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
+
 #include <orc/OrcFile.hh>
 
 #include "exec/hdfs_scanner/hdfs_scanner.h"
@@ -24,6 +26,7 @@
 namespace starrocks {
 
 class OrcRowReaderFilter;
+class StoragePageCache;
 
 class HdfsOrcScanner final : public HdfsScanner {
 public:
@@ -76,6 +79,10 @@ private:
     Filter _chunk_filter;
     SkipRowsContextPtr _skip_rows_ctx;
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
+
+    StoragePageCache* _cache = nullptr;
+
+    FRIEND_TEST(HdfsScannerTest, TestOrcFooterCache);
 };
 
 } // namespace starrocks

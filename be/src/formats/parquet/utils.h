@@ -36,7 +36,6 @@ struct ParquetField;
 enum ColumnContentType { VALUE, DICT_CODE };
 
 enum ColumnIOType { INVALID = 0, PAGE_INDEX = 1, PAGES = 2, BLOOM_FILTER = 4 };
-enum CacheType { META, PAGE };
 
 using ColumnIOTypeFlags = int32_t;
 
@@ -54,9 +53,6 @@ public:
 
     static int64_t get_row_group_end_offset(const tparquet::RowGroup& row_group);
 
-    static std::string get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
-                                          uint64_t file_size);
-
     // Resolve constant/nullable wrappers and return the non-null underlying data column + row index.
     // Returns false if column is null at `row` or input/output args are invalid.
     static bool get_non_null_data_column_and_row(const Column* column, size_t row, const Column** out_column,
@@ -67,9 +63,6 @@ public:
 
     // Returns true when the column is binary (after unwrap) and has at least one non-null value in [0, num_rows).
     static bool has_non_null_binary_value(const Column* column, size_t num_rows);
-
-private:
-    inline static const std::vector<std::string> cache_key_prefix{"ft", "pg"};
 };
 
 // Infer typed descriptor for variant typed_value Parquet field (scalar/array/map/struct).
