@@ -237,7 +237,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     public void prepare() throws StarRocksException {
         super.prepare();
-        checkCustomPartition(customKafkaPartitions);
+        checkCustomPartition(customKafkaPartitions, computeResource);
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.
         convertCustomProperties(true);
@@ -670,7 +670,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
-    private List<Integer> getAllKafkaPartitions() throws StarRocksException {
+    private List<Integer> getAllKafkaPartitions(ComputeResource computeResource) throws StarRocksException {
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
                 snapshotConvertedCustomProperties(), computeResource);
     }
@@ -726,21 +726,22 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             // the seed partitions are never pinned into customKafkaPartitions, so the
             // prepare()-time check skips them; validate once against the broker here,
             // otherwise a mistyped partition would silently discard its seeded offset.
-            // acquire the compute resource first so the validation RPC is routed to the
-            // job's warehouse instead of the default one (shared-data mode)
-            kafkaRoutineLoadJob.acquireComputeResource();
+            // acquire a local compute resource so the validation RPC is routed to the job's
+            // warehouse (shared-data mode) without writing the not-yet-scheduled job's field
+            ComputeResource computeResource = kafkaRoutineLoadJob.acquireComputeResource();
             kafkaRoutineLoadJob.checkCustomPartition(stmt.getKafkaPartitionOffsets().stream()
-                    .map(p -> p.first).collect(Collectors.toList()));
+                    .map(p -> p.first).collect(Collectors.toList()), computeResource);
         }
 
         return kafkaRoutineLoadJob;
     }
 
-    private void checkCustomPartition(List<Integer> customKafkaPartitions) throws StarRocksException {
+    private void checkCustomPartition(List<Integer> customKafkaPartitions, ComputeResource computeResource)
+            throws StarRocksException {
         if (customKafkaPartitions.isEmpty()) {
             return;
         }
-        List<Integer> allKafkaPartitions = getAllKafkaPartitions();
+        List<Integer> allKafkaPartitions = getAllKafkaPartitions(computeResource);
         for (Integer customPartition : customKafkaPartitions) {
             if (!allKafkaPartitions.contains(customPartition)) {
                 throw new LoadException("there is an invalid custom partition: " + customPartition + " for topic: " + topic);
@@ -1008,12 +1009,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             // check if partition is validate; an ALTER that touches no partition offsets has
             // nothing to validate against the broker, so it must not require the warehouse
             try {
-                // the compute resource may be outdated here: a job that has never been
-                // scheduled still holds the creation-time default, and after a restart or
-                // leader change the persisted value may reference stale warehouse state;
-                // re-acquire so the broker RPC targets the job's current warehouse resource
-                acquireComputeResource();
-                checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+                // validation-only: acquire a local compute resource and route the broker RPC
+                // through it, without writing the shared computeResource field. This runs
+                // before the job write lock, so mutating the field would race the
+                // scheduler/refresh paths and could leak into a rejected ALTER; prepare()
+                // re-acquires the real field on the next scheduling.
+                ComputeResource computeResource = acquireComputeResource();
+                checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()),
+                        computeResource);
             } catch (StarRocksException e) {
                 // surface the real cause (partition not in the topic, an unavailable
                 // warehouse, or a failed broker metadata RPC) instead of a generic

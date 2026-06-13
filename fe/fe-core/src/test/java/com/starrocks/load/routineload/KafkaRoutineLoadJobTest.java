@@ -572,12 +572,17 @@ public class KafkaRoutineLoadJobTest {
         RoutineLoadDataSourceProperties dataSourceProperties = new RoutineLoadDataSourceProperties("KAFKA", properties);
         dataSourceProperties.analyze();
 
+        ComputeResource originalResource = Deencapsulation.getField(routineLoadJob, "computeResource");
+
         routineLoadJob.checkDataSourceProperties(dataSourceProperties);
 
-        // the broker validation must re-acquire the job's compute resource instead of
-        // trusting the possibly stale persisted field (or the creation-time default on a
+        // the broker validation must route through a freshly acquired compute resource
+        // instead of the possibly stale persisted field (or the creation-time default on a
         // job that has never been scheduled)
         Assertions.assertSame(acquiredResource, resourceSeenByValidation[0]);
+        // validation is read-only: it must not mutate the shared computeResource field (only
+        // the scheduling path does), so concurrent scheduling/refresh cannot observe a torn value
+        Assertions.assertSame(originalResource, Deencapsulation.getField(routineLoadJob, "computeResource"));
     }
 
     @Test

@@ -928,23 +928,23 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // (e.g. after a Kafka partition-count change).
     // derived class can override this.
     public void prepare() throws StarRocksException {
-        acquireComputeResource();
+        this.computeResource = acquireComputeResource();
     }
 
-    // acquire the compute resource of this job's warehouse. Broker-metadata RPCs that run
-    // outside the scheduling path (e.g. partition validation at CREATE or ALTER) must call
-    // this first: a freshly created job still holds the static default resource, and the
-    // persisted value restored after a restart or leader change may reference stale
-    // warehouse state; prepare() re-acquires on every scheduling for the same reason.
-    // An unavailable warehouse is rethrown as a checked LoadException so that every caller
-    // handles it as a regular job/DDL failure; the scheduler in particular only catches
-    // StarRocksException per job, and an escaping RuntimeException would abort the whole
-    // scheduler round and stall all other routine load jobs
-    protected void acquireComputeResource() throws LoadException {
+    // Acquire a compute resource for this job's warehouse and return it WITHOUT mutating the
+    // shared computeResource field. Only the scheduling path (prepare()) writes the field, so
+    // validation-only callers (partition checks at CREATE/ALTER) acquire a local resource to
+    // route their broker RPC to the right warehouse without racing the scheduler/refresh paths
+    // that read computeResource under the job lock. An unavailable warehouse is rethrown as a
+    // checked LoadException so that every caller handles it as a regular job/DDL failure: the
+    // scheduler in particular only catches StarRocksException per job, and an escaping
+    // RuntimeException would abort the whole scheduler round and stall all other routine load
+    // jobs.
+    protected ComputeResource acquireComputeResource() throws LoadException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         try {
-            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            return warehouseManager.acquireComputeResource(acquireContext);
         } catch (ErrorReportException e) {
             throw new LoadException(e.getMessage(), e);
         }
