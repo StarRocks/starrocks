@@ -534,6 +534,21 @@ struct AggHashMapVariant {
 
     size_t allocated_memory_usage(const MemPool* pool) const;
 
+    // Reserve capacity for `count` keys up front to avoid incremental rehashing.
+    // No-op for fixed-size maps (they never rehash).
+    void reserve(size_t count);
+
+    // Conservative OVER-estimate of the bytes a reserve(count) would allocate for
+    // this variant, used to keep the reserve within the configured byte cap. 0 for
+    // fixed maps. Over-estimation keeps the cap an upper bound on real memory.
+    size_t reserve_bytes_estimate(size_t count) const;
+
+    // Whether the FINAL variant type can be reserved: true for every phmap-backed map
+    // (numeric, slice/string, two-level, and the compressed-key / fixed-size-slice forms
+    // the optimizer picks once min-max stats are known); false only for the small
+    // SmallFixedSizeHashMap variants, which have a hard-coded full keyspace.
+    bool supports_reserve() const;
+
 private:
     Type _type = Type::phase1_slice;
     AggStatistics* _agg_stat = nullptr;

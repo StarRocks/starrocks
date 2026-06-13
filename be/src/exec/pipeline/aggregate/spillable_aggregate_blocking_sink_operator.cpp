@@ -345,6 +345,9 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
 OperatorPtr SpillableAggregateBlockingSinkOperatorFactory::create(int32_t degree_of_parallelism,
                                                                   int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
+    // Record the local DOP so the reserve divisor is NDV/dop, not NDV/1. This sink
+    // overrides create(), so it must set DOP itself (the base sink does the same).
+    aggregator->set_degree_of_parallelism(degree_of_parallelism);
 
     auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(
             aggregator, this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_shared_limit_countdown());

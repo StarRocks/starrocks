@@ -2173,6 +2173,12 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
 
+// Upper bound (bytes) on how much hash-table capacity a single aggregator may
+// pre-reserve from the FE cardinality estimate. Caps the wasted memory when the
+// estimate overshoots (e.g. a selective filter on a non-group-by column).
+// Setting it to 0 disables the estimate-driven reserve entirely.
+CONF_mInt64(agg_hashtable_reserve_max_bytes, "268435456"); // 256MB
+
 CONF_Int32(llm_max_queue_size, "4096");
 
 CONF_Int32(llm_max_concurrent_queries, "8");

@@ -224,6 +224,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TExpr;
@@ -2535,6 +2536,35 @@ public class PlanFragmentBuilder {
                     intermediateAggrExprs, removeDistinctFlags);
         }
 
+        // Below this NDV the BE hash table already starts large enough (chunk_size),
+        // so reserving buys nothing; do not bother propagating the estimate.
+        private static final long MIN_RESERVE_CARDINALITY = 4096;
+
+        // Returns the group-by NDV to send to the BE for hash-table reserve, or -1 to
+        // skip. Mirrors the unknown-stats detection in StatisticsCalculator: if any
+        // group-by input column stat is unknown, the cardinality is inputRows*0.5 (a
+        // correlation fallback, not a real NDV) and must not drive a reserve.
+        private long computeReservableCardinality(OptExpression optExpr, List<ColumnRefOperator> groupBys,
+                                                  long cardinality) {
+            if (groupBys.isEmpty() || cardinality <= MIN_RESERVE_CARDINALITY) {
+                return -1;
+            }
+            Statistics inputStatistics = optExpr.inputAt(0).getStatistics();
+            if (inputStatistics == null) {
+                return -1;
+            }
+            for (ColumnRefOperator groupBy : groupBys) {
+                // Use the raw map lookup, not getColumnStatistic(), which THROWS when the
+                // column is absent (it never returns null). A group-by column may be missing
+                // from the propagated input statistics; treat that like unknown -> no reserve.
+                ColumnStatistic columnStatistic = inputStatistics.getColumnStatistics().get(groupBy);
+                if (columnStatistic == null || columnStatistic.isUnknown()) {
+                    return -1;
+                }
+            }
+            return cardinality;
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
@@ -2687,6 +2717,22 @@ public class PlanFragmentBuilder {
                 inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
                 aggregationNode.setIdenticallyDistributed(true);
+            }
+
+            // Propagate the group-by NDV estimate so the BE can reserve the merge hash
+            // table, but only for aggregations that own ~the full keyspace (one-phase /
+            // merged-local / distinct-global / global) and only when the group-by stats
+            // are known. This is the full cluster-wide NDV; when the input is hash-shuffled
+            // it is sharded by the fragment instance count at schedule time (see
+            // ExecutionFragment#scaleAggReserveEstimateByInstanceCount). The BE additionally
+            // restricts reserve to hash-blocking sinks.
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal() ||
+                    node.getType().isGlobal()) {
+                long estimatedCardinality =
+                        computeReservableCardinality(optExpr, groupBys, aggregationNode.getCardinality());
+                if (estimatedCardinality > 0) {
+                    aggregationNode.setEstimatedCardinality(estimatedCardinality);
+                }
             }
 
             if (node.isTopNLocalAgg() && node.getTopNSortInfo() != null) {

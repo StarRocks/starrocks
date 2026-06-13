@@ -194,6 +194,8 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
                 tnode.agg_node.__isset.enable_pipeline_share_limit ? tnode.agg_node.enable_pipeline_share_limit : false;
         params->grouping_min_max =
                 tnode.agg_node.__isset.group_by_min_max ? tnode.agg_node.group_by_min_max : std::vector<TExpr>{};
+        params->estimated_cardinality =
+                tnode.agg_node.__isset.estimated_cardinality ? tnode.agg_node.estimated_cardinality : -1;
 
         break;
     }
@@ -277,6 +279,77 @@ void AggregatorParams::init() {
 
 Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {
     _allocator = std::make_unique<CountingAllocatorWithHook>();
+}
+
+Status Aggregator::reserve_hash_table_from_estimate() {
+    // Apply the initial-capacity reserve at most once over this aggregator's life,
+    // even across repeated triggers.
+    if (_initial_reserve_applied) {
+        return Status::OK();
+    }
+    _initial_reserve_applied = true;
+
+    // Only the hash MAP with group-by keys is in scope: distinct (set) reserve and
+    // the no-group-by single-state path are excluded.
+    if (is_hash_set() || is_none_group_by_exprs()) {
+        return Status::OK();
+    }
+    // FE only sets a positive estimate when it proved the value safe to reserve from.
+    const int64_t est = _params->estimated_cardinality;
+    if (est <= 0) {
+        return Status::OK();
+    }
+    // The final variant type (after two-level / compressed-key rewrites) must support
+    // reserve -- true for every phmap-backed map, false only for fixed-size-small maps.
+    if (!_hash_map_variant.supports_reserve()) {
+        return Status::OK();
+    }
+
+    // Divisor = local DOP: drivers split the keyspace after local-shuffle, so each
+    // driver only needs its share. The estimate is already per-instance when the input
+    // is hash-shuffled (the FE divides the cluster-wide NDV by the fragment instance
+    // count), so est/dop is the per-driver share NDV/(instances*dop). The estimate
+    // under-counts more often than it over-counts (clamped to input rows, post-HAVING),
+    // so under-reserve is the common, harmless case; the byte cap below bounds over-estimate.
+    const int64_t dop = _degree_of_parallelism > 0 ? _degree_of_parallelism : 1;
+    constexpr int64_t kMaxReserveSlots = int64_t{1} << 30; // overflow / absurd-estimate guard
+    int64_t reserve_slots = std::min(est / dop, kMaxReserveSlots);
+
+    // A limit-bounded group-by keeps at most `limit` groups in the table (the phase-2
+    // _agg_group_by_with_limit path in the blocking sink), while the FE cardinality is
+    // the full NDV -- not capped by the agg limit. Never reserve beyond the limit.
+    if (limit() != -1 && conjunct_ctxs().empty() && get_aggr_phase() == AggrPhase2) {
+        reserve_slots = std::min(reserve_slots, limit());
+    }
+
+    // Reserving at/below the current capacity (the chunk_size baseline) buys nothing.
+    if (reserve_slots <= static_cast<int64_t>(_hash_map_variant.capacity())) {
+        return Status::OK();
+    }
+
+    // Cap the reserve so one aggregator never pre-allocates more than the configured
+    // ceiling, bounding wasted memory when the estimate overshoots.
+    const int64_t cap_bytes = config::agg_hashtable_reserve_max_bytes;
+    if (cap_bytes <= 0) {
+        return Status::OK();
+    }
+    const int64_t want_bytes = static_cast<int64_t>(_hash_map_variant.reserve_bytes_estimate(reserve_slots));
+    if (want_bytes > cap_bytes) {
+        reserve_slots = static_cast<int64_t>(static_cast<__int128>(reserve_slots) * cap_bytes / want_bytes);
+        if (reserve_slots <= static_cast<int64_t>(_hash_map_variant.capacity())) {
+            return Status::OK();
+        }
+    }
+
+    // Best-effort: a reserve OOM is reported but treated as non-fatal by the caller,
+    // which falls back to incremental growth. phmap::reserve is exception-safe, so
+    // the map is left intact on failure. The thread-local mem tracker set by the
+    // driver around prepare_local_state covers this allocation (same as open()).
+    TRY_CATCH_BAD_ALLOC(_hash_map_variant.reserve(static_cast<size_t>(reserve_slots)));
+    // Baseline the grow counter at the reserved capacity so the reserve itself is not
+    // counted as rehashes -- only later organic growth past it is.
+    _prev_hash_map_capacity = _hash_map_variant.capacity();
+    return Status::OK();
 }
 
 Status Aggregator::open(RuntimeState* state) {
@@ -724,6 +797,9 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     // _state_allocator holds the entries of the hash_map/hash_set, when iterating a hash_map/set, the _state_allocator
     // is used to access these entries, so we must reset the _state_allocator along with the hash_map/hash_set.
     _state_allocator.reset();
+    // The hash map was re-created small; rebaseline the grow counter so post-reset
+    // growth is counted from scratch (reserve is not re-applied after reset).
+    _prev_hash_map_capacity = 0;
     return Status::OK();
 }
 
@@ -1617,6 +1693,44 @@ void Aggregator::_build_hash_variant(HashVariantType& hash_variant, typename Has
     });
 }
 
+namespace {
+// Flat slice/string map variants that grow into a partitioned (two-level) map once
+// they pass the two-level memory threshold. Only these can be preselected as
+// two-level from the FE estimate; fx/cx-compressed and numeric variants cannot.
+bool is_flat_slice_string_map_type(AggHashMapVariant::Type type) {
+    switch (type) {
+    case AggHashMapVariant::Type::phase1_slice:
+    case AggHashMapVariant::Type::phase2_slice:
+    case AggHashMapVariant::Type::phase1_string:
+    case AggHashMapVariant::Type::phase2_string:
+    case AggHashMapVariant::Type::phase1_null_string:
+    case AggHashMapVariant::Type::phase2_null_string:
+        return true;
+    default:
+        return false;
+    }
+}
+
+AggHashMapVariant::Type to_two_level_map_type(AggHashMapVariant::Type type) {
+    switch (type) {
+    case AggHashMapVariant::Type::phase1_slice:
+        return AggHashMapVariant::Type::phase1_slice_two_level;
+    case AggHashMapVariant::Type::phase2_slice:
+        return AggHashMapVariant::Type::phase2_slice_two_level;
+    case AggHashMapVariant::Type::phase1_string:
+        return AggHashMapVariant::Type::phase1_string_two_level;
+    case AggHashMapVariant::Type::phase2_string:
+        return AggHashMapVariant::Type::phase2_string_two_level;
+    case AggHashMapVariant::Type::phase1_null_string:
+        return AggHashMapVariant::Type::phase1_null_string_two_level;
+    case AggHashMapVariant::Type::phase2_null_string:
+        return AggHashMapVariant::Type::phase2_null_string_two_level;
+    default:
+        return type;
+    }
+}
+} // namespace
+
 template <typename HashVariantType>
 void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     auto type = _get_hash_table_type<HashVariantType>();
@@ -1640,6 +1754,27 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         type = _try_to_apply_fixed_size_opt<HashVariantType>(type, &has_null_column, &fixed_byte_size);
     }
 
+    // If the FE estimate already implies a slice/string map larger than the two-level
+    // threshold, build the partitioned (two-level) map directly so the later reserve
+    // sizes it, skipping the grow-then-convert path. Gated by the same master switch as
+    // the reserve (agg_hashtable_reserve_max_bytes > 0) so 0 fully restores the original
+    // build. Blocking aggregators only: the blocking factory sets DOP before open(),
+    // streaming leaves it 0. MAP only (not the distinct set).
+    if constexpr (std::is_same_v<HashVariantType, AggHashMapVariant>) {
+        if (config::agg_hashtable_reserve_max_bytes > 0 && _degree_of_parallelism > 0 &&
+            _params->estimated_cardinality > 0 && is_flat_slice_string_map_type(type)) {
+            const int64_t per_driver =
+                    std::min<int64_t>(_params->estimated_cardinality / _degree_of_parallelism, int64_t{1} << 30);
+            // Slice slot = Slice key (16B) + AggDataPtr (8B) + 1 control byte; worst-case
+            // phmap capacity is ~16/7x the requested count (power-of-two rounding).
+            constexpr int64_t kSliceSlotBytes = 16 + 8 + 1;
+            const int64_t est_bytes = (per_driver * 16 / 7 + 1) * kSliceSlotBytes;
+            if (est_bytes > get_two_level_threahold()) {
+                type = to_two_level_map_type(type);
+            }
+        }
+    }
+
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
     hash_variant.init(_state, type, _agg_stat);
@@ -1650,6 +1785,22 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             variant->fixed_byte_size = fixed_byte_size;
         }
     });
+}
+
+void Aggregator::_update_hash_table_grow_count() {
+    const size_t cap = _hash_map_variant.capacity();
+    if (cap <= _prev_hash_map_capacity) {
+        return;
+    }
+    // phmap doubles capacity (2^k-1) on each rehash; count the doublings via the
+    // bit-length delta (highest set bit). A table reserved to its final size does not
+    // grow here, so the counter stays ~0 -- a direct profile signal that reserve worked.
+    auto bit_len = [](size_t v) { return v == 0 ? 0 : 64 - __builtin_clzll(static_cast<unsigned long long>(v)); };
+    const int delta = bit_len(cap) - bit_len(_prev_hash_map_capacity);
+    if (delta > 0) {
+        COUNTER_UPDATE(_agg_stat->hash_table_grow_count, delta);
+    }
+    _prev_hash_map_capacity = cap;
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {
@@ -1667,6 +1818,7 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
         hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
                                           &_tmp_agg_states);
     });
+    _update_hash_table_grow_count();
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown,
@@ -1693,6 +1845,7 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
                                                      &_streaming_selection, _limit);
     });
     shared_limit_countdown.fetch_sub(_hash_map_variant.size() - start_size, std::memory_order_relaxed);
+    _update_hash_table_grow_count();
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
@@ -1702,6 +1855,7 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
                                                          AllocateState<MapType>(this), &_tmp_agg_states,
                                                          &_streaming_selection);
     });
+    _update_hash_table_grow_count();
 }
 
 void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
@@ -1718,6 +1872,7 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
         SIMD::count_zero(_streaming_selection.data(), chunk_size) != chunk_size) {
         _topn_runtime_filter_builder->update(_group_by_columns, _streaming_selection);
     }
+    _update_hash_table_grow_count();
 }
 
 // When meets not found group keys, mark the first pos into `_streaming_selection` and insert into the hashmap
@@ -1730,6 +1885,7 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
                                                                         &_streaming_selection);
     });
+    _update_hash_table_grow_count();
 }
 
 Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,

@@ -30,6 +30,7 @@ struct AggStatistics {
         expr_release_timer = ADD_TIMER(runtime_profile, "ExprReleaseTime");
         input_row_count = ADD_COUNTER(runtime_profile, "InputRowCount", TUnit::UNIT);
         hash_table_size = ADD_COUNTER(runtime_profile, "HashTableSize", TUnit::UNIT);
+        hash_table_grow_count = ADD_COUNTER(runtime_profile, "HashTableGrowCount", TUnit::UNIT);
         pass_through_row_count = ADD_COUNTER(runtime_profile, "PassThroughRowCount", TUnit::UNIT);
         rows_returned_counter = ADD_COUNTER(runtime_profile, "RowsReturned", TUnit::UNIT);
         state_destroy_timer = ADD_TIMER(runtime_profile, "StateDestroy");
@@ -55,6 +56,8 @@ struct AggStatistics {
     RuntimeProfile::Counter* rows_returned_counter;
     // hash table elements size
     RuntimeProfile::Counter* hash_table_size{};
+    // number of hash-table capacity growths (rehashes); ~0 when reserved from the FE estimate
+    RuntimeProfile::Counter* hash_table_grow_count{};
     // timer for iterator hash table
     RuntimeProfile::Counter* iter_timer{};
     // timer for get result from hash table
