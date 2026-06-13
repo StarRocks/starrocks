@@ -131,6 +131,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
 - 引入版本：-
 
+### enable_spill_agg_events
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：为发生落盘的聚合算子启用 pipeline 事件调度器，替代轮询自旋（poll-spinning）。
+- 引入版本：-
+
 ### enable_string_prefix_zonemap
 
 - 默认值：true

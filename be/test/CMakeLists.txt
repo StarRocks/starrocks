@@ -54,6 +54,13 @@ set(EXEC_FILES
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
+        ./compute_env/spill/spill_observable_test.cpp
+        ./exec/pipeline/spill_process_channel_test.cpp
+        ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/block_reason_agg_test.cpp
+        ./exec/pipeline/spillable_agg_event_test.cpp
+        ./exec/pipeline/spillable_agg_source_lockstep_test.cpp
+        ./exec/pipeline/spillable_agg_observer_wakeup_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp

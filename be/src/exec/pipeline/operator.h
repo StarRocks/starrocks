@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "exec/pipeline/primitives/block_reason.h"
 #include "exec/pipeline/primitives/operator_exec_stats.h"
 #include "exec/pipeline/primitives/operator_runtime_access.h"
 #include "exec/pipeline/runtime_filter_core_types.h"
@@ -120,6 +121,19 @@ public:
     // since FragmentContext is unregistered prematurely after all the drivers are finalized.
     // Only source and sink operator may return true, and other operators always return false.
     virtual bool pending_finish() const { return false; }
+
+    // Names the reason this operator is blocked on its current false predicate branch. It is pure, cheap,
+    // and not on the hot path: it is read once when the driver is parked (EventScheduler::add_blocked_driver
+    // for a wakeable edge) and in tests. The switch must follow the same logic as has_output()/need_input(),
+    // so they stay in sync. Default NONE: an operator that is not blocked on a spill reason returns NONE and
+    // is ignored by the park-time check.
+    virtual BlockReason block_reason() const { return BlockReason::NONE; }
+
+    // Bitmask (block_reason_bit) of the reasons this operator has a wakeup for. It is a constant that
+    // reflects what prepare() actually subscribed to / declared. The park-time check asserts that
+    // block_reason() is covered by this mask; an uncovered reason means a parked driver with nobody to wake
+    // it. Default 0: an operator that never declares a BlockReason needs no coverage.
+    virtual uint32_t covered_wakeups() const { return 0; }
 
     // Pull chunk from this operator
     // Use shared_ptr, because in some cases (local broadcast exchange),

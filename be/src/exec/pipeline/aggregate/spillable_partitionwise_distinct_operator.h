@@ -15,11 +15,16 @@
 
 #pragma once
 #include <memory>
+#include <optional>
 
+#include "common/config_exec_flow_fwd.h"
 #include "compute_env/spill/spill_components.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
+#include "exec/pipeline/primitives/block_reason.h"
+#include "exec/pipeline/primitives/spillable_flat_sink_mixin.h"
+#include "exec/pipeline/primitives/spillable_partitionwise_source_mixin.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
 #include "storage/chunk_helper.h"
@@ -46,7 +51,11 @@ using SPWDistinctSinkOperatorPtr = std::shared_ptr<SpillablePartitionWiseDistinc
 using SPWDistinctSinkOperatorFactoryRawPtr = SpillablePartitionWiseDistinctSinkOperatorFactory*;
 using SPWDistinctSinkOperatorFactoryPtr = std::shared_ptr<SpillablePartitionWiseDistinctSinkOperatorFactory>;
 
-class SpillablePartitionWiseDistinctSourceOperator final : public SourceOperator {
+class SpillablePartitionWiseDistinctSourceOperator final
+        : public SourceOperator,
+          public SpillablePartitionWiseSourceMixin<SpillablePartitionWiseDistinctSourceOperator> {
+    friend class SpillablePartitionWiseSourceMixin<SpillablePartitionWiseDistinctSourceOperator>;
+
 public:
     SpillablePartitionWiseDistinctSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                  int32_t driver_sequence, DistinctSourceOperatorPtr non_pw_agg,
@@ -58,8 +67,15 @@ public:
 
     ~SpillablePartitionWiseDistinctSourceOperator() override = default;
 
-    bool has_output() const override;
-    bool is_finished() const override;
+    bool has_output() const override { return spill_pw_source_has_output(); }
+    bool is_finished() const override { return spill_pw_source_is_finished(); }
+
+    // The source sleeps INPUT_EMPTY on has_output() on two axes (WAIT_FLUSH while the sink drains its final
+    // flush, WAIT_RESTORE while a per-partition restore is in flight); the predicate and its rationale live
+    // in SpillablePartitionWiseSourceMixin. covered_wakeups() declares both reasons.
+    BlockReason block_reason() const override { return spill_pw_source_block_reason(); }
+    static constexpr uint32_t kCoveredWakeups = kSpillPwSourceCoveredWakeups;
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
 
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
@@ -77,12 +93,25 @@ private:
     ConjugateOperatorPtr _pw_distinct;
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
+    // Return the parent spiller and the wrapped-op booleans that the SpillablePartitionWiseSourceMixin
+    // predicates read, on this operator's own path. Defined out-of-line.
+    const std::shared_ptr<spill::Spiller>& _spiller() const;
+    bool _sink_complete() const;
+    bool _conjugate_finished() const;
+    bool _non_pw_has_output() const;
+    bool _non_pw_finished() const;
+
     std::vector<const SpillPartitionInfo*> _partitions;
     size_t _curr_partition_idx{0};
     std::shared_ptr<spill::SpillerReader> _curr_partition_reader;
     bool _curr_partition_eos{false};
     bool _is_finished{false};
 };
+
+static_assert(SpillablePartitionWiseDistinctSourceOperator::kCoveredWakeups &
+              block_reason_bit(BlockReason::WAIT_FLUSH));
+static_assert(SpillablePartitionWiseDistinctSourceOperator::kCoveredWakeups &
+              block_reason_bit(BlockReason::WAIT_RESTORE));
 
 class SpillablePartitionWiseDistinctSourceOperatorFactory final : public SourceOperatorFactory {
 public:
@@ -98,7 +127,9 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    bool support_event_scheduler() const override { return false; }
+    // Event-scheduler opt-in, gated on enable_spill_agg_events (default false; kill-switch demotes the agg
+    // fragment to the poller without a rebuild).
+    bool support_event_scheduler() const override { return config::enable_spill_agg_events; }
 
     void set_pw_distinct_factory(ConjugateOperatorFactoryPtr&& pw_agg_factory) {
         _pw_distinct_factory = std::move(pw_agg_factory);
@@ -109,7 +140,11 @@ private:
     ConjugateOperatorFactoryPtr _pw_distinct_factory;
 };
 
-class SpillablePartitionWiseDistinctSinkOperator : public Operator {
+class SpillablePartitionWiseDistinctSinkOperator
+        : public Operator,
+          public SpillableFlatSinkMixin<SpillablePartitionWiseDistinctSinkOperator> {
+    friend class SpillableFlatSinkMixin<SpillablePartitionWiseDistinctSinkOperator>;
+
 public:
     SpillablePartitionWiseDistinctSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                int32_t driver_sequence, DistinctSinkOperatorPtr&& agg_op)
@@ -121,6 +156,13 @@ public:
     bool need_input() const override;
     bool is_finished() const override;
     Status set_finishing(RuntimeState* state) override;
+
+    // The sink sleeps OUTPUT_FULL on need_input(): a queued spill-process task (WAIT_CHANNEL) or a full
+    // writer (WAIT_FLUSH). covered_wakeups() declares both reasons the prepare() sink-list subscription on
+    // the wrapped distinct-op's spiller covers.
+    BlockReason block_reason() const override;
+    static constexpr uint32_t kCoveredWakeups = kSpillSinkCoveredWakeups;
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return Status::InternalError("Not support"); }
 
@@ -158,6 +200,12 @@ public:
 private:
     bool spilled() const { return _distinct_op->aggregator()->spiller()->spilled(); }
 
+    // Spiller/spill-channel pair that the SpillableFlatSinkMixin reads to compute
+    // need_input()/block_reason(): reached through the wrapped distinct-op's aggregator.
+    // Defined out-of-line.
+    const std::shared_ptr<spill::Spiller>& _spiller() const;
+    SpillProcessChannelPtr _spill_channel() const;
+
 private:
     Status _spill_all_data(RuntimeState* state);
 
@@ -177,6 +225,10 @@ private:
     static constexpr int32_t HT_LOW_REDUCTION_CHUNK_LIMIT = 5;
 };
 
+static_assert(SpillablePartitionWiseDistinctSinkOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_FLUSH));
+static_assert(SpillablePartitionWiseDistinctSinkOperator::kCoveredWakeups &
+              block_reason_bit(BlockReason::WAIT_CHANNEL));
+
 class SpillablePartitionWiseDistinctSinkOperatorFactory : public OperatorFactory {
 public:
     SpillablePartitionWiseDistinctSinkOperatorFactory(int32_t id, int32_t plan_node_id,
@@ -193,7 +245,9 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
-    bool support_event_scheduler() const override { return false; }
+    // Event-scheduler opt-in, gated on enable_spill_agg_events (default false; kill-switch demotes the agg
+    // fragment to the poller without a rebuild).
+    bool support_event_scheduler() const override { return config::enable_spill_agg_events; }
 
 private:
     ObjectPool _pool;
