@@ -172,7 +172,7 @@ public class TracerTest extends PlanTestBase {
                 List<Tracers> forks = new ArrayList<>();
                 List<Future<?>> futures = new ArrayList<>();
                 for (int i = 0; i < numThreads; i++) {
-                    Tracers forked = owner.fork();
+                    Tracers forked = owner.fork(true);
                     forks.add(forked);
                     futures.add(executor.submit(() -> {
                         try (Timer ignored = Tracers.watchScope(forked, Tracers.Module.BASE,
@@ -222,7 +222,7 @@ public class TracerTest extends PlanTestBase {
                 List<Tracers> forks = new ArrayList<>(numTasks);
                 Future<?>[] futures = new Future[numTasks];
                 for (int i = 0; i < numTasks; i++) {
-                    Tracers forked = owner.fork();
+                    Tracers forked = owner.fork(true);
                     forks.add(forked);
                     String scopeName = "BASE.processSplit.table" + i;
                     futures[i] = executor.submit(() -> {

@@ -66,9 +66,11 @@ public class TimeWatcher {
                 .collect(Collectors.toList());
     }
 
-    public TimeWatcher fork() {
+    public TimeWatcher fork(boolean retainScope) {
         TimeWatcher f = new TimeWatcher();
-        f.levels.addAll(this.levels);
+        if (retainScope) {
+            f.levels.addAll(this.levels);
+        }
         return f;
     }
 

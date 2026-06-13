@@ -43,13 +43,13 @@ class TracerImpl extends Tracer {
     }
 
     @Override
-    public Tracer fork() {
+    public Tracer fork(boolean retainScope) {
         return new TracerImpl(
-                this.timing,           // shared — unified time base
-                this.watcher.fork(),   // forked — independent scope stack
-                this.varTracer,        // shared — no record/count calls in parallel paths
-                this.logTracer,        // shared — already sync-safe
-                this.reasonTracer      // shared — already sync-safe
+                this.timing,                     // shared — unified time base
+                this.watcher.fork(retainScope),  // forked — retainScope copies levels
+                this.varTracer,                  // shared — no record/count calls in parallel paths
+                this.logTracer,                  // shared — already sync-safe
+                this.reasonTracer                // shared — already sync-safe
         );
     }
 

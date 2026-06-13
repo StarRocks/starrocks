@@ -89,12 +89,12 @@ public class Tracers {
      * The fork shares the timing stopwatch, VarTracer, logTracer, and reasonTracer with
      * the owner but gets its own TimeWatcher (to be merged back via {@link #mergeFrom}).
      */
-    public Tracers fork() {
+    public Tracers fork(boolean retainScope) {
         Tracers f = new Tracers();
         f.moduleMask = this.moduleMask;
         f.modeMask = this.modeMask;
         f.allTracer[0] = EMPTY_TRACER;
-        f.allTracer[1] = this.allTracer[1].fork();
+        f.allTracer[1] = this.allTracer[1].fork(retainScope);
         return f;
     }
 

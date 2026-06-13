@@ -75,7 +75,7 @@ public class PrepareCollectMetaTask extends OptimizerTask {
                 CompletableFuture<?>[] futures = new CompletableFuture[numTasks];
                 for (int i = 0; i < numTasks; i++) {
                     LogicalScanOperator op = scanOperators.get(i);
-                    Tracers forked = ownerTracers.fork();
+                    Tracers forked = ownerTracers.fork(true);
                     forks.add(forked);
                     futures[i] = CompletableFuture.supplyAsync(() ->
                                     metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),

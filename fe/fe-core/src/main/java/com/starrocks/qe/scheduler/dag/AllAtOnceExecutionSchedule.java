@@ -143,7 +143,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         if (option.useQueryDeployExecutor) {
             deployScanRangesTask.executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
             deployScanRangesTask.ownerTracers = Tracers.get();
-            deployScanRangesTask.forkedTracers = deployScanRangesTask.ownerTracers.fork();
+            deployScanRangesTask.forkedTracers = deployScanRangesTask.ownerTracers.fork(false);
             deployScanRangesTask.currentConnectContext = ConnectContext.get();
         }
     }

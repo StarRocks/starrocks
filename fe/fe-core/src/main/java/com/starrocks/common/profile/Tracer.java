@@ -82,7 +82,7 @@ public abstract class Tracer {
      * The default implementation returns {@code this} (identity — used by the empty tracer).
      * Real tracers override to return an independent copy.
      */
-    public Tracer fork() {
+    public Tracer fork(boolean retainScope) {
         return this;
     }
 
