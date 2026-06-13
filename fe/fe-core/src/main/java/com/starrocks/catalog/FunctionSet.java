@@ -653,6 +653,11 @@ public class FunctionSet {
     public static final String BOOL_OR = "bool_or";
     public static final String BOOLOR_AGG = "boolor_agg";
 
+    // Translates a constant to its global-dictionary code; emitted by the low-cardinality rewrite
+    // so a dict-aware comparison can run on integer codes. Registered as a vectorized builtin via
+    // gensrc/script/functions.py (id 30700/30701).
+    public static final String DICT_ENCODE = "dict_encode";
+
     public static final ImmutableList<ScalarType> NUMERIC_TYPES = ImmutableList.<ScalarType>builder()
             .addAll(IntegerType.INTEGER_TYPES)
             .addAll(FloatType.FLOAT_TYPES)
