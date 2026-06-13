@@ -100,9 +100,9 @@ mysql> SHOW PROC '/compactions';
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Partition           | TxnID | StartTime           | CommitTime          | FinishTime          | Error | Profile                                                                                                                                                                                                              |
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18} |
-| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38} |
-| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23} |
+| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
+| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
+| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
@@ -125,6 +125,9 @@ mysql> SHOW PROC '/compactions';
   - `write_segment_mb`: 所有子任务新生成文件的总大小。单位：MB。
   - `write_remote_sec`: 所有子任务往远程存储写入数据的总耗时。单位：秒。
   - `in_queue_sec`：所有子任务排队的总时间。单位：秒。
+  - `score_before`：Compaction 前分区的 Compaction Score。包含 `avg`、`p50` 和 `max` 字段。
+  - `score_after`：Compaction 后分区的 Compaction Score。包含 `avg`、`p50` 和 `max` 字段。
+  - `partial_success`：Compaction 任务是否部分成功（部分 Tablet 失败）。
 
 #### 查看 Compaction 任务的执行详情
 

@@ -34,6 +34,7 @@ import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -170,6 +171,9 @@ public class CompactionScheduler extends Daemon {
                     history.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_failure);
                     abortTransactionIgnoreException(job, errorMsg);
+                    if (MetricRepo.hasInit) {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_FAILED.increase(1L);
+                    }
                     continue;
                 }
             }
@@ -178,12 +182,16 @@ public class CompactionScheduler extends Daemon {
                 job.finish();
                 history.offer(CompactionRecord.build(job));
                 long cost = job.getFinishTs() - job.getStartTs();
-                if (cost >= /*60 minutes=*/3600000) {
-                    LOG.info("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
-                            cost / 1000, runningCompactions.size());
-                } else if (LOG.isDebugEnabled()) {
-                    LOG.debug("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
-                            cost / 1000, runningCompactions.size());
+                LOG.debug("Finished compaction. {}, cost={}s", job.getDebugString(), cost / 1000);
+                if (MetricRepo.hasInit) {
+                    // Mutually exclusive status counters: a partial-success commit lands
+                    // only in PARTIAL_SUCCESS, not also in SUCCESS, so dashboards can sum
+                    // success + partial + failed without double-counting.
+                    if (job.isPartialSuccess()) {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS.increase(1L);
+                    } else {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_SUCCESS.increase(1L);
+                    }
                 }
                 int factor = (statistics != null) ? statistics.getPunishFactor() : 1;
                 compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_success * factor);
@@ -234,9 +242,15 @@ public class CompactionScheduler extends Daemon {
             }
             info.taskRunning += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Created new compaction job, {}", job.getDebugString());
+            if (MetricRepo.hasInit) {
+                // Centiscore (score * 100) preserves two decimal places of precision in a long-valued histogram;
+                // Math.round avoids the systematic under-reporting introduced by a plain (long) truncation.
+                Quantiles scoreBefore = job.getScoreBefore();
+                if (scoreBefore != null) {
+                    MetricRepo.HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER.update(Math.round(scoreBefore.getAvg() * 100));
+                }
             }
+            LOG.debug("Started compaction, {}", job.getDebugString());
         }
     }
 
@@ -360,14 +374,14 @@ public class CompactionScheduler extends Daemon {
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
-                                              info.computeResource, info.warehouseName);
+                                              info.computeResource, info.warehouseName,
+                                              partitionStatisticsSnapshot.getCompactionScore());
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
                         partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId(), table);
                 task.sendRequest();
                 job.setAggregateTask(task);
-                LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
                         job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(), table);
@@ -384,6 +398,9 @@ public class CompactionScheduler extends Daemon {
             abortTransactionIgnoreError(job, e.getMessage());
             job.finish();
             history.offer(CompactionRecord.build(job, e.getMessage()));
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_LAKE_COMPACTION_FAILED.increase(1L);
+            }
             return null;
         } finally {
             compactionManager.enableCompactionAfter(partitionIdentifier, nextCompactionInterval);
@@ -561,9 +578,6 @@ public class CompactionScheduler extends Daemon {
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Committing compaction transaction. partition={} txnId={}", partition, job.getTxnId());
-        }
 
         VisibleStateWaiter waiter;
 
@@ -633,6 +647,13 @@ public class CompactionScheduler extends Daemon {
 
     protected ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
         return runningCompactions;
+    }
+
+    public void setScoreAfter(PartitionIdentifier partition, Quantiles scoreAfter) {
+        CompactionJob job = runningCompactions.get(partition);
+        if (job != null) {
+            job.setScoreAfter(scoreAfter);
+        }
     }
 
     public boolean existCompaction(long txnId) {

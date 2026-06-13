@@ -305,6 +305,11 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_TXN_BEGIN;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_FAILED;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING_TASKS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -381,6 +386,7 @@ public final class MetricRepo {
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
     public static Histogram HISTO_TABLET_RESHARD_JOB_DURATION;
+    public static LeaderAwareHistogramMetric HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -919,6 +925,37 @@ public final class MetricRepo {
         COUNTER_TXN_FAILED =
                 new LeaderAwareCounterMetricLong("txn_failed", MetricUnit.REQUESTS, "counter of failed transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_FAILED);
+        COUNTER_LAKE_COMPACTION_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_success", MetricUnit.REQUESTS,
+                        "counter of successful lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_SUCCESS);
+        COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_partial_success", MetricUnit.REQUESTS,
+                        "counter of partially successful lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS);
+        COUNTER_LAKE_COMPACTION_FAILED =
+                new LeaderAwareCounterMetricLong("lake_compaction_failed", MetricUnit.REQUESTS,
+                        "counter of failed lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_FAILED);
+        GAUGE_LAKE_COMPACTION_RUNNING = new LeaderAwareGaugeMetricLong("lake_compaction_running", MetricUnit.NOUNIT,
+                "number of currently running lake compaction jobs") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING);
+        // Alias of lake_compaction_running exposed under the *_tasks suffix to match other
+        // task-count gauges across the codebase.
+        GAUGE_LAKE_COMPACTION_RUNNING_TASKS = new LeaderAwareGaugeMetricLong(
+                "lake_compaction_running_tasks", MetricUnit.NOUNIT,
+                "number of lake compaction jobs currently tracked in the FE leader's runningCompactions map") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
@@ -1040,6 +1077,14 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
+        // Centiscore (raw score * 100) of partitions at the moment a lake compaction job is created.
+        // Multiplied by 100 to preserve two decimal places of precision in a long-valued histogram;
+        // dashboards should divide by 100 to recover the original score. Use NOUNIT so the JSON
+        // metrics endpoint does not mis-report these samples as milliseconds (the default unit
+        // for the latency histograms that this base class was originally written for).
+        HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER =
+                new LeaderAwareHistogramMetric("lake_compaction_score_at_trigger", Metric.MetricUnit.NOUNIT);
+        METRIC_REGISTER.register("lake_compaction_score_at_trigger", HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER);
 
         // init system metrics
         initSystemMetrics();

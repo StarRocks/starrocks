@@ -32,10 +32,24 @@ import java.util.stream.Collectors;
 public class HistogramMetric extends Histogram {
     protected final List<MetricLabel> labels = Lists.newArrayList();
     private final String name;
+    // Unit reported by visitors that emit a "unit" label (e.g. JsonMetricVisitor).
+    // Defaults to MILLISECONDS for backward compatibility with the long-standing latency
+    // histograms. Pass a different unit for non-time distributions (e.g. NOUNIT for
+    // unit-less scores).
+    private final Metric.MetricUnit unit;
 
     public HistogramMetric(String name) {
+        this(name, Metric.MetricUnit.MILLISECONDS);
+    }
+
+    public HistogramMetric(String name, Metric.MetricUnit unit) {
         super(new ExponentiallyDecayingReservoir());
         this.name = name;
+        this.unit = unit;
+    }
+
+    public Metric.MetricUnit getUnit() {
+        return unit;
     }
 
     public void addLabel(MetricLabel label) {

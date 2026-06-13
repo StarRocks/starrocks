@@ -154,20 +154,24 @@ public class JsonMetricVisitor extends MetricVisitor {
     @Override
     public void visitHistogram(HistogramMetric histogram) {
         final String fullName = prefix + "_" + histogram.getName().replace("\\.", "_");
+        // Use the unit declared by the histogram instead of hardcoding milliseconds.
+        // Existing latency histograms default to MILLISECONDS, so behavior is unchanged
+        // for them; non-time distributions (e.g. score_at_trigger) report their real unit.
+        final String unit = histogram.getUnit().name().toLowerCase();
         Snapshot snapshot = histogram.getSnapshot();
         List<MetricLabel> labels = histogram.getLabels();
-        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get75thPercentile()),
+        buildMetric(fullName, unit, String.valueOf(snapshot.get75thPercentile()),
                 ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.75"))));
-        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get95thPercentile()),
+        buildMetric(fullName, unit, String.valueOf(snapshot.get95thPercentile()),
                 ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.95"))));
-        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get98thPercentile()),
+        buildMetric(fullName, unit, String.valueOf(snapshot.get98thPercentile()),
                 ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.98"))));
-        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get99thPercentile()),
+        buildMetric(fullName, unit, String.valueOf(snapshot.get99thPercentile()),
                 ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.99"))));
-        buildMetric(fullName, MILLISECONDS, String.valueOf(snapshot.get999thPercentile()),
+        buildMetric(fullName, unit, String.valueOf(snapshot.get999thPercentile()),
                 ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.999"))));
 
-        buildMetric(fullName + "_sum", MILLISECONDS,
+        buildMetric(fullName + "_sum", unit,
                 String.valueOf(histogram.getCount() * snapshot.getMean()), labels);
         buildMetric(fullName + "_count", NOUNIT,
                 String.valueOf(histogram.getCount()), labels);
