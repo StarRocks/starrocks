@@ -134,6 +134,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
 
         fragmentUsedDictExprs.union(decodeInfo.outputStringColumns);
         fragmentUsedDictExprs.union(decodeInfo.usedStringColumns);
+        fragmentUsedDictExprs.union(decodeInfo.inProgressStringAggregations);
+        fragmentUsedDictExprs.union(decodeInfo.finalizingStringAggregations);
         ColumnRefSet childFragmentUsedDictExpr = optExpression.getOp() instanceof PhysicalDistributionOperator ?
                 new ColumnRefSet() : fragmentUsedDictExprs;
 
@@ -152,7 +154,9 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             optExpression.setChild(i, child);
         }
         // some string column need rewrite
-        boolean hasDictInput = !decodeInfo.inputStringColumns.isEmpty();
+        boolean hasDictInput = !decodeInfo.inputStringColumns.isEmpty()
+                || !decodeInfo.inProgressStringAggregations.isEmpty()
+                || !decodeInfo.finalizingStringAggregations.isEmpty();
         boolean hasDictOutput = !decodeInfo.outputStringColumns.isEmpty();
 
         if (hasDictInput || hasDictOutput) {
@@ -488,6 +492,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Map<Integer, ColumnDict> dictMap = Maps.newHashMap();
         ColumnRefSet inputColumns = new ColumnRefSet();
         inputColumns.union(info.inputStringColumns);
+        inputColumns.union(info.inProgressStringAggregations);
+        inputColumns.union(info.finalizingStringAggregations);
         info.inputStringColumns.getStream()
                 .map(factory::getColumnRef)
                 .filter(c -> c.getType().isStructType())

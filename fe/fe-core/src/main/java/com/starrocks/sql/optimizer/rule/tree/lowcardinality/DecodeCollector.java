@@ -166,6 +166,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private final Map<Integer, List<CallOperator>> stringAggregateExpressions = Maps.newHashMap();
 
+    private final Map<CallOperator, ColumnRefSet> aggFnToSupportColumns = Maps.newIdentityHashMap();
+
     private final Map<Integer, Integer> tableFunctionDependencies = Maps.newHashMap();
 
     private final Map<Integer, ScalarOperator> stringRefToDefineExprMap = Maps.newHashMap();
@@ -404,7 +406,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 if (agg.getColumnRefs().stream().map(ColumnRefOperator::getId)
                         .anyMatch(context.allStringColumns::contains)) {
                     context.stringAggregateExprs.put(aggregateId, aggregateExprs);
-                    context.allStringColumns.add(aggregateId);
                     break;
                 }
             }
@@ -419,26 +420,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             info.inputStringColumns.intersect(alls);
             if (!info.isEmpty()) {
                 context.operatorDecodeInfo.put(operator, info);
-                if (operator instanceof PhysicalHashAggregateOperator hashAgg) {
-                    hashAgg.getAggregations().keySet().forEach(agg -> {
-                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
-                                .union(info.inputStringColumns);
-                    });
-                }
-                if (operator instanceof PhysicalWindowOperator window) {
-                    window.getAnalyticCall().keySet().forEach(agg -> {
-                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
-                                .union(info.inputStringColumns);
-                    });
-                }
-                if (operator instanceof PhysicalTopNOperator topN && topN.getPreAggCall() != null) {
-                    topN.getPreAggCall().keySet().forEach(agg -> {
-                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
-                                .union(info.inputStringColumns);
-                    });
-                }
             }
         }
+        context.aggFnToSupportColumns = aggFnToSupportColumns;
         // Filling context's structOpToFieldUseStringRefMap and structRefToFieldUseStringRefMap with fields in
         // context.allStringColumns.
         context.structOpToFieldUseStringRefMap = structOpToFieldUseStringRef.entrySet().stream()
@@ -681,6 +665,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 }
                 // aggregate ref -> aggregate expr
                 stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+                aggFnToSupportColumns.put(value, info.inputStringColumns);
                 // min/max should replace to dict column, count/count distinct don't need
                 if (FunctionSet.MAX.equals(value.getFnName()) || FunctionSet.MIN.equals(value.getFnName())) {
                     info.outputStringColumns.union(key.getId());
@@ -944,6 +929,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+            aggFnToSupportColumns.put(value, info.inputStringColumns);
             // if the function return type is not string or array<string>, then its output column can not be
             // encoded, however the function evaluation can adopt encoded columns, for examples:
             // 1. select v1, count(t.a1) over(partition by v1) select t0, unnest(t0.a1) t(a1);
@@ -986,7 +972,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
-    private boolean shouldProcessAggFunction(CallOperator agg, ColumnRefSet supportColumns, boolean isFirstStage) {
+    private boolean shouldProcessAggFunction(CallOperator agg, DecodeInfo info, boolean isFirstStage) {
+        ColumnRefSet supportColumns = new ColumnRefSet();
+        supportColumns.union(info.getInputStringColumns());
+        supportColumns.union(info.getInProgressStringAggregations());
+        supportColumns.union(info.getFinalizingStringAggregations());
         final boolean enableArrayAgg = sessionVariable.isEnableArrayAggLowCardinalityOptimize()
                 && sessionVariable.isEnableArrayLowCardinalityOptimize()
                 && sessionVariable.isEnableStructLowCardinalityOptimize();
@@ -1012,18 +1002,21 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeInfo context) {
-        if (context.outputStringColumns.isEmpty()) {
+        if (context.outputStringColumns.isEmpty() && context.inProgressStringAggregations.isEmpty()) {
             return DecodeInfo.empty();
         }
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
         DecodeInfo info = context.createOutputInfo();
+        if (aggregate.getType().isGlobal()) {
+            info.inProgressStringAggregations.clear();
+        }
 
         ColumnRefSet disableColumns = new ColumnRefSet();
         for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
             CallOperator agg = aggregate.getAggregations().get(key);
             final boolean isFirstStage = !agg.getArguments().isEmpty() &&
                     (!(agg.getArguments().get(0) instanceof ColumnRefOperator ref) || ref.getId() != key.getId());
-            if (!shouldProcessAggFunction(agg, info.inputStringColumns, isFirstStage)) {
+            if (!shouldProcessAggFunction(agg, info, isFirstStage)) {
                 disableColumns.union(agg.getUsedColumns());
                 disableColumns.union(key);
             } else if (isFirstStage && FunctionSet.ARRAY_AGG.equals(agg.getFnName()) &&
@@ -1046,6 +1039,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             CallOperator value = aggregate.getAggregations().get(key);
             // aggregate ref -> aggregate expr
             stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+            aggFnToSupportColumns.put(value, info.inputStringColumns);
             AggregateFunction aggFn = (AggregateFunction) value.getFunction();
             if (aggFn.getIntermediateTypeOrReturnType().isStructType()
                     && !structRefToFieldUseStringRef.containsKey(key.getId())) {
@@ -1070,11 +1064,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 structOpToFieldUseStringRef.put(value, fieldsData);
             }
             if (supportLowCardinality(value.getType())) {
-                info.outputStringColumns.union(key.getId());
+                if (aggregate.getType().isGlobal() || !aggregate.isSplit()) {
+                    info.outputStringColumns.union(key.getId());
+                    info.finalizingStringAggregations.union(key.getId());
+                } else {
+                    info.inProgressStringAggregations.union(key.getId());
+                }
                 setDefineExpr(key, value, 1);
             } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinct()) {
                 // count/count distinct, need output dict-set in 1st stage
-                info.outputStringColumns.union(key.getId());
+                info.inProgressStringAggregations.union(key.getId());
             }
         }
 
@@ -1134,7 +1133,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalDistribution(OptExpression optExpression, DecodeInfo context) {
-        if (context.outputStringColumns.isEmpty()) {
+        if (context.outputStringColumns.isEmpty() && context.inProgressStringAggregations.isEmpty()) {
             return DecodeInfo.empty();
         }
         return context.createOutputInfo();

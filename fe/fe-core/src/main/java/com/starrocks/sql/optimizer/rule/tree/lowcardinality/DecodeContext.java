@@ -91,7 +91,7 @@ class DecodeContext {
     // all string aggregate expressions
     Map<Integer, List<CallOperator>> stringAggregateExprs = Maps.newHashMap();
 
-    Map<Integer, ColumnRefSet> aggIdToSupportColumns = Maps.newHashMap();
+    Map<CallOperator, ColumnRefSet> aggFnToSupportColumns;
 
     // The string columns used by the operator
     // IdentityHashMap: use object == object, operator equals is not enough
@@ -243,10 +243,11 @@ class DecodeContext {
         // rewrite string aggregate expression
         AggregateRewriter rewriter = new AggregateRewriter();
         stringAggregateExprs.forEach((aggId, aggFns) -> {
-            ColumnRefSet supportColumns = aggIdToSupportColumns.get(aggId);
-            Preconditions.checkNotNull(supportColumns);
-            rewriter.setSupportColumns(supportColumns);
+            rewriter.setAggId(aggId);
             for (CallOperator aggFn : aggFns) {
+                ColumnRefSet supportColumns = aggFnToSupportColumns.get(aggFn);
+                Preconditions.checkNotNull(supportColumns);
+                rewriter.setSupportColumns(supportColumns);
                 CallOperator new1stAggFn = (CallOperator) (aggFn.accept(rewriter, null));
                 stringExprToDictExprMap.put(aggFn, new1stAggFn);
             }
@@ -497,10 +498,11 @@ class DecodeContext {
 
     private class AggregateRewriter extends BaseScalarOperatorShuttle {
         private ColumnRefSet supportColumns;
+        private int aggId;
 
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void ignore) {
-            return supportColumns.contains(variable) ?
+            return (variable.getId() == aggId || supportColumns.contains(variable)) ?
                     stringRefToDictRefMap.getOrDefault(variable, variable) : variable;
         }
 
@@ -517,7 +519,9 @@ class DecodeContext {
                     Map<String, ColumnRefOperator> fieldMapping = getFieldUseStringRefMap(originalChildren.get(0));
                     Preconditions.checkNotNull(fieldMapping);
                     for (int i = 0; i < fn.getNumArgs(); ++i) {
-                        argTypes.add(fieldMapping.containsKey("col" + (i + 1)) ? getDictifiedType(fn.getArgs()[i])
+                        ColumnRefOperator fieldStringRef = fieldMapping.get("col" + (i + 1));
+                        argTypes.add(fieldStringRef != null && supportColumns.contains(fieldStringRef) ?
+                                getDictifiedType(fn.getArgs()[i])
                                 : fn.getArgs()[i]);
                     }
                 } else {
@@ -553,15 +557,18 @@ class DecodeContext {
 
             if (call.getFunction() instanceof AggregateFunction origFn) {
                 AggregateFunction fn = buildAggregateFunction(origFn, newChildren, call.getArguments());
-                ColumnRefOperator firstChild = newChildren.get(0).isColumnRef() ? newChildren.get(0).cast() : null;
-                if (firstChild != null && firstChild != call.getArguments().get(0)) {
-                    if (firstChild.getType().matchesType(fn.getReturnType())) {
-                        newChildren.set(0, new ColumnRefOperator(firstChild.getId(), fn.getReturnType(),
+                ColumnRefOperator firstChild =
+                        call.getChild(0).isColumnRef() ? call.getChild(0).cast() : null;
+                if (firstChild != null && firstChild.getId() == aggId) {
+                    Preconditions.checkState(newChildren.get(0).isColumnRef());
+                    int newAggId = ((ColumnRefOperator) newChildren.get(0)).getId();
+                    if (firstChild.getType().matchesType(origFn.getReturnType())) {
+                        newChildren.set(0, new ColumnRefOperator(newAggId, fn.getReturnType(),
                                 firstChild.getName(), firstChild.isNullable()));
                     }
-                    if (fn.getIntermediateType() != null
-                            && firstChild.getType().matchesType(fn.getIntermediateType())) {
-                        newChildren.set(0, new ColumnRefOperator(firstChild.getId(), fn.getIntermediateType(),
+                    if (origFn.getIntermediateType() != null
+                            && firstChild.getType().matchesType(origFn.getIntermediateType())) {
+                        newChildren.set(0, new ColumnRefOperator(newAggId, fn.getIntermediateType(),
                                 firstChild.getName(), firstChild.isNullable()));
                     }
                 }
@@ -584,6 +591,10 @@ class DecodeContext {
 
         void setSupportColumns(ColumnRefSet supportColumns) {
             this.supportColumns = supportColumns;
+        }
+
+        void setAggId(int aggId) {
+            this.aggId = aggId;
         }
     }
 

@@ -46,6 +46,12 @@ public class DecodeInfo {
     // operator used string column but not output to downstream operator
     ColumnRefSet usedStringColumns = new ColumnRefSet();
 
+    // Low cardinality aggregations that have been started but are not finalized yet
+    ColumnRefSet inProgressStringAggregations = new ColumnRefSet();
+
+    // Low cardinality aggregations that are being finalized in this operator
+    ColumnRefSet finalizingStringAggregations = new ColumnRefSet();
+
     public ColumnRefSet getInputStringColumns() {
         return inputStringColumns;
     }
@@ -58,14 +64,23 @@ public class DecodeInfo {
         return outputStringColumns;
     }
 
+    public ColumnRefSet getInProgressStringAggregations() {
+        return inProgressStringAggregations;
+    }
+
+    public ColumnRefSet getFinalizingStringAggregations() {
+        return finalizingStringAggregations;
+    }
+
     public DecodeInfo createOutputInfo() {
-        if (this.outputStringColumns.isEmpty()) {
+        if (this.outputStringColumns.isEmpty() && this.inProgressStringAggregations.isEmpty()) {
             return DecodeInfo.empty();
         }
 
         DecodeInfo info = DecodeInfo.create();
         info.inputStringColumns.union(this.outputStringColumns);
         info.outputStringColumns.union(this.outputStringColumns);
+        info.inProgressStringAggregations.union(this.inProgressStringAggregations);
         return info;
     }
 
@@ -81,16 +96,19 @@ public class DecodeInfo {
 
     public boolean isEmpty() {
         return this.outputStringColumns.isEmpty() && this.inputStringColumns.isEmpty() &&
-                this.decodeStringColumns.isEmpty();
+                this.decodeStringColumns.isEmpty() && this.inProgressStringAggregations.isEmpty() &&
+                this.finalizingStringAggregations.isEmpty();
     }
 
     public void addChildInfo(DecodeInfo other) {
         this.outputStringColumns.union(other.outputStringColumns);
+        this.inProgressStringAggregations.union(other.inProgressStringAggregations);
     }
 
     @Override
     public String toString() {
         return "input[" + inputStringColumns + "], " + "decode[" + decodeStringColumns + "], " + "output[" +
-                outputStringColumns + ']';
+                outputStringColumns + "]," + " inProgressAgreegations[" + inProgressStringAggregations + "]" +
+                " finalizingAgreegations[" + finalizingStringAggregations + "]";
     }
 }
