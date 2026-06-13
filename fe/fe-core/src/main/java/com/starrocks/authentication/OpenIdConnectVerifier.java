@@ -14,6 +14,9 @@
 
 package com.starrocks.authentication;
 
+import com.fasterxml.jackson.core.JsonPointer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
@@ -38,7 +41,7 @@ public class OpenIdConnectVerifier {
         try {
             SignedJWT signedJWT = verifyJWT(idToken, jwkSet);
             JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
-            String jwtUserName = claims.getStringClaim(principalFiled);
+            String jwtUserName = resolveClaimValue(claims, principalFiled);
 
             if (jwtUserName == null) {
                 throw new AuthenticationException("Can not get specified principal " + principalFiled);
@@ -65,6 +68,25 @@ public class OpenIdConnectVerifier {
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }
+    }
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /**
+     * Resolves a claim value from the JWT claims set.
+     * If {@code principalField} starts with {@code /}, it is treated as an
+     * <a href="https://datatracker.ietf.org/doc/html/rfc6901">RFC 6901 JSON Pointer</a>
+     * and evaluated using Jackson's {@link JsonPointer}. Otherwise, a flat
+     * top-level lookup is performed for backward compatibility.
+     */
+    static String resolveClaimValue(JWTClaimsSet claims, String principalField) throws ParseException {
+        if (!principalField.startsWith("/")) {
+            return claims.getStringClaim(principalField);
+        }
+
+        JsonNode tree = MAPPER.valueToTree(claims.toJSONObject());
+        JsonNode result = tree.at(JsonPointer.compile(principalField));
+        return result.isTextual() ? result.textValue() : null;
     }
 
     private static SignedJWT verifyJWT(String jwt, JWKSet jwkSet) throws AuthenticationException, ParseException, JOSEException {

@@ -64,7 +64,7 @@ PROPERTIES (
 ##### principal_field
 
 - Required: Yes
-- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Description: The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names. For example, `/https:~1~1sts.amazonaws.com~1/request_tags/starrocks_user` resolves the `starrocks_user` field nested under the URI-namespaced claim `https://sts.amazonaws.com/`.
 
 ##### required_issuer
 

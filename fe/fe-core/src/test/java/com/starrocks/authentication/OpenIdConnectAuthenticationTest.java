@@ -26,6 +26,8 @@ import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 public class OpenIdConnectAuthenticationTest {
 
     private final String[] emptyAudience = {};
@@ -150,5 +152,57 @@ public class OpenIdConnectAuthenticationTest {
         } catch (AuthenticationException e) {
             Assertions.assertTrue(e.getMessage().contains("JWT expired at"));
         }
+    }
+
+    @Test
+    public void testNestedClaimJsonPointer() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000,
+                Map.of("realm_access", Map.of("user", "harbor")));
+
+        OpenIdConnectVerifier.verify(token, "harbor", jwkSet, "/realm_access/user", emptyIssuer, emptyAudience);
+    }
+
+    @Test
+    public void testDeeplyNestedClaimJsonPointer() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000,
+                Map.of("https://sts.amazonaws.com/",
+                        Map.of("request_tags", Map.of("starrocks_user", "harbor"))));
+
+        OpenIdConnectVerifier.verify(token, "harbor", jwkSet,
+                "/https:~1~1sts.amazonaws.com~1/request_tags/starrocks_user",
+                emptyIssuer, emptyAudience);
+    }
+
+    @Test
+    public void testNestedClaimNotFound() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000,
+                Map.of("realm_access", Map.of("user", "harbor")));
+
+        try {
+            OpenIdConnectVerifier.verify(token, "harbor", jwkSet,
+                    "/realm_access/nonexistent", emptyIssuer, emptyAudience);
+            Assertions.fail();
+        } catch (AuthenticationException e) {
+            Assertions.assertTrue(e.getMessage().contains("Can not get specified principal /realm_access/nonexistent"));
+        }
+    }
+
+    @Test
+    public void testFlatLookupStillWorks() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        // Flat claim (no leading /) should work exactly as before
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        OpenIdConnectVerifier.verify(token, "harbor", jwkSet, "preferred_username", emptyIssuer, emptyAudience);
     }
 }
