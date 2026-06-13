@@ -236,6 +236,13 @@ public:
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
+    // Test only: replace the async delta writer executor so unit tests can install a saturated
+    // thread pool and exercise the overload/fail-fast reject paths. Returns the previously
+    // installed executor (ownership transferred to the caller) so the test can restore it.
+    // Defined out-of-line because bthread::Executor is only forward-declared here.
+    std::unique_ptr<bthread::Executor> TEST_swap_async_delta_writer_executor(
+            std::unique_ptr<bthread::Executor> executor);
+
     LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() { return _load_spill_block_merge_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }

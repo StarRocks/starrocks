@@ -175,7 +175,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
-- Description: The length of time that the BE waits to exit after the disk hangs.
+- Description: The amount of time the async delta writer thread pool can stay saturated (typically caused by a slow or hung disk) before the BE reacts. When `enable_load_fail_fast_when_disk_write_hang` is `true` (default), load writes are failed fast with a retryable error after this timeout. When `enable_load_fail_fast_when_disk_write_hang` is `false`, the BE exits the process after this timeout instead.
 - Introduced in: -
 
 ### be_http_num_workers

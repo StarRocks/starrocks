@@ -655,8 +655,21 @@ CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // 0 means disable
 CONF_mInt64(stale_memtable_flush_time_sec, "0");
 
-// delta writer hang after this time, be will exit since storage is in error state
+// The async delta writer thread pool is treated as "hung" once it stays saturated
+// (queue full and no task completes) for longer than this many seconds, which usually
+// indicates a slow or stuck disk.
+// - When enable_load_fail_fast_when_disk_write_hang is true (default), new load writes
+//   are failed fast with a retryable error after this timeout.
+// - When it is false, the BE keeps the legacy behavior and exits the process after this
+//   timeout so the storage error becomes visible.
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
+
+// When the async delta writer thread pool stays saturated for longer than
+// be_exit_after_disk_write_hang_second (typically a slow or hung disk), fail new load
+// writes fast with a retryable error instead of exiting the whole BE process. This keeps
+// the node serving the other (healthy) disks and lets the FE retry or reroute the load.
+// Set to false to restore the legacy behavior of exiting the BE on a disk write hang.
+CONF_mBool(enable_load_fail_fast_when_disk_write_hang, "true");
 
 // Automatically detect whether a char/varchar column to use dictionary encoding
 // If the number of keys in a dictionary is greater than this fraction of the total number of rows

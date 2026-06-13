@@ -166,6 +166,12 @@ StorageEngine::~StorageEngine() {
 #endif
 }
 
+std::unique_ptr<bthread::Executor> StorageEngine::TEST_swap_async_delta_writer_executor(
+        std::unique_ptr<bthread::Executor> executor) {
+    _async_delta_writer_executor.swap(executor);
+    return executor;
+}
+
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
     threads.reserve(data_dirs.size());

@@ -796,6 +796,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Stream Load、Broker Load、Insertなどの取り込みで使用されるタブレットライタースレッドの数。パラメータが0以下に設定されている場合、システムはCPUコア数の半分を使用し、最小値は16です。パラメータが0より大きい値に設定されている場合、システムはその値を使用します。この設定はv3.1.7以降、動的に変更されました。
 - 導入バージョン: -
 
+### enable_load_fail_fast_when_disk_write_hang
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: async delta writer スレッドプールが `be_exit_after_disk_write_hang_second` を超えて飽和状態（キューが満杯でタスクが完了しない、通常はディスクの低速またはハングを示す）が続いた場合に、取り込みの書き込みを再試行可能なエラーで即座に失敗させるかどうか。`true` に設定すると、BE は他の正常なディスクへのサービスを継続し、FE が取り込みを再試行または再ルーティングできるようにします。`false` に設定すると、BE は従来の動作を維持し、タイムアウト後にプロセスを終了します。
+- 導入バージョン: -
+
 ### push_worker_count_high_priority
 
 - デフォルト: 3

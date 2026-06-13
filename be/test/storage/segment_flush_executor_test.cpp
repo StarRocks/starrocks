@@ -18,13 +18,18 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
+#include <memory>
 #include <thread>
 #include <utility>
 
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
@@ -46,6 +51,41 @@
 #include "storage/txn_manager.h"
 
 namespace starrocks {
+
+namespace {
+// Builds a single-worker, single-slot pool, blocks the worker, and fills the only queue slot so
+// the pool reports as saturated/hung. With be_exit_after_disk_write_hang_second=0 this makes
+// ThreadPoolExecutor::is_overloaded() return true, which drives the load-fail-fast reject paths.
+std::unique_ptr<ThreadPool> build_saturated_pool(const std::string& name, std::atomic<bool>* release) {
+    std::unique_ptr<ThreadPool> pool;
+    CHECK(ThreadPoolBuilder(name).set_min_threads(1).set_max_threads(1).set_max_queue_size(1).build(&pool).ok());
+
+    auto started = std::make_shared<std::atomic<bool>>(false);
+    CHECK(pool->submit_func([started, release]() {
+                  started->store(true);
+                  while (!release->load()) {
+                      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                  }
+              }).ok());
+    while (!started->load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    // Fill the only queue slot; the blocked worker can never drain it.
+    CHECK(pool->submit_func([]() {}).ok());
+    return pool;
+}
+
+// Captures the Status delivered to AsyncDeltaWriter::write()/commit().
+class CapturingCallback : public AsyncDeltaWriterCallback {
+public:
+    void run(const Status& st, const CommittedRowsetInfo* /*info*/, const FailedRowsetInfo* /*failed_info*/) override {
+        status = st;
+        called = true;
+    }
+    Status status;
+    bool called = false;
+};
+} // namespace
 
 class SegmentFlushExecutorTest : public ::testing::Test {
 public:
@@ -410,6 +450,51 @@ TEST_F(SegmentFlushExecutorTest, test_duplicate_commit_after_committed_returns_o
     ASSERT_EQ(kCommitted, delta_writer->get_state());
 
     ASSERT_OK(StorageEngine::instance()->txn_manager()->delete_txn(_partition_id, _tablet, delta_writer->txn_id()));
+}
+
+// When the async delta writer thread pool is saturated by a slow/hung disk, write() and commit()
+// must shed load by rejecting the request fast with a retryable ServiceUnavailable error instead
+// of piling up in the queue.
+TEST_F(SegmentFlushExecutorTest, write_and_commit_reject_when_overloaded) {
+    auto saved_fail_fast = config::enable_load_fail_fast_when_disk_write_hang;
+    auto saved_hang_second = config::be_exit_after_disk_write_hang_second;
+
+    // Open the writer with the real executor before swapping in the saturated one, so its
+    // execution queue keeps pointing at the live original executor.
+    std::shared_ptr<AsyncDeltaWriter> async_delta_writer =
+            create_delta_writer(_tablet->tablet_id(), _tablet->schema_hash(), _mem_tracker.get());
+
+    std::atomic<bool> release{false};
+    auto pool = build_saturated_pool("seg_flush_reject", &release);
+    auto saturated = std::make_unique<bthreads::ThreadPoolExecutor>(pool.get(), kDontTakeOwnership);
+    auto original = StorageEngine::instance()->TEST_swap_async_delta_writer_executor(std::move(saturated));
+
+    config::enable_load_fail_fast_when_disk_write_hang = true;
+    config::be_exit_after_disk_write_hang_second = 0;
+
+    {
+        CapturingCallback cb;
+        AsyncDeltaWriterRequest req; // contents are unused on the reject path
+        async_delta_writer->write(req, &cb);
+        ASSERT_TRUE(cb.called);
+        ASSERT_TRUE(cb.status.is_service_unavailable()) << cb.status.to_string();
+    }
+    {
+        CapturingCallback cb;
+        async_delta_writer->commit(&cb);
+        ASSERT_TRUE(cb.called);
+        ASSERT_TRUE(cb.status.is_service_unavailable()) << cb.status.to_string();
+    }
+
+    // Restore the real executor before any teardown, then release and drain the saturated pool.
+    StorageEngine::instance()->TEST_swap_async_delta_writer_executor(std::move(original));
+    release.store(true);
+    pool->shutdown();
+
+    async_delta_writer->abort();
+
+    config::enable_load_fail_fast_when_disk_write_hang = saved_fail_fast;
+    config::be_exit_after_disk_write_hang_second = saved_hang_second;
 }
 
 } // namespace starrocks

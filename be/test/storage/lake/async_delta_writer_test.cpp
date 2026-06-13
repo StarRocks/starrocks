@@ -18,6 +18,9 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <chrono>
+#include <memory>
 #include <random>
 #include <thread>
 
@@ -32,8 +35,11 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptors.h"
@@ -45,12 +51,37 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
 namespace starrocks::lake {
 
 using namespace starrocks;
+
+namespace {
+// Builds a single-worker, single-slot pool, blocks the worker, and fills the only queue slot so
+// the pool reports as saturated/hung. With be_exit_after_disk_write_hang_second=0 this makes
+// ThreadPoolExecutor::is_overloaded() return true, which drives the load-fail-fast reject paths.
+std::unique_ptr<ThreadPool> build_saturated_pool(const std::string& name, std::atomic<bool>* release) {
+    std::unique_ptr<ThreadPool> pool;
+    CHECK(ThreadPoolBuilder(name).set_min_threads(1).set_max_threads(1).set_max_queue_size(1).build(&pool).ok());
+
+    auto started = std::make_shared<std::atomic<bool>>(false);
+    CHECK(pool->submit_func([started, release]() {
+                  started->store(true);
+                  while (!release->load()) {
+                      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                  }
+              }).ok());
+    while (!started->load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    // Fill the only queue slot; the blocked worker can never drain it.
+    CHECK(pool->submit_func([]() {}).ok());
+    return pool;
+}
+} // namespace
 
 class LakeAsyncDeltaWriterTest : public TestBase {
 public:
@@ -1295,6 +1326,74 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_cancel_and_close) {
     auto t2 = std::thread([&]() { delta_writer->close(); });
     t1.join();
     t2.join();
+}
+
+// When the async delta writer thread pool is saturated by a slow/hung disk, write() and finish()
+// must shed load by rejecting the request fast with a retryable ServiceUnavailable error instead
+// of piling up in the queue.
+TEST_F(LakeAsyncDeltaWriterTest, write_and_finish_reject_when_overloaded) {
+    auto saved_fail_fast = config::enable_load_fail_fast_when_disk_write_hang;
+    auto saved_hang_second = config::be_exit_after_disk_write_hang_second;
+
+    // Open the writer with the real executor before swapping in the saturated one, so its
+    // execution queue keeps pointing at the live original executor.
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    std::atomic<bool> release{false};
+    auto pool = build_saturated_pool("lake_async_reject", &release);
+    auto saturated = std::make_unique<bthreads::ThreadPoolExecutor>(pool.get(), kDontTakeOwnership);
+    auto original = StorageEngine::instance()->TEST_swap_async_delta_writer_executor(std::move(saturated));
+
+    config::enable_load_fail_fast_when_disk_write_hang = true;
+    config::be_exit_after_disk_write_hang_second = 0;
+
+    static const int kChunkSize = 16;
+    auto chunk = generate_data(kChunkSize);
+    std::vector<uint32_t> indexes(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    {
+        Status write_status;
+        bool called = false;
+        delta_writer->write(&chunk, indexes.data(), indexes.size(), [&](const Status& st) {
+            write_status = st;
+            called = true;
+        });
+        ASSERT_TRUE(called);
+        ASSERT_TRUE(write_status.is_service_unavailable()) << write_status.to_string();
+    }
+    {
+        Status finish_status;
+        bool called = false;
+        delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+            finish_status = res.status();
+            called = true;
+        });
+        ASSERT_TRUE(called);
+        ASSERT_TRUE(finish_status.is_service_unavailable()) << finish_status.to_string();
+    }
+
+    // Restore the real executor before any teardown, then release and drain the saturated pool.
+    StorageEngine::instance()->TEST_swap_async_delta_writer_executor(std::move(original));
+    release.store(true);
+    pool->shutdown();
+
+    delta_writer->close();
+
+    config::enable_load_fail_fast_when_disk_write_hang = saved_fail_fast;
+    config::be_exit_after_disk_write_hang_second = saved_hang_second;
 }
 
 } // namespace starrocks::lake
