@@ -35,10 +35,13 @@
 package com.starrocks.load.routineload;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
+
+import java.util.List;
 
 // {"progress": "", "backendId": "", "taskSignature": "", "numOfErrorData": "",
 // "numOfTotalData": "", "taskId": "", "jobId": ""}
@@ -63,6 +66,15 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private String errorLogUrl;
     private long loadedBytes;
     private boolean nonRetryable = false;
+
+    // Avro schema evolution: set by the BE on the rollback attachment when a message's writer schema is
+    // not yet covered by the table. detectedSchemaColumns is the full writer schema (each top-level field
+    // as name + full type, nullable, no default); detectedWidenColumns names varchar/varbinary columns an
+    // over-length value overran. Consumed in afterAborted; not persisted or replayed.
+    private boolean schemaChangeNeeded = false;
+    private int detectedSchemaId = -1;
+    private List<TColumn> detectedSchemaColumns;
+    private List<String> detectedWidenColumns;
 
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
@@ -99,6 +111,18 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         }
         if (rlTaskTxnCommitAttachment.isSetNonRetryable()) {
             this.nonRetryable = rlTaskTxnCommitAttachment.isNonRetryable();
+        }
+        if (rlTaskTxnCommitAttachment.isSetSchemaChangeNeeded()) {
+            this.schemaChangeNeeded = rlTaskTxnCommitAttachment.isSchemaChangeNeeded();
+        }
+        if (rlTaskTxnCommitAttachment.isSetDetectedSchemaId()) {
+            this.detectedSchemaId = rlTaskTxnCommitAttachment.getDetectedSchemaId();
+        }
+        if (rlTaskTxnCommitAttachment.isSetDetectedSchemaColumns()) {
+            this.detectedSchemaColumns = rlTaskTxnCommitAttachment.getDetectedSchemaColumns();
+        }
+        if (rlTaskTxnCommitAttachment.isSetDetectedWidenColumns()) {
+            this.detectedWidenColumns = rlTaskTxnCommitAttachment.getDetectedWidenColumns();
         }
     }
 
@@ -152,6 +176,22 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     public boolean isNonRetryable() {
         return nonRetryable;
+    }
+
+    public boolean isSchemaChangeNeeded() {
+        return schemaChangeNeeded;
+    }
+
+    public int getDetectedSchemaId() {
+        return detectedSchemaId;
+    }
+
+    public List<TColumn> getDetectedSchemaColumns() {
+        return detectedSchemaColumns;
+    }
+
+    public List<String> getDetectedWidenColumns() {
+        return detectedWidenColumns;
     }
 
     @Override

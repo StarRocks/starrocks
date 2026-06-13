@@ -229,6 +229,41 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testSchemaEvolutionRejectsExplicitColumnList() {
+        String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS(`a`, `b`) " +
+                "PROPERTIES (\"format\"=\"avro\", \"avro.use_native_reader\"=\"true\", " +
+                "\"avro.enable_schema_evolution\"=\"true\") " +
+                "FROM KAFKA (\"kafka_broker_list\" = \"kafkahost1:9092\", " +
+                "\"confluent.schema.registry.url\" = \"https://confluent.west.us\", " +
+                "\"kafka_topic\" = \"topictest\")";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+        try {
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            Assertions.fail("expected the explicit column list to be rejected");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("cannot be combined with an explicit column list"));
+        }
+    }
+
+    @Test
+    public void testSchemaEvolutionAllowsExpressionOnlyColumns() {
+        // Expression mappings pin no payload column set, so they are compatible with schema evolution.
+        String sql = "CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS(`c` = 1) " +
+                "PROPERTIES (\"format\"=\"avro\", \"avro.use_native_reader\"=\"true\", " +
+                "\"avro.enable_schema_evolution\"=\"true\") " +
+                "FROM KAFKA (\"kafka_broker_list\" = \"kafkahost1:9092\", " +
+                "\"confluent.schema.registry.url\" = \"https://confluent.west.us\", " +
+                "\"kafka_topic\" = \"topictest\")";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        Assertions.assertTrue(createRoutineLoadStmt.getEnableAvroSchemaEvolution());
+    }
+
+    @Test
     public void testLoadPropertiesContexts() {
         String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
                 + " PROPERTIES( \"desired_concurrent_number\"=\"3\",\n"

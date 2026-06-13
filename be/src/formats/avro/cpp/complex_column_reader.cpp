@@ -29,7 +29,12 @@ StructColumnReader::StructColumnReader(std::string_view col_name, const TypeDesc
 }
 
 Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
-    DCHECK_EQ(datum.type(), avro::AVRO_RECORD);
+    // The reader is built from the table column type while the datum carries whatever the writer sent,
+    // so a kind mismatch is reachable data, not a programming error: value<T>() on it would crash.
+    if (UNLIKELY(datum.type() != avro::AVRO_RECORD)) {
+        return Status::DataQualityError(
+                fmt::format("Unsupported avro type {} to struct. column: {}", avro::toString(datum.type()), _col_name));
+    }
 
     auto struct_column = down_cast<StructColumn*>(column);
     const auto& record = datum.value<avro::GenericRecord>();
@@ -52,7 +57,10 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
 }
 
 Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
-    DCHECK_EQ(datum.type(), avro::AVRO_ARRAY);
+    if (UNLIKELY(datum.type() != avro::AVRO_ARRAY)) {
+        return Status::DataQualityError(
+                fmt::format("Unsupported avro type {} to array. column: {}", avro::toString(datum.type()), _col_name));
+    }
 
     auto array_column = down_cast<ArrayColumn*>(column);
     auto* elements_column = array_column->elements_column_raw_ptr();
@@ -78,12 +86,23 @@ Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* co
 }
 
 Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
-    DCHECK_EQ(datum.type(), avro::AVRO_MAP);
+    if (UNLIKELY(datum.type() != avro::AVRO_MAP)) {
+        return Status::DataQualityError(
+                fmt::format("Unsupported avro type {} to map. column: {}", avro::toString(datum.type()), _col_name));
+    }
 
     auto map_column = down_cast<MapColumn*>(column);
     auto keys_column = down_cast<NullableColumn*>(map_column->keys_column_raw_ptr());
     auto* values_column = map_column->values_column_raw_ptr();
     auto* offsets_column = map_column->offsets_column_raw_ptr();
+
+    // Avro map keys are always strings, and the key path below appends raw bytes into a binary key
+    // column. FILES() always types the key column VARCHAR (inferred schema), but routine load types it
+    // straight from the table, so e.g. MAP<INT,...> reaches here: reject it instead of corrupting it.
+    if (_key_reader != nullptr && UNLIKELY(!keys_column->data_column_raw_ptr()->is_binary())) {
+        return Status::DataQualityError(
+                fmt::format("avro map keys are strings; the key type of map column '{}' cannot hold them", _col_name));
+    }
 
     const auto& map = datum.value<avro::GenericMap>();
     const auto& map_values = map.value();

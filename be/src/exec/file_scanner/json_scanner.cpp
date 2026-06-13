@@ -29,6 +29,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/simdjson_util.h"
+#include "exec/file_scanner/stream_source_meta.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -294,6 +295,7 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _type_descs(std::move(type_descs)),
           _range_desc(range_desc),
           _envelope_type(range_desc.__isset.envelope ? range_desc.envelope : TEnvelopeType::NONE) {
+    _meta_col_by_slot_id = build_stream_source_meta_columns(_scanner->_scan_range.params.stream_source_meta_columns);
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
         const auto& desc = _slot_descs[i];
@@ -302,6 +304,8 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
         }
         if (UNLIKELY(desc->col_name() == "__op")) {
             _op_col_index = index;
+        } else if (auto m = _meta_col_by_slot_id.find(desc->id()); m != _meta_col_by_slot_id.end()) {
+            _meta_col_by_index.emplace(index, m->second);
         }
         index++;
         _slot_desc_dict.emplace(desc->col_name(), desc);
@@ -495,6 +499,11 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
 Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
     _parsed_columns.assign(chunk->num_columns(), false);
 
+    // Hidden source-metadata columns are filled from the buffer's Kafka/Pulsar metadata (routine load),
+    // never from the payload. Their slots have generated names that cannot appear in the payload, so no
+    // payload field is ever shadowed.
+    const StreamMessageMeta* meta = stream_source_meta_of(_file_stream_buffer);
+
     faststring buffer;
     try {
         uint32_t key_index = 0;
@@ -546,8 +555,22 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 auto slot_desc = itr->second;
                 auto type_desc = _type_desc_dict[key];
 
-                // update the prev parsed position
                 column_index = chunk->get_index_by_slot_id(slot_desc->id());
+                // A hidden metadata slot is filled from the message meta in the null-fill pass, never
+                // from the payload; if a payload field happens to use its internal name, skip it (cache
+                // as a skip via column_index = -1) so the metadata value still wins.
+                if (_meta_col_by_index.count(column_index) > 0) {
+                    if (_prev_parsed_position.size() <= key_index) {
+                        _prev_parsed_position.emplace_back(key);
+                    } else {
+                        _prev_parsed_position[key_index].key = key;
+                        _prev_parsed_position[key_index].column_index = -1;
+                    }
+                    key_index++;
+                    continue;
+                }
+
+                // update the prev parsed position
                 if (_prev_parsed_position.size() <= key_index) {
                     _prev_parsed_position.emplace_back(key, column_index, type_desc);
                 } else {
@@ -582,7 +605,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
         return Status::DataQualityError(err_msg);
     }
 
-    // append null to the column without data.
+    // append null (or synthetic metadata) to the columns without data.
     for (int i = 0; i < chunk->num_columns(); i++) {
         if (!_parsed_columns[i]) {
             auto* column = chunk->get_column_raw_ptr_by_index(i);
@@ -596,6 +619,9 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 } else {
                     column->append_datum(Datum(op_val));
                 }
+            } else if (auto it = _meta_col_by_index.find(i); it != _meta_col_by_index.end()) {
+                // Fill from meta (NULL when the buffer carries none).
+                RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
             } else {
                 column->append_nulls(1);
             }
@@ -607,6 +633,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
 Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
     size_t slot_size = _slot_descs.size();
     size_t jsonpath_size = _scanner->_json_paths.size();
+    const StreamMessageMeta* meta = stream_source_meta_of(_file_stream_buffer);
+    // Hidden metadata columns carry no jsonpath, so they are transparent to the positional
+    // slot->jsonpath mapping: a jsonpath maps to the i-th non-metadata slot. This keeps payload columns
+    // aligned even when a metadata column sits before jsonpath-backed columns.
+    size_t meta_count = 0;
     for (size_t i = 0; i < slot_size; i++) {
         if (_slot_descs[i] == nullptr) {
             continue;
@@ -615,7 +646,18 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
 
         // The columns in JsonReader's chunk are all in NullableColumn type;
         auto* column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_slot_descs[i]->id()));
-        if (i >= jsonpath_size) {
+
+        // Hidden source-metadata slots are filled from the message meta, not the payload, before the
+        // jsonpath extraction. Fill unconditionally (NULL when the buffer carries no meta) and always
+        // advance meta_count, so a metadata slot stays transparent to the positional jsonpath mapping
+        // regardless of whether meta is present.
+        if (auto it = _meta_col_by_slot_id.find(_slot_descs[i]->id()); UNLIKELY(it != _meta_col_by_slot_id.end())) {
+            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+            meta_count++;
+            continue;
+        }
+        size_t jp = i - meta_count;
+        if (jp >= jsonpath_size) {
             if (column_name.compare("__op") == 0) {
                 // special treatment for __op column, fill default value rather than null.
                 // For Debezium CDC format, use the op from the CDC envelope.
@@ -637,7 +679,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         // simdjson's api is limited, which coult not convert ondemand::object to ondemand::value.
         // As a workaround, extract procedure is duplicated, for both ondemand::object and ondemand::value
         // TODO(mofei) make it more elegant
-        if (_scanner->_json_paths[i].size() == 1 && _scanner->_json_paths[i][0].key == "$") {
+        if (_scanner->_json_paths[jp].size() == 1 && _scanner->_json_paths[jp][0].key == "$") {
             // add_nullable_column may invoke a for-range iterating to the row.
             // If the for-range iterating is invoked after field access, or a second for-range iterating is invoked,
             // it would get an error "Objects and arrays can only be iterated when they are first encountered",
@@ -647,7 +689,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                     column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row, !_strict_mode));
         } else {
             simdjson::ondemand::value val;
-            auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val);
+            auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[jp], &val);
             if (st.ok()) {
                 RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
             } else if (st.is_not_found()) {

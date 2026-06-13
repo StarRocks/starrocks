@@ -122,6 +122,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -245,6 +246,23 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected long maxBatchSizeBytes = Config.max_routine_load_batch_size;
 
     private String confluentSchemaRegistryUrl;
+    // Resolved at job creation for Avro jobs (never null for them); null means a non-Avro job
+    // or a job persisted before this field existed.
+    @SerializedName("nar")
+    private Boolean useNativeAvroReader;
+    // null/false = schema evolution disabled (opt-in via avro.enable_schema_evolution). Resolved once at
+    // job creation, like useNativeAvroReader.
+    @SerializedName("ase")
+    private Boolean enableAvroSchemaEvolution;
+    // null = default true. When false, schema evolution auto-applies only metadata-only fast changes; a
+    // change needing a full table rewrite pauses the job, naming the ALTER to run by hand.
+    @SerializedName("ahs")
+    private Boolean allowHeavySchemaChange;
+    // Avro schema evolution: non-null while a task reported a writer schema the table does not yet cover and
+    // the resulting ALTER has not resolved. Runtime-only (no @SerializedName): re-derived from BE signals
+    // after a leader failover. Set in afterAborted; cleared by the schema-evolution daemon. While set, the
+    // task scheduler holds this job's tasks.
+    private volatile PendingSchemaChange pendingSchemaChange;
 
     protected int currentTaskConcurrentNum;
     @SerializedName("p")
@@ -446,6 +464,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
             }
             this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
+            this.useNativeAvroReader = stmt.getUseNativeAvroReader();
+            this.enableAvroSchemaEvolution = stmt.getEnableAvroSchemaEvolution();
+            this.allowHeavySchemaChange = stmt.getAllowHeavySchemaChange();
         } else {
             throw new StarRocksException("Invalid format type.");
         }
@@ -502,6 +523,127 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
         this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public Boolean getUseNativeAvroReader() {
+        return useNativeAvroReader;
+    }
+
+    public Boolean getEnableAvroSchemaEvolution() {
+        return enableAvroSchemaEvolution;
+    }
+
+    public Boolean getAllowHeavySchemaChange() {
+        return allowHeavySchemaChange;
+    }
+
+    // Default true when unset (job created before the property existed, or older persisted state).
+    public boolean isHeavySchemaChangeAllowed() {
+        return !Boolean.FALSE.equals(allowHeavySchemaChange);
+    }
+
+    // True only when the job opted in AND the configuration can actually act on it: the native avro reader
+    // is active and no jsonpaths are set. jsonpaths are excluded because routine-load avro never had a
+    // working jsonpath->column mapping, so that path carries no by-name field->column binding for
+    // evolution to build on. Mirrors the BE detection gate.
+    public boolean isAvroSchemaEvolutionEnabled() {
+        return Boolean.TRUE.equals(enableAvroSchemaEvolution)
+                && "avro".equalsIgnoreCase(getFormat())
+                && Boolean.TRUE.equals(useNativeAvroReader)
+                && Strings.isNullOrEmpty(getJsonPaths());
+    }
+
+    public PendingSchemaChange getPendingSchemaChange() {
+        return pendingSchemaChange;
+    }
+
+    public void setPendingSchemaChange(PendingSchemaChange pendingSchemaChange) {
+        this.pendingSchemaChange = pendingSchemaChange;
+    }
+
+    public boolean hasPendingSchemaChange() {
+        return pendingSchemaChange != null;
+    }
+
+    // Called by the RoutineLoad scheduler daemon (off the txn thread, holding no routine-load lock) when this
+    // job has a pending Avro schema change. Diffs the writer schema against the live table and applies the
+    // ALTER, then either clears the marker (the table now covers the schema, so the held tasks resume) or
+    // pauses the job. Idempotent across ticks: while an ALTER is in flight it waits; once applied it verifies
+    // coverage rather than re-applying, so a cancelled or ineffective ALTER pauses instead of looping.
+    public void tryEvolveSchema() throws StarRocksException {
+        PendingSchemaChange pending = pendingSchemaChange;
+        if (pending == null) {
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(getDbId());
+        Table table = db == null ? null
+                : GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(getDbId(), getTableId());
+        if (!(table instanceof OlapTable)) {
+            // Table dropped or not OLAP: drop the marker so the held tasks resume and fail through normal paths.
+            pendingSchemaChange = null;
+            return;
+        }
+        OlapTable olapTable = (OlapTable) table;
+
+        // An ALTER (ours from a previous tick, or another) is still running on this table: wait for it.
+        if (!GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .getUnfinishedAlterJobV2ByTableId(olapTable.getId()).isEmpty()) {
+            return;
+        }
+
+        Set<String> metaNames = Load.collectStreamMetaColumnNames(getColumnDescs());
+        AvroSchemaEvolver.Plan plan = AvroSchemaEvolver.plan(olapTable, pending, metaNames);
+
+        if (plan.getClauses().isEmpty()) {
+            // Nothing more to apply: the table already covers the schema, or only unresolvable fields remain.
+            if (plan.shouldPause()) {
+                updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                        "Avro schema evolution: " + plan.getPauseReason()));
+            }
+            pendingSchemaChange = null;
+            return;
+        }
+
+        if (pending.isApplied()) {
+            // Applied on an earlier tick, nothing running, yet the table still does not cover the schema: the
+            // ALTER did not converge (e.g. it was cancelled). Pause instead of re-applying in a loop.
+            updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    "Avro schema evolution did not converge for table " + olapTable.getName()));
+            pendingSchemaChange = null;
+            return;
+        }
+
+        List<String> heavyRefused;
+        try {
+            heavyRefused = AvroSchemaEvolver.applyClauses(db.getFullName(), olapTable.getName(),
+                    plan.getClauses(), isHeavySchemaChangeAllowed());
+            pending.setApplied(true);
+        } catch (Exception e) {
+            updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    "Avro schema evolution ALTER failed: " + e.getMessage()));
+            pendingSchemaChange = null;
+            return;
+        }
+
+        // Applied what we could. Pause if any field was unresolvable, or if a needed change was refused
+        // because it requires a full table rewrite (allow_heavy off) -- naming the exact ALTERs so the
+        // operator can run them by hand or enable the property. Otherwise the next tick confirms coverage
+        // (sync fast schema evolution is immediate; a heavy rewrite finishes asynchronously) and clears the
+        // marker, resuming the held tasks.
+        List<String> pauseReasons = new ArrayList<>();
+        if (plan.shouldPause()) {
+            pauseReasons.add(plan.getPauseReason());
+        }
+        if (!heavyRefused.isEmpty()) {
+            pauseReasons.add("the following changes require a full table rewrite and "
+                    + CreateRoutineLoadStmt.AVRO_ALLOW_HEAVY_SCHEMA_CHANGE
+                    + " is false; run them manually or enable the property: " + String.join(", ", heavyRefused));
+        }
+        if (!pauseReasons.isEmpty()) {
+            updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    "Avro schema evolution: " + String.join("; ", pauseReasons)));
+            pendingSchemaChange = null;
+        }
     }
 
     @Override
@@ -1255,6 +1397,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 return;
             }
 
+            // Avro schema evolution: the BE shipped the writer schema the table does not yet cover. Record it
+            // so the schema-evolution daemon can ALTER the table and resume; the task scheduler holds this
+            // job's tasks while the marker is set. The task is still renewed below and waits in the queue.
+            // A late abort carrying the same schema id must not replace an existing marker: that would reset
+            // the daemon's "already applied" flag and could re-apply an in-flight ALTER. A different schema id
+            // does replace it (a newer writer schema supersedes the old one).
+            if (rlAttachment != null && rlAttachment.isSchemaChangeNeeded()) {
+                PendingSchemaChange existing = getPendingSchemaChange();
+                if (existing == null || existing.getSchemaId() != rlAttachment.getDetectedSchemaId()) {
+                    setPendingSchemaChange(new PendingSchemaChange(rlAttachment.getDetectedSchemaId(),
+                            rlAttachment.getDetectedSchemaColumns(), rlAttachment.getDetectedWidenColumns()));
+                }
+            }
+
             // step2: commit task , update progress, maybe create a new task
             executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.ABORTED,
                     txnStatusChangeReasonString);
@@ -1814,6 +1970,24 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
         sb.append(getJsonRoot()).append("\",\n");
 
+        // For an Avro job persisted before this field existed (null), emit "false" rather than nothing:
+        // such a job runs the legacy reader, and replaying the shown DDL must keep doing so even if the
+        // FE-wide default config has been flipped to the native reader since.
+        if ("avro".equalsIgnoreCase(getFormat())) {
+            sb.append("\"").append(CreateRoutineLoadStmt.AVRO_USE_NATIVE_READER).append("\"=\"");
+            sb.append(useNativeAvroReader != null ? useNativeAvroReader : Boolean.FALSE).append("\",\n");
+        }
+
+        if (enableAvroSchemaEvolution != null) {
+            sb.append("\"").append(CreateRoutineLoadStmt.AVRO_ENABLE_SCHEMA_EVOLUTION).append("\"=\"");
+            sb.append(enableAvroSchemaEvolution).append("\",\n");
+        }
+
+        if (allowHeavySchemaChange != null) {
+            sb.append("\"").append(CreateRoutineLoadStmt.AVRO_ALLOW_HEAVY_SCHEMA_CHANGE).append("\"=\"");
+            sb.append(allowHeavySchemaChange).append("\",\n");
+        }
+
         if (!Strings.isNullOrEmpty(getEnvelope())) {
             sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
             sb.append(getEnvelope()).append("\",\n");
@@ -1886,6 +2060,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                           Map<String, String> jobProperties,
                           RoutineLoadDataSourceProperties dataSourceProperties,
                           OriginStatementInfo originStatement) throws DdlException {
+        // ALTER can replace the COLUMNS clause, so re-check that any metadata functions apply to this
+        // job's source (e.g. reject kafka_offset() on a Pulsar job). CREATE is validated in
+        // CreateRoutineLoadAnalyzer; this covers the ALTER path.
+        List<ImportColumnDesc> metaColumnDescs =
+                (routineLoadDesc != null && routineLoadDesc.getColumnsInfo() != null)
+                        ? routineLoadDesc.getColumnsInfo().getColumns()
+                        : null;
+        Load.validateStreamMetaFunctions(metaColumnDescs, getDataSourceTypeName(), getFormat(),
+                getUseNativeAvroReader());
         if (jobProperties != null) {
             checkCommonJobProperties(jobProperties);
         }

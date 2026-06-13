@@ -384,6 +384,69 @@ FROM KAFKA
   >
   > You do not need to specify the `COLUMNS` parameter if the names and number of the fields in the Avro record completely match those of columns in the StarRocks table.
 
+- Native Avro reader (`STRUCT`/`MAP` and logical types)
+
+  By default, Routine Load uses the legacy Avro reader, which loads `record`/`map` fields as JSON strings and reads Avro logical types (`date`, `timestamp`, `decimal`) as raw integers/bytes.
+
+  Set `"avro.use_native_reader" = "true"` in `PROPERTIES` to use the native reader instead:
+
+  - `record` is loaded into a `STRUCT` column and `map` into a `MAP` column (instead of JSON).
+  - Avro logical types are interpreted: `date` → `DATE`, `timestamp-millis`/`timestamp-micros` → `DATETIME` (converted with the job time zone), and `decimal(precision, scale)` → `DECIMAL(precision, scale)`.
+
+  The property is set per job. When it is not specified, the FE configuration item `enable_routine_load_native_avro_reader` (default `false`) decides which reader to use. The reader choice is fixed when the job is created, so changing the configuration item later affects only newly created jobs — existing jobs keep their reader.
+
+  For example, given the following Avro schema with a nested `record` field `event`, a `map` field `tags`, a logical `date` field `d`, and a logical `decimal` field `amount`:
+
+  ```JSON
+  {
+      "type": "record",
+      "name": "Event",
+      "fields": [
+          {"name": "id", "type": "long"},
+          {"name": "event", "type": {
+              "type": "record",
+              "name": "EventInfo",
+              "fields": [
+                  {"name": "name", "type": "string"},
+                  {"name": "code", "type": "int"}
+              ]
+          }},
+          {"name": "tags", "type": {"type": "map", "values": "long"}},
+          {"name": "d", "type": {"type": "int", "logicalType": "date"}},
+          {"name": "amount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 18, "scale": 4}}
+      ]
+  }
+  ```
+
+  Create a matching table and load it with the native reader:
+
+  ```SQL
+  CREATE TABLE example_db.events (
+      id           BIGINT,
+      event        STRUCT<name VARCHAR(64), code INT>,
+      tags         MAP<VARCHAR(64), BIGINT>,
+      d            DATE,
+      amount       DECIMAL(18, 4)
+  )
+  ENGINE = OLAP
+  DUPLICATE KEY(id)
+  DISTRIBUTED BY HASH(id);
+
+  CREATE ROUTINE LOAD example_db.events_load_job ON events
+  PROPERTIES
+  (
+      "format" = "avro",
+      "avro.use_native_reader" = "true"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+      "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",
+      "kafka_topic" = "topic_events",
+      "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+  );
+  ```
+
 After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) statement to check the status of the load job.
 
 #### Data types mapping
@@ -407,17 +470,162 @@ The data type mapping between the Avro data fields you want to load and the Star
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
-| record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
+| record         | Legacy reader: the entire RECORD or its subfields as JSON. Native reader (`avro.use_native_reader = true`): `STRUCT`. |
 | enums          | STRING                                                       |
 | arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
+| maps           | Legacy reader: JSON. Native reader: `MAP`.                  |
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
+
+##### Logical types
+
+The native reader (`avro.use_native_reader = true`) also interprets Avro logical types. The legacy reader loads them as their underlying primitive (raw int/long/bytes).
+
+| Avro logical type            | StarRocks (native reader) |
+| ---------------------------- | ------------------------- |
+| date                         | DATE                      |
+| timestamp-millis / -micros   | DATETIME                  |
+| decimal(precision, scale)    | DECIMAL(precision, scale) |
 
 #### Limits
 
 - Currently, StarRocks does not support schema evolution.
 - Each Kafka message must only contain a single Avro data record.
+
+### Access source message metadata
+
+When loading JSON- or Avro-format data, you can populate destination columns from a message's Kafka/Pulsar metadata — topic, partition, offset, timestamp, key, and headers — instead of from the message payload. You reference the metadata with source-specific functions in the `COLUMNS` clause; each call is mapped to a destination column.
+
+This is useful for auditing (which topic/partition/offset a row came from), event-time processing (using the message timestamp), and routing on a header value.
+
+#### Functions
+
+Kafka jobs use the `kafka_*` functions; Pulsar jobs use the `pulsar_*` functions.
+
+| Function | Return type | Description |
+| --- | --- | --- |
+| `kafka_topic()` | VARCHAR | Topic name. |
+| `kafka_partition()` | INT | Partition number. |
+| `kafka_offset()` | BIGINT | Message offset within the partition. |
+| `kafka_timestamp_ms()` | BIGINT | Record timestamp in milliseconds since epoch. `NULL` when the broker reports no timestamp. |
+| `kafka_key()` | VARCHAR | Message key as raw bytes. `NULL` when the message has no key. |
+| `kafka_header('name')` | VARCHAR | Value of the header `name`. When the header appears more than once, the last value wins. `NULL` when the header is absent. |
+| `kafka_headers()` | MAP\<VARCHAR, VARCHAR> | All headers as a map. On duplicate keys, the last value wins. |
+| `pulsar_topic()` | VARCHAR | The logical topic the job consumes (a partitioned topic's `-partition-N` suffix is not included). |
+| `pulsar_partition()` | INT | Partition index, parsed from the per-message topic name. `NULL` for a non-partitioned topic. |
+| `pulsar_message_id()` | VARCHAR | Message ID. |
+| `pulsar_publish_time_ms()` | BIGINT | Publish time in milliseconds since epoch. |
+| `pulsar_event_time_ms()` | BIGINT | Event time in milliseconds since epoch. `NULL` when the producer did not set it. |
+| `pulsar_key()` | VARCHAR | Partition key. `NULL` when the message has no key. |
+| `pulsar_property('name')` | VARCHAR | Value of the property `name`. `NULL` when the property is absent. |
+| `pulsar_properties()` | MAP\<VARCHAR, VARCHAR> | All properties as a map. |
+
+#### Usage notes
+
+- These functions are available for `format = json` (Kafka and Pulsar) and `format = avro` (Kafka only; Pulsar Routine Load does not support Avro). They are not supported for CSV, where one message can expand into many rows and per-message metadata would be ambiguous.
+- For Avro, the native reader is required: set `"avro.use_native_reader" = "true"` (see [Load Avro-format data](#load-avro-format-data)).
+- The functions can only be used in the `COLUMNS` clause. A payload field with the same name as a metadata field is never shadowed — the metadata value is taken from the message, and the payload field is read independently.
+- `kafka_header('name')` and `pulsar_property('name')` take a single string-literal key.
+
+#### Example
+
+Load the order payload field `order_id` together with the source topic, partition, offset, the message timestamp converted to a `DATETIME`, and a `trace-id` header:
+
+```SQL
+CREATE TABLE example_db.orders_with_meta (
+    order_id      BIGINT,
+    src_topic     VARCHAR(256),
+    src_partition INT,
+    src_offset    BIGINT,
+    msg_time      DATETIME,
+    trace_id      VARCHAR(128)
+)
+ENGINE = OLAP
+DUPLICATE KEY(order_id)
+DISTRIBUTED BY HASH(order_id);
+
+CREATE ROUTINE LOAD example_db.orders_with_meta_job ON orders_with_meta
+COLUMNS
+(
+    order_id,
+    src_topic     = kafka_topic(),
+    src_partition = kafka_partition(),
+    src_offset    = kafka_offset(),
+    msg_time      = from_unixtime(kafka_timestamp_ms() / 1000),
+    trace_id      = kafka_header('trace-id')
+)
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" = "[\"$.order_id\"]"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+    "kafka_topic" = "topic_orders",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+A metadata function may be nested inside an expression (as with `from_unixtime(kafka_timestamp_ms() / 1000)` above); only payload columns are listed in `jsonpaths`.
+
+### Evolve the Avro schema automatically
+
+When a Kafka producer changes its Avro writer schema — adds a field, adds a subfield to a `record`, or widens a field's type — Routine Load can evolve the destination table to match and keep loading, instead of failing the job. This is opt-in and works only with the native Avro reader.
+
+Enable it per job with `"avro.enable_schema_evolution" = "true"` (default `false`). It additionally requires `"avro.use_native_reader" = "true"` and no `jsonpaths`, because evolution relies on the reader's by-name field-to-column mapping. A plain column list in `COLUMNS` is rejected too: an explicit list pins the loaded column set, so with it you own the column set yourself. Expression mappings in `COLUMNS` (for example metadata functions) are fine.
+
+When a message carries a schema the table does not yet cover, the table is automatically altered to match. Messages already read under the old schema commit normally; the job briefly holds its tasks while the table is altered, then resumes.
+
+#### Changes applied automatically
+
+- A writer field with no matching column → `ADD COLUMN` (nullable, no default).
+- A new subfield in an existing `STRUCT` column, at any nesting depth → `ADD FIELD`.
+- A column whose type no longer holds the writer value, when the change is a safe widening → `MODIFY COLUMN`. For example `INT` → `BIGINT`, `FLOAT` → `DOUBLE`, a `DECIMAL` precision/scale grow, or a scalar type → `VARCHAR`.
+- A value too long for a length-limited `VARCHAR`/`VARBINARY` column → the column is widened to its maximum length.
+
+A field whose type already fits the column (the same or a wider type, or a `VARCHAR`/`STRUCT`/`MAP`/`ARRAY` that already accommodates it) needs no change.
+
+#### Changes that pause the job
+
+Some changes cannot be made safely and automatically. The job is paused, with the field named in `ReasonOfStateChanged`; resolve it by hand and then [RESUME ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.md):
+
+- A writer field whose name collides with a metadata column (see [Access source message metadata](#access-source-message-metadata)).
+- A writer field that differs only in letter case from an existing column (StarRocks forbids two columns differing only in case).
+- A key column whose type would have to change to hold the new value. Key columns are not auto-evolved because a key type change affects sorting and distribution. (A key column that the new value still fits needs no change and does not pause the job.)
+- A type change the engine cannot perform — for example, a field that became a `record` over a non-`VARCHAR` column.
+
+#### Heavy schema changes
+
+Most changes on a table that uses fast schema evolution (`ADD COLUMN`, `ADD FIELD`, integer/float widening, `VARCHAR` length increase) are metadata-only and take effect immediately. A few require a full table rewrite (a background schema-change job): a `DECIMAL` precision/scale grow, a type change to `VARCHAR`, or any change on a table created with `fast_schema_evolution = false`.
+
+`"avro.schema_evolution_allow_heavy_alter"` (default `true`) controls these:
+
+- `true`: heavy changes are applied automatically.
+- `false`: only metadata-only changes are applied automatically. A change that needs a rewrite pauses the job and names the exact `ALTER TABLE` to run by hand — run it and then RESUME, or set the property to `true`.
+
+#### Example
+
+Enable evolution on the native-reader job from [Load Avro-format data](#load-avro-format-data):
+
+```SQL
+CREATE ROUTINE LOAD example_db.events_load_job ON events
+PROPERTIES
+(
+    "format" = "avro",
+    "avro.use_native_reader" = "true",
+    "avro.enable_schema_evolution" = "true"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+    "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",
+    "kafka_topic" = "topic_events",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+If the producer later adds a field `region` (string) and a subfield `event.severity` (int), the table automatically gains a `region` column and an `event.severity` struct field, and loading continues.
 
 ## Check a load job and task
 

@@ -1,0 +1,40 @@
+-- name: test_mixed_schema_change_clauses
+create database test_mixed_schema_change;
+-- result:
+-- !result
+use test_mixed_schema_change;
+-- result:
+-- !result
+CREATE TABLE `t` (
+  `k` int(11) NULL,
+  `n` int(11) NULL,
+  `s` struct<a int>
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"fast_schema_evolution" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+alter table t add column c2 varchar(32), modify column s add field b int, modify column n bigint;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t values (1, 10, row(100, 101), 'x');
+-- result:
+-- !result
+select * from t;
+-- result:
+1	10	{"a":100,"b":101}	x
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database test_mixed_schema_change;
+-- result:
+-- !result

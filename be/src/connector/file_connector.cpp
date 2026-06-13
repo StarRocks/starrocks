@@ -17,6 +17,7 @@
 #include "connector/file_scan_metrics.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/avro_scanner.h"
+#include "exec/file_scanner/avro_stream_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
@@ -104,8 +105,18 @@ Status FileDataSource::_create_scanner() {
              _scan_range.params.file_scan_type == TFileScanType::FILES_QUERY)) {
             _scanner = std::make_unique<AvroCppScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
         } else {
-            // avro routine load
-            _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+            // avro routine load. FE resolves the per-job `avro.use_native_reader` property against its
+            // own default and sets use_native_avro_reader on every scan range, so the choice is uniform
+            // across BE nodes. Unset (older FE) falls back to the legacy scanner.
+            bool use_native =
+                    _scan_range.params.__isset.use_native_avro_reader && _scan_range.params.use_native_avro_reader;
+            if (use_native) {
+                // avrocpp stack (STRUCT/MAP support)
+                _scanner =
+                        std::make_unique<AvroStreamScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+            } else {
+                _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+            }
         }
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);

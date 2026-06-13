@@ -34,11 +34,43 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 #include "base/concurrency/blocking_queue.hpp"
 #include "common/thread/priority_thread_pool.hpp"
 #include "runtime/routine_load/data_consumer.h"
 
 namespace starrocks {
+
+// Recover a Pulsar message's partition index from its topic name. The Pulsar C++ Message API exposes
+// no partition number at all -- only getTopicName() -- so the partition has to be parsed out of the
+// per-partition name Pulsar gives the Nth partition of a partitioned topic: "<topic>-partition-N".
+// (pulsar_topic() does not go through here; it is taken straight from the job's configured logical
+// topic, so only the index is parsed below.)
+//
+// The "-partition-N" suffix on its own is ambiguous: Pulsar lets you create a standalone
+// non-partitioned topic literally named "<x>-partition-<n>" (it only refuses the name when a
+// partitioned topic <x> with more than n partitions already exists), and that topic's getTopicName()
+// is byte-for-byte identical to partition n of a partitioned topic <x>. The job's configured logical
+// topic is the only thing that tells the two apart, so we anchor on it: a trailing "-partition-N" is a
+// real partition only when stripping it leaves exactly the configured topic.
+//
+// getTopicName() is the fully-qualified canonical name ("persistent://tenant/ns/<local-name>"), while
+// the configured topic may be the short local form ("<local-name>"). Pulsar only prepends the
+// scheme/tenant/namespace defaults and never rewrites the local name, so the configured topic is
+// always a suffix of the canonical name aligned on a "/" -- hence the match accepts either an exact
+// equality or a match at a leading "/" boundary.
+//
+// Returns the partition index, or -1 when message_topic is not a partition of logical_topic (the
+// scanner renders -1 as SQL NULL).
+int32_t parse_pulsar_partition_index(const std::string& logical_topic, const std::string& message_topic);
+
+// Parse the Confluent wire-format schema id from a message: a 0x00 magic byte followed by a 4-byte
+// big-endian schema id. Writes the id to *schema_id and returns true on success; returns false for
+// anything not framed this way (raw Avro, fewer than 5 bytes, wrong magic), so the caller falls back
+// to the normal append path. Used to detect schema-id boundaries within a routine-load batch.
+bool parse_confluent_schema_id(const char* data, size_t size, int32_t* schema_id);
 
 // data consumer group saves a group of data consumers.
 // These data consumers share the same stream load pipe.

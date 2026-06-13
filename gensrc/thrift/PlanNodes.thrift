@@ -239,6 +239,31 @@ enum TFileScanType {
     FILES_QUERY
 }
 
+// Which per-message metadata field a routine-load source-metadata slot is bound to. The FE lowers
+// metadata functions in the COLUMNS clause (kafka_topic(), kafka_header('k'), pulsar_message_id(),
+// ...) into hidden source slots described by TRoutineLoadMetaColumn, so the BE scanner fills the slot
+// from the Kafka/Pulsar message rather than the payload. TIMESTAMP is the Kafka record timestamp /
+// Pulsar publish time; EVENT_TIME is the Pulsar event time. HEADER selects one header/property by key
+// (last-wins); HEADERS is the whole map.
+enum TStreamSourceMetaKind {
+    TOPIC = 0,
+    PARTITION = 1,
+    OFFSET = 2,
+    MESSAGE_ID = 3,
+    TIMESTAMP = 4,
+    EVENT_TIME = 5,
+    KEY = 6,
+    HEADER = 7,
+    HEADERS = 8
+}
+
+struct TRoutineLoadMetaColumn {
+    1: optional Types.TSlotId slot_id
+    2: optional TStreamSourceMetaKind kind
+    // For HEADER: the header/property key to look up. Unused for the other kinds.
+    3: optional string key
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -303,6 +328,14 @@ struct TBrokerScanRangeParams {
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
     34: optional bool schema_sample_types = true
+    // Per-job choice for avro routine load: use the avrocpp-based scanner (STRUCT/MAP support). The FE
+    // resolves this at job creation (from the avro.use_native_reader property, defaulting to the FE
+    // config enable_avro_routine_load_native_reader) and sets it here. If unset (e.g. an older FE), the
+    // BE falls back to the legacy avro scanner.
+    35: optional bool use_native_avro_reader
+    // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
+    // field. Empty for non-routine-load and for jobs that use no metadata function.
+    36: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 
 // Broker scan range

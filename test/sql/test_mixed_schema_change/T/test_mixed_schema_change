@@ -1,0 +1,20 @@
+-- name: test_mixed_schema_change_clauses
+create database test_mixed_schema_change;
+use test_mixed_schema_change;
+CREATE TABLE `t` (
+  `k` int(11) NULL,
+  `n` int(11) NULL,
+  `s` struct<a int>
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"fast_schema_evolution" = "true",
+"replication_num" = "1"
+);
+alter table t add column c2 varchar(32), modify column s add field b int, modify column n bigint;
+function: wait_alter_table_finish()
+insert into t values (1, 10, row(100, 101), 'x');
+select * from t;
+drop table t;
+drop database test_mixed_schema_change;

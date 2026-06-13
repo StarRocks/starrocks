@@ -354,6 +354,9 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     } else {
         ctx->max_filter_ratio = 1.0;
     }
+    if (task.__isset.enable_schema_evolution) {
+        ctx->enable_schema_evolution = task.enable_schema_evolution;
+    }
 
     // set source related params
     switch (task.type) {
@@ -364,6 +367,8 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         // real source instead of the SequentialFile placeholder name.
         ctx->put_result.params.query_options.__set_routine_load_source_info(
                 build_kafka_source_info(task.kafka_load_info));
+        // Thread the schema-evolution gate to the fragment so the Avro scanner can detect new columns.
+        ctx->put_result.params.query_options.__set_enable_avro_schema_evolution(ctx->enable_schema_evolution);
         break;
 #ifndef __APPLE__
     case TLoadSourceType::PULSAR:

@@ -37,6 +37,9 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/sync_point.h"
 #include "common/logging.h"
@@ -63,16 +66,16 @@ struct MemTrackerDeleter {
     }
 };
 
-enum class ByteBufferMetaType { NONE, KAFKA };
+enum class ByteBufferMetaType { NONE, KAFKA, PULSAR };
 
 std::string byte_buffer_meta_type_name(ByteBufferMetaType type);
 
 class ByteBufferMeta {
 public:
     virtual ~ByteBufferMeta() = default;
-    virtual ByteBufferMetaType type() = 0;
+    virtual ByteBufferMetaType type() const = 0;
     virtual Status copy_from(ByteBufferMeta* source) = 0;
-    virtual std::string to_string() = 0;
+    virtual std::string to_string() const = 0;
 
     static StatusOr<ByteBufferMeta*> create(ByteBufferMetaType meta_type);
 };
@@ -84,10 +87,10 @@ public:
     NoneByteBufferMeta(NoneByteBufferMeta&&) = delete;
     NoneByteBufferMeta& operator=(NoneByteBufferMeta&&) = delete;
 
-    ByteBufferMetaType type() override { return ByteBufferMetaType::NONE; }
+    ByteBufferMetaType type() const override { return ByteBufferMetaType::NONE; }
 
     Status copy_from(ByteBufferMeta* source) override;
-    std::string to_string() override { return "none"; }
+    std::string to_string() const override { return "none"; }
 
     static NoneByteBufferMeta* instance() {
         static NoneByteBufferMeta instance;
@@ -98,24 +101,62 @@ private:
     NoneByteBufferMeta() = default;
 };
 
-class KafkaByteBufferMeta : public ByteBufferMeta {
+// Per-message metadata for routine-load stream sources (Kafka/Pulsar). Carries the message-level
+// fields a job may surface via the source-metadata functions (kafka_topic(), kafka_header('k'), ...):
+// topic, partition, offset/message_id, timestamp/event_timestamp, key, headers. One class for both
+// sources, tagged by type(); a field left at its sentinel (negative number / empty / !has_key) is
+// rendered as SQL NULL by the scanner. copy_from() fully overwrites every field so a buffer reused
+// across messages never leaks the previous message's key/headers.
+class StreamMessageMeta : public ByteBufferMeta {
 public:
-    KafkaByteBufferMeta() = default;
+    explicit StreamMessageMeta(ByteBufferMetaType source) : _source(source) {}
 
-    ByteBufferMetaType type() override { return ByteBufferMetaType::KAFKA; }
+    ByteBufferMetaType type() const override { return _source; }
+
+    void set_topic(std::string topic) { _topic = std::move(topic); }
+    const std::string& topic() const { return _topic; }
 
     void set_partition(int32_t partition) { _partition = partition; }
     int32_t partition() const { return _partition; }
+
     void set_offset(int64_t offset) { _offset = offset; }
     int64_t offset() const { return _offset; }
 
+    void set_message_id(std::string message_id) { _message_id = std::move(message_id); }
+    const std::string& message_id() const { return _message_id; }
+
+    void set_timestamp(int64_t timestamp) { _timestamp = timestamp; }
+    int64_t timestamp() const { return _timestamp; }
+
+    void set_event_timestamp(int64_t event_timestamp) { _event_timestamp = event_timestamp; }
+    int64_t event_timestamp() const { return _event_timestamp; }
+
+    // A null key and an empty key are distinct: only set_key() marks the key present.
+    void set_key(std::string key) {
+        _key = std::move(key);
+        _has_key = true;
+    }
+    bool has_key() const { return _has_key; }
+    const std::string& key() const { return _key; }
+
+    void add_header(std::string key, std::string value) { _headers.emplace_back(std::move(key), std::move(value)); }
+    const std::vector<std::pair<std::string, std::string>>& headers() const { return _headers; }
+
     Status copy_from(ByteBufferMeta* source) override;
 
-    std::string to_string() override { return fmt::format("kafka partition: {}, offset: {}", _partition, _offset); }
+    std::string to_string() const override;
 
 private:
+    ByteBufferMetaType _source;
+    std::string _topic;
     int32_t _partition{-1};
-    int64_t _offset{-1};
+    int64_t _offset{-1};          // Kafka position
+    std::string _message_id;      // Pulsar position
+    int64_t _timestamp{-1};       // ms since epoch, -1 = not available (Kafka record ts / Pulsar publish time)
+    int64_t _event_timestamp{-1}; // ms since epoch, -1 = not available (Pulsar event time)
+    bool _has_key{false};
+    std::string _key;
+    std::vector<std::pair<std::string, std::string>> _headers;
 };
 
 struct ByteBuffer {

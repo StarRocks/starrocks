@@ -271,6 +271,15 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
             return;
         }
 
+        // Hold this job's tasks while an Avro schema evolution is pending: the schema-evolution daemon is
+        // altering the table, and dispatching now would just re-abort against the not-yet-evolved schema. No
+        // BE slot is taken yet (allocated below), so deferring here leaks nothing.
+        RoutineLoadJob pendingJob = routineLoadManager.getJob(routineLoadTaskInfo.getJobId());
+        if (pendingJob != null && pendingJob.hasPendingSchemaChange()) {
+            delayPutToQueue(routineLoadTaskInfo, "waiting for Avro schema evolution to complete");
+            return;
+        }
+
         try {
             // for kafka/pulsar routine load, readyToExecute means there is new data in kafka/pulsar stream
             if (!routineLoadTaskInfo.readyToExecute()) {
