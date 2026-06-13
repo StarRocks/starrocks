@@ -17,6 +17,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "column/fixed_length_column.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -816,6 +818,62 @@ TEST_F(VectorizedBinaryPredicateMapTest, mapEqExpr2) {
     ASSERT_TRUE(ptr->is_numeric());
 
     auto v = BooleanColumn::static_pointer_cast(ptr);
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_FALSE(v->get_data()[j]);
+    }
+}
+
+// Null-safe equal (<=>) treats NaN as not distinct from NaN for float/double, unlike a plain '=' which
+// keeps IEEE NaN != NaN. Covers the interpreted path; the JIT path is verified under STARROCKS_JIT_ENABLE.
+TEST_F(VectorizedBinaryPredicateTest, nullSafeEqNaN) {
+    expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
+    expr_node.child_type = TPrimitiveType::DOUBLE;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(TPrimitiveType::DOUBLE);
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    MockVectorizedExpr<TYPE_DOUBLE> col1(expr_node, 10, nan);
+    MockVectorizedExpr<TYPE_DOUBLE> col2(expr_node, 10, nan);
+    expr->_children.push_back(&col1);
+    expr->_children.push_back(&col2);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    auto v = BooleanColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(10, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_TRUE(v->get_data()[j]);
+    }
+#ifdef STARROCKS_JIT_ENABLE
+    {
+        ColumnPtr jptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(
+                jptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& jptr) {
+                    auto col = BooleanColumn::static_pointer_cast(jptr);
+                    for (int j = 0; j < col->size(); ++j) {
+                        ASSERT_TRUE(col->get_data()[j]);
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+    }
+#endif
+}
+
+// Control: a NaN is still distinct from a non-NaN value under <=>.
+TEST_F(VectorizedBinaryPredicateTest, nullSafeEqNaNvsValue) {
+    expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
+    expr_node.child_type = TPrimitiveType::DOUBLE;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(TPrimitiveType::DOUBLE);
+    MockVectorizedExpr<TYPE_DOUBLE> col1(expr_node, 10, std::numeric_limits<double>::quiet_NaN());
+    MockVectorizedExpr<TYPE_DOUBLE> col2(expr_node, 10, 1.0);
+    expr->_children.push_back(&col1);
+    expr->_children.push_back(&col2);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    auto v = BooleanColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(10, v->size());
     for (int j = 0; j < v->size(); ++j) {
         ASSERT_FALSE(v->get_data()[j]);
     }

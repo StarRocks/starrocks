@@ -3389,4 +3389,199 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, NormalizeNanInColumn) {
+    constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
+    constexpr double kDoubleNaN = std::numeric_limits<double>::quiet_NaN();
+
+    // Float column without NaN — function returns the same column unchanged.
+    {
+        auto col = FloatColumn::create();
+        col->append(1.0f);
+        col->append(2.5f);
+        ColumnPtr input = std::move(col);
+        auto result = normalize_nan_in_column<float>(input);
+        ASSERT_EQ(result.get(), input.get());
+    }
+
+    // Float column with NaN — only NaN entries are rewritten to canonical bits.
+    {
+        auto col = FloatColumn::create();
+        col->append(1.0f);
+        col->append(kFloatNaN);
+        col->append(3.5f);
+        col->append(kFloatNaN);
+        ColumnPtr input = std::move(col);
+        auto result = normalize_nan_in_column<float>(input);
+        ASSERT_NE(result.get(), input.get());
+        const auto& data = down_cast<const FloatColumn*>(result.get())->get_data();
+        ASSERT_EQ(data[0], 1.0f);
+        ASSERT_TRUE(std::isnan(data[1]));
+        ASSERT_EQ(data[2], 3.5f);
+        ASSERT_TRUE(std::isnan(data[3]));
+        // Both NaN entries must collapse to the same canonical bit pattern,
+        // otherwise they would hash to different buckets in a null-safe join.
+        ASSERT_EQ(std::bit_cast<uint32_t>(data[1]), CANONICAL_FLOAT_NAN_BITS);
+        ASSERT_EQ(std::bit_cast<uint32_t>(data[3]), CANONICAL_FLOAT_NAN_BITS);
+    }
+
+    // Double column with NaN — canonical double NaN bits.
+    {
+        auto col = DoubleColumn::create();
+        col->append(1.0);
+        col->append(kDoubleNaN);
+        ColumnPtr input = std::move(col);
+        auto result = normalize_nan_in_column<double>(input);
+        const auto& data = down_cast<const DoubleColumn*>(result.get())->get_data();
+        ASSERT_EQ(data[0], 1.0);
+        ASSERT_EQ(std::bit_cast<uint64_t>(data[1]), CANONICAL_DOUBLE_NAN_BITS);
+    }
+
+    // Nullable column — null mask preserved, NaN payloads normalized.
+    {
+        auto data_col = FloatColumn::create();
+        data_col->append(1.0f);
+        data_col->append(kFloatNaN);
+        auto null_col = NullColumn::create();
+        null_col->append(0);
+        null_col->append(1);
+        ColumnPtr input = NullableColumn::create(std::move(data_col), std::move(null_col));
+        auto result = normalize_nan_in_column<float>(input);
+        ASSERT_TRUE(result->is_nullable());
+        const auto* res_nullable = down_cast<const NullableColumn*>(result.get());
+        const auto& res_data = down_cast<const FloatColumn*>(res_nullable->data_column().get())->get_data();
+        ASSERT_EQ(res_data[0], 1.0f);
+        ASSERT_TRUE(std::isnan(res_data[1]));
+        ASSERT_EQ(std::bit_cast<uint32_t>(res_data[1]), CANONICAL_FLOAT_NAN_BITS);
+        const auto& res_nulls = res_nullable->null_column()->get_data();
+        ASSERT_EQ(res_nulls[0], 0);
+        ASSERT_EQ(res_nulls[1], 1);
+    }
+
+    // Empty column — short-circuits to the same column.
+    {
+        ColumnPtr input = FloatColumn::create();
+        auto result = normalize_nan_in_column<float>(input);
+        ASSERT_EQ(result.get(), input.get());
+    }
+
+    // Dispatcher passes non-float types through untouched.
+    {
+        auto int_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        int_col->append_datum(Datum(int32_t{42}));
+        ColumnPtr input = std::move(int_col);
+        auto result = normalize_float_nan(input, TYPE_INT);
+        ASSERT_EQ(result.get(), input.get());
+    }
+}
+
+// A null-safe equal (<=>) join on a double key must treat NaN as equal to NaN. The key column has no
+// NULLs, which previously dropped the null-safe flag and routed the single key through the ONE_KEY fast
+// path (raw float ==, where NaN != NaN). The fix keeps float/double on the serialized path that
+// canonicalizes NaN, so two NaNs match even with different bit payloads.
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, NullSafeEqualMatchesNaNForDouble) {
+    TypeDescriptor double_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_DOUBLE, false, 1);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_DOUBLE, false, 1);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 2);
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.join_keys.emplace_back(JoinKeyDesc{&double_type, /*is_null_safe_equal=*/true, nullptr});
+
+    // Two NaNs with different bit payloads: a match can only come from canonicalization, not memcmp.
+    const double canonical_nan = std::bit_cast<double>(CANONICAL_DOUBLE_NAN_BITS);
+    const double other_nan = std::bit_cast<double>(CANONICAL_DOUBLE_NAN_BITS | 0x1ULL);
+
+    JoinHashTable ht;
+
+    auto build_chunk = std::make_shared<Chunk>();
+    auto build_column = DoubleColumn::create();
+    build_column->append({1.0, canonical_nan, 2.0});
+    build_chunk->append_column(std::move(build_column), 1);
+
+    auto probe_chunk = std::make_shared<Chunk>();
+    auto probe_column = DoubleColumn::create();
+    probe_column->append({other_nan, 1.0, 3.0});
+    probe_chunk->append_column(probe_column->clone(), 0);
+    Columns probe_key_columns = {probe_column->clone()};
+
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool eos = false;
+
+    ht.create(param);
+    Columns key_columns{build_chunk->columns()[0]};
+    ht.append_chunk(build_chunk, key_columns);
+    (void)ht.build(_runtime_state.get());
+    (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+
+    // probe other_nan -> build canonical_nan (NaN <=> NaN), and 1.0 -> 1.0; 3.0 has no match.
+    auto* result_column = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    auto result_data = down_cast<DoubleColumn*>(result_column)->get_data();
+    ASSERT_EQ(result_data.size(), 2);
+    bool has_nan = false;
+    bool has_one = false;
+    for (double v : result_data) {
+        has_nan |= std::isnan(v);
+        has_one |= (v == 1.0);
+    }
+    ASSERT_TRUE(has_nan);
+    ASSERT_TRUE(has_one);
+}
+
+// Scope guard: a regular '=' join keeps IEEE semantics (NaN != NaN). Only the null-safe path
+// canonicalizes NaN, so a plain equi-join on a double NaN must NOT match.
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, PlainEqualDoesNotMatchNaNForDouble) {
+    TypeDescriptor double_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_DOUBLE, false, 1);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_DOUBLE, false, 1);
+
+    auto probe_row_desc = create_probe_desc(&row_desc_builder);
+    auto build_row_desc = create_build_desc(&row_desc_builder);
+
+    HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 2);
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.join_keys.emplace_back(JoinKeyDesc{&double_type, /*is_null_safe_equal=*/false, nullptr});
+
+    const double nan_value = std::bit_cast<double>(CANONICAL_DOUBLE_NAN_BITS);
+
+    JoinHashTable ht;
+
+    auto build_chunk = std::make_shared<Chunk>();
+    auto build_column = DoubleColumn::create();
+    build_column->append({nan_value, 1.0});
+    build_chunk->append_column(std::move(build_column), 1);
+
+    auto probe_chunk = std::make_shared<Chunk>();
+    auto probe_column = DoubleColumn::create();
+    probe_column->append({nan_value, 1.0});
+    probe_chunk->append_column(probe_column->clone(), 0);
+    Columns probe_key_columns = {probe_column->clone()};
+
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool eos = false;
+
+    ht.create(param);
+    Columns key_columns{build_chunk->columns()[0]};
+    ht.append_chunk(build_chunk, key_columns);
+    (void)ht.build(_runtime_state.get());
+    (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+
+    // Only 1.0 -> 1.0 matches; NaN = NaN is false under IEEE equality.
+    auto* result_column = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    auto result_data = down_cast<DoubleColumn*>(result_column)->get_data();
+    ASSERT_EQ(result_data.size(), 1);
+    ASSERT_EQ(result_data[0], 1.0);
+}
+
 } // namespace starrocks
