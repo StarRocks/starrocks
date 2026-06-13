@@ -55,92 +55,29 @@ function: assert_explain_contains("select id from vt where cat < 5 and doc match
 -- result:
 None
 -- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
 function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
--- !result
-set ann_filter_strategy = 'pre';
--- result:
--- !result
-function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'brute_force';
--- result:
--- !result
-function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'auto';
--- result:
 -- !result
 function: assert_equal_result("select id from vt where cat < 9 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 9 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
 -- !result
-set ann_filter_strategy = 'brute_force';
--- result:
--- !result
 function: assert_equal_result("select id from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 1 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
--- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
-function: assert_equal_result("select id from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 1 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'brute_force';
--- result:
 -- !result
 function: assert_equal_result("select id from vt where tag = 0 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where tag = 0 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
 -- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
-function: assert_equal_result("select id from vt where tag = 0 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where tag = 0 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
 function: assert_equal_result("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
 -- !result
-set ann_filter_strategy = 'brute_force';
--- result:
--- !result
-function: assert_equal_result("select id from vt where doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'brute_force';
--- result:
--- !result
 function: assert_equal_result("select id from vt where doc match 'rare' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'rare' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
--- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
-function: assert_equal_result("select id from vt where doc match 'rare' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where doc match 'rare' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'auto';
--- result:
 -- !result
 function: assert_equal_result("select id from vt where cat < 5 and doc match 'red' order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 and doc match 'red' order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
@@ -150,9 +87,6 @@ function: assert_explain_contains("select id from vt where cat = 0 or cat = 5 or
 -- result:
 None
 -- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
 function: assert_equal_result("select id from vt where cat = 0 or cat = 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat = 0 or cat = 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
@@ -161,39 +95,9 @@ function: assert_explain_contains("select id from vt where cat + tag > 50 order 
 -- result:
 None
 -- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
 function: assert_equal_result("select id from vt where cat + tag > 50 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat + tag > 50 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
--- !result
-set ann_filter_strategy = 'post';
--- result:
--- !result
-select count(*) from (select id, cat from vt where cat < 1 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10) s where s.cat >= 1;
--- result:
-0
--- !result
-function: assert_equal_result("select id from vt where cat < 9 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 9 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
-UPDATE information_schema.be_configs SET VALUE = 'false' WHERE NAME = 'enable_vector_index_residual_prefilter';
--- result:
--- !result
-function: assert_equal_result("select id from vt where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-UPDATE information_schema.be_configs SET VALUE = 'true' WHERE NAME = 'enable_vector_index_residual_prefilter';
--- result:
--- !result
-set ann_filter_strategy = 'auto';
--- result:
 -- !result
 DROP TABLE vt;
 -- result:
@@ -227,22 +131,9 @@ function: assert_explain_contains("select id from vt_pk where cat < 5 order by a
 -- result:
 None
 -- !result
-set ann_filter_strategy = 'auto';
--- result:
--- !result
 function: assert_equal_result("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt_pk where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
 -- result:
 None
--- !result
-set ann_filter_strategy = 'brute_force';
--- result:
--- !result
-function: assert_equal_result("select id from vt_pk where cat < 5 order by approx_l2_distance(vec, [0,0,0,0,0]) limit 10", "select id from vt_pk where cat < 5 order by l2_distance(vec, [0,0,0,0,0]) limit 10")
--- result:
-None
--- !result
-set ann_filter_strategy = 'auto';
--- result:
 -- !result
 DROP TABLE vt_pk;
 -- result:

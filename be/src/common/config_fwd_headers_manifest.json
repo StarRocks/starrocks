@@ -355,8 +355,6 @@
         "vector_adaptive_ef_alpha",
         "vector_adaptive_ef_cap",
         "vector_adaptive_ef_baseline_rows",
-        "enable_vector_index_residual_prefilter",
-        "vector_index_residual_post_filter_oversample",
         "vector_index_brute_selectivity_threshold",
         "vector_index_build_flush_threshold_rows"
       ]

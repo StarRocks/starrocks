@@ -305,9 +305,6 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
         _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
-        _params.vector_search_option->filter_strategy = _runtime_state->query_options().__isset.ann_filter_strategy
-                                                                ? _runtime_state->query_options().ann_filter_strategy
-                                                                : 0;
     }
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;

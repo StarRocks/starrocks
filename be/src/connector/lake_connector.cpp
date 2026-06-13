@@ -402,9 +402,6 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
         _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
-        _params.vector_search_option->filter_strategy = _runtime_state->query_options().__isset.ann_filter_strategy
-                                                                ? _runtime_state->query_options().ann_filter_strategy
-                                                                : 0;
     }
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));

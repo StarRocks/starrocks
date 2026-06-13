@@ -50,11 +50,6 @@ public:
 
     double k_factor;
 
-    // ANN filter strategy override (AnnFilterStrategy: 0=AUTO, 1=PRE, 2=POST, 3=BRUTE). Set from the
-    // ann_filter_strategy session variable via TQueryOptions.ann_filter_strategy; AUTO lets the BE
-    // resolver decide per segment.
-    int filter_strategy = 0;
-
     VectorSearchOption() = default;
 };
 

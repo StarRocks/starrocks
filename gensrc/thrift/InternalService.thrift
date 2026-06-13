@@ -354,9 +354,6 @@ struct TQueryOptions {
   150: optional map<string, string> ann_params;
   151: optional double pq_refine_factor;
   152: optional double k_factor;
-  // ANN filter strategy override from the ann_filter_strategy session variable
-  // (0=AUTO, 1=PRE, 2=POST, 3=BRUTE; see AnnFilterStrategy / resolve_ann_filter_strategy).
-  153: optional i32 ann_filter_strategy;
 
   160: optional bool enable_join_runtime_filter_pushdown;
   161: optional bool enable_join_runtime_bitset_filter;
