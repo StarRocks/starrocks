@@ -207,9 +207,14 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             return predicate;
         }
 
+        // Treat CAST-of-constant as constant-like so the optimize path can trigger
+        boolean leftIsConstLike = leftChild.isConstantRef() ||
+                (leftChild instanceof CastOperator && leftChild.getChild(0).isConstantRef());
+        boolean rightIsConstLike = rightChild.isConstantRef() ||
+                (rightChild instanceof CastOperator && rightChild.getChild(0).isConstantRef());
         // we will try cast const operator to variable operator
-        if ((rightChild.isVariable() && leftChild.isConstantRef()) ||
-                (leftChild.isVariable() && rightChild.isConstantRef())) {
+        if ((rightChild.isVariable() && leftIsConstLike) ||
+                (leftChild.isVariable() && rightIsConstLike)) {
             int constant = leftChild.isVariable() ? 1 : 0;
             int variable = 1 - constant;
             Optional<BinaryPredicateOperator> optional = optimizeConstantAndVariable(predicate, constant, variable);
@@ -234,6 +239,24 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                                                                           int constantIndex, int variableIndex) {
         ScalarOperator constant = predicate.getChild(constantIndex);
         ScalarOperator variable = predicate.getChild(variableIndex);
+
+        // If constant is a CAST operator, try to fold it so the literal can be
+        // coerced directly into the variable's type. Under FORBID_INVALID_IMPLICIT_CAST,
+        // that direct coercion may be forbidden (e.g. BIGINT->INT narrowing).
+        // In that case bail out so the caller's compatible-type path can
+        // widen the variable instead, which is an allowed coercion.
+        if (constant instanceof CastOperator && constant.getChild(0).isConstantRef()) {
+            if (isStrictModeBlockingFold(constant.getType(), variable.getType())) {
+                return Optional.empty();
+            }
+            FoldConstantsRule foldRule = new FoldConstantsRule();
+            ScalarOperator foldedConstant = foldRule.apply(constant, new ScalarOperatorRewriteContext());
+            if (foldedConstant instanceof ConstantOperator) {
+                predicate.getChildren().set(constantIndex, foldedConstant);
+                constant = foldedConstant;
+            }
+        }
+
         Type typeConstant = constant.getType();
         Type typeVariable = variable.getType();
 
@@ -432,6 +455,21 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 "Implicit cast from %s to %s is not allowed under FORBID_INVALID_IMPLICIT_CAST sql_mode. "
                         + "Use an explicit CAST.",
                 from, to));
+    }
+
+    // True iff strict mode is on AND collapsing the CAST target type into the
+    // variable's type would be rejected by checkImplicitCastAllowed. Used to
+    // bail out of the CAST-of-constant fold so the caller's compatible-type
+    // path can widen the variable instead.
+    private static boolean isStrictModeBlockingFold(Type castTargetType, Type variableType) {
+        if (ConnectContext.get() == null) {
+            return false;
+        }
+        if (!SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_FORBID_INVALID_IMPLICIT_CAST)) {
+            return false;
+        }
+        return !isImplicitCastSafe(castTargetType, variableType);
     }
 
     private static boolean isImplicitCastSafe(Type from, Type to) {
