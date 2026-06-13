@@ -20,14 +20,39 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
+
+// Wrapper over PercentileValue that defers ctor compression until the first
+// incoming digest is observed. PercentileValue itself is a value-type stored on
+// disk and copied verbatim through merge/spill paths; adding a flag to it would
+// affect serialization layout, so the flag lives only in this aggregate state.
+struct PercentileUnionState {
+    PercentileValue value;
+    bool compression_initialized = false;
+
+    void reinit_with_compression(double c) {
+        value = PercentileValue(c);
+        compression_initialized = true;
+    }
+
+    int64_t mem_usage() const { return value.mem_usage(); }
+};
+
 class PercentileUnionAggregateFunction final
-        : public AggregateFunctionBatchHelper<PercentileValue, PercentileUnionAggregateFunction> {
+        : public AggregateFunctionBatchHelper<PercentileUnionState, PercentileUnionAggregateFunction> {
 public:
     ALWAYS_INLINE void update_state(FunctionContext* ctx, AggDataPtr state, const PercentileValue* value) const {
+        // Lazy init from the first incoming digest. Covers both local-agg
+        // (update -> update_state) and distributed/spill-restore paths
+        // (merge -> update_state), since merge is the only deserialization
+        // entry point in this aggregate.
+        if (UNLIKELY(!this->data(state).compression_initialized)) {
+            this->data(state).reinit_with_compression(value->compression());
+        }
         int64_t prev_memory = this->data(state).mem_usage();
-        this->data(state).merge(value);
+        this->data(state).value.merge(value);
         ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
@@ -55,7 +80,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_object());
         auto* column = down_cast<PercentileColumn*>(to);
-        auto& percentile_value = const_cast<PercentileValue&>(this->data(state));
+        auto& percentile_value = const_cast<PercentileValue&>(this->data(state).value);
         column->append(std::move(percentile_value));
     }
 
@@ -67,7 +92,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_object());
         auto* column = down_cast<PercentileColumn*>(to);
-        auto& percentile_value = const_cast<PercentileValue&>(this->data(state));
+        auto& percentile_value = const_cast<PercentileValue&>(this->data(state).value);
         column->append(std::move(percentile_value));
     }
 

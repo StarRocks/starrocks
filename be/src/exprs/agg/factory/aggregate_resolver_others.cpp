@@ -18,6 +18,7 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/percentile_cont.h"
+#include "exprs/agg/percentile_union.h"
 #include "types/logical_type.h"
 #include "types/percentile_value.h"
 
@@ -72,7 +73,7 @@ void AggregateFuncResolver::register_others() {
             "percentile_approx_weighted", false,
             AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction());
 
-    add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
+    add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileUnionState>(
             "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());
 
     add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileState<TYPE_DOUBLE>>(
