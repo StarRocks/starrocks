@@ -530,6 +530,12 @@ public:
                _query_options.enable_hash_join_serialize_fixed_size_string;
     }
 
+    // Aggregation: adaptive consecutive-keys cache (default on, FE may turn off per query).
+    bool enable_agg_consecutive_keys_cache() const {
+        return !_query_options.__isset.enable_agg_consecutive_keys_cache ||
+               _query_options.enable_agg_consecutive_keys_cache;
+    }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }

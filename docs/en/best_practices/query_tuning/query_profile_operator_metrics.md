@@ -327,6 +327,8 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | `GetResultsTime` | Time to extract aggregate results. |
 | `HashTableSize` | Size of the Hash Table. |
 | `HashTableMemoryUsage` | Memory size of the Hash Table. |
+| `ConsecutiveKeysCacheHits` | Rows whose `GROUP BY` key matched the previous row, letting the aggregate reuse the already-resolved state and skip the hash-table lookup. A high ratio indicates input clustered by the group-by columns — typical of sorted scans, sort-key-prefixed storage, or upstream pre-aggregation — and means the aggregate is paying reduced per-row cost. |
+| `ConsecutiveKeysCacheMisses` | Rows whose key differed from the previous row and required a full hash-table probe. If the hit ratio (`Hits / (Hits + Misses)`) stays low over the first few chunks, the cache auto-disables itself for the rest of the query, so a large miss count with no further hits is expected on unordered input. |
 | `InputRowCount` | Number of input rows. |
 | `PassThroughRowCount` | In Auto mode, the number of data rows processed in streaming mode after low aggregation leads to degradation to streaming mode. |
 | `ResultAggAppendTime` | Time taken to append aggregate result columns. |

@@ -70,7 +70,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     }
 
     if (!_aggregator->is_none_group_by_exprs()) {
-        COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
+        _aggregator->update_hash_map_profile_counters();
         // If hash map is empty, we don't need to return value
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();

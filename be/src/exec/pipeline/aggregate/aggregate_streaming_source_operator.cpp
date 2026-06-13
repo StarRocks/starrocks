@@ -90,7 +90,7 @@ DEFINE_FAIL_POINT(force_reset_aggregator_after_agg_streaming_sink_finish);
 Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->it_hash() = _aggregator->state_allocator().begin();
-        COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
+        _aggregator->update_hash_map_profile_counters();
     }
 
     RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));

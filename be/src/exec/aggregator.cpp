@@ -1650,6 +1650,17 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             variant->fixed_byte_size = fixed_byte_size;
         }
     });
+
+    // Session-gated activation. Default ON; FE may turn off per query for
+    // diagnosis or to bisect a regression.
+    const bool cache_enabled = _state == nullptr || _state->enable_agg_consecutive_keys_cache();
+    if (!cache_enabled) {
+        hash_variant.visit([](auto& variant) {
+            if constexpr (requires { variant->_consecutive_key_cache.force_disable(); }) {
+                variant->_consecutive_key_cache.force_disable();
+            }
+        });
+    }
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {
