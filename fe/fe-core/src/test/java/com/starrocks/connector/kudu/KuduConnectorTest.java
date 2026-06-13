@@ -92,4 +92,50 @@ public class KuduConnectorTest {
         ConnectorMetadata metadata = connector.getMetadata();
         Assertions.assertTrue(metadata instanceof KuduMetadata);
     }
+
+    @Test
+    public void testCreateConnectorWithCustomTimeouts() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("kudu.master", "localhost:7051");
+        properties.put("kudu.catalog.type", "kudu");
+        properties.put(KuduConnector.KUDU_CLIENT_DEFAULT_OPERATION_TIMEOUT_MS, "600000");
+        properties.put(KuduConnector.KUDU_CLIENT_DEFAULT_ADMIN_OPERATION_TIMEOUT_MS, "120000");
+
+        KuduConnector connector = new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties));
+        Assertions.assertTrue(connector.getMetadata() instanceof KuduMetadata);
+    }
+
+    @Test
+    public void testCreateConnectorWithNonNumericTimeoutFails() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("kudu.master", "localhost:7051");
+        properties.put("kudu.catalog.type", "kudu");
+        properties.put(KuduConnector.KUDU_CLIENT_DEFAULT_OPERATION_TIMEOUT_MS, "not-a-number");
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)));
+    }
+
+    @Test
+    public void testCreateConnectorWithNonPositiveTimeoutFails() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("kudu.master", "localhost:7051");
+        properties.put("kudu.catalog.type", "kudu");
+        properties.put(KuduConnector.KUDU_CLIENT_DEFAULT_ADMIN_OPERATION_TIMEOUT_MS, "0");
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)));
+    }
+
+    @Test
+    public void testCreateConnectorAcceptsBlankTimeoutAsDefault() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("kudu.master", "localhost:7051");
+        properties.put("kudu.catalog.type", "kudu");
+        properties.put(KuduConnector.KUDU_CLIENT_DEFAULT_OPERATION_TIMEOUT_MS, "");
+        properties.put(KuduConnector.KUDU_CLIENT_DEFAULT_ADMIN_OPERATION_TIMEOUT_MS, "");
+
+        KuduConnector connector = new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties));
+        Assertions.assertTrue(connector.getMetadata() instanceof KuduMetadata);
+    }
 }

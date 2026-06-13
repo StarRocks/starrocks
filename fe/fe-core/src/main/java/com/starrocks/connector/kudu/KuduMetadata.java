@@ -73,22 +73,41 @@ public class KuduMetadata implements ConnectorMetadata {
     private final Optional<IHiveMetastore> metastore;
     private final Boolean schemaEmulationEnabled;
     private final String schemaEmulationPrefix;
+    private final long defaultOperationTimeoutMs;
     private static final String DATABASE_TABLE_JOINER = ".";
     public static final String DEFAULT_SCHEMA = "default";
     public static final Set<String> HIVE_SYSTEM_SCHEMA = Sets.newHashSet("information_schema", "sys");
-    private static final ConcurrentHashMap<String, KuduClient> KUDU_CLIENTS = new ConcurrentHashMap<>();
+    // Cache shared FE-side KuduClient instances. Keyed by master address together with the configured
+    // operation/admin timeouts so two catalogs that point to the same master but configure different
+    // timeouts get distinct clients instead of silently reusing whichever one was created first.
+    private static final ConcurrentHashMap<KuduClientCacheKey, KuduClient> KUDU_CLIENTS = new ConcurrentHashMap<>();
     private final Map<String, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
 
     public KuduMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, String master, boolean schemaEmulationEnabled,
-                        String schemaEmulationPrefix, Optional<IHiveMetastore> hiveMetastore) {
+                        String schemaEmulationPrefix, Optional<IHiveMetastore> hiveMetastore,
+                        long defaultOperationTimeoutMs, long defaultAdminOperationTimeoutMs) {
         this.masterAddresses = master;
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.metastore = hiveMetastore;
-        this.kuduClient = KUDU_CLIENTS.computeIfAbsent(master, m -> new KuduClient.KuduClientBuilder(m).build());
+        this.defaultOperationTimeoutMs = defaultOperationTimeoutMs;
+        this.kuduClient = KUDU_CLIENTS.computeIfAbsent(
+                new KuduClientCacheKey(master, defaultOperationTimeoutMs, defaultAdminOperationTimeoutMs),
+                key -> new KuduClient.KuduClientBuilder(key.master())
+                        .defaultOperationTimeoutMs(key.defaultOperationTimeoutMs())
+                        .defaultAdminOperationTimeoutMs(key.defaultAdminOperationTimeoutMs())
+                        .build());
         this.schemaEmulationEnabled = schemaEmulationEnabled;
         this.schemaEmulationPrefix = schemaEmulationPrefix;
+    }
+
+    static boolean clientCacheContains(String master, long defaultOperationTimeoutMs, long defaultAdminOperationTimeoutMs) {
+        return KUDU_CLIENTS.containsKey(
+                new KuduClientCacheKey(master, defaultOperationTimeoutMs, defaultAdminOperationTimeoutMs));
+    }
+
+    record KuduClientCacheKey(String master, long defaultOperationTimeoutMs, long defaultAdminOperationTimeoutMs) {
     }
 
     @Override
@@ -270,6 +289,9 @@ public class KuduMetadata implements ConnectorMetadata {
         }
         KuduScanToken.KuduScanTokenBuilder builder = kuduClient.newScanTokenBuilder(nativeTable);
         builder.setProjectedColumnNames(params.getFieldNames());
+        // Encode the operation timeout into scan tokens so the BE-side scanner uses the configured
+        // value when issuing scan RPCs, instead of the kudu-client built-in 30 s default.
+        builder.scanRequestTimeout(defaultOperationTimeoutMs);
         if (params.getLimit() > 0) {
             builder.limit(params.getLimit());
         }
