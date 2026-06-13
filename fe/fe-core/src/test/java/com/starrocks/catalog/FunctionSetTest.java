@@ -380,4 +380,16 @@ public class FunctionSetTest {
         Assertions.assertEquals(IntegerType.BIGINT, tableFunction.getTableFnReturnTypes().get(0));
         Assertions.assertEquals(VarcharType.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
     }
+
+    @Test
+    public void testTableFunctionCopyPreservesJoinFlags() {
+        TableFunction tableFunction = new TableFunction(new FunctionName("unnest"), Lists.newArrayList("unnest"),
+                Lists.newArrayList(AnyArrayType.ANY_ARRAY), Lists.newArrayList(AnyElementType.ANY_ELEMENT), true);
+        tableFunction.setIsLeftJoin(true);
+        tableFunction.setIsArrayJoin(true);
+
+        TableFunction copied = (TableFunction) tableFunction.copy();
+        Assertions.assertTrue(copied.isLeftJoin());
+        Assertions.assertTrue(copied.isArrayJoin());
+    }
 }

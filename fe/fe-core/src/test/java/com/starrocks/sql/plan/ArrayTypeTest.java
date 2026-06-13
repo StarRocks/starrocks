@@ -855,4 +855,17 @@ public class ArrayTypeTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         assertContains(plan, "function_name:array_agg");
     }
+
+    @Test
+    public void testArrayJoinSyntax() throws Exception {
+        String sql = "select c0, c1 from test_array array join c2 as c1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "TableValueFunction");
+        assertContains(plan, "tableFunctionName: unnest");
+
+        sql = "select c0, c1 from test_array left array join c2 as c1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "join op: LEFT OUTER JOIN");
+        assertContains(plan, "tableFunctionName: unnest");
+    }
 }
