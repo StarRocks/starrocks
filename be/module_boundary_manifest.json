@@ -536,7 +536,9 @@
       "owned_targets": ["ExecRuntime"],
       "additional_owned_globs": [
         "be/src/exec/runtime/fragment_runtime_state.h",
-        "be/src/exec/runtime/query_runtime_state.h"
+        "be/src/exec/runtime/query_runtime_state.h",
+        "be/src/exec/pipeline/schedule/common.h",
+        "be/src/exec/pipeline/schedule/utils.h"
       ],
       "allowed_include_prefixes": [
         "compute_env/",
@@ -547,6 +549,10 @@
         "exec/pipeline/operator_with_dependency.h",
         "exec/pipeline/source_operator.h",
         "exec/pipeline/primitives/",
+        "exec/pipeline/schedule/common.h",
+        "exec/pipeline/schedule/event_scheduler.h",
+        "exec/pipeline/schedule/pipeline_driver_observer.h",
+        "exec/pipeline/schedule/utils.h",
         "exec/pipeline/runtime_filter_hub.h",
         "exec/pipeline/runtime_filter_core_types.h",
         "exec/pipeline/scan/morsel_queue.h",

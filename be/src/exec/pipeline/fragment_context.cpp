@@ -39,9 +39,9 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/exec_env.h"
@@ -208,7 +208,7 @@ bool FragmentContext::need_report_exec_state() {
     }
     const auto now = MonotonicNanos();
     const auto interval_ns = query_runtime_state->get_runtime_profile_report_interval_ns();
-    auto last_report_ns = _last_report_exec_state_ns.load();
+    auto last_report_ns = _fragment_runtime_state._last_report_exec_state_ns.load();
     return now - last_report_ns >= interval_ns;
 }
 
@@ -223,7 +223,7 @@ void FragmentContext::report_exec_state_if_necessary() {
     }
     const auto now = MonotonicNanos();
     const auto interval_ns = query_runtime_state->get_runtime_profile_report_interval_ns();
-    auto last_report_ns = _last_report_exec_state_ns.load();
+    auto last_report_ns = _fragment_runtime_state._last_report_exec_state_ns.load();
     if (now - last_report_ns < interval_ns) {
         return;
     }
@@ -249,7 +249,8 @@ void FragmentContext::report_exec_state_if_necessary() {
         }
     });
 
-    if (allPrepared && _last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+    if (allPrepared && _fragment_runtime_state._last_report_exec_state_ns.compare_exchange_strong(
+                               last_report_ns, normalized_report_ns)) {
         iterate_pipeline([](const Pipeline* pipeline) {
             for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();

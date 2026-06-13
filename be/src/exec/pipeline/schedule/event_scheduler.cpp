@@ -14,27 +14,46 @@
 
 #include "exec/pipeline/schedule/event_scheduler.h"
 
-#include "exec/pipeline/fragment_context.h"
+#include "base/time/time.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/driver_state.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/pipeline_driver_observer.h"
 #include "exec/pipeline/schedule/utils.h"
+#include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime/query_runtime_state.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
-std::unique_ptr<PipelineObserver> EventScheduler::create_driver_observer(DriverRawPtr driver) const {
-    return std::make_unique<PipelineDriverObserver>(driver);
+namespace {
+
+bool need_report_exec_state(FragmentRuntimeState* fragment_runtime_state, QueryRuntimeState* query_runtime_state) {
+    DCHECK(fragment_runtime_state != nullptr);
+    DCHECK(query_runtime_state != nullptr);
+    if (!query_runtime_state->enable_profile()) {
+        return false;
+    }
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_runtime_state->get_runtime_profile_report_interval_ns();
+    const auto last_report_ns = fragment_runtime_state->last_report_exec_state_ns();
+    return now - last_report_ns >= interval_ns;
+}
+
+} // namespace
+
+std::unique_ptr<PipelineObserver> EventScheduler::create_driver_observer(DriverRawPtr driver) {
+    return std::make_unique<PipelineDriverObserver>(driver, this);
 }
 
 void EventScheduler::add_blocked_driver(const DriverRawPtr driver) {
     // Capture query-context is needed before calling reschedule to avoid UAF
     auto* runtime_state = driver->runtime_state();
     DCHECK(runtime_state != nullptr);
-    auto query_ctx = runtime_state->query_ctx()->shared_from_this();
+    [[maybe_unused]] auto query_ctx_lifetime = runtime_state->query_ctx_lifetime().lock();
+    DCHECK(query_ctx_lifetime != nullptr);
     SCHEDULE_CHECK(!driver->is_in_blocked());
     driver->set_in_blocked(true);
     TRACE_SCHEDULE_LOG << "TRACE add to block queue:" << driver << "," << driver->to_readable_string();
@@ -55,11 +74,11 @@ void EventScheduler::try_schedule(const DriverRawPtr driver) {
     // The logic in the pipeline poller is basically the same.
     auto* runtime_state = driver->runtime_state();
     DCHECK(runtime_state != nullptr);
-    auto* fragment_ctx = runtime_state->fragment_ctx();
-    DCHECK(fragment_ctx != nullptr);
+    auto* fragment_runtime_state = driver->fragment_runtime_state();
+    auto* query_runtime_state = driver->query_runtime_state();
     if (runtime_state->is_cancelled() && !driver->is_operator_cancelled()) {
         add_to_ready_queue = true;
-    } else if (!driver->is_finished() && fragment_ctx->need_report_exec_state()) {
+    } else if (!driver->is_finished() && need_report_exec_state(fragment_runtime_state, query_runtime_state)) {
         add_to_ready_queue = true;
     } else if (driver->pending_finish()) {
         if (!driver->is_still_pending_finish()) {
