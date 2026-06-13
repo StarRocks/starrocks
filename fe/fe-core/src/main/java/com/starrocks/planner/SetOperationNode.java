@@ -332,7 +332,7 @@ public abstract class SetOperationNode extends PlanNode {
             }
         }
 
-        if (description.canProbeUse(this, context)) {
+        if (description.canProbeUse(this, probeExpr, context)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);

@@ -27,6 +27,9 @@ namespace starrocks {
 
 template <LogicalType LT>
 void BucketChainedJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    // Hash-bucket chaining maps keys by hash, so distinct keys can collide into one bucket; used_buckets
+    // is a lower bound that estimate_ndv() corrects with Linear Counting.
+    table_items->ndv_kind = JoinHashTableItems::NdvKind::HashedLC;
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
     table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
@@ -126,6 +129,8 @@ void BucketChainedJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_i
 template <LogicalType LT, bool NeedBuildChained>
 void TLinearChainedJoinHashMap<LT, NeedBuildChained>::build_prepare(RuntimeState* state,
                                                                     JoinHashTableItems* table_items) {
+    table_items->ndv_kind = is_asof_join(table_items->join_type) ? JoinHashTableItems::NdvKind::Unknown
+                                                                 : JoinHashTableItems::NdvKind::ExactBuckets;
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
     table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
@@ -373,6 +378,7 @@ void TLinearChainedJoinHashMap<LT, NeedBuildChained>::lookup_init(const JoinHash
 
 template <LogicalType LT>
 void LinearChainedAsofJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    table_items->ndv_kind = JoinHashTableItems::NdvKind::Unknown; // ASOF: see NdvKind note.
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
     table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
     table_items->first.resize(table_items->bucket_size, 0);
@@ -540,6 +546,8 @@ void LinearChainedAsofJoinHashMap<LT>::lookup_init(const JoinHashTableItems& tab
 
 template <LogicalType LT>
 void DirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    table_items->ndv_kind = is_asof_join(table_items->join_type) ? JoinHashTableItems::NdvKind::Unknown
+                                                                 : JoinHashTableItems::NdvKind::ExactBuckets;
     static constexpr size_t BUCKET_SIZE = static_cast<int64_t>(RunTimeTypeLimits<LT>::max_value()) -
                                           static_cast<int64_t>(RunTimeTypeLimits<LT>::min_value()) + 1L;
     table_items->bucket_size = BUCKET_SIZE;
@@ -623,6 +631,8 @@ void DirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_i
 
 template <LogicalType LT>
 void RangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    table_items->ndv_kind = is_asof_join(table_items->join_type) ? JoinHashTableItems::NdvKind::Unknown
+                                                                 : JoinHashTableItems::NdvKind::ExactBuckets;
     const uint64_t value_interval = static_cast<uint64_t>(table_items->max_value) - table_items->min_value + 1L;
     table_items->bucket_size = value_interval;
     table_items->first.resize(table_items->bucket_size, 0);
@@ -711,6 +721,7 @@ void RangeDirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& ta
 
 template <LogicalType LT>
 void RangeDirectMappingJoinHashSet<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    table_items->ndv_kind = JoinHashTableItems::NdvKind::ExactBitset;
     const uint64_t value_interval = static_cast<uint64_t>(table_items->max_value) - table_items->min_value + 1L;
     table_items->bucket_size = (value_interval + 7) / 8;
     table_items->key_bitset.resize(table_items->bucket_size, 0);
@@ -783,6 +794,8 @@ void RangeDirectMappingJoinHashSet<LT>::lookup_init(const JoinHashTableItems& ta
 
 template <LogicalType LT>
 void DenseRangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    table_items->ndv_kind = is_asof_join(table_items->join_type) ? JoinHashTableItems::NdvKind::Unknown
+                                                                 : JoinHashTableItems::NdvKind::ExactBuckets;
     const uint64_t value_interval = static_cast<uint64_t>(table_items->max_value) - table_items->min_value + 1L;
     table_items->bucket_size = table_items->row_count + 1;
     table_items->dense_groups.resize((value_interval + 31) / 32);

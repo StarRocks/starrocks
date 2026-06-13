@@ -70,6 +70,7 @@ public:
 
     void incr_builder() {
         _ht_row_counts.emplace_back(0);
+        _ht_ndv.emplace_back(0);
         _partial_in_filters.emplace_back();
         _partial_bloom_filter_build_params.emplace_back();
         _num_active_builders++;
@@ -93,7 +94,8 @@ public:
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
-    StatusOr<bool> add_partial_filters(size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
+    StatusOr<bool> add_partial_filters(size_t idx, size_t ht_row_count, size_t ht_ndv,
+                                       RuntimeInFilters&& partial_in_filters,
                                        OpTRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
                                        RuntimeMembershipFilters&& bloom_filter_descriptors);
 
@@ -116,6 +118,9 @@ private:
     std::atomic<bool> _always_true{false};
     std::atomic<size_t> _num_active_builders{0};
     std::vector<size_t> _ht_row_counts;
+    // Per-builder estimated distinct build-key count (NDV), parallel to _ht_row_counts. Local-shuffle
+    // partitions are disjoint, so these sum to the build NDV used to size and gate runtime filters.
+    std::vector<size_t> _ht_ndv;
     std::vector<RuntimeInFilters> _partial_in_filters;
     std::vector<OpTRuntimeBloomFilterBuildParams> _partial_bloom_filter_build_params;
     RuntimeMembershipFilters _bloom_filter_descriptors;

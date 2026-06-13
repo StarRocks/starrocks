@@ -32,6 +32,7 @@ import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -868,6 +870,24 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testGenRuntimeFilterWhenRightJoin() throws Exception {
+        // Make the build (part) side selective: NDV(p_partkey) below NDV(l_partkey) so the runtime filter
+        // prunes the probe (semijoin selectivity 50000/200000 = 0.25). On the unfiltered TPCH FK join the two
+        // sides have equal NDV, which is correctly judged useless by the probe gate; this keeps the test on
+        // its original intent - right joins generate a remote runtime filter when it is actually useful.
+        new MockUp<MockTpchStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Invocation invocation, Table table, List<String> columns) {
+                List<ColumnStatistic> stats = invocation.proceed(table, columns);
+                List<ColumnStatistic> result = new ArrayList<>(stats);
+                for (int i = 0; i < columns.size(); i++) {
+                    if (columns.get(i).equalsIgnoreCase("p_partkey")) {
+                        result.set(i, new ColumnStatistic(1, 200000, 0, 8, 50000));
+                    }
+                }
+                return result;
+            }
+        };
+
         String sql = "select * from lineitem right anti join [shuffle] part on lineitem.l_partkey = part.p_partkey";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  4:HASH JOIN\n" +

@@ -170,19 +170,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
-        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
-            // If it's partitioned join, and we can not get correct ndv
-            // then it's hard to estimate right bloom filter size, or it's too big.
-            // so we'd better to skip this global runtime filter.
-            // If buildMaxSize == 0, the filter must be used
-            // Otherwise would decide based on cardinality
-            long card = inner.getCardinality();
-            long buildMaxSize = sessionVariable.getGlobalRuntimeFilterBuildMaxSize();
-            if (buildMaxSize > 0 && (card <= 0 || card > buildMaxSize)) {
-                return;
-            }
-        }
-
         // if this is skew join's broadcast join and corresponding shuffle join decide not to generate grf
         // this join node should not generate grf either
         if (this instanceof HashJoinNode) {
@@ -202,6 +189,16 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
                     BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
+
+            // A skew join is split into a partitioned shuffle friend and a broadcast friend that share the
+            // same probe side and the same equi-conjuncts (both built from the same on-predicate, so conjunct
+            // indices line up). Only the shuffle friend is size-gated, so without this the broadcast friend
+            // would build a filter for a conjunct the shuffle friend dropped; PlanFragment#collectNodes then
+            // sees the per-conjunct count mismatch and clears the runtime filters on BOTH friends, discarding
+            // the selective filter the gate kept. Mirror the shuffle friend's kept conjuncts here.
+            if (skewBroadcastFriendSkipsConjunct(i)) {
+                continue;
+            }
 
             RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
             rf.setBuildPlanNodeId(this.id.asInt());
@@ -224,9 +221,16 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                     right = temp;
                 }
 
+                // Gate per conjunct by build-filter size (NDV of the build key, see buildSizeExceedsLimit),
+                // so a selective narrow key is not dropped together with a wide one.
+                if (buildSizeExceedsLimit(inner, sessionVariable, left)) {
+                    continue;
+                }
+
                 // push down rf to left child node, and build it only when it
                 // can be accepted by left child node.
                 rf.setBuildExpr(left);
+                rf.setBuildNdv(inner.getColumnNdv(left));
                 RuntimeFilterPushDownContext rfPushDownCxt =
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
                 if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, right, probePartitionByExprs)) {
@@ -248,9 +252,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 if (!ExprUtils.isBoundByTupleIds(right, getChild(1).getTupleIds())) {
                     continue;
                 }
+                if (buildSizeExceedsLimit(inner, sessionVariable, right)) {
+                    continue;
+                }
 
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 rf.setBuildExpr(right);
+                rf.setBuildNdv(inner.getColumnNdv(right));
                 rf.setOnlyLocal(true);
                 RuntimeFilterPushDownContext rfPushDownCxt =
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
@@ -259,6 +267,38 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 }
             }
         }
+    }
+
+    // The build-side bloom filter is sized by the number of distinct keys it holds, so gate on the build
+    // key's NDV, falling back to the build row count when the NDV is unknown (matches the previous
+    // row-count behavior when no stats are present). Only shuffle/partitioned joins are gated; broadcast
+    // and colocate joins keep a small build side by construction and are left ungated as before.
+    private boolean buildSizeExceedsLimit(PlanNode inner, SessionVariable sessionVariable, Expr buildKey) {
+        if (!distrMode.equals(DistributionMode.PARTITIONED) &&
+                !distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
+            return false;
+        }
+        long buildMaxSize = sessionVariable.getGlobalRuntimeFilterBuildMaxSize();
+        if (buildMaxSize <= 0) {
+            return false;
+        }
+        long ndv = inner.getColumnNdv(buildKey);
+        long buildSize = (ndv > 0) ? ndv : inner.getCardinality();
+        return buildSize <= 0 || buildSize > buildMaxSize;
+    }
+
+    // For a skew join's broadcast friend, report whether the corresponding shuffle friend declined to
+    // build a filter for this conjunct. The shuffle friend records the conjunct indices it kept in
+    // eqJoinConjunctsIndexToRfId; it is populated before the broadcast friend is visited, and both friends
+    // share the same equi-conjunct order, so a missing index means the shuffle friend dropped that conjunct
+    // and the broadcast friend must drop it too to keep the two filter sets the same size.
+    private boolean skewBroadcastFriendSkipsConjunct(int conjunctIndex) {
+        if (!(this instanceof HashJoinNode hashJoinNode) || !hashJoinNode.isSkewBroadJoin()) {
+            return false;
+        }
+        HashJoinNode shuffleFriend = hashJoinNode.getSkewJoinFriend();
+        return shuffleFriend != null &&
+                !shuffleFriend.getEqJoinConjunctsIndexToRfId().containsKey(conjunctIndex);
     }
 
     /**
@@ -389,7 +429,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
-            if (description.canProbeUse(this, context)) {
+            if (description.canProbeUse(this, probeExpr, context)) {
                 description.addProbeExpr(id.asInt(), probeExpr);
                 description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);
