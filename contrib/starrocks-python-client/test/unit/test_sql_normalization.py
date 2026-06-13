@@ -145,6 +145,15 @@ class TestNormalizeSQL:
         result = TableAttributeNormalizer.normalize_sql("")
         assert result == ""
 
+    def test_include_comment_string_normalization(self):
+        sql = """
+        SELECT '--not a comment' AS marker -- real comment
+        FROM users
+        """
+        expected = "select '--not a comment' as marker from users"
+        result = TableAttributeNormalizer.normalize_sql(sql)
+        assert result == expected
+
     def test_case_conversion(self):
         """Test case conversion to lowercase."""
         sql = "SELECT `ID`, `NAME` FROM `USERS` WHERE `STATUS` = 'ACTIVE'"
