@@ -895,7 +895,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public List<String> getTables(String dbName, String tablePattern, TableType tableType)
             throws MetaException, TException, UnknownDBException {
-        return client.get_all_tables(dbName);
+        return client.get_tables_by_type(dbName, tablePattern, tableType.name());
     }
 
     @Override
