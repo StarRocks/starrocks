@@ -833,4 +833,59 @@ TEST_F(SpillTest, file_group_test) {
 }
 */
 
+// Death tests for the CHECK invariants added in _compact_skew_chunks
+// (https://github.com/StarRocks/starrocks/issues/74074). Contract guard so a
+// future refactor cannot silently re-introduce a defensive skip and let the
+// OOB read sneak back in. The test target is built with -fno-access-control,
+// so we can call the private method directly.
+class SpillCompactSkewChunksCheckTest : public ::testing::Test {
+protected:
+    static ChunkPtr make_chunk_with_n_rows(size_t n) {
+        auto chunk = std::make_shared<Chunk>();
+        auto hash_col = spill::SpillHashColumn::create(n);
+        chunk->append_column(std::move(hash_col), 0);
+        return chunk;
+    }
+    static ChunkPtr make_empty_chunk() { return std::make_shared<Chunk>(); }
+    static void invoke(std::vector<ChunkPtr> chunks, size_t num_rows) {
+        RuntimeState rt_st;
+        spill::PartitionedSpillerWriter writer(nullptr, &rt_st);
+        (void)writer._compact_skew_chunks(num_rows, chunks);
+    }
+};
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_chunks_aborts) {
+    EXPECT_DEATH(invoke({}, 30), "empty chunks with num_rows");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, null_first_chunk_aborts) {
+    EXPECT_DEATH(invoke({ChunkPtr{}}, 30), "null chunk at idx 0");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_first_chunk_aborts) {
+    EXPECT_DEATH(invoke({make_empty_chunk()}, 30), "empty chunk at idx 0");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, num_rows_overshoot_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(5)}, 100), "disagrees with sum");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, null_mid_chunk_in_locator_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(15), ChunkPtr{}, make_chunk_with_n_rows(30)}, 45),
+                 "null chunk at idx 1");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_mid_chunk_in_locator_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(15), make_empty_chunk(), make_chunk_with_n_rows(30)}, 45),
+                 "empty chunk at idx 1");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, null_chunk_in_frequency_pass_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(50), ChunkPtr{}}, 50), "null chunk in frequency pass");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_chunk_in_frequency_pass_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(50), make_empty_chunk()}, 50), "empty chunk in frequency pass");
+}
+
 } // namespace starrocks::vectorized
