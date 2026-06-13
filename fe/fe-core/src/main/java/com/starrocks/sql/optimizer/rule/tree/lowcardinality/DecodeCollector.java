@@ -394,6 +394,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
         }
 
+        ColumnRefSet nonLowCardAggOutputs = new ColumnRefSet();
         // add string column's all aggregate expression(1st & 2nd stage)
         for (Integer aggregateId : stringAggregateExpressions.keySet()) {
             if (disableRewriteStringColumns.contains(aggregateId)) {
@@ -404,7 +405,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 if (agg.getColumnRefs().stream().map(ColumnRefOperator::getId)
                         .anyMatch(context.allStringColumns::contains)) {
                     context.stringAggregateExprs.put(aggregateId, aggregateExprs);
-                    context.allStringColumns.add(aggregateId);
+                    if (!context.allStringColumns.contains(aggregateId)) {
+                        nonLowCardAggOutputs.union(aggregateId);
+                        context.allStringColumns.add(aggregateId);
+                    }
                     break;
                 }
             }
@@ -424,6 +428,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                         context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
                                 .union(info.inputStringColumns);
                     });
+                    if (hashAgg.getType().isGlobal()) {
+                        info.outputStringColumns.except(nonLowCardAggOutputs);
+                    }
                 }
                 if (operator instanceof PhysicalWindowOperator window) {
                     window.getAnalyticCall().keySet().forEach(agg -> {

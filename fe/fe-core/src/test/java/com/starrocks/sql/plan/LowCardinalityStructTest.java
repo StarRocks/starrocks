@@ -14,8 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Expectations;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -650,5 +653,28 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  aggregate: array_agg[([3: ARRAY_VARCHAR_COL, ARRAY<VARCHAR(40)>, true]); args: INVALID_TYPE; " +
                 "result: struct<`col1` array<array<varchar(40)>>>; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggNonLowCardStringInput() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='2') */
+                ARRAY_AGG(VARCHAR_COL ORDER BY VARCHAR_COL2)
+                FROM T JOIN T2 ON (KEY_COL = KEY_COL2)
+                """;
+
+        IDictManager dictManager = IDictManager.getInstance();
+        new Expectations(dictManager) {
+            {
+                dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
+                result = false;
+            }
+        };
+
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: array_agg[([9: array_agg, struct<`col1` array<varchar(25)>, `col2` array<int(11)>>, " +
+                "true]); args: VARCHAR,INT; result: ARRAY<VARCHAR(25)>; args nullable: true; result nullable: " +
+                "true]"), plan);
     }
 }
