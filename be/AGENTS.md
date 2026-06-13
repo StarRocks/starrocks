@@ -233,7 +233,7 @@ Primitive execution contracts, runtime-filter infrastructure, generic morsel que
 ### ExecRuntime (`execruntime`)
 Execution runtime driver lifecycle and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.
 - Targets: `ExecRuntime`
-- Allowed internal include prefixes: `compute_env/`, `exec/runtime/`, `exec/pipeline/pipeline_driver.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/operator_with_dependency.h`, `exec/pipeline/source_operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_hub.h`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/split_morsel_ticket_checker.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exec/runtime_filter/`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `compute_env/`, `exec/pipeline/pipeline_driver.h`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/operator_with_dependency.h`, `exec/pipeline/source_operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_hub.h`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/split_morsel_ticket_checker.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exec/runtime_filter/`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ComputeEnv`, `ExecPrimitive`, `StoragePrimitive`, `ExprCore`, `Serde`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_runtime_test`
 - Remediation: Keep ExecRuntime limited to driver lifecycle and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward.
@@ -246,11 +246,18 @@ Read-side connector contracts, DataSource, and DataSourceProvider default mechan
 - Core tests: `connector_primitive_test`
 - Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
 
+### ConnectorLance (`connectorlance`)
+JNI-based Lance connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.
+- Targets: `ConnectorLance`
+- Allowed internal include prefixes: `connector/lance/`, `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `exec/hdfs_scanner/jni_scanner.h`, `exec/hdfs_scanner/hdfs_scanner.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ConnectorPrimitive`, `Connector`, `Exec`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep ConnectorLance limited to the Lance JNI connector implementation; move registration into ConnectorBootstrap and avoid pulling storage, service, or full Exec code into the connector library.
+
 ### ConnectorBootstrap (`connectorbootstrap`)
 Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.
 - Targets: `ConnectorBootstrap`
-- Allowed internal include prefixes: `connector/connector_bootstrap.h`, `connector/benchmark/`, `connector/elasticsearch/`, `connector/mysql/`, `connector/connector.h`, `connector/connector_registry.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `connector/connector_bootstrap.h`, `connector/benchmark/`, `connector/elasticsearch/`, `connector/mysql/`, `connector/lance/`, `connector/connector.h`, `connector/connector_registry.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorLance`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap.
 
 ### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)
