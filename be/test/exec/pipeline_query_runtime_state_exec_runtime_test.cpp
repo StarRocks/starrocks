@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <limits>
 #include <thread>
 
 #include "common/object_pool.h"
@@ -89,6 +90,66 @@ TEST(QueryRuntimeStateTest, StoresQueryScopedServiceReferences) {
     EXPECT_EQ(arbitrator, state.connector_scan_operator_mem_share_arbitrator());
     EXPECT_EQ(glm_ctx_mgr, state.global_late_materialization_ctx_mgr());
     EXPECT_EQ(1024, state.static_query_mem_limit());
+}
+
+TEST(QueryRuntimeStateTest, ProfileControlsDefaultToDisabledMergeProfile) {
+    QueryRuntimeState state;
+
+    EXPECT_FALSE(state.get_enable_profile_flag());
+    EXPECT_FALSE(state.enable_profile());
+    EXPECT_EQ(0, state.get_big_query_profile_threshold_ns());
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), state.get_runtime_profile_report_interval_ns());
+    EXPECT_EQ(TPipelineProfileLevel::type::MERGE, state.profile_level());
+    EXPECT_EQ(0, state.query_begin_time());
+}
+
+TEST(QueryRuntimeStateTest, EnableProfileFlagForcesProfileCollection) {
+    QueryRuntimeState state;
+
+    state.set_enable_profile();
+
+    EXPECT_TRUE(state.get_enable_profile_flag());
+    EXPECT_TRUE(state.enable_profile());
+}
+
+TEST(QueryRuntimeStateTest, ConvertsBigQueryProfileThresholdUnitsToNanos) {
+    QueryRuntimeState state;
+
+    state.set_big_query_profile_threshold(2, TTimeUnit::NANOSECOND);
+    EXPECT_EQ(2, state.get_big_query_profile_threshold_ns());
+
+    state.set_big_query_profile_threshold(2, TTimeUnit::MICROSECOND);
+    EXPECT_EQ(2'000, state.get_big_query_profile_threshold_ns());
+
+    state.set_big_query_profile_threshold(2, TTimeUnit::MILLISECOND);
+    EXPECT_EQ(2'000'000, state.get_big_query_profile_threshold_ns());
+
+    state.set_big_query_profile_threshold(2, TTimeUnit::SECOND);
+    EXPECT_EQ(2'000'000'000L, state.get_big_query_profile_threshold_ns());
+
+    state.set_big_query_profile_threshold(2, TTimeUnit::MINUTE);
+    EXPECT_EQ(120'000'000'000L, state.get_big_query_profile_threshold_ns());
+}
+
+TEST(QueryRuntimeStateTest, EnablesProfileAfterBigQueryThreshold) {
+    QueryRuntimeState state;
+
+    state.init_query_begin_time();
+    state.set_big_query_profile_threshold(1, TTimeUnit::NANOSECOND);
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
+
+    EXPECT_GT(state.query_begin_time(), 0);
+    EXPECT_TRUE(state.enable_profile());
+}
+
+TEST(QueryRuntimeStateTest, StoresProfileReportIntervalAndLevel) {
+    QueryRuntimeState state;
+
+    state.set_runtime_profile_report_interval(5);
+    state.set_profile_level(TPipelineProfileLevel::type::DETAIL);
+
+    EXPECT_EQ(5'000'000'000L, state.get_runtime_profile_report_interval_ns());
+    EXPECT_EQ(TPipelineProfileLevel::type::DETAIL, state.profile_level());
 }
 
 TEST(QueryRuntimeStateTest, TracksQueryAndDeliveryExpiry) {

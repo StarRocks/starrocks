@@ -143,17 +143,17 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
     }
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
-        _query_ctx->set_enable_profile();
+        query_runtime_state.set_enable_profile();
     }
     if (query_options.__isset.big_query_profile_threshold) {
-        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_threshold,
-                                                    query_options.big_query_profile_threshold_unit);
+        query_runtime_state.set_big_query_profile_threshold(query_options.big_query_profile_threshold,
+                                                            query_options.big_query_profile_threshold_unit);
     }
     if (query_options.__isset.pipeline_profile_level) {
-        _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+        query_runtime_state.set_profile_level(query_options.pipeline_profile_level);
     }
     if (query_options.__isset.runtime_profile_report_interval) {
-        _query_ctx->set_runtime_profile_report_interval(
+        query_runtime_state.set_runtime_profile_report_interval(
                 std::max<int64_t>(1, query_options.runtime_profile_report_interval));
     }
 

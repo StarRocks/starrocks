@@ -1282,10 +1282,10 @@ bool NodeChannel::_process_diagnose_profile(RuntimeState* state, PLoadDiagnoseRe
     } else {
         RuntimeProfile* load_channel_profile = state->load_channel_profile();
         load_channel_profile->update(thrift_profile);
-        // Query context is only available for pipeline engine
-        auto query_ctx = state->query_ctx();
-        if (query_ctx) {
-            query_ctx->set_enable_profile();
+        // Query runtime state is only available for pipeline engine
+        auto* query_runtime_state = state->query_runtime_state();
+        if (query_runtime_state != nullptr) {
+            query_runtime_state->set_enable_profile();
         }
         has_profile = true;
     }

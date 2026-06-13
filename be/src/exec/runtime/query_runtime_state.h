@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -26,8 +27,10 @@
 #include "base/hash/hash.h"
 #include "base/hash/hash_std.hpp"
 #include "base/phmap/phmap.h"
+#include "base/time/time.h"
 #include "exec/pipeline/primitives/operator_exec_stats.h"
-#include "gen_cpp/Types_types.h" // for TUniqueId
+#include "gen_cpp/InternalService_types.h" // for TPipelineProfileLevel, TTimeUnit
+#include "gen_cpp/Types_types.h"           // for TUniqueId
 
 namespace starrocks {
 class GlobalLateMaterilizationContextMgr;
@@ -88,6 +91,29 @@ public:
         _static_query_mem_limit = static_query_mem_limit;
     }
     int64_t static_query_mem_limit() const { return _static_query_mem_limit; }
+
+    void set_enable_profile() { _enable_profile.store(true, std::memory_order_relaxed); }
+    bool get_enable_profile_flag() const { return _enable_profile.load(std::memory_order_relaxed); }
+    bool enable_profile() const {
+        if (get_enable_profile_flag()) {
+            return true;
+        }
+        if (_big_query_profile_threshold_ns <= 0) {
+            return false;
+        }
+        return MonotonicNanos() - _query_begin_time > _big_query_profile_threshold_ns;
+    }
+    void set_big_query_profile_threshold(int64_t big_query_profile_threshold,
+                                         TTimeUnit::type big_query_profile_threshold_unit);
+    int64_t get_big_query_profile_threshold_ns() const { return _big_query_profile_threshold_ns; }
+    void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
+        _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
+    }
+    int64_t get_runtime_profile_report_interval_ns() const { return _runtime_profile_report_interval_ns; }
+    void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
+    const TPipelineProfileLevel::type& profile_level() const { return _profile_level; }
+    int64_t query_begin_time() const { return _query_begin_time; }
+    void init_query_begin_time() { _query_begin_time = MonotonicNanos(); }
 
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -233,6 +259,11 @@ private:
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
     GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
     int64_t _static_query_mem_limit = 0;
+    std::atomic_bool _enable_profile = false;
+    int64_t _big_query_profile_threshold_ns = 0;
+    int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
+    TPipelineProfileLevel::type _profile_level = TPipelineProfileLevel::type::MERGE;
+    int64_t _query_begin_time = 0;
 };
 
 } // namespace starrocks::pipeline

@@ -202,12 +202,13 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
 bool FragmentContext::need_report_exec_state() {
     auto* state = runtime_state();
-    auto* query_ctx = state->query_ctx();
-    if (!query_ctx->enable_profile()) {
+    auto* query_runtime_state = state->query_runtime_state();
+    DCHECK(query_runtime_state != nullptr);
+    if (!query_runtime_state->enable_profile()) {
         return false;
     }
     const auto now = MonotonicNanos();
-    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    const auto interval_ns = query_runtime_state->get_runtime_profile_report_interval_ns();
     auto last_report_ns = _last_report_exec_state_ns.load();
     return now - last_report_ns >= interval_ns;
 }
@@ -215,11 +216,14 @@ bool FragmentContext::need_report_exec_state() {
 void FragmentContext::report_exec_state_if_necessary() {
     auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
-    if (!query_ctx->enable_profile()) {
+    DCHECK(query_ctx != nullptr);
+    auto* query_runtime_state = state->query_runtime_state();
+    DCHECK(query_runtime_state != nullptr);
+    if (!query_runtime_state->enable_profile()) {
         return;
     }
     const auto now = MonotonicNanos();
-    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    const auto interval_ns = query_runtime_state->get_runtime_profile_report_interval_ns();
     auto last_report_ns = _last_report_exec_state_ns.load();
     if (now - last_report_ns < interval_ns) {
         return;
