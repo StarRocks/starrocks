@@ -55,6 +55,11 @@ public:
         }
     }
 
+    // Public entry that writes into a caller-owned builder. Used by convert_simdjson_to_vpack.
+    static Status convert_into_builder(SimdJsonValue value, vpack::Builder* out) {
+        return convert(value, {}, false, out);
+    }
+
     static StatusOr<JsonValue> create(SimdJsonObject value) {
         try {
             vpack::Builder builder;
@@ -238,6 +243,17 @@ StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value) {
 StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value) {
     try {
         return SimdJsonConverter::create(value);
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
+}
+
+Status convert_simdjson_to_vpack(SimdJsonValue value, vpack::Builder* out) {
+    try {
+        return SimdJsonConverter::convert_into_builder(value, out);
+    } catch (const simdjson::simdjson_error& e) {
+        return Status::DataQualityError(
+                strings::Substitute("simdjson error during vpack conversion: $0", simdjson::error_message(e.error())));
     } catch (const vpack::Exception& e) {
         return fromVPackException(e);
     }

@@ -31,6 +31,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_expr_fwd.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -2296,5 +2297,168 @@ INSTANTIATE_TEST_SUITE_P(JsonPrettyTest, JsonPrettyTestFixture,
 ])",
                                                                false, "Empty array (Occupies lines)"},
                                            JsonPrettyTestParam{"", "", true, "Null input should return null"}));
+
+// ===================================================================================
+// Differential tests: JSON-extract fusion fast path vs legacy parse_json+JsonPath::extract.
+// The same input is fed through both paths via set_json_fast_path_disabled_for_test();
+// results must be byte-identical row-for-row.
+// ===================================================================================
+
+namespace {
+
+struct DiffJsonCase {
+    std::string name;
+    std::vector<std::string> json_rows; // 1+ rows
+    std::string path;
+};
+
+ColumnPtr run_get_json_string_with_flag(bool fast_path_enabled, const DiffJsonCase& tc) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = BinaryColumn::create();
+    auto path_col = BinaryColumn::create();
+    for (const auto& r : tc.json_rows) {
+        json_col->append(r);
+    }
+    path_col->append(tc.path);
+    const size_t n = tc.json_rows.size();
+
+    Columns columns;
+    columns.emplace_back(json_col);
+    columns.emplace_back(ConstColumn::create(path_col, n));
+
+    ctx->set_constant_columns(columns);
+    EXPECT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    EXPECT_TRUE(
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    set_json_fast_path_disabled_for_test(ctx.get(), !fast_path_enabled);
+
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
+
+    EXPECT_TRUE(
+            JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    EXPECT_TRUE(
+            JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    return result;
+}
+
+void assert_diff_get_json_string(const DiffJsonCase& tc) {
+    ColumnPtr legacy = run_get_json_string_with_flag(/*fast=*/false, tc);
+    ColumnPtr fast = run_get_json_string_with_flag(/*fast=*/true, tc);
+    ASSERT_EQ(legacy->size(), fast->size()) << tc.name;
+    for (size_t i = 0; i < legacy->size(); ++i) {
+        ASSERT_EQ(legacy->is_null(i), fast->is_null(i)) << tc.name << " row=" << i;
+        if (!legacy->is_null(i)) {
+            ASSERT_EQ(legacy->get(i).get_slice().to_string(), fast->get(i).get_slice().to_string())
+                    << tc.name << " row=" << i;
+        }
+    }
+}
+
+} // namespace
+
+TEST_F(JsonFunctionsTest, diff_get_json_string_simple_paths) {
+    std::vector<DiffJsonCase> cases = {
+            {"int_leaf", {R"({"k":1})"}, "$.k"},
+            {"double_leaf", {R"({"k":3.14})"}, "$.k"},
+            {"string_leaf", {R"({"k":"hello"})"}, "$.k"},
+            {"bool_leaf", {R"({"k":true})"}, "$.k"},
+            {"null_leaf", {R"({"k":null})"}, "$.k"},
+            {"deep_object_leaf", {R"({"a":{"b":{"c":42}}})"}, "$.a.b.c"},
+            {"object_leaf", {R"({"k":{"x":1,"y":2}})"}, "$.k"},
+            {"array_leaf", {R"({"k":[1,2,3]})"}, "$.k"},
+            {"array_index", {R"({"a":[10,20,30]})"}, "$.a[1]"},
+            {"chained_indices", {R"({"m":[[1,2],[3,4]]})"}, "$.m[0][1]"},
+            {"missing_key", {R"({"k":1})"}, "$.missing"},
+            {"missing_deep", {R"({"a":{"b":1}})"}, "$.a.c"},
+            {"oob_array", {R"({"a":[1,2]})"}, "$.a[5]"},
+            {"escaped_key_inside_value", {R"({"k":"a\"b"})"}, "$.k"},
+            {"unicode_key_value", {R"({"k":"é"})"}, "$.k"},
+            // Escape sequences in the OBJECT KEY itself: \uXXXX in the document must match the
+            // unescaped path segment in both the legacy (parse_json → VPack) and the fused
+            // (simdjson ondemand) paths.
+            {"unicode_escape_in_key", {R"({"\u0061":1})"}, "$.a"},
+            {"unicode_escape_in_key_deep", {R"({"\u0061":{"\u0062":42}})"}, "$.a.b"},
+            {"unicode_escape_mixed_in_key", {R"({"a\u0062c":1})"}, "$.abc"},
+            // Multi-row: parser reuse + scratch copy across rows; mixed leaf types.
+            {"multi_row_mixed_leaves",
+             {R"({"k":1})", R"({"k":"two"})", R"({"k":3.5})", R"({"k":[1,2]})", R"({"k":null})", R"({"other":1})",
+              R"({"k":true})"},
+             "$.k"},
+            {"multi_row_deep",
+             {R"({"a":{"b":{"c":1}}})", R"({"a":{"b":{"c":"two"}}})", R"({"a":{"b":{"c":[1,2]}}})"},
+             "$.a.b.c"},
+    };
+    for (const auto& tc : cases) {
+        SCOPED_TRACE(tc.name);
+        assert_diff_get_json_string(tc);
+    }
+}
+
+// Stress test: large batch with mixed escape patterns. Designed to trip the buffer-overflow
+// hazards documented in be/src/common/simdjson_util.h around unescaped_key()/get_string()
+// internal buffers. Run under ASAN to validate value_get_string_safe / field_unescaped_key_safe
+// usage in the fused path.
+TEST_F(JsonFunctionsTest, asan_stress_get_json_string_escapes) {
+    constexpr int kNumRows = 100000;
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = BinaryColumn::create();
+    auto path_col = BinaryColumn::create();
+
+    // Each row carries a mix of escape sequences. Periodically vary escape density.
+    for (int i = 0; i < kNumRows; ++i) {
+        std::string payload = R"({"a":{"k":"x)";
+        // Varying length and escape density per row.
+        for (int j = 0; j < (i % 32); ++j) {
+            payload += "\\\""; // \"
+        }
+        payload += R"(","u":"éé","t":")";
+        payload += std::string(i % 64, 'a');
+        payload += R"("}})";
+        json_col->append(payload);
+    }
+    path_col->append("$.a.k");
+
+    Columns columns;
+    columns.emplace_back(json_col);
+    columns.emplace_back(ConstColumn::create(path_col, 1));
+
+    ctx->set_constant_columns(columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    ASSERT_TRUE(
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
+    ASSERT_EQ(kNumRows, result->size());
+
+    ASSERT_TRUE(
+            JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+}
+
+TEST_F(JsonFunctionsTest, diff_get_json_string_bare_scalar_inputs) {
+    // parse_json_or_string semantics: empty / whitespace / bare-scalar inputs are wrapped
+    // as JSON strings. Fast path delegates to legacy via FallbackRow, so results match.
+    std::vector<DiffJsonCase> cases = {
+            {"empty_input", {""}, "$.k"},
+            {"whitespace_input", {"   "}, "$.k"},
+            {"bare_int", {"123"}, "$.k"},
+            {"bare_true", {"true"}, "$.k"},
+            {"bare_null_text", {"null"}, "$.k"},
+            {"bare_word", {"hello"}, "$.k"},
+            {"malformed_object", {"{not valid json"}, "$.k"},
+            {"malformed_array", {"[1,2,"}, "$.k"},
+            // Mixed batch: well-formed, malformed, bare-scalar interleaved.
+            {"multi_row_mixed_input",
+             {R"({"k":1})", "", "   ", "bare", R"({"k":2})", "[1,2,", R"({"k":"three"})"},
+             "$.k"},
+    };
+    for (const auto& tc : cases) {
+        SCOPED_TRACE(tc.name);
+        assert_diff_get_json_string(tc);
+    }
+}
 
 } // namespace starrocks
