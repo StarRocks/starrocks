@@ -121,10 +121,10 @@ GLOG_SOURCE=glog-0.7.1
 GLOG_MD5SUM="128e2995cc33d794ff24f785a3060346"
 
 # gtest
-GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.10.0.tar.gz"
-GTEST_NAME=googletest-release-1.10.0.tar.gz
-GTEST_SOURCE=googletest-release-1.10.0
-GTEST_MD5SUM="ecd1fa65e7de707cd5c00bdac56022cd"
+GTEST_DOWNLOAD="https://github.com/google/googletest/releases/download/v1.17.0/googletest-1.17.0.tar.gz"
+GTEST_NAME=googletest-1.17.0.tar.gz
+GTEST_SOURCE=googletest-1.17.0
+GTEST_MD5SUM="b6f100bc2a5853a48046aa168ececf84"
 
 # snappy
 SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.8.tar.gz"
@@ -199,10 +199,10 @@ BRPC_SOURCE=brpc-1.9.0
 BRPC_MD5SUM="a2b626d96a5b017f2a6701ffa594530c"
 
 # rocksdb
-ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
-ROCKSDB_NAME=rocksdb-6.22.1.zip
-ROCKSDB_SOURCE=rocksdb-6.22.1
-ROCKSDB_MD5SUM="02727e52cdb94fa6a9dbbd68d157e619"
+ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v7.10.2.tar.gz"
+ROCKSDB_NAME=rocksdb-7.10.2.tar.gz
+ROCKSDB_SOURCE=rocksdb-7.10.2
+ROCKSDB_MD5SUM="57548a7b8a65c57e4116f17a94acb35c"
 
 # libsasl
 SASL_DOWNLOAD="https://github.com/cyrusimap/cyrus-sasl/archive/refs/tags/cyrus-sasl-2.1.28.tar.gz"
@@ -308,10 +308,10 @@ RAGEL_SOURCE="ragel-6.10"
 RAGEL_MD5SUM="748cae8b50cffe9efcaa5acebc6abf0d"
 
 # mariadb-connector-c
-MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.1.14.tar.gz"
-MARIADB_NAME="mariadb-connector-c-3.1.14.tar.gz"
-MARIADB_SOURCE="mariadb-connector-c-3.1.14"
-MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
+MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.4.8.tar.gz"
+MARIADB_NAME="mariadb-connector-c-3.4.8.tar.gz"
+MARIADB_SOURCE="mariadb-connector-c-3.4.8"
+MARIADB_MD5SUM="ae57909c37ddd0e30707d677d2d7d7b6"
 
 # Google Cloud Storage, gcs-connector
 GCS_CONNECTOR_DOWNLOAD="https://cdn-thirdparty.starrocks.com/gcs-connector-hadoop3-2.2.11-shaded.zip"

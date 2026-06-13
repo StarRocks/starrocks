@@ -1,0 +1,40 @@
+--- a/db/blob/blob_file_meta.h	2026-04-10 12:57:28.594713722 +0800
++++ db/blob/blob_file_meta.h	2026-04-10 12:57:28.598713715 +0800
+@@ -1,4 +1,5 @@
+ //  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
++#include <cstdint>
+ //  This source code is licensed under both the GPLv2 (found in the
+ //  COPYING file in the root directory) and Apache 2.0 License
+ //  (found in the LICENSE.Apache file in the root directory).
+--- a/table/block_based/data_block_hash_index.h	2026-04-10 12:57:28.636713648 +0800
++++ table/block_based/data_block_hash_index.h	2026-04-10 12:57:28.638713644 +0800
+@@ -1,4 +1,5 @@
+ // Copyright (c) 2011-present, Facebook, Inc. All rights reserved.
++#include <cstdint>
+ //  This source code is licensed under both the GPLv2 (found in the
+ //  COPYING file in the root directory) and Apache 2.0 License
+ //  (found in the LICENSE.Apache file in the root directory).
+--- a/include/rocksdb/trace_record.h	2026-04-10 12:57:28.645713631 +0800
++++ include/rocksdb/trace_record.h	2026-04-10 12:57:28.647713628 +0800
+@@ -1,4 +1,5 @@
+ //  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
++#include <cstdint>
+ //  This source code is licensed under both the GPLv2 (found in the
+ //  COPYING file in the root directory) and Apache 2.0 License
+ //  (found in the LICENSE.Apache file in the root directory).
+--- a/trace_replay/trace_record_result.cc	2026-04-10 12:57:28.653713617 +0800
++++ trace_replay/trace_record_result.cc	2026-04-10 12:57:28.656713612 +0800
+@@ -1,4 +1,5 @@
+ //  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
++#include <cstdint>
+ //  This source code is licensed under both the GPLv2 (found in the
+ //  COPYING file in the root directory) and Apache 2.0 License
+ //  (found in the LICENSE.Apache file in the root directory).
+--- a/util/string_util.h	2026-04-10 12:57:28.661713603 +0800
++++ util/string_util.h	2026-04-10 12:57:28.664713597 +0800
+@@ -1,4 +1,5 @@
+ //  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
++#include <cstdint>
+ //  This source code is licensed under both the GPLv2 (found in the
+ //  COPYING file in the root directory) and Apache 2.0 License
+ //  (found in the LICENSE.Apache file in the root directory).

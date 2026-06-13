@@ -826,7 +826,8 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
+    CFLAGS="-fPIC -DPROTOTYPES=1 -Wno-error -Wno-incompatible-pointer-types -Wno-old-style-definition -Wno-discarded-qualifiers" \
+    LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
     make -j$PARALLEL
     make install
 }
@@ -1220,7 +1221,7 @@ build_mariadb() {
 
     unset CXXFLAGS
     unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}"
+    export CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu99 -fPIC -Wno-error ${FILE_PREFIX_MAP_OPTION}"
 
     # force use make build system, since ninja doesn't support install only headers
     CMAKE_GENERATOR="Unix Makefiles"
