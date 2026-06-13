@@ -1336,6 +1336,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
     public void testMVPartitionRefreshRewrite3() throws Exception {
         sql("CREATE TABLE test_base_table(\n" +
                 "    `id`             bigint(20) NULL,\n" +
+                "    `id2`             bigint(20) NULL,\n" +
                 "    `pt`             date NULL,\n" +
                 "    `gmv`            bigint(20) NULL\n" +
                 ") DUPLICATE KEY(id)\n" +
@@ -1345,12 +1346,12 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
                 "  PROPERTIES(\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
-        sql("INSERT INTO test_base_table partition('p20220401') VALUES (987654321, '2022-04-01', 1);");
+        sql("INSERT INTO test_base_table partition('p20220401') VALUES (987654321, 1, '2022-04-01', 1);");
         sql("CREATE MATERIALIZED VIEW test_base_mv \n" +
                 "partition by (pt)\n" +
                 "REFRESH DEFERRED MANUAL\n" +
                 "AS\n" +
-                "SELECT pt, id, sum(gmv) FROM test_base_table group by pt,id;");
+                "SELECT pt, id, id2, sum(gmv) FROM test_base_table group by pt,id,id2;");
 
         sql("refresh materialized view test_base_mv partition start('2022-04-01') end ('2022-04-02') with sync mode;");
 
@@ -1378,12 +1379,12 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
                 "FROM\n" +
                 "(\n" +
                 "SELECT  pt\n" +
-                "       ,id,sum(gmv)\n" +
+                "       ,id,id2,concat(id,id2),sum(gmv)\n" +
                 "FROM test_base_table\n" +
                 "WHERE pt ='2022-04-01'\n" +
                 "AND id IN ( SELECT id FROM test_sub_table WHERE pt = '2022-04-01' GROUP BY id)\n" +
                 "GROUP BY  pt\n" +
-                "         ,id\n" +
+                "         ,id,id2,concat(id,id2)\n" +
                 ") T";
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
         {

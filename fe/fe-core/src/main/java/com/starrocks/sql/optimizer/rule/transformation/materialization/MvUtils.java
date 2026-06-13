@@ -126,8 +126,10 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -466,6 +468,31 @@ public class MvUtils {
             OptExpression child = root.inputAt(0);
             return isLogicalSPJG(child, level + 1);
         }
+    }
+
+    /**
+     * Whether `root` and its children are Select/Project/Group ops.
+     */
+    public static boolean isLogicalSPG(OptExpression root) {
+        if (root == null) {
+            return false;
+        }
+        Operator operator = root.getOp();
+        if (!(operator instanceof LogicalOperator)) {
+            return false;
+        }
+        if (!(operator instanceof LogicalScanOperator)
+                && !(operator instanceof LogicalProjectOperator)
+                && !(operator instanceof LogicalFilterOperator)
+                && !(operator instanceof LogicalAggregationOperator)) {
+            return false;
+        }
+        for (OptExpression child : root.getInputs()) {
+            if (!isLogicalSPG(child)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -935,6 +962,17 @@ public class MvUtils {
         return columnRefMap;
     }
 
+    /**
+     * optExpression is SPG expression
+     */
+    public static Set<String> collectSPGScanColumnNames(OptExpression optExpression) {
+        // optExpression is SPG expression, so there is only one scanOperator
+        LogicalScanOperator queryScanOperator = getScanOperator(optExpression).get(0);
+        return queryScanOperator.getColRefToColumnMetaMap().values().stream()
+                .map(Column::getName)
+                .collect(Collectors.toSet());
+    }
+
     public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
         return collectScanColumn(optExpression, Predicates.alwaysTrue());
     }
@@ -1402,6 +1440,165 @@ public class MvUtils {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         return scanMvOutputColumns;
+    }
+
+    /**
+     * Starting from queryExpression (TopAgg -> Join -> ...), collects the physical columns
+     * referenced by the top-level Agg's group-by keys, grouped by table id.
+     */
+    public static void collectGroupByColumnsByTable(OptExpression queryExpression, Map<Table, Set<String>> columnsByTable) {
+        if (queryExpression.getOp() instanceof LogicalAggregationOperator) {
+            // colRef -> [<tableId, physicalColName>]
+            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
+            buildSPJFullColumnsToTableColumns(queryExpression.inputAt(0), colRefToTableColumns);
+            LogicalAggregationOperator agg = (LogicalAggregationOperator) queryExpression.getOp();
+            for (ColumnRefOperator key : agg.getGroupingKeys()) {
+                List<Pair<Table, String>> resolved = colRefToTableColumns.getOrDefault(key.getId(), Collections.emptyList());
+                for (Pair<Table, String> tableColumn : resolved) {
+                    columnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>()).add(tableColumn.second);
+                }
+            }
+        }
+    }
+
+    /**
+     * Post-order DFS over the subtree rooted at {@code node}, building a colId -> List&lt;(tableId, physicalColName)&gt; map.
+     *
+     * - Scan node: seeds the map from colRefToColumnMetaMap.
+     * - All nodes (post-order): if the node carries an inlined Projection (Cascades merges LogicalProject
+     *   into its parent before rule matching), expands its columnRefMap into the map.
+     * - Nested Agg children are skipped to exclude Agg->Agg->...->Scan paths.
+     */
+    private static void buildSPJFullColumnsToTableColumns(OptExpression node,
+                                                          Map<Integer, List<Pair<Table, String>>> colToTableColumns) {
+        if (node.getOp() instanceof LogicalScanOperator) {
+            LogicalScanOperator scan = (LogicalScanOperator) node.getOp();
+            Table table = scan.getTable();
+            for (Map.Entry<ColumnRefOperator, Column> e : scan.getColRefToColumnMetaMap().entrySet()) {
+                colToTableColumns.put(e.getKey().getId(),
+                        Collections.singletonList(Pair.create(table, e.getValue().getName())));
+            }
+        }
+
+        // Recurse into children first (post-order); skip nested Agg subtrees (excludes Agg->Agg->...->Scan paths)
+        for (OptExpression child : node.getInputs()) {
+            if (child.getOp() instanceof LogicalAggregationOperator) {
+                continue;
+            }
+            buildSPJFullColumnsToTableColumns(child, colToTableColumns);
+        }
+
+        Projection inlineProj = node.getOp().getProjection();
+        if (inlineProj != null) {
+            resolveProjectionIntoMap(inlineProj.getColumnRefMap(), colToTableColumns);
+        }
+
+        if (node.getOp() instanceof LogicalProjectOperator) {
+            resolveProjectionIntoMap(((LogicalProjectOperator) node.getOp()).getColumnRefMap(), colToTableColumns);
+        }
+    }
+
+    /**
+     * Expands each output colRef in {@code columnRefMap} to the union of physical (tableId, colName) pairs
+     */
+    private static void resolveProjectionIntoMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                                                 Map<Integer, List<Pair<Table, String>>> columnToTableColumns) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> e : columnRefMap.entrySet()) {
+            columnToTableColumns.computeIfAbsent(e.getKey().getId(), input -> {
+                List<Pair<Table, String>> resolved = new ArrayList<>();
+                e.getValue().getUsedColumns().getStream()
+                        .forEach(id -> resolved.addAll(columnToTableColumns.getOrDefault(id, Collections.emptyList())));
+                return resolved.isEmpty() ? null : resolved;
+            });
+        }
+    }
+
+    /**
+     * DFS over the expression tree collecting physical columns referenced in predicates,
+     * grouped by table into {@code predicateColumnsByTable}. Nested Agg subtrees are skipped.
+     *
+     * <p>Columns are collected from three sources:
+     * <ul>
+     *   <li>Pushed-down predicates on {@link LogicalScanOperator}</li>
+     *   <li>Predicates on {@link LogicalFilterOperator} (filters not pushed into scan)</li>
+     *   <li>ON predicates on {@link LogicalJoinOperator}</li>
+     * </ul>
+     */
+    public static void collectPredicateColumnsByTable(OptExpression node, Map<Table, Set<String>> predicateColumnsByTable) {
+        if (node.getOp() instanceof LogicalScanOperator) {
+            LogicalScanOperator scan = (LogicalScanOperator) node.getOp();
+            if (scan.getPredicate() != null) {
+                Table table = scan.getTable();
+                Map<ColumnRefOperator, Column> refToCol = scan.getColRefToColumnMetaMap();
+                ColumnRefSet usedColumns = scan.getPredicate().getUsedColumns();
+                Set<String> tablePredicateColumns =
+                        predicateColumnsByTable.computeIfAbsent(table, t -> new HashSet<>());
+                refToCol.forEach((ref, col) -> {
+                    if (usedColumns.contains(ref.getId())) {
+                        tablePredicateColumns.add(col.getName());
+                    }
+                });
+            }
+            return;
+        }
+        // Collect columns referenced in LogicalFilter predicates (e.g. filters not pushed into scan).
+        if (node.getOp() instanceof LogicalFilterOperator filter && filter.getPredicate() != null) {
+            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
+            buildSPJFullColumnsToTableColumns(node, colRefToTableColumns);
+            collectPredicateColumnsByTable(filter.getPredicate(), colRefToTableColumns, predicateColumnsByTable);
+        }
+        // Collect columns referenced in JOIN ON filter predicates (e.g. ON a.id = b.id AND a.col = 1).
+        if (node.getOp() instanceof LogicalJoinOperator join && join.getOnPredicate() != null) {
+            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
+            buildSPJFullColumnsToTableColumns(node, colRefToTableColumns);
+            collectPredicateColumnsByTable(join.getOnPredicate(), colRefToTableColumns, predicateColumnsByTable);
+        }
+        for (OptExpression child : node.getInputs()) {
+            if (child.getOp() instanceof LogicalAggregationOperator) {
+                continue;
+            }
+            collectPredicateColumnsByTable(child, predicateColumnsByTable);
+        }
+    }
+
+    /**
+     * Collects all physical columns referenced in {@code predicate} into {@code predicateColumnsByTable},
+     * resolving column ids to (table, column name) pairs via {@code colRefToTableColumns}.
+     *
+     * Examples:
+     * <ul>
+     *   <li>{@code a.id = b.id}                              → a.id added to tableA, b.id to tableB</li>
+     *   <li>{@code concat(a.col,'x') = concat(b.id,'2',3)}   → a.col added to tableA, b.id to tableB</li>
+     *   <li>{@code a.col = 1}                                → col from a added</li>
+     *   <li>{@code concat(a.col,'x') = concat(1,'2',3)}      → col from a added</li>
+     *   <li>{@code a.col1 > a.col2}                          → col1, col2 from a added</li>
+     * </ul>
+     */
+    private static void collectPredicateColumnsByTable(ScalarOperator predicate,
+                                                             Map<Integer, List<Pair<Table, String>>> colRefToTableColumns,
+                                                             Map<Table, Set<String>> predicateColumnsByTable) {
+        predicate.getUsedColumns().getStream().forEach(colId -> {
+            for (Pair<Table, String> tableColumn :
+                    colRefToTableColumns.getOrDefault(colId, Collections.emptyList())) {
+                predicateColumnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>())
+                        .add(tableColumn.second);
+            }
+        });
+    }
+
+    /**
+     * Returns true if the expression tree contains at least one LogicalAggregationOperator.
+     */
+    public static boolean containsAggregation(OptExpression node) {
+        if (node.getOp() instanceof LogicalAggregationOperator) {
+            return true;
+        }
+        for (OptExpression child : node.getInputs()) {
+            if (containsAggregation(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static OptExpression addExtraPredicate(OptExpression result,
