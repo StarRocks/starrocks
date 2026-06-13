@@ -110,7 +110,7 @@ public:
 
     Status final_status() const { return _fragment_runtime_state.final_status(); }
 
-    void cancel(const Status& status, bool cancelled_by_fe = false);
+    void cancel(const Status& status);
 
     void finish() { cancel(Status::OK()); }
 

@@ -27,6 +27,7 @@
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline.h"
@@ -273,7 +274,7 @@ TEST_F(PipelineObserverTest, test_cancel) {
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
-    _dummy_fragment_ctx->cancel(Status::InternalError("error"));
+    cancel_fragment_context(_dummy_fragment_ctx.get(), Status::InternalError("error"));
     driver->set_in_blocked(true);
     driver->observer()->all_trigger();
     for (size_t i = 0; i < driver->_operator_stages.size(); ++i) {

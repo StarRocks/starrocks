@@ -252,7 +252,7 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group
 void QueryContext::release_workgroup_token_once() {
     auto* old = _wg_running_query_token_atomic_ptr.load();
     if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
-        // The release_workgroup_token_once function is called by FragmentContext::cancel
+        // The release_workgroup_token_once function is called by cancel_fragment_context
         // to detach the QueryContext from the workgroup.
         // When the workgroup undergoes a configuration change, the old version of the workgroup is released,
         // and a new version is created. The old workgroup will only be physically destroyed once no

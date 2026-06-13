@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -142,7 +143,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
 
     if (const auto status = prepare_drivers(); !status.ok()) {
         LOG(WARNING) << "[ADAPTIVE DOP] failed to prepare pipeline drivers [status=" << status.message() << "]";
-        state->fragment_ctx()->cancel(status);
+        cancel_fragment_context(state->fragment_ctx(), status);
         for (const auto& pipeline : _pipelines) {
             // The pipeline without driver indicates it has not been instantiated.
             // So we just count down the driver num once to trigger finalization of the pipeline.

@@ -19,6 +19,7 @@
 
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
@@ -76,7 +77,7 @@ bool ConnectorSinkOperator::need_input() const {
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
-        _fragment_context->cancel(status);
+        cancel_fragment_context(_fragment_context, status);
     }
 
     return can_accept_more_input;
@@ -101,7 +102,7 @@ bool ConnectorSinkOperator::is_finished() const {
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
-        _fragment_context->cancel(status);
+        cancel_fragment_context(_fragment_context, status);
     }
     return ret;
 }

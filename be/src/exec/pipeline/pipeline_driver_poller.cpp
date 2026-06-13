@@ -17,6 +17,7 @@
 #include <chrono>
 
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -114,8 +115,8 @@ void PipelineDriverPoller::run_internal() {
                     auto query_id = driver->query_runtime_state()->query_id();
                     size_t timeout = driver->query_runtime_state()->get_query_expire_seconds();
                     hook_on_query_timeout(query_id, timeout);
-                    fragment_ctx->cancel(
-                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));
+                    cancel_fragment_context(fragment_ctx, Status::TimedOut(fmt::format(
+                                                                  "Query reached its timeout of {} seconds", timeout)));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (runtime_state->is_cancelled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
@@ -147,7 +148,7 @@ void PipelineDriverPoller::run_internal() {
                 } else {
                     auto status_or_is_not_blocked = driver->is_not_blocked();
                     if (!status_or_is_not_blocked.ok()) {
-                        fragment_ctx->cancel(status_or_is_not_blocked.status());
+                        cancel_fragment_context(fragment_ctx, status_or_is_not_blocked.status());
                         on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                     } else if (status_or_is_not_blocked.value()) {
                         driver->set_driver_state(DriverState::READY);

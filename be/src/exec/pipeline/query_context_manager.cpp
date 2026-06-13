@@ -25,6 +25,7 @@
 #include "common/thread/thread.h"
 #include "common/util/thrift_client_cache.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/query_context.h"
 #include "platform/thrift_rpc_helper.h"
@@ -460,7 +461,7 @@ std::vector<PipeLineReportTaskKey> QueryContextManager::report_fragments(
                 if (!rpc_status.ok()) {
                     int32_t index = cur_batch_report_indexes[j];
                     FragmentContext* fragment_ctx = need_report_fragment_context[index].get();
-                    fragment_ctx->cancel(rpc_status);
+                    cancel_fragment_context(fragment_ctx, rpc_status);
                 }
             }
         }

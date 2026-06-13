@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
@@ -65,14 +66,14 @@ void MysqlTableSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_writer == nullptr) {
         if (Status status = _open_mysql_table_writer(); !status.ok()) {
             LOG(WARNING) << "open mysql table writer failed, error: " << status.to_string();
-            _fragment_ctx->cancel(status);
+            cancel_fragment_context(_fragment_ctx, status);
             return;
         }
     }
 
     if (Status status = _writer->append(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to mysql table writer failed, error: " << status.to_string();
-        _fragment_ctx->cancel(status);
+        cancel_fragment_context(_fragment_ctx, status);
         return;
     }
 }

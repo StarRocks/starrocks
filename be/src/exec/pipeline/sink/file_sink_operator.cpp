@@ -21,6 +21,7 @@
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exprs/expr.h"
@@ -117,7 +118,7 @@ void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
         if (Status status = _writer->open(_state); !status.ok()) {
             status = status.clone_and_prepend("open file writer failed, error");
             LOG(WARNING) << status;
-            _fragment_ctx->cancel(status);
+            cancel_fragment_context(_fragment_ctx, status);
             close(_state);
             return;
         }
@@ -127,7 +128,7 @@ void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
         status = status.clone_and_prepend("add chunk to file writer failed, error");
         LOG(WARNING) << status;
-        _fragment_ctx->cancel(status);
+        cancel_fragment_context(_fragment_ctx, status);
         close(_state);
         return;
     }

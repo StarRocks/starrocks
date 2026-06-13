@@ -20,6 +20,7 @@
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
@@ -71,14 +72,14 @@ void ExportSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_file_builder == nullptr) {
         if (Status status = _open_file_writer(); !status.ok()) {
             LOG(WARNING) << "open file write failed, error: " << status.to_string();
-            _fragment_ctx->cancel(status);
+            cancel_fragment_context(_fragment_ctx, status);
             return;
         }
     }
 
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
-        _fragment_ctx->cancel(status);
+        cancel_fragment_context(_fragment_ctx, status);
         return;
     }
 }

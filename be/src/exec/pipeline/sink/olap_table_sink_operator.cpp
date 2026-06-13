@@ -20,6 +20,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "runtime/runtime_state.h"
 
@@ -61,7 +62,7 @@ bool OlapTableSinkOperator::pending_finish() const {
         // since is_open_done(), open_wait will not block
         auto st = _sink->open_wait();
         if (!st.ok()) {
-            _fragment_ctx->cancel(st);
+            cancel_fragment_context(_fragment_ctx, st);
             return false;
         }
     }
@@ -75,7 +76,7 @@ bool OlapTableSinkOperator::pending_finish() const {
         auto st = _sink->send_chunk_nonblocking(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
         _automatic_partition_chunk.reset();
         if (!st.ok()) {
-            _fragment_ctx->cancel(st);
+            cancel_fragment_context(_fragment_ctx, st);
             return false;
         }
     }
@@ -83,7 +84,7 @@ bool OlapTableSinkOperator::pending_finish() const {
     if (!_sink->is_close_done()) {
         auto st = _sink->try_close(_fragment_ctx->runtime_state());
         if (!st.ok()) {
-            _fragment_ctx->cancel(st);
+            cancel_fragment_context(_fragment_ctx, st);
             return false;
         }
         return true;
@@ -91,7 +92,7 @@ bool OlapTableSinkOperator::pending_finish() const {
 
     auto st = _sink->close(_fragment_ctx->runtime_state(), Status::OK());
     if (!st.ok()) {
-        _fragment_ctx->cancel(st);
+        cancel_fragment_context(_fragment_ctx, st);
     }
 
     return false;
