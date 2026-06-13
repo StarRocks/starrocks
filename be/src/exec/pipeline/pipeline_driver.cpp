@@ -33,6 +33,7 @@
 #include "compute_env/spill/common.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/query_spill_manager.h"
+#include "compute_env/spill/spill_metrics.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/driver_queue.h"
@@ -145,6 +146,7 @@ void PipelineDriver::prepare_profile() {
     _block_by_precondition_counter = ADD_COUNTER(_runtime_profile, "BlockByPrecondition", TUnit::UNIT);
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
+    _block_by_intermediate_counter = ADD_COUNTER(_runtime_profile, "BlockByIntermediate", TUnit::UNIT);
 
     _pending_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "PendingTime", 1_ms);
     _precondition_block_timer =
@@ -303,6 +305,17 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
     }
 
+    // Wakeable-intermediate registry: an interior operator is one whose index is_interior_index().
+    // INTERMEDIATE_BLOCK classification in process() is gated on this flag, so a driver only parks an
+    // interior block when at least one interior operator promises a wakeup.
+    _has_wakeable_intermediates = false;
+    for (size_t i = 0, n = _operators.size(); i < n; ++i) {
+        if (is_interior_index(i, n) && _operators[i]->supports_intermediate_wakeup()) {
+            _has_wakeable_intermediates = true;
+            break;
+        }
+    }
+
     // Driver has no dependencies always sets _all_dependencies_ready to true;
     _all_dependencies_ready = _dependencies.empty() && !_pipeline_event->need_wait_dependencies_finished();
     // Driver has no local rf to wait for completion always sets _all_local_rf_ready to true;
@@ -369,6 +382,11 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
         size_t num_chunks_moved = 0;
         bool should_yield = false;
+        // Set when an intermediate operator pair (i.e. neither the source-edge producer nor the
+        // sink-edge consumer) is blocked this round: an intermediate curr_op has no output and is
+        // not finished, or an intermediate next_op does not need input. Collected from the pair loop
+        // below without a second pass; consumed by the post-loop classification.
+        bool has_intermediate_block = false;
         size_t num_operators = _operators.size();
         size_t new_first_unfinished = _first_unfinished;
 
@@ -410,6 +428,18 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 _try_to_release_buffer(runtime_state, i, curr_op);
                 // try successive operator pairs
                 if (!curr_op->has_output() || !next_op->need_input()) {
+                    // Record an intermediate-pair block. The source edge (i == 0 with no output) is
+                    // classified as INPUT_EMPTY and the sink edge (i + 1 == last with no need_input)
+                    // as OUTPUT_FULL by the post-loop classification; only a strictly-interior block
+                    // counts as INTERMEDIATE_BLOCK. curr_op is _operators[i], next_op is _operators[i + 1];
+                    // the loop bound (i <= num_operators - 2) keeps the right edge off curr, so its
+                    // interiority reduces to i > 0.
+                    const bool curr_is_interior = is_interior_index(i, num_operators);
+                    const bool next_is_interior = is_interior_index(i + 1, num_operators);
+                    if ((curr_is_interior && !curr_op->has_output() && !curr_op->is_finished()) ||
+                        (next_is_interior && !next_op->need_input())) {
+                        has_intermediate_block = true;
+                    }
                     continue;
                 }
 
@@ -566,6 +596,20 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     set_driver_state(DriverState::INPUT_EMPTY);
                     COUNTER_UPDATE(_block_by_input_empty_counter, 1);
                 }
+            } else if (has_intermediate_block && !should_yield && _has_wakeable_intermediates) {
+                // Both edges are open but an interior operator pair is blocked (e.g. a spilled probe
+                // waiting on restore IO). Without this state the driver would classify as READY and keep
+                // spinning. It is gated on _has_wakeable_intermediates: parking an interior block is only
+                // safe when some interior operator declares supports_intermediate_wakeup() (it is
+                // subscribed to a notification layer / owns notifying tasks). With no wakeable intermediate
+                // this branch is dead and the driver behaves like the default driver (READY, kept polling)
+                // -- a non-spill intermediate has no notifier and would otherwise hang here. should_yield
+                // drivers still go READY: they are not blocked, just time-sliced.
+                set_driver_state(DriverState::INTERMEDIATE_BLOCK);
+                COUNTER_UPDATE(_block_by_intermediate_counter, 1);
+                // BlockReason check: the wakeable interior operator that caused this park must name a reason
+                // that its declared wakeups cover, or the driver would sleep with nobody to wake it.
+                verify_block_reason_covered();
             } else {
                 set_driver_state(DriverState::READY);
             }
@@ -598,6 +642,68 @@ Status PipelineDriver::check_short_circuit() {
     }
 
     return Status::OK();
+}
+
+void PipelineDriver::verify_block_reason_covered() {
+    // Each call site has one natural blocker: for an edge park it is the stalled edge, for an
+    // INTERMEDIATE_BLOCK park it is the wakeable interior operator. Walk the relevant operators, and for
+    // each one that declares a wakeup (covered_wakeups() != 0), check that its named reason is covered.
+    auto check_one = [this](Operator* op) -> bool {
+        const uint32_t covered = op->covered_wakeups();
+        if (covered == 0) {
+            return false;
+        }
+        const BlockReason reason = op->block_reason();
+        if (reason == BlockReason::NONE) {
+            // Legal for a single operator: in a chain with several wakeable interiors, only the one that
+            // actually blocked names a reason; a runnable neighbour returns NONE. The "no operator at all
+            // named a reason" case is handled by the caller, over the whole chain.
+            return false;
+        }
+        if ((covered & block_reason_bit(reason)) != 0) {
+            return true;
+        }
+        // Uncovered: a parked driver with nobody to wake it on this reason.
+        DCHECK(false) << "operator parked with uncovered BlockReason " << block_reason_name(reason) << " (covered mask "
+                      << covered << "): " << op->get_name() << " in " << to_readable_string();
+#ifdef NDEBUG
+        if (auto* sm = SpillMetrics::instance(); sm != nullptr && sm->parked_with_uncovered_reason_total() != nullptr) {
+            sm->parked_with_uncovered_reason_total()->increment(1);
+        }
+        LOG_EVERY_SECOND(WARNING) << "operator parked with uncovered BlockReason " << block_reason_name(reason)
+                                  << " (covered mask " << covered << "): " << op->get_name() << " in "
+                                  << to_readable_string();
+#endif
+        return true;
+    };
+
+    if (_state == DriverState::INTERMEDIATE_BLOCK) {
+        // Interior operators are index [1, n-2]; only the wakeable ones declare a reason to check.
+        bool any_named = false;
+        for (size_t i = 1; i + 1 < _operators.size(); ++i) {
+            if (_operators[i]->supports_intermediate_wakeup()) {
+                any_named |= check_one(_operators[i].get());
+            }
+        }
+        // No wakeable interior named a reason. This is not always a bug. An IO-completion thread can open
+        // a predicate (for example a flush completion clears is_full) in the window between the
+        // classification gate and this check, after which every wakeable interior reports NONE. The wakeup
+        // is not lost: the same IO completion already sent its notify, and the schedule token plus
+        // need_check_reschedule close the park-under-race. So we do not DCHECK here -- it would be flaky.
+        // A genuinely uncovered named reason is still caught by the DCHECK inside check_one. The no-reason
+        // case is only logged (rate-limited, debug and release) as a breadcrumb for debugging a hang; it is
+        // not a metric, because it also fires on the race above and is not alertable.
+        if (!any_named) {
+            LOG_EVERY_SECOND(WARNING) << "INTERMEDIATE_BLOCK with no wakeable interior naming a BlockReason in "
+                                      << to_readable_string();
+        }
+    } else if (_state == DriverState::OUTPUT_FULL) {
+        check_one(sink_operator());
+    } else if (_state == DriverState::INPUT_EMPTY) {
+        if (auto* src = source_operator(); src != nullptr) {
+            check_one(src);
+        }
+    }
 }
 
 bool PipelineDriver::dependencies_block() {

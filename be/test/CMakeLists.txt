@@ -54,6 +54,15 @@ set(EXEC_FILES
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
+        ./compute_env/spill/spill_observable_test.cpp
+        ./exec/pipeline/spill_process_channel_test.cpp
+        ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/block_reason_join_test.cpp
+        ./exec/pipeline/spillable_hash_join_probe_event_test.cpp
+        ./exec/pipeline/spillable_probe_cancel_test.cpp
+        ./exec/pipeline/spillable_hash_join_build_event_test.cpp
+        ./exec/pipeline/intermediate_block_event_test.cpp
+        ./exec/pipeline/intermediate_block_driver_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -77,6 +86,7 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
+        ./exec/query_cache/cache_wrapper_forwarding_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
