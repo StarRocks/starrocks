@@ -54,14 +54,6 @@ CONF_mDouble(vector_adaptive_ef_cap, "8.0");
 
 CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 
-// Kill-switch for the ANN residual pre-filter machinery (whole-tree bitmap evaluation, filtered
-// search, exact-rescan gates). When false, residual ANN queries -- including an explicit
-// ann_filter_strategy='pre' -- run the exact in-scan brute-force path instead.
-CONF_mBool(enable_vector_index_residual_prefilter, "true");
-
-// Post-filter oversample factor: the ANN searches k * this when post-filtering a residual predicate.
-CONF_mInt32(vector_index_residual_post_filter_oversample, "3");
-
 // PRE short-circuit: when the residual pre-filter bitmap holds at most this fraction of the segment's
 // rows, skip the filtered ANN search and score the candidates exactly (a sparse bitmap makes the HNSW
 // traversal slow and likely to under-return, paying the exact rescan on top of the wasted search).
