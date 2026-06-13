@@ -266,8 +266,17 @@ Status TabletReader::_init_collector_for_pk_index_read() {
             return Status::InternalError(strings::Substitute("get rowid size not match tablet:$0 $1 != $2",
                                                              _tablet->tablet_id(), rowids.size(), 1));
         }
+        // Verify the PK index snapshot version matches our query snapshot version to guarantee
+        // REPEATABLE READ isolation. If the index has advanced past our snapshot (i.e. a concurrent
+        // write committed after our snapshot was taken), the fast-path result reflects a newer state
+        // than the query is allowed to observe. Return NotSupported so that do_get_next() falls back
+        // to the version-consistent normal read path.
+        if (read_version.major_number() > _version.second) {
+            return Status::NotSupported(strings::Substitute(
+                    "pk index version ($0) is ahead of snapshot version ($1), fallback to normal read, tablet:$2",
+                    read_version.major_number(), _version.second, _tablet->tablet_id()));
+        }
     }
-    // do not check read version in use_pk_index mode
     uint32_t rssid = rowids[0] >> 32;
     uint32_t rowid = rowids[0] & 0xffffffff;
     if (rssid == (uint32_t)-1) {
