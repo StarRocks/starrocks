@@ -16,7 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,11 +56,12 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         row.set(1, analyzeStatus.getCatalogName() + "." + analyzeStatus.getDbName());
         row.set(2, analyzeStatus.getTableName());
 
-        Table table;
+        BasicTable table;
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                    context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                    context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName(),
+                    Config.enable_external_catalog_information_schema_tables_access_full_metadata);
             if (table == null) {
                 throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
             }
@@ -68,10 +71,19 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
             return null;
         }
 
-        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
-        if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
-            String str = String.join(",", columns);
-            row.set(3, str);
+        if (null != columns && !columns.isEmpty()) {
+            // Internal-catalog path returns a real Table, so we can match the
+            // legacy "ALL" rendering when the explicit column list equals the
+            // full collectible set. External catalogs only get a BasicTable
+            // stub here (no schema, no network IO), so we always render the
+            // captured column names.
+            long totalCollectColumnsSize = (table instanceof Table)
+                    ? StatisticUtils.getCollectibleColumns((Table) table).size()
+                    : -1L;
+            if (columns.size() != totalCollectColumnsSize) {
+                String str = String.join(",", columns);
+                row.set(3, str);
+            }
         }
 
         row.set(4, analyzeStatus.getType().name());
