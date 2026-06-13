@@ -14,9 +14,35 @@
 
 #include "exec/runtime/query_runtime_state.h"
 
+#include "common/logging.h"
 #include "runtime/query_statistics.h"
 
 namespace starrocks::pipeline {
+
+void QueryRuntimeState::set_big_query_profile_threshold(int64_t big_query_profile_threshold,
+                                                        TTimeUnit::type big_query_profile_threshold_unit) {
+    int64_t factor = 1;
+    switch (big_query_profile_threshold_unit) {
+    case TTimeUnit::NANOSECOND:
+        factor = 1;
+        break;
+    case TTimeUnit::MICROSECOND:
+        factor = 1'000L;
+        break;
+    case TTimeUnit::MILLISECOND:
+        factor = 1'000'000L;
+        break;
+    case TTimeUnit::SECOND:
+        factor = 1'000'000'000L;
+        break;
+    case TTimeUnit::MINUTE:
+        factor = 60 * 1'000'000'000L;
+        break;
+    default:
+        DCHECK(false);
+    }
+    _big_query_profile_threshold_ns = factor * big_query_profile_threshold;
+}
 
 void QueryRuntimeState::update_operator_exec_stats(const OperatorExecStatsSnapshot& snapshot) {
     if (!snapshot.valid) {

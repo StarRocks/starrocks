@@ -174,14 +174,13 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
     }
 
-    if (state->query_ctx()) {
-        // Query context is only available for pipeline engine (insert/broker load)
-        auto query_ctx = state->query_ctx();
-        _load_channel_profile_config.set_enable_profile(query_ctx->get_enable_profile_flag());
+    if (auto* query_runtime_state = state->query_runtime_state(); query_runtime_state != nullptr) {
+        // Query runtime state is only available for pipeline engine (insert/broker load)
+        _load_channel_profile_config.set_enable_profile(query_runtime_state->get_enable_profile_flag());
         _load_channel_profile_config.set_big_query_profile_threshold_ns(
-                query_ctx->get_big_query_profile_threshold_ns());
+                query_runtime_state->get_big_query_profile_threshold_ns());
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(
-                query_ctx->get_runtime_profile_report_interval_ns());
+                query_runtime_state->get_runtime_profile_report_interval_ns());
     } else {
         // For non-pipeline engine (stream load/routine load), get the profile config from query options
         auto& query_options = state->query_options();
