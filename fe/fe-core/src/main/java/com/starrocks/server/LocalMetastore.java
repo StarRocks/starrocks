@@ -112,6 +112,9 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -5838,5 +5841,54 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 info, wal -> addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue));
 
         LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        if (!(table instanceof OlapTable)) {
+            return TvrTableSnapshot.empty();
+        }
+        OlapTable olapTable = (OlapTable) table;
+        // Sum all partition visible versions so that a load into any partition advances the
+        // watermark, not just loads that beat the current per-partition maximum.
+        long watermark = olapTable.getPhysicalPartitions().stream()
+                .mapToLong(PhysicalPartition::getVisibleVersion)
+                .sum();
+        return watermark > 0 ? TvrTableSnapshot.of(watermark) : TvrTableSnapshot.empty();
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                          TvrTableSnapshot fromSnapshotExclusive,
+                                                          TvrTableSnapshot toSnapshotInclusive) {
+        if (fromSnapshotExclusive.equals(toSnapshotInclusive)) {
+            return Collections.emptyList();
+        }
+        if (!(table instanceof OlapTable)) {
+            return Collections.emptyList();
+        }
+        long toVersion = toSnapshotInclusive.end()
+                .orElseThrow(() -> new StarRocksConnectorException(
+                        "from snapshot is not a parent ancestor of empty target snapshot"));
+        if (!fromSnapshotExclusive.isEmpty()) {
+            long fromVersion = fromSnapshotExclusive.getSnapshotId();
+            if (fromVersion > toVersion) {
+                throw new StarRocksConnectorException(
+                        "from snapshot %s is not a parent ancestor of end snapshot %s",
+                        fromVersion, toVersion);
+            }
+        }
+        Optional<Long> fromOpt = fromSnapshotExclusive.isEmpty()
+                ? Optional.empty()
+                : Optional.of(fromSnapshotExclusive.getSnapshotId());
+        TvrTableDelta delta = TvrTableDelta.of(fromOpt, Optional.of(toVersion));
+        return Collections.singletonList(classifyNativeDelta(delta));
+    }
+
+    // All native OLAP deltas are conservatively classified as retractable because DELETE
+    // predicates are legal on every KeysType, and per-version op-type metadata is unavailable
+    // in the FE. Promote to MONOTONIC in a follow-up once op-type tracking exists.
+    private static TvrTableDeltaTrait classifyNativeDelta(TvrTableDelta delta) {
+        return TvrTableDeltaTrait.ofRetractable(delta);
     }
 }
