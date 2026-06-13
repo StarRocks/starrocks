@@ -47,9 +47,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
     bool ret = true;
     switch (field->physical_type) {
     case tparquet::Type::type::BOOLEAN: {
-        // Parquet stores BOOLEAN min/max stats as a single byte; bit 0 holds the value (0=false, 1=true).
-        // Non-BOOLEAN logical types are rejected upstream by ColumnConverterFactory::create_converter,
-        // so the need_convert branch is unreachable here.
+        // Parquet stores BOOLEAN min/max stats as a single byte (0=false, 1=true).
         uint8_t decode_value = 0;
         for (size_t i = 0; i < values.size(); i++) {
             if (null_pages[i]) {
