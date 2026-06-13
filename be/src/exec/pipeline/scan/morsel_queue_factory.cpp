@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
 #include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
+#include "fmt/format.h"
 #include "gutil/casts.h"
 
 namespace starrocks::pipeline {
@@ -87,20 +88,18 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     }
 }
 
-// The reason why we want to expand size of this vector is support of incremental scan ranges delivery
-// Think about a case that in the initial round, there is 4 drivers assigned scan ranges, so vector size is 4
-// but in the next round, if there is 5 drivers assigned scan ranges, then we have to expane vector to 5.
-static void ensure_size_of_queue_per_drive_seq(std::vector<MorselQueuePtr>& _queue_per_driver_seq, int driver_seq) {
-    int size = _queue_per_driver_seq.size();
-    if (driver_seq >= size) {
-        for (int i = 0; i < (driver_seq - size) + 1; i++) {
-            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
-        }
+static Status validate_driver_seq(const std::vector<MorselQueuePtr>& queue_per_driver_seq, int driver_seq,
+                                  const char* factory_name) {
+    const auto queue_size = queue_per_driver_seq.size();
+    if (driver_seq < 0 || static_cast<size_t>(driver_seq) >= queue_size) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid driver_seq {} for {} with {} queues", driver_seq, factory_name, queue_size));
     }
+    return Status::OK();
 }
 
 Status IndividualMorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
-    ensure_size_of_queue_per_drive_seq(_queue_per_driver_seq, driver_seq);
+    RETURN_IF_ERROR(validate_driver_seq(_queue_per_driver_seq, driver_seq, "IndividualMorselQueueFactory"));
 
 #ifndef NDEBUG
     // only append splitted morsel
@@ -179,7 +178,7 @@ BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int,
 }
 
 Status BucketSequenceMorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
-    ensure_size_of_queue_per_drive_seq(_queue_per_driver_seq, driver_seq);
+    RETURN_IF_ERROR(validate_driver_seq(_queue_per_driver_seq, driver_seq, "BucketSequenceMorselQueueFactory"));
     RETURN_IF_ERROR(_queue_per_driver_seq[driver_seq]->append_morsels(std::move(morsels)));
     return Status::OK();
 }
