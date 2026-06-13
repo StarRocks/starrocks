@@ -55,6 +55,7 @@ public class LogicalWindowOperator extends LogicalOperator {
      */
     private boolean useHashBasedPartition;
     private boolean isSkewed;
+    private boolean forceMergeSort;
 
     // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
     private ScalarOperator skewColumn;
@@ -73,6 +74,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.isSkewed = false;
         this.skewColumn = null;
         this.skewValues = ImmutableList.of();
+        this.forceMergeSort = false;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -101,6 +103,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public boolean isSkewed() {
         return isSkewed;
+    }
+
+    public boolean isForceMergeSort() {
+        return forceMergeSort;
     }
 
     public ScalarOperator getSkewColumn() {
@@ -176,13 +182,14 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(isSkewed, that.isSkewed)
                 && Objects.equals(skewColumn, that.skewColumn)
                 && Objects.equals(skewValues, that.skewValues)
+                && Objects.equals(forceMergeSort, that.forceMergeSort)
                 && Objects.equals(inputIsBinary, that.inputIsBinary);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition, isSkewed, skewColumn, skewValues, inputIsBinary);
+                useHashBasedPartition, isSkewed, forceMergeSort, skewColumn, skewValues, inputIsBinary);
     }
 
     public static Builder builder() {
@@ -208,6 +215,8 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.isSkewed = windowOperator.isSkewed;
             builder.skewColumn = windowOperator.skewColumn;
             builder.skewValues = windowOperator.skewValues;
+            builder.forceMergeSort = windowOperator.forceMergeSort;
+            builder.inputIsBinary = windowOperator.inputIsBinary;
             return this;
         }
 
@@ -256,7 +265,12 @@ public class LogicalWindowOperator extends LogicalOperator {
             return this;
         }
 
-        public  Builder setInputIsBinary(boolean isBinary) {
+        public Builder setForceMergeSort(boolean forceMergeSort) {
+            builder.forceMergeSort = forceMergeSort;
+            return this;
+        }
+
+        public Builder setInputIsBinary(boolean isBinary) {
             builder.inputIsBinary = isBinary;
             return this;
         }

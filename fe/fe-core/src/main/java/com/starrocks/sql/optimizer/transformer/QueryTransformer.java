@@ -429,6 +429,9 @@ public class QueryTransformer {
                     windowOperator.setSkewColumn(rewriteOperator.getSkewColumn());
                     windowOperator.setSkewValues(rewriteOperator.getSkewValues());
                 }
+                if (rewriteOperator.isForceMergeSort()) {
+                    windowOperator.setForceMergeSort();
+                }
                 windowOperator.addFunction(analyticExpr);
             } else {
                 windowOperators.add(rewriteOperator);

@@ -3538,6 +3538,7 @@ public class PlanFragmentBuilder {
                     analyticWindow,
                     node.isUseHashBasedPartition(),
                     node.isSkewed(),
+                    node.isForceMergeSort(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -3557,8 +3558,11 @@ public class PlanFragmentBuilder {
                 analyticEvalNode.getConjuncts()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
+            // When forceMergeSort or isSkewed is true, the AnalyticNode uses OrderedPartitionExchanger
+            // which assumes a single ordered stream. The child SortNode must produce a single
+            // merged output instead of partition sort
             passPartitionByToSortNode(context, inputFragment.getPlanRoot(), analyticEvalNode.getPartitionExprs(),
-                    node.isSkewed());
+                    node.isSkewed() || node.isForceMergeSort());
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
@@ -3622,9 +3626,12 @@ public class PlanFragmentBuilder {
          * In new planner.
          * Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
          * to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
+         *
+         * @param needsMerge when true, forces the SortNode to produce a single merged output stream
+         *                   (required by OrderedPartitionExchanger in skewed/forceMergeSort paths)
          */
         private static void passPartitionByToSortNode(ExecPlan context, PlanNode childRoot, List<Expr> partitionExprs,
-                                                      boolean isSkewed) {
+                                                      boolean needsMerge) {
             SortNode sortNode = null;
             if (childRoot instanceof SortNode) {
                 sortNode = (SortNode) childRoot;
@@ -3655,8 +3662,7 @@ public class PlanFragmentBuilder {
             }
 
             if (sortNode != null) {
-                // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
-                sortNode.setAnalyticPartitionSkewed(isSkewed);
+                sortNode.setAnalyticNeedsMerge(needsMerge);
             }
         }
 
