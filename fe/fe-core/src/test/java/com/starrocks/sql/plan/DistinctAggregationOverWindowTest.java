@@ -16,7 +16,6 @@ package com.starrocks.sql.plan;
 
 import com.google.api.client.util.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -447,7 +446,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 .flatMap(agg -> agg.getAggInfo().getAggregateExprs().stream())
                 .filter(fcall -> names.contains(fcall.getFunctionName()))
                 .findFirst()
-                .map(fcall -> ((AggregateFunction) fcall.getFn()).getReturnType());
+                .map(FunctionCallExpr::getType);
 
         if (optReturnType.isPresent()) {
             return optReturnType.get();
@@ -459,7 +458,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 .flatMap(win -> win.getAnalyticFnCalls().stream().map(e -> (FunctionCallExpr) e))
                 .filter(fcall -> names.contains(fcall.getFunctionName()))
                 .findFirst()
-                .map(fcall -> ((AggregateFunction) fcall.getFn()).getReturnType());
+                .map(FunctionCallExpr::getType);
 
         Assertions.assertTrue(optReturnType.isPresent());
         return optReturnType.get();

@@ -45,8 +45,8 @@ public class PartitionExprAnalyzer {
                 Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFunctionName(),
                         dateTruncType, Function.CompareMode.IS_IDENTICAL);
 
-                funcCall.setFn(builtinFunction);
                 funcCall.setType(targetColType);
+                AnalysisContext.populateCachedFields(funcCall, builtinFunction);
             } else if (arg1 instanceof FunctionCallExpr) {
                 analyzePartitionExpr((FunctionCallExpr) arg1, partitionSlotRef);
 
@@ -55,8 +55,8 @@ public class PartitionExprAnalyzer {
                 Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFunctionName(),
                         dateTruncType, Function.CompareMode.IS_IDENTICAL);
 
-                funcCall.setFn(builtinFunction);
                 funcCall.setType(targetColType);
+                AnalysisContext.populateCachedFields(funcCall, builtinFunction);
             }
         }
     }
@@ -72,7 +72,7 @@ public class PartitionExprAnalyzer {
             String functionName = functionCallExpr.getFunctionName();
             if (functionName.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 analyzeDateTruncFunction(functionCallExpr, partitionSlotRef);
-                builtinFunction = functionCallExpr.getFn();
+                builtinFunction = AnalysisContext.getFunctionByExpr(functionCallExpr);
                 targetColType = functionCallExpr.getType();
             } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
                 Type[] timeSliceType = {DateType.DATETIME, IntegerType.INT, VarcharType.VARCHAR, VarcharType.VARCHAR};
@@ -144,8 +144,8 @@ public class PartitionExprAnalyzer {
                 throw new SemanticException(msg, expr.getPos());
             }
 
-            functionCallExpr.setFn(builtinFunction);
             functionCallExpr.setType(targetColType);
+            AnalysisContext.populateCachedFields(functionCallExpr, builtinFunction);
         } else if (expr instanceof CastExpr) {
             CastExpr castExpr = (CastExpr) expr;
             castExpr.setType(castExpr.getTargetTypeDef().getType());

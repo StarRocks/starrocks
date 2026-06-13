@@ -164,7 +164,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     /**
      * Set the expr to be analyzed and computes isConstant_.
      */
-    protected void analysisDone() {
+    public void analysisDone() {
         Preconditions.checkState(!isAnalyzed);
         // We need to compute the const-ness as the last step, since analysis may change
         // the result, e.g. by resolving function.
@@ -295,6 +295,16 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Override
     public String toString() {
         return MoreObjects.toStringHelper(this.getClass()).add("type", type).toString();
+    }
+
+    /**
+     * Produce a simple SQL-like string for error messages.
+     * Default implementation uses debugString(). Subclasses in fe-parser
+     * (like FunctionCallExpr) override to produce cleaner output.
+     * fe-core subclasses (SlotRef, StringLiteral, etc.) override in their own files.
+     */
+    public String toSimpleSql() {
+        return debugString();
     }
 
     @Override

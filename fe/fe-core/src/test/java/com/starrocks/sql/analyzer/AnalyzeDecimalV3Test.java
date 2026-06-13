@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
@@ -197,7 +198,7 @@ public class AnalyzeDecimalV3Test {
             Assertions.assertTrue(items.get(i) != null);
             Type type = items.get(i).getType();
             Type expectType = expectTypes[i / 2];
-            AggregateFunction fn = (AggregateFunction) ((FunctionCallExpr) items.get(i)).getFn();
+            AggregateFunction fn = (AggregateFunction) AnalysisContext.getFunctionByExpr((FunctionCallExpr) items.get(i));
             Type returnType = fn.getReturnType();
             Type argType = fn.getArgs()[0];
             Type serdeType = fn.getIntermediateType();
@@ -250,8 +251,9 @@ public class AnalyzeDecimalV3Test {
             Type expectArgType = expectArgTypes[i / 3];
             Type expectReturnType = expectReturnTypes[i / 3];
 
-            Assertions.assertTrue(((FunctionCallExpr) items.get(i)).getFn() instanceof AggregateFunction);
-            AggregateFunction fn = (AggregateFunction) ((FunctionCallExpr) items.get(i)).getFn();
+            Function resolvedFn = AnalysisContext.getFunctionByExpr((FunctionCallExpr) items.get(i));
+            Assertions.assertTrue(resolvedFn instanceof AggregateFunction);
+            AggregateFunction fn = (AggregateFunction) resolvedFn;
             Type returnType = fn.getReturnType();
             Type argType = fn.getArgs()[0];
             Type serdeType = fn.getIntermediateType();
@@ -812,9 +814,10 @@ public class AnalyzeDecimalV3Test {
             for (int i = 0; i < items.size(); ++i) {
                 Expr expr = items.get(i);
                 Assertions.assertEquals(expr.getType(), FloatType.DOUBLE);
-                Assertions.assertEquals(((FunctionCallExpr) expr).getFn().getArgs()[0], FloatType.DOUBLE);
-                Assertions.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), FloatType.DOUBLE);
-                Assertions.assertEquals(((AggregateFunction) ((FunctionCallExpr) expr).getFn()).getIntermediateType(),
+                Function exprFn = AnalysisContext.getFunctionByExpr((FunctionCallExpr) expr);
+                Assertions.assertEquals(exprFn.getArgs()[0], FloatType.DOUBLE);
+                Assertions.assertEquals(exprFn.getReturnType(), FloatType.DOUBLE);
+                Assertions.assertEquals(((AggregateFunction) exprFn).getIntermediateType(),
                         VarbinaryType.VARBINARY);
             }
         }

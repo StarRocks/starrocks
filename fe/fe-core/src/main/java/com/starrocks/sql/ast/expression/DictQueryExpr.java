@@ -17,6 +17,7 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -28,6 +29,7 @@ import java.util.List;
 public class DictQueryExpr extends FunctionCallExpr {
 
     private TDictQueryExpr dictQueryExpr;
+    private Function fn;
 
     public DictQueryExpr(List<Expr> params) throws SemanticException {
         super(FunctionSet.DICT_MAPPING, params);
@@ -37,12 +39,14 @@ public class DictQueryExpr extends FunctionCallExpr {
         super(FunctionSet.DICT_MAPPING, params);
         this.dictQueryExpr = dictQueryExpr;
         this.fn = fn;
+        AnalysisContext.populateCachedFields(this, fn);
         setType(fn.getReturnType());
     }
 
     protected DictQueryExpr(DictQueryExpr other) {
         super(other);
         this.dictQueryExpr = other.getDictQueryExpr();
+        this.fn = other.fn;
     }
 
 
@@ -64,6 +68,15 @@ public class DictQueryExpr extends FunctionCallExpr {
 
     public TDictQueryExpr getDictQueryExpr() {
         return dictQueryExpr;
+    }
+
+    public Function getFn() {
+        return fn;
+    }
+
+    public void setFn(Function fn) {
+        this.fn = fn;
+        AnalysisContext.populateCachedFields(this, fn);
     }
 
     public void setDictQueryExpr(TDictQueryExpr dictQueryExpr) {

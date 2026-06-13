@@ -1028,7 +1028,7 @@ public class ExpressionAnalyzer {
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
             if (node.isNondeterministicBuiltinFnName()) {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
-                node.setNondeterministicId(exprId);
+                node.setNondeterministicId(exprId.asInt());
             }
             String fnName = node.getFunctionName();
 
@@ -1148,8 +1148,8 @@ public class ExpressionAnalyzer {
                 // This must be after reordering because it depends on parameter positions
                 FunctionAnalyzer.validateNullConstraints(fnName, fn, node);
 
-                node.setFn(fn);
                 node.setType(fn.getReturnType());
+                AnalysisContext.populateCachedFields(node, fn);
                 FunctionAnalyzer.analyze(node);
                 return null;
             }
@@ -1172,8 +1172,8 @@ public class ExpressionAnalyzer {
                             visit(child, scope);
                         }
                     }
-                    node.setFn(fn);
                     node.setType(fn.getReturnType());
+                    AnalysisContext.populateCachedFields(node, fn);
                     FunctionAnalyzer.analyze(node);
                     return null;
                 }
@@ -1186,8 +1186,8 @@ public class ExpressionAnalyzer {
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 throw new SemanticException(msg, node.getPos());
             }
-            node.setFn(fn);
             node.setType(fn.getReturnType());
+            AnalysisContext.populateCachedFields(node, fn);
             FunctionAnalyzer.analyze(node);
             return null;
         }
@@ -1557,8 +1557,8 @@ public class ExpressionAnalyzer {
             Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName(),
                     childTypes, Function.CompareMode.IS_IDENTICAL);
 
-            node.setFn(fn);
             node.setType(fn.getReturnType());
+            AnalysisContext.populateCachedFields(node, fn);
             return null;
         }
 
@@ -1931,6 +1931,7 @@ public class ExpressionAnalyzer {
             Function fn = new Function(FunctionName.createFnName(FunctionSet.DICT_MAPPING), actualTypes, valueType, false);
             fn.setBinaryType(TFunctionBinaryType.BUILTIN);
             node.setFn(fn);
+            AnalysisContext.populateCachedFields(node, fn);
 
             node.setDictQueryExpr(dictQueryExpr);
             return null;

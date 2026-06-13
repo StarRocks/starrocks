@@ -124,6 +124,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -2503,7 +2504,7 @@ public class PlanFragmentBuilder {
                         .put(aggregation.getKey(), new SlotRef(aggregation.getKey().toString(), slotDesc));
 
                 SlotDescriptor intermediateSlotDesc = new SlotDescriptor(slotDesc.getId(), slotDesc.getParent());
-                AggregateFunction aggrFn = (AggregateFunction) aggExpr.getFn();
+                AggregateFunction aggrFn = (AggregateFunction) AnalysisContext.getFunctionByExpr(aggExpr);
                 Type intermediateType = aggrFn.getIntermediateType() != null ?
                         aggrFn.getIntermediateType() : aggrFn.getReturnType();
                 intermediateType = AnalyzerUtils.replaceNullType2Boolean(intermediateType);
@@ -2778,28 +2779,30 @@ public class PlanFragmentBuilder {
                 final String functionName = functionCallExpr.getFunctionName();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
-                    replaceExpr.setFn(ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
-                            functionCallExpr.getFn().getArgs(),
-                            IS_NONSTRICT_SUPERTYPE_OF));
+                    Function mdcFn = ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
+                            functionCallExpr.getFnArgTypes(),
+                            IS_NONSTRICT_SUPERTYPE_OF);
+                    AnalysisContext.populateCachedFields(replaceExpr, mdcFn);
                     replaceExpr.getParams().setIsDistinct(false);
                     replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM, functionCallExpr.getParams());
                     Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
-                            functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
-                    replaceExpr.setFn(multiDistinctSum);
+                            AnalysisContext.getFunctionByExpr(functionCallExpr), functionCallExpr.getChild(0).getType());
+                    AnalysisContext.populateCachedFields(replaceExpr, multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
                     replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
                     AggregateFunction fn =
                             (AggregateFunction) ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
-                                    functionCallExpr.getFn().getArgs(),
+                                    functionCallExpr.getFnArgTypes(),
                                     IS_NONSTRICT_SUPERTYPE_OF);
+                    Function fceFn = AnalysisContext.getFunctionByExpr(functionCallExpr);
                     fn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
-                            fn, functionCallExpr.getFn().getArgs()[0], functionCallExpr.getFn().getReturnType());
+                            fn, functionCallExpr.getFnArgTypes()[0], fceFn.getReturnType());
 
-                    replaceExpr.setFn(fn);
+                    AnalysisContext.populateCachedFields(replaceExpr, fn);
                     replaceExpr.getParams().setIsDistinct(false);
                     replaceExpr.setType(functionCallExpr.getType());
                 }
@@ -3488,15 +3491,16 @@ public class PlanFragmentBuilder {
                 // Only boolean/numeric/string type can be optimized via array_agg_distinct
                 if (call.isDistinct() && call.getFunctionName().equals(FunctionSet.ARRAY_AGG) &&
                         call.getFnParams().exprs().size() == 1 && (
-                        call.getFn().getArgs()[0].isNumericType() || call.getFn().getArgs()[0].isStringType() ||
-                                call.getFn().getArgs()[0].isBoolean())) {
+                        call.getFnArgTypes()[0].isNumericType() || call.getFnArgTypes()[0].isStringType() ||
+                                call.getFnArgTypes()[0].isBoolean())) {
                     FunctionCallExpr newCall = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, call.getParams());
                     AggregateFunction fn =
                             (AggregateFunction) ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
-                                    call.getFn().getArgs(), IS_NONSTRICT_SUPERTYPE_OF);
+                                    call.getFnArgTypes(), IS_NONSTRICT_SUPERTYPE_OF);
+                    Function callFn = AnalysisContext.getFunctionByExpr(call);
                     fn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
-                            fn, call.getFn().getArgs()[0], call.getFn().getReturnType());
-                    newCall.setFn(fn);
+                            fn, call.getFnArgTypes()[0], callFn.getReturnType());
+                    AnalysisContext.populateCachedFields(newCall, fn);
                     newCall.getParams().setIsDistinct(false);
                     newCall.setType(call.getType());
                     analyticFunction = newCall;

@@ -38,15 +38,14 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
 
 /**
  * Representation of an analytic function call with OVER clause.
@@ -130,7 +129,7 @@ public class AnalyticExpr extends Expr {
 
         this.window = window;
         this.skewValues = List.of();
-        if (CollectionUtils.isNotEmpty(hints)) {
+        if (hints != null && !hints.isEmpty()) {
             for (String hint : hints) {
                 if (HintNode.HINT_ANALYTIC_SORT.equalsIgnoreCase(hint) ||
                         HintNode.HINT_ANALYTIC_HASH.equalsIgnoreCase(hint)) {
@@ -163,7 +162,10 @@ public class AnalyticExpr extends Expr {
             orderByElements.add(e.clone());
         }
 
-        partitionExprs = ExprUtils.cloneList(other.partitionExprs);
+        partitionExprs = new ArrayList<>();
+        for (Expr e : other.partitionExprs) {
+            partitionExprs.add(e.clone());
+        }
         window = (other.window != null ? other.window.clone() : null);
         resetWindow = other.resetWindow;
         partitionHint = other.partitionHint;
@@ -171,7 +173,10 @@ public class AnalyticExpr extends Expr {
         useHashBasedPartition = other.useHashBasedPartition;
         isSkewed = other.isSkewed;
         skewColumn = (other.skewColumn != null ? other.skewColumn.clone() : null);
-        skewValues = ExprUtils.cloneList(other.skewValues);
+        skewValues = new ArrayList<>();
+        for (Expr e : other.skewValues) {
+            skewValues.add(e.clone());
+        }
         sqlString = other.sqlString;
         setChildren();
     }
@@ -327,7 +332,7 @@ public class AnalyticExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAnalyticExpr(this, context);
+        return visitor.visitAnalyticExpr(this, context);
     }
 
     @Override

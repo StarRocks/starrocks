@@ -42,6 +42,7 @@ import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -1184,7 +1185,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
 
         FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName().getFunction(), node.getChildExpressions());
-        expr.setFn(tableFunction);
+        AnalysisContext.populateCachedFields(expr, tableFunction);
         ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context, columnRefFactory);
 
         if (operator.isConstantRef() && ((ConstantOperator) operator).isNull()) {

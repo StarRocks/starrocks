@@ -30,7 +30,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
@@ -189,7 +188,7 @@ public class AnalyzerUtils {
     public static void verifyNoAggregateFunctions(Expr expression, String clause) {
         List<FunctionCallExpr> functions = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                ((FunctionCallExpr) arg).getFn() instanceof AggregateFunction, functions);
+                ((FunctionCallExpr) arg).isAggregateFn(), functions);
         if (!functions.isEmpty()) {
             throw new SemanticException(clause + " clause cannot contain aggregations", expression.getPos());
         }
