@@ -50,8 +50,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
@@ -94,9 +97,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> result = tableStatsCache.getAll(keys);
-            if (Config.enable_sync_statistics_load) {
-                result.get();
-            }
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s".formatted(tableId));
             if (result.isDone()) {
                 Map<TableStatsCacheKey, Optional<Long>> data = result.get();
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
@@ -348,9 +349,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
                     columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
-            if (Config.enable_sync_statistics_load) {
-                result.get();
-            }
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, column: %s".formatted(table.getId(), column));
             if (result.isDone()) {
                 Optional<ColumnStatistic> realResult;
                 realResult = result.get();
@@ -390,9 +389,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result =
                     columnStatistics.getAll(cacheKeys);
-            if (Config.enable_sync_statistics_load) {
-                result.get();
-            }
+
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, columns: [%s]".formatted(table.getId(),
+                    stringifyColumnCacheKeys(cacheKeys)));
             if (result.isDone()) {
                 List<ColumnStatistic> columnStatistics = new ArrayList<>();
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> realResult;
@@ -431,9 +430,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
                     partitionStatistics.getAll(cacheKeys);
-            if (Config.enable_sync_statistics_load) {
-                resultFuture.get();
-            }
+            waitForStatsFutureIfWaitEnabled(resultFuture, () -> "tableId: %s, columns: [%s]".formatted(table.getId(),
+                    stringifyColumnCacheKeys(cacheKeys)));
 
             if (resultFuture.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get();
@@ -549,9 +547,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
-            if (Config.enable_sync_statistics_load) {
-                result.get();
-            }
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, columns: [%s]".formatted(tableId,
+                    stringifyColumnCacheKeys(cacheKeys)));
             if (result.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<Histogram>> realResult;
                 realResult = result.get();
@@ -658,9 +655,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = multiColumnStats.get(tableId);
-            if (Config.enable_sync_statistics_load) {
-                result.get();
-            }
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s".formatted(tableId));
             if (result.isDone()) {
                 Optional<MultiColumnCombinedStatistics> data = result.get();
                 return data.orElse(MultiColumnCombinedStatistics.EMPTY);
@@ -741,5 +736,24 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         }
 
         return cacheBuilder.buildAsync(cacheLoader);
+    }
+
+    private <T> void waitForStatsFutureIfWaitEnabled(CompletableFuture<T> future, Supplier<String> contextSupplier)
+            throws InterruptedException, ExecutionException {
+        try {
+            if (Config.enable_sync_statistics_load) {
+                final var timeoutMs = Config.sync_statistics_load_timeout_ms;
+                future.get(timeoutMs, TimeUnit.MILLISECONDS);
+            }
+        } catch (TimeoutException e) {
+            LOG.warn("Timeout waiting for stats to be loaded into the cache. (timeout: {}ms, context: {})",
+                    Config.sync_statistics_load_timeout_ms, contextSupplier.get());
+        }
+    }
+
+    private static String stringifyColumnCacheKeys(Collection<ColumnStatsCacheKey> columnStatsCacheKeys) {
+        return columnStatsCacheKeys.stream() //
+                .map(ColumnStatsCacheKey::toString) //
+                .collect(Collectors.joining(", "));
     }
 }
