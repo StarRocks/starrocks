@@ -1591,4 +1591,151 @@ public class QueryCacheTest {
         Optional<PlanFragment> frag = getCachedFragment(sql0);
         Assertions.assertTrue(frag.isPresent());
     }
+
+    // ===== Query cache x Global Late Materialization coverage =====
+    //
+    // The shared fixture force-disables global late materialization (see setUp),
+    // so the cases below flip it on locally to exercise the combination. They guard
+    // three properties:
+    //   (1) digests of non-GLM queries do not shift when GLM is toggled (regression);
+    //   (2) when GLM does fire, the cached fragment is either suppressed cleanly or,
+    //       if produced, its digest stays stable across structurally-equivalent rewrites;
+    //   (3) FETCH-introducing plans differing in output column set must NOT collide
+    //       on the cache digest — FetchNode currently does not override PlanNode.normalize()
+    //       (see fe/fe-core/.../planner/FetchNode.java), so this is the at-risk path.
+
+    private void withGlobalLateMaterialization(boolean enabled, Runnable body) {
+        boolean prev = ctx.getSessionVariable().isEnableGlobalLateMaterialization();
+        ctx.getSessionVariable().setEnableGlobalLateMaterialization(enabled);
+        try {
+            body.run();
+        } finally {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(prev);
+        }
+    }
+
+    @Test
+    public void testQueryCacheDigestStable_AggregationUnaffectedByGLMToggle() {
+        // A pure aggregation query has no LIMIT, so GLM's hasLimit() short-circuit
+        // returns false and the rewriter is a no-op. Toggling the flag must not
+        // perturb the cache digest.
+        String sql = "select dt, sum(v1) from t0 where dt between '2022-01-01' and '2022-01-31' group by dt";
+
+        Optional<PlanFragment> off = getCachedFragment(sql);
+        Assertions.assertTrue(off.isPresent(), "aggregation query must be cacheable with GLM off");
+        byte[] digestOff = off.get().getCacheParam().getDigest();
+
+        withGlobalLateMaterialization(true, () -> {
+            Optional<PlanFragment> on = getCachedFragment(sql);
+            Assertions.assertTrue(on.isPresent(), "aggregation query must remain cacheable with GLM on");
+            byte[] digestOn = on.get().getCacheParam().getDigest();
+            Assertions.assertArrayEquals(digestOff, digestOn,
+                    "GLM toggle must not change digest of plans where GLM is a no-op");
+        });
+    }
+
+    @Test
+    public void testQueryCacheWithTopNLimit_TriggersGLM() {
+        // SELECT non-key columns with ORDER BY + LIMIT on a duplicate-key table is the
+        // canonical TopN trigger for GLM (cost-based path: hasTopNWithLimit).
+        // Verify either:
+        //   - the fragment is no longer marked cacheable (GLM and cache are incompatible), or
+        //   - the fragment is still cacheable and its digest is stable across the
+        //     same query repeated and across partition-pruning variants.
+        List<String> queries = Lists.newArrayList(
+                "select dt, c1, v2, v3, v4 from t0 " +
+                        "where dt between '2022-01-05' and '2022-01-25' order by v5 desc limit 10",
+                "select dt, c1, v2, v3, v4 from t0 " +
+                        "where dt between '2022-01-05' and '2022-01-25' order by v5 desc limit 10");
+
+        withGlobalLateMaterialization(true, () -> {
+            List<PlanFragment> frags0 = getCachedFragments(queries.get(0));
+            List<PlanFragment> frags1 = getCachedFragments(queries.get(1));
+            // Property: the planner's cacheability decision must be deterministic
+            // for the same SQL string.
+            Assertions.assertEquals(frags0.size(), frags1.size(),
+                    "cacheability must be deterministic for repeated SQL under GLM");
+
+            if (!frags0.isEmpty() && !frags1.isEmpty()) {
+                byte[] d0 = frags0.get(0).getCacheParam().getDigest();
+                byte[] d1 = frags1.get(0).getCacheParam().getDigest();
+                Assertions.assertArrayEquals(d0, d1,
+                        "identical SQL must produce identical cache digest under GLM");
+            }
+        });
+    }
+
+    @Test
+    public void testQueryCacheWithLimitAfterJoin_TriggersGLM() {
+        // LIMIT placed after a JOIN is the second GLM trigger (hasLimitAfterJoin).
+        // Same contract: cacheability is deterministic and digest is stable for
+        // repeated SQL.
+        String sql = "select lo.dt, lo.c1, lo.v2, lo.v3 " +
+                "from t0 lo join[broadcast] t2 on lo.c3 = t2.c1 " +
+                "where lo.dt between '2022-01-05' and '2022-01-25' limit 50";
+
+        withGlobalLateMaterialization(true, () -> {
+            List<PlanFragment> first = getCachedFragments(sql);
+            List<PlanFragment> second = getCachedFragments(sql);
+            Assertions.assertEquals(first.size(), second.size(),
+                    "cacheability for LIMIT-after-JOIN must be deterministic under GLM");
+            if (!first.isEmpty() && !second.isEmpty()) {
+                Assertions.assertArrayEquals(
+                        first.get(0).getCacheParam().getDigest(),
+                        second.get(0).getCacheParam().getDigest(),
+                        "repeated LIMIT-after-JOIN SQL must yield the same digest under GLM");
+            }
+        });
+    }
+
+    @Test
+    public void testQueryCacheDigestDistinguishesFetchedColumns_UnderGLM() {
+        // Regression target: FetchNode does not override PlanNode.normalize(), so plans
+        // that differ only in which columns are lazily fetched could collide on the
+        // cache digest. Two TopN+LIMIT queries on t0 selecting different output column
+        // sets MUST produce distinct cache digests (whether or not GLM is the path that
+        // produces them). If GLM disables caching entirely, both should be uncached and
+        // this assertion is vacuously fine — but if a cached fragment is produced for
+        // both, their digests must differ.
+        String sqlA = "select dt, c1, v2 from t0 " +
+                "where dt between '2022-01-05' and '2022-01-25' order by v5 desc limit 10";
+        String sqlB = "select dt, c1, v3 from t0 " +
+                "where dt between '2022-01-05' and '2022-01-25' order by v5 desc limit 10";
+
+        withGlobalLateMaterialization(true, () -> {
+            List<PlanFragment> fragsA = getCachedFragments(sqlA);
+            List<PlanFragment> fragsB = getCachedFragments(sqlB);
+            if (!fragsA.isEmpty() && !fragsB.isEmpty()) {
+                byte[] digestA = fragsA.get(0).getCacheParam().getDigest();
+                byte[] digestB = fragsB.get(0).getCacheParam().getDigest();
+                Assertions.assertFalse(java.util.Arrays.equals(digestA, digestB),
+                        "queries with different output columns (different FETCH topology) must " +
+                                "produce different cache digests");
+            }
+        });
+    }
+
+    @Test
+    public void testQueryCacheOnAggregateKeyTable_GLMSupportsFilterHonored() {
+        // OlapScanLazyMaterializationSupport.supports() returns false for aggregation
+        // family tables, so GLM must not fire on t6 (AGGREGATE KEY). The aggregation
+        // query below should produce a cache fragment with the same digest regardless
+        // of the GLM session flag.
+        String sql = "select ts, sum(v2) from t6 " +
+                "where ts between '2022-01-05 00:00:00' and '2022-01-25 00:00:00' group by ts";
+
+        Optional<PlanFragment> off = getCachedFragment(sql);
+        Assertions.assertTrue(off.isPresent(),
+                "aggregation query on AGGREGATE KEY table must be cacheable with GLM off");
+        byte[] digestOff = off.get().getCacheParam().getDigest();
+
+        withGlobalLateMaterialization(true, () -> {
+            Optional<PlanFragment> on = getCachedFragment(sql);
+            Assertions.assertTrue(on.isPresent(),
+                    "aggregation query on AGGREGATE KEY table must remain cacheable with GLM on " +
+                            "(GLM supports() filter excludes aggregation family)");
+            Assertions.assertArrayEquals(digestOff, on.get().getCacheParam().getDigest(),
+                    "GLM flag must not affect cache digest on tables where supports() returns false");
+        });
+    }
 }

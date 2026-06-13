@@ -1,0 +1,183 @@
+-- name: test_query_cache_with_global_late_materialization
+set enable_pipeline_engine = true;
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+CREATE TABLE qc_glm_dup (
+    dt date NOT NULL,
+    k0 int NOT NULL,
+    v_int int NOT NULL,
+    v_str varchar(32) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, k0)
+PARTITION BY RANGE(dt) (
+    START ("2024-01-01") END ("2024-01-11") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO qc_glm_dup VALUES
+  ('2024-01-01', 1, 10, 's1'),
+  ('2024-01-01', 2, 20, 's2'),
+  ('2024-01-02', 3, 30, 's3'),
+  ('2024-01-02', 4, 40, 's4'),
+  ('2024-01-03', 5, 50, 's5'),
+  ('2024-01-03', 6, 60, 's6'),
+  ('2024-01-04', 7, 70, 's7'),
+  ('2024-01-04', 8, 80, 's8'),
+  ('2024-01-05', 9, 90, 's9'),
+  ('2024-01-05', 10, 100, 's10');
+-- result:
+-- !result
+select count(*) from qc_glm_dup;
+-- result:
+10
+-- !result
+select dt, sum(v_int) from qc_glm_dup
+where dt between '2024-01-01' and '2024-01-03'
+group by dt order by dt;
+-- result:
+2024-01-01	30
+2024-01-02	70
+2024-01-03	110
+-- !result
+select k0, v_int, v_str from qc_glm_dup
+where dt between '2024-01-01' and '2024-01-05'
+order by k0 desc limit 5;
+-- result:
+10	100	s10
+9	90	s9
+8	80	s8
+7	70	s7
+6	60	s6
+-- !result
+select k0, v_int, v_str from qc_glm_dup
+where dt between '2024-01-01' and '2024-01-05'
+order by k0 desc limit 5;
+-- result:
+10	100	s10
+9	90	s9
+8	80	s8
+7	70	s7
+6	60	s6
+-- !result
+CREATE TABLE qc_glm_dim (
+    k0 int NOT NULL,
+    cat varchar(8) NOT NULL
+) ENGINE=OLAP DUPLICATE KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO qc_glm_dim VALUES (1, 'A'), (2, 'A'), (3, 'B'), (4, 'B'), (5, 'C');
+-- result:
+-- !result
+select t.k0, t.v_int, d.cat
+from qc_glm_dup t join[broadcast] qc_glm_dim d on t.k0 = d.k0
+where t.dt between '2024-01-01' and '2024-01-05'
+order by t.k0 limit 100;
+-- result:
+1	10	A
+2	20	A
+3	30	B
+4	40	B
+5	50	C
+-- !result
+select k0, v_int, v_str from qc_glm_dup where dt = '2024-01-01' order by k0 limit 10;
+-- result:
+1	10	s1
+2	20	s2
+-- !result
+INSERT INTO qc_glm_dup VALUES ('2024-01-01', 99, 999, 's99');
+-- result:
+-- !result
+select k0, v_int, v_str from qc_glm_dup where dt = '2024-01-01' order by k0 limit 10;
+-- result:
+1	10	s1
+2	20	s2
+99	999	s99
+-- !result
+CREATE TABLE qc_glm_agg (
+    dt date NOT NULL,
+    k0 int NOT NULL,
+    v_sum int SUM NOT NULL,
+    v_max int MAX NOT NULL
+) ENGINE=OLAP
+AGGREGATE KEY(dt, k0)
+PARTITION BY RANGE(dt) (
+    START ("2024-01-01") END ("2024-01-11") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO qc_glm_agg VALUES
+  ('2024-01-01', 1, 10, 1),
+  ('2024-01-01', 1, 15, 2),
+  ('2024-01-02', 2, 20, 3),
+  ('2024-01-02', 2, 25, 4),
+  ('2024-01-03', 3, 30, 5),
+  ('2024-01-03', 3, 35, 6);
+-- result:
+-- !result
+select dt, k0, v_sum, v_max from qc_glm_agg
+where dt between '2024-01-01' and '2024-01-03'
+order by dt, k0;
+-- result:
+2024-01-01	1	25	2
+2024-01-02	2	45	4
+2024-01-03	3	65	6
+-- !result
+CREATE TABLE qc_glm_pk (
+    dt date NOT NULL,
+    k0 int NOT NULL,
+    v_int int NOT NULL,
+    v_str varchar(32) NOT NULL
+) ENGINE=OLAP
+PRIMARY KEY(dt, k0)
+PARTITION BY RANGE(dt) (
+    START ("2024-01-01") END ("2024-01-11") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(k0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO qc_glm_pk VALUES
+  ('2024-01-01', 1, 10, 'a'),
+  ('2024-01-01', 2, 20, 'b'),
+  ('2024-01-02', 3, 30, 'c'),
+  ('2024-01-02', 4, 40, 'd'),
+  ('2024-01-03', 5, 50, 'e');
+-- result:
+-- !result
+select k0, v_int, v_str from qc_glm_pk
+where dt between '2024-01-01' and '2024-01-03'
+order by k0 desc limit 3;
+-- result:
+5	50	e
+4	40	d
+3	30	c
+-- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
+select k0, v_int from qc_glm_dup
+where dt between '2024-01-02' and '2024-01-04'
+order by v_int limit 4;
+-- result:
+3	30
+4	40
+5	50
+6	60
+-- !result
+set enable_global_late_materialization_cost_based = true;
+-- result:
+-- !result
