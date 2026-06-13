@@ -91,7 +91,7 @@ public class ShowMaterializedViewStatus {
     /**
      * RefreshJobStatus represents a batch of batch TaskRunStatus because a fresh may trigger more than one task runs.
      */
-    public class RefreshJobStatus {
+    public static class RefreshJobStatus {
         private String taskOwner;
         private String jobId;
         private Constants.TaskRunState refreshState;
@@ -243,9 +243,7 @@ public class ShowMaterializedViewStatus {
         @Override
         public String toString() {
             return "RefreshJobStatus{" +
-                    "taskId=" + taskId +
-                    ", taskName='" + taskName + '\'' +
-                    ", taskOwner='" + taskOwner + '\'' +
+                    "taskOwner='" + taskOwner + '\'' +
                     ", refreshState=" + refreshState +
                     ", mvRefreshStartTime=" + mvRefreshStartTime +
                     ", mvRefreshEndTime=" + mvRefreshEndTime +
@@ -266,7 +264,7 @@ public class ShowMaterializedViewStatus {
     /**
      * To avoid changing show materialized view's result schema, use this to keep extra message.
      */
-    class ExtraMessage {
+    static class ExtraMessage {
         @SerializedName("queryIds")
         private List<String> queryIds;
         @SerializedName("isManual")
@@ -586,21 +584,32 @@ public class ShowMaterializedViewStatus {
         }
     }
 
-    private List<String> applyTaskRunStatusWith(Function<TaskRunStatus, String> func) {
-        return lastJobTaskRunStatus.stream()
+    private static List<String> applyTaskRunStatusWith(List<TaskRunStatus> batch, Function<TaskRunStatus, String> func) {
+        return batch.stream()
                 .map(x -> func.apply(x))
                 .map(x -> Optional.ofNullable(x).orElse("NULL"))
                 .collect(Collectors.toList());
     }
 
     public RefreshJobStatus getRefreshJobStatus() {
+        return fromTaskRuns(this.lastJobTaskRunStatus);
+    }
+
+    /**
+     * Rolls up a batch of task runs into one job status. The input list is not mutated; ordering is
+     * established on a defensive copy because callers other than setLastJobTaskRunStatus pass unsorted runs.
+     */
+    public static RefreshJobStatus fromTaskRuns(List<TaskRunStatus> batch) {
         RefreshJobStatus status = new RefreshJobStatus();
-        if (lastJobTaskRunStatus == null || lastJobTaskRunStatus.isEmpty()) {
+        if (batch == null || batch.isEmpty()) {
             return status;
         }
 
-        TaskRunStatus firstTaskRunStatus = lastJobTaskRunStatus.get(0);
-        TaskRunStatus lastTaskRunStatus = lastJobTaskRunStatus.get(lastJobTaskRunStatus.size() - 1);
+        List<TaskRunStatus> sorted = new ArrayList<>(batch);
+        sorted.sort(Comparator.comparing(TaskRunStatus::getProcessStartTime));
+
+        TaskRunStatus firstTaskRunStatus = sorted.get(0);
+        TaskRunStatus lastTaskRunStatus = sorted.get(sorted.size() - 1);
 
         // Task creator
         Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(firstTaskRunStatus.getTaskName());
@@ -614,7 +623,7 @@ public class ShowMaterializedViewStatus {
 
         // extra message
         ExtraMessage extraMessage = new ExtraMessage();
-        List<String> queryIds = applyTaskRunStatusWith(x -> x.getQueryId());
+        List<String> queryIds = applyTaskRunStatusWith(sorted, x -> x.getQueryId());
         // queryIds
         extraMessage.setQueryIds(queryIds);
         extraMessage.setLastTaskRunState(lastTaskRunStatus.getState());
@@ -647,24 +656,24 @@ public class ShowMaterializedViewStatus {
         status.setForce(mvTaskRunExtraMessage.isForceRefresh());
 
         // getPartitionStart
-        List<String> refreshedPartitionStarts = applyTaskRunStatusWith(x ->
+        List<String> refreshedPartitionStarts = applyTaskRunStatusWith(sorted, x ->
                 x.getMvTaskRunExtraMessage().getPartitionStart());
         status.setRefreshedPartitionStarts(refreshedPartitionStarts);
 
         // getPartitionEnd
-        List<String> refreshedPartitionEnds = applyTaskRunStatusWith(x ->
+        List<String> refreshedPartitionEnds = applyTaskRunStatusWith(sorted, x ->
                 x.getMvTaskRunExtraMessage().getPartitionEnd());
         status.setRefreshedPartitionEnds(refreshedPartitionEnds);
 
         // getBasePartitionsToRefreshMapString
-        List<Map<String, Set<String>>> refreshedBasePartitionsToRefreshMaps = lastJobTaskRunStatus.stream()
+        List<Map<String, Set<String>>> refreshedBasePartitionsToRefreshMaps = sorted.stream()
                 .map(x -> x.getMvTaskRunExtraMessage().getBasePartitionsToRefreshMap())
                 .map(x -> Optional.ofNullable(x).orElse(Maps.newHashMap()))
                 .collect(Collectors.toList());
         status.setRefreshedBasePartitionsToRefreshMaps(refreshedBasePartitionsToRefreshMaps);
 
         // getMvPartitionsToRefreshString
-        List<Set<String>> refreshedMvPartitionsToRefreshs = lastJobTaskRunStatus.stream()
+        List<Set<String>> refreshedMvPartitionsToRefreshs = sorted.stream()
                 .map(x -> x.getMvTaskRunExtraMessage().getMvPartitionsToRefresh())
                 .map(x -> Optional.ofNullable(x).orElse(Sets.newHashSet()))
                 .collect(Collectors.toList());
@@ -677,7 +686,7 @@ public class ShowMaterializedViewStatus {
             long mvRefreshFinishTime = lastTaskRunStatus.getFinishTime();
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
-            long totalProcessDuration = lastJobTaskRunStatus.stream()
+            long totalProcessDuration = sorted.stream()
                     .map(TaskRunStatus::calculateRefreshProcessDuration)
                     .collect(Collectors.summingLong(Long::longValue));
             status.setTotalProcessDuration(totalProcessDuration);

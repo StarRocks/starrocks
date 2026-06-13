@@ -16,13 +16,126 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.qe.ShowMaterializedViewStatus;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedViewStatus;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class ShowMaterializedViewStatusTest {
+
+    @BeforeEach
+    public void setUp() {
+        // fromTaskRuns looks up the task owner via the global task manager; keep it offline in this unit test.
+        TaskManager taskManager = new MockUp<TaskManager>() {
+            @Mock
+            public Task getTask(String taskName) {
+                return null;
+            }
+        }.getMockInstance();
+        MockUp<GlobalStateMgr> globalStateMgrMock = new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TaskManager getTaskManager() {
+                return taskManager;
+            }
+        };
+        GlobalStateMgr mockGlobalStateMgr = globalStateMgrMock.getMockInstance();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return mockGlobalStateMgr;
+            }
+        };
+    }
+
+    private static TaskRunStatus mvTaskRun(String startTaskRunId, String taskRunId, long createTime,
+                                           long processStartTime, long finishTime,
+                                           Constants.TaskRunState state) {
+        TaskRunStatus taskRun = new TaskRunStatus();
+        taskRun.setTaskName("mvTask");
+        taskRun.setSource(Constants.TaskSource.MV);
+        taskRun.setStartTaskRunId(startTaskRunId);
+        taskRun.setTaskRunId(taskRunId);
+        taskRun.setCreateTime(createTime);
+        taskRun.setProcessStartTime(processStartTime);
+        taskRun.setFinishTime(finishTime);
+        taskRun.setState(state);
+        taskRun.setErrorCode(0);
+        taskRun.setErrorMessage("");
+        taskRun.setMvTaskRunExtraMessage(new MVTaskRunExtraMessage());
+        return taskRun;
+    }
+
+    @Test
+    public void fromTaskRunsRollsUpEarliestAndLatestRun() {
+        // Out-of-order batch: the rollup must sort by processStartTime, so run "b" (earliest) is first
+        // and run "c" (latest) is last regardless of list order.
+        TaskRunStatus runB = mvTaskRun("job-1", "run-b", 1000L, 1000L, 1500L, Constants.TaskRunState.FAILED);
+        TaskRunStatus runA = mvTaskRun("job-1", "run-a", 3000L, 3000L, 3700L, Constants.TaskRunState.FAILED);
+        TaskRunStatus runC = mvTaskRun("job-1", "run-c", 5000L, 5000L, 5900L, Constants.TaskRunState.FAILED);
+
+        List<TaskRunStatus> batch = Arrays.asList(runA, runC, runB);
+        ShowMaterializedViewStatus.RefreshJobStatus status = ShowMaterializedViewStatus.fromTaskRuns(batch);
+
+        Assertions.assertEquals(1000L, status.getMvRefreshStartTime());
+        Assertions.assertEquals(1000L, status.getMvRefreshProcessTime());
+        Assertions.assertEquals(runC.getStartTaskRunId(), status.getJobId());
+        Assertions.assertEquals(runC.getLastRefreshState(), status.getRefreshState());
+
+        Assertions.assertTrue(status.isRefreshFinished());
+        Assertions.assertEquals(5900L, status.getMvRefreshEndTime());
+        long expectedDuration = (1500L - 1000L) + (3700L - 3000L) + (5900L - 5000L);
+        Assertions.assertEquals(expectedDuration, status.getTotalProcessDuration());
+    }
+
+    @Test
+    public void fromTaskRunsDoesNotMutateInputOrder() {
+        TaskRunStatus runLate = mvTaskRun("job-2", "run-late", 9000L, 9000L, 9500L, Constants.TaskRunState.FAILED);
+        TaskRunStatus runEarly = mvTaskRun("job-2", "run-early", 1000L, 1000L, 1500L, Constants.TaskRunState.FAILED);
+
+        List<TaskRunStatus> batch = Arrays.asList(runLate, runEarly);
+        ShowMaterializedViewStatus.fromTaskRuns(batch);
+
+        Assertions.assertSame(runLate, batch.get(0));
+        Assertions.assertSame(runEarly, batch.get(1));
+    }
+
+    @Test
+    public void fromTaskRunsReturnsEmptyStatusForEmptyOrNull() {
+        ShowMaterializedViewStatus.RefreshJobStatus empty =
+                ShowMaterializedViewStatus.fromTaskRuns(Collections.emptyList());
+        Assertions.assertNotNull(empty);
+        Assertions.assertFalse(empty.isRefreshFinished());
+        Assertions.assertNull(empty.getJobId());
+
+        ShowMaterializedViewStatus.RefreshJobStatus fromNull = ShowMaterializedViewStatus.fromTaskRuns(null);
+        Assertions.assertNotNull(fromNull);
+        Assertions.assertFalse(fromNull.isRefreshFinished());
+        Assertions.assertNull(fromNull.getJobId());
+    }
+
+    @Test
+    public void getRefreshJobStatusDelegatesToFromTaskRuns() {
+        TaskRunStatus run = mvTaskRun("job-3", "run-1", 2000L, 2000L, 2600L, Constants.TaskRunState.FAILED);
+        ShowMaterializedViewStatus viewStatus = new ShowMaterializedViewStatus(1L, "testDb", "testView");
+        viewStatus.setLastJobTaskRunStatus(Collections.singletonList(run));
+
+        ShowMaterializedViewStatus.RefreshJobStatus status = viewStatus.getRefreshJobStatus();
+
+        Assertions.assertEquals(2000L, status.getMvRefreshStartTime());
+        Assertions.assertEquals("job-3", status.getJobId());
+        Assertions.assertTrue(status.isRefreshFinished());
+        Assertions.assertEquals(2600L, status.getMvRefreshEndTime());
+        Assertions.assertEquals(600L, status.getTotalProcessDuration());
+    }
 
     @Test
     public void toThriftReturnsDefaultValuesWhenNoRefreshJobStatus() {
