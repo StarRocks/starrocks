@@ -325,13 +325,11 @@ public class Log4jConfig extends XmlConfiguration {
                             "'level':{'$resolver':'level','field':'name'}," +
                             "'thread.name':{'$resolver':'thread','field':'name'}," +
                             "'thread.id':{'$resolver':'thread','field':'id'}," +
-                            "'line':{'$resolver':'source','field':'lineNumber'}," +
-                            "'file':{'$resolver':'source','field':'fileName'}," +
-                            "'method':{'$resolver':'source','field':'methodName'}," +
+                            "'logger':{'$resolver':'logger','field':'name'}," +
                             "'message':{'$resolver':'message','stringfield':'true'}," +
                             "'exception':{'$resolver':'exception','field':'stackTrace','stackTrace':{'stringified':true,'full':true}}}";
             jsonConfig = jsonConfig.replace("'", "\"");
-            String jsonLayoutFormatter = "<JsonTemplateLayout maxStringLength=\"%d\" locationInfoEnabled=\"true\">\n" +
+            String jsonLayoutFormatter = "<JsonTemplateLayout maxStringLength=\"%d\" locationInfoEnabled=\"false\">\n" +
                     "<EventTemplate><![CDATA[" + jsonConfig + "]]></EventTemplate>\n" + "</JsonTemplateLayout>";
             String jsonLayoutDefault = String.format(jsonLayoutFormatter, Config.sys_log_json_max_string_length);
             String jsonLayoutProfile = String.format(jsonLayoutFormatter, Config.sys_log_json_profile_max_string_length);
@@ -344,9 +342,9 @@ public class Log4jConfig extends XmlConfiguration {
         } else {
             // fallback to plaintext logging
             properties.put("syslog_default_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%c{1}] %m%n\"/>");
             properties.put("syslog_warning_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%c{1}] %m%n%ex\"/>");
             properties.put("syslog_audit_layout",
                     "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
             properties.put("syslog_dump_layout",
