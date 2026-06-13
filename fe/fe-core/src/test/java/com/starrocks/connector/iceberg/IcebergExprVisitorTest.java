@@ -363,9 +363,7 @@ public class IcebergExprVisitorTest {
         CastOperator cast = new CastOperator(DateType.DATE, K6);
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
-        expectedExpr = Expressions.equal("k6", "2022-11-11");
-        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
-                "Generated equal expression should be correct");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
 
         // cast date column to string
         value = ConstantOperator.createVarchar("2022-11-11");
@@ -560,5 +558,187 @@ public class IcebergExprVisitorTest {
                         new BinaryPredicateOperator(BinaryType.EQ, syntheticVariantColumn, ConstantOperator.createInt(10))),
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+
+    /**
+     * Verifies the literal-side rejections in {@code ExtractLiteralValue.tryCastToResultType}
+     * together with the column-side cast peeling in {@code visitCastOperator}, covering the
+     * cases where peeling the column-side cast would otherwise silently push down a wrong
+     * predicate (truncated date, lex-vs-numeric ordering, integer wrap, float precision loss,
+     * etc.). Same-typed regression cases that do not go through the cast path are also covered.
+     */
+    @Test
+    public void testCastPeelRejectsLossyLiterals() {
+        ScalarOperatorToIcebergExpr.IcebergContext context =
+                new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr;
+        Expression expectedExpr;
+
+        // DATE column = midnight DATETIME literal -> lossless cast, push down.
+        ConstantOperator dtMidnight =
+                ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0, 0));
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K3, dtMidnight)), context);
+        expectedExpr = Expressions.equal("k3", LocalDate.of(2024, 1, 1).toEpochDay());
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "midnight DATETIME literal should be pushed down to DATE column");
+
+        // DATE column >= DATETIME literal with non-zero time-of-day -> silent truncation, reject.
+        ConstantOperator dtNoon =
+                ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 12, 0, 0));
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, K3, dtNoon)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "DATETIME literal with non-zero time-of-day must be rejected on DATE column");
+
+        // CAST(date_col AS STRING) = '2024-01-01 12:00:00' -> reject (non-zero time-of-day).
+        CastOperator dateColAsString = new CastOperator(VarcharType.VARCHAR, K3);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, dateColAsString,
+                        ConstantOperator.createVarchar("2024-01-01 12:00:00"))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "STRING literal with non-zero time-of-day must be rejected on DATE column");
+
+        // CAST(date_col AS STRING) = '2024-01-01 00:00:00' -> push down (midnight).
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, dateColAsString,
+                        ConstantOperator.createVarchar("2024-01-01 00:00:00"))), context);
+        expectedExpr = Expressions.equal("k3", LocalDate.of(2024, 1, 1).toEpochDay());
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "midnight STRING literal should be pushed down to DATE column");
+
+        // CAST(date_col AS STRING) = '2024/01/01' -> conservatively reject unparseable literal.
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, dateColAsString,
+                        ConstantOperator.createVarchar("2024/01/01"))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "unparseable STRING literal must be conservatively rejected on DATE column");
+
+        // DATETIME column = bare DATE literal -> reject (ambiguous with CAST(dt AS DATE)= pattern).
+        ConstantOperator dateLit =
+                ConstantOperator.createDate(LocalDate.of(2024, 1, 1).atStartOfDay());
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K4, dateLit)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "bare DATE literal on DATETIME column must be conservatively rejected");
+
+        // CAST(datetime_col AS DATE) = DATE literal -> reject after column-side peel.
+        CastOperator datetimeColAsDate = new CastOperator(DateType.DATE, K4);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, datetimeColAsDate, dateLit)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "CAST(datetime_col AS DATE) = DATE literal must be rejected after column-side peel");
+
+        // DATETIME column = same-typed DATETIME literal -> no cast involved, push down.
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K4, dtMidnight)), context);
+        long expectedMicros = TimeUnit.MICROSECONDS.convert(
+                LocalDateTime.of(2024, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC), TimeUnit.SECONDS);
+        expectedExpr = Expressions.equal("k4", expectedMicros);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "same-typed DATETIME literal on DATETIME column should be pushed down (no cast involved)");
+
+        // CAST(string_col AS DATETIME) > DATETIME literal -> reject (lex order != date order).
+        CastOperator stringColAsDatetime = new CastOperator(DateType.DATETIME, K6);
+        ConstantOperator dtMay = ConstantOperator.createDatetime(LocalDateTime.of(2026, 5, 15, 0, 0, 0));
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GT, stringColAsDatetime, dtMay)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "DATETIME literal on STRING column must be rejected (lex order != date order)");
+
+        // CAST(string_col AS INT) > 10 -> reject (lex order != numeric order).
+        CastOperator stringColAsInt = new CastOperator(IntegerType.INT, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GT, stringColAsInt,
+                        ConstantOperator.createInt(10))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "numeric literal on STRING column must be rejected (lex order != numeric order)");
+
+        // CAST(string_col AS DATE) = DATE literal -> reject.
+        CastOperator stringColAsDate = new CastOperator(DateType.DATE, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, stringColAsDate, dateLit)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "DATE literal on STRING column must be rejected");
+
+        // CAST(string_col AS BOOLEAN) = false -> reject ('1'/'0' vs 'true'/'false' mismatch).
+        CastOperator stringColAsBool = new CastOperator(BooleanType.BOOLEAN, K6);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, stringColAsBool,
+                        ConstantOperator.createBoolean(false))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "BOOLEAN literal on STRING column must be rejected ('1'/'0' vs 'true'/'false' mismatch)");
+
+        // STRING column = same-typed STRING literal -> push down.
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K6,
+                        ConstantOperator.createVarchar("2024-01-01"))), context);
+        expectedExpr = Expressions.equal("k6", "2024-01-01");
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "same-typed STRING literal on STRING column should be pushed down");
+
+        // INT column = BIGINT literal out of INT range -> reject (silent wrap risk).
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K1,
+                        ConstantOperator.createBigint(999999999999L))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "BIGINT literal out of INT range must be rejected on INT column");
+
+        // INT column = BIGINT literal within INT range -> still rejected (one-shot null policy).
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K1,
+                        ConstantOperator.createBigint(100L))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "BIGINT literal in INT range is currently rejected (acceptable conservatism)");
+
+        // FLOAT column = DOUBLE literal -> reject (precision loss risk).
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K8,
+                        ConstantOperator.createDouble(1.0))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "DOUBLE literal on FLOAT column must be rejected");
+
+        // BIGINT column = INT literal -> reject (numeric one-shot null policy).
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K7,
+                        ConstantOperator.createInt(1))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "INT literal on BIGINT column must be rejected");
+
+        // DOUBLE column = FLOAT literal -> reject (numeric one-shot null policy).
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K9,
+                        ConstantOperator.createFloat(1.0))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "FLOAT literal on DOUBLE column must be rejected");
+
+        // Same-typed regression cases (no cast path involved).
+
+        // DATE column > same-typed DATE literal -> push down.
+        ConstantOperator dateMay =
+                ConstantOperator.createDate(LocalDate.of(2026, 5, 15).atStartOfDay());
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GT, K3, dateMay)), context);
+        expectedExpr = Expressions.greaterThan("k3", LocalDate.of(2026, 5, 15).toEpochDay());
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "same-typed DATE literal on DATE column should be pushed down");
+
+        // INT column = same-typed INT literal -> push down.
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K1,
+                        ConstantOperator.createInt(100))), context);
+        expectedExpr = Expressions.equal("k1", 100);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "same-typed INT literal on INT column should be pushed down");
+
+        // BOOLEAN column = same-typed BOOLEAN literal -> push down.
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K5,
+                        ConstantOperator.createBoolean(true))), context);
+        expectedExpr = Expressions.equal("k5", true);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "same-typed BOOLEAN literal on BOOLEAN column should be pushed down");
     }
 }
