@@ -269,6 +269,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.belonged_to_cloud_native = true;
     seg_options.has_preaggregation = options.has_preaggregation;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    seg_options.sample_options = options.sample_options;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
     seg_options.dynamic_rss_id_base = options.dynamic_rss_id_base;

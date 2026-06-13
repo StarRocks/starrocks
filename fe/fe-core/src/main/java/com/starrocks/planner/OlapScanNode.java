@@ -1221,6 +1221,12 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setEnable_global_late_materialization(true);
             }
 
+            if (sample != null && sample.isUseSampling()) {
+                TTableSampleOptions sampleOptions = new TTableSampleOptions();
+                msg.lake_scan_node.setSample_options(sampleOptions);
+                sample.toThrift(sampleOptions);
+            }
+
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
             msg.lake_scan_node.setSchema_key(getSchemaKey());
 

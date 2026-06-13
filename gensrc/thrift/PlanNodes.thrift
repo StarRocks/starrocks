@@ -746,6 +746,8 @@ struct TLakeScanNode {
 
   57: optional TVectorSearchOptions vector_search_options
 
+  58: optional TTableSampleOptions sample_options;
+
   60: optional list<Exprs.TExpr> partition_conjuncts
 }
 

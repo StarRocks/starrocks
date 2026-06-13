@@ -386,6 +386,9 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
     }
+    if (thrift_lake_scan_node.__isset.sample_options) {
+        _params.sample_options = thrift_lake_scan_node.sample_options;
+    }
 
     _params.use_vector_index = _use_vector_index;
     if (_use_vector_index) {
