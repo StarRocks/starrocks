@@ -548,7 +548,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             tsid.tablet_id = tablet->id();
             tsid.segment_id = rssid;
             DelVectorPtr old_del_vec;
-            RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false /* file cache */, &old_del_vec));
+            RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, true /* fill metacache */, &old_del_vec));
             new_del_vecs[idx].first = rssid;
             old_del_vec->add_dels_as_new_version(new_delete.second, metadata->version(), &(new_del_vecs[idx].second));
             size_t cur_old = old_del_vec->cardinality();
@@ -904,7 +904,7 @@ Status UpdateManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write, int
         tsid.tablet_id = tablet->id();
         tsid.segment_id = rssid;
         DelVectorPtr old_delvec;
-        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false, &old_delvec));
+        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, true /* fill metacache */, &old_delvec));
         DelVectorPtr dv_new;
         old_delvec->add_dels_as_new_version(del_ids, metadata->version(), &dv_new);
         new_del_vecs.emplace_back(rssid, dv_new);
