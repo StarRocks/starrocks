@@ -113,7 +113,7 @@ OutPut Partition: HASH_PARTITIONED: 33: c_custkey
 OutPut Exchange Id: 19
 
 18:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 NON-PARTITION PREDICATES: 33: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
@@ -224,7 +224,7 @@ OutPut Exchange Id: 14
 |       cardinality: 40000
 |
 2:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '1996-12-31'
 MIN/MAX PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '1996-12-31'
 partitions=1/1
@@ -279,7 +279,7 @@ OutPut Exchange Id: 11
 |       cardinality: 1
 |
 3:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
@@ -312,7 +312,7 @@ OutPut Exchange Id: 08
 |       cardinality: 25
 |
 4:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 42: n_name IN ('CANADA', 'IRAN')
 MIN/MAX PREDICATES: 42: n_name >= 'CANADA', 42: n_name <= 'IRAN'
 partitions=1/1
@@ -330,7 +330,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 06
 
 5:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 46: n_name IN ('IRAN', 'CANADA')
 MIN/MAX PREDICATES: 46: n_name >= 'CANADA', 46: n_name <= 'IRAN'
 partitions=1/1
@@ -348,7 +348,7 @@ OutPut Partition: HASH_PARTITIONED: 24: o_orderkey
 OutPut Exchange Id: 01
 
 0:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 24: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0

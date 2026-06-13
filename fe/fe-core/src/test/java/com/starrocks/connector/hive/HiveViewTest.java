@@ -71,7 +71,7 @@ public class HiveViewTest extends PlanTestBase {
         String sql = "select * from hive0.tpch.customer_view";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "0:HdfsScanNode\n" +
-                "     TABLE: customer");
+                "     TABLE: tpch.customer");
     }
 
     @Test
@@ -79,9 +79,9 @@ public class HiveViewTest extends PlanTestBase {
         String sql = "select * from hive0.tpch.customer_nation_view where c_custkey = 1";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "1:HdfsScanNode\n" +
-                        "     TABLE: customer",
+                        "     TABLE: tpch.customer",
                 "0:HdfsScanNode\n" +
-                        "     TABLE: nation");
+                        "     TABLE: tpch.nation");
     }
 
     @Test
@@ -168,7 +168,7 @@ public class HiveViewTest extends PlanTestBase {
         connectContext.getSessionVariable().setSqlDialect("trino");
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "0:HdfsScanNode\n" +
-                "     TABLE: customer");
+                "     TABLE: tpch.customer");
     }
 
     @Test
@@ -177,14 +177,14 @@ public class HiveViewTest extends PlanTestBase {
         String sql = "select * from hive0.tpch.customer_view_without_db where c_custkey = 1";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "0:HdfsScanNode\n" +
-                "     TABLE: customer");
+                "     TABLE: tpch.customer");
     }
 
     @Test
     public void testQueryHiveViewCaseInsensitive() throws Exception {
         String sql = "select * from hive0.tpch.customer_case_insensitive_view where c_custkey = 1";
         String sqlPlan = getFragmentPlan(sql);
-        assertContains(sqlPlan, "TABLE: customer");
+        assertContains(sqlPlan, "TABLE: tpch.customer");
 
         Throwable exception = assertThrows(SemanticException.class, () -> {
             getFragmentPlan("select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1");

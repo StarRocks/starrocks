@@ -126,7 +126,7 @@ OutPut Exchange Id: 24
 |       cardinality: 40000
 |
 13:HdfsScanNode
-TABLE: partsupp
+TABLE: tpch.partsupp
 NON-PARTITION PREDICATES: 20: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=20.0
@@ -169,7 +169,7 @@ OutPut Exchange Id: 20
 |       cardinality: 1
 |
 14:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 24: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
@@ -195,7 +195,7 @@ OutPut Exchange Id: 17
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 15:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 32: n_name = 'PERU'
 MIN/MAX PREDICATES: 32: n_name <= 'PERU', 32: n_name >= 'PERU'
 partitions=1/1
@@ -250,7 +250,7 @@ OutPut Exchange Id: 11
 |       cardinality: 40000
 |
 0:HdfsScanNode
-TABLE: partsupp
+TABLE: tpch.partsupp
 NON-PARTITION PREDICATES: 2: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
@@ -294,7 +294,7 @@ OutPut Exchange Id: 07
 |       cardinality: 1
 |
 1:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 6: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
@@ -320,7 +320,7 @@ OutPut Exchange Id: 04
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 2:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 14: n_name = 'PERU'
 MIN/MAX PREDICATES: 14: n_name <= 'PERU', 14: n_name >= 'PERU'
 partitions=1/1

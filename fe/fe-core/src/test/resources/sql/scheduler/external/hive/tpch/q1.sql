@@ -118,7 +118,7 @@ PLAN FRAGMENT 2
   |  <slot 31> : 27: cast * 30: cast
   |  
   0:HdfsScanNode
-     TABLE: lineitem
+     TABLE: tpch.lineitem
      NON-PARTITION PREDICATES: 11: l_shipdate <= '1998-12-01'
      MIN/MAX PREDICATES: 11: l_shipdate <= '1998-12-01'
      partitions=1/1

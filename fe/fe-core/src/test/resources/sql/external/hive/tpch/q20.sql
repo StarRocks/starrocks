@@ -97,7 +97,7 @@ OutPut Exchange Id: 22
 |       cardinality: 1
 |
 16:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 4: s_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=73.0
@@ -125,7 +125,7 @@ OutPut Exchange Id: 19
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 17:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 9: n_name = 'ARGENTINA'
 MIN/MAX PREDICATES: 9: n_name <= 'ARGENTINA', 9: n_name >= 'ARGENTINA'
 partitions=1/1
@@ -243,7 +243,7 @@ OutPut Exchange Id: 09
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |
 7:HdfsScanNode
-TABLE: part
+TABLE: tpch.part
 NON-PARTITION PREDICATES: 17: p_partkey IS NOT NULL, 18: p_name LIKE 'sienna%'
 partitions=1/1
 avgRowSize=63.0
@@ -260,7 +260,7 @@ OutPut Partition: HASH_PARTITIONED: 12: ps_partkey
 OutPut Exchange Id: 06
 
 5:HdfsScanNode
-TABLE: partsupp
+TABLE: tpch.partsupp
 NON-PARTITION PREDICATES: 13: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=20.0
@@ -302,7 +302,7 @@ OutPut Exchange Id: 03
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 29: l_suppkey IS NOT NULL, 37: l_shipdate >= '1993-01-01', 37: l_shipdate < '1994-01-01'
 MIN/MAX PREDICATES: 37: l_shipdate >= '1993-01-01', 37: l_shipdate < '1994-01-01'
 partitions=1/1

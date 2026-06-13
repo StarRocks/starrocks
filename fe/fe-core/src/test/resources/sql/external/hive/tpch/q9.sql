@@ -144,7 +144,7 @@ OutPut Partition: HASH_PARTITIONED: 34: ps_suppkey
 OutPut Exchange Id: 21
 
 20:HdfsScanNode
-TABLE: partsupp
+TABLE: tpch.partsupp
 NON-PARTITION PREDICATES: 34: ps_suppkey IS NOT NULL, 33: ps_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
@@ -188,7 +188,7 @@ OutPut Exchange Id: 17
 |       cardinality: 25
 |
 12:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 partitions=1/1
 avgRowSize=8.0
 dataCacheOptions={populate: false}
@@ -206,7 +206,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 14
 
 13:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 47: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=29.0
@@ -270,7 +270,7 @@ OutPut Partition: HASH_PARTITIONED: 38: o_orderkey
 OutPut Exchange Id: 08
 
 7:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 38: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
@@ -324,7 +324,7 @@ OutPut Exchange Id: 06
 |       cardinality: 5000000
 |
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 19: l_suppkey IS NOT NULL, 18: l_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=44.0
@@ -355,7 +355,7 @@ OutPut Exchange Id: 03
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |
 1:HdfsScanNode
-TABLE: part
+TABLE: tpch.part
 NON-PARTITION PREDICATES: 2: p_name LIKE '%peru%'
 partitions=1/1
 avgRowSize=63.0

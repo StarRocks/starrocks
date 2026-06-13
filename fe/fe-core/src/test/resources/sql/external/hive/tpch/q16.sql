@@ -150,7 +150,7 @@ OutPut Exchange Id: 08
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
 |
 6:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 21: s_comment LIKE '%Customer%Complaints%'
 partitions=1/1
 avgRowSize=105.0
@@ -167,7 +167,7 @@ OutPut Partition: HASH_PARTITIONED: 6: p_partkey
 OutPut Exchange Id: 03
 
 2:HdfsScanNode
-TABLE: part
+TABLE: tpch.part
 NON-PARTITION PREDICATES: 9: p_brand != 'Brand#43', NOT (10: p_type LIKE 'PROMO BURNISHED%'), 11: p_size IN (31, 43, 9, 6, 18, 11, 25, 1)
 MIN/MAX PREDICATES: 11: p_size >= 1, 11: p_size <= 43
 partitions=1/1
@@ -187,7 +187,7 @@ OutPut Partition: HASH_PARTITIONED: 1: ps_partkey
 OutPut Exchange Id: 01
 
 0:HdfsScanNode
-TABLE: partsupp
+TABLE: tpch.partsupp
 NON-PARTITION PREDICATES: 1: ps_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0

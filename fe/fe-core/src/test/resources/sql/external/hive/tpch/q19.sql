@@ -71,7 +71,7 @@ OutPut Partition: HASH_PARTITIONED: 17: p_partkey
 OutPut Exchange Id: 04
 
 3:HdfsScanNode
-TABLE: part
+TABLE: tpch.part
 NON-PARTITION PREDICATES: 20: p_brand IN ('Brand#45', 'Brand#11', 'Brand#21'), 22: p_size <= 15, 23: p_container IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG', 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK', 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'), 22: p_size >= 1
 MIN/MAX PREDICATES: 20: p_brand >= 'Brand#11', 20: p_brand <= 'Brand#45', 22: p_size <= 15, 23: p_container >= 'LG BOX', 23: p_container <= 'SM PKG', 22: p_size >= 1
 partitions=1/1
@@ -104,7 +104,7 @@ OutPut Exchange Id: 02
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 5: l_quantity >= 5, 5: l_quantity <= 35, 15: l_shipmode IN ('AIR', 'AIR REG'), 14: l_shipinstruct = 'DELIVER IN PERSON'
 MIN/MAX PREDICATES: 5: l_quantity >= 5, 5: l_quantity <= 35, 15: l_shipmode >= 'AIR', 15: l_shipmode <= 'AIR REG', 14: l_shipinstruct <= 'DELIVER IN PERSON', 14: l_shipinstruct >= 'DELIVER IN PERSON'
 partitions=1/1

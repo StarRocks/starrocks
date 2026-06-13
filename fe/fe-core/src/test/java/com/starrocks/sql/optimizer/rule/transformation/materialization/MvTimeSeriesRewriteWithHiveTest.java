@@ -46,7 +46,7 @@ public class MvTimeSeriesRewriteWithHiveTest extends MVTestBase {
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 26: dt >= '1998-01-02'\n" +
                     "     partitions=1/2");
-            PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+            PlanTestBase.assertContains(plan, "     TABLE: partitioned_db.lineitem_par\n" +
                     "     PARTITION PREDICATES: ((date_trunc('month', 35: l_shipdate) < '1998-01-02') " +
                     "OR (date_trunc('month', 35: l_shipdate) IS NULL)) " +
                     "OR ((date_trunc('month', 35: l_shipdate) < '1998-01-02') " +
