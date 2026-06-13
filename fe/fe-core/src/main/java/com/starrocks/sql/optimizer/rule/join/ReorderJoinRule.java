@@ -390,8 +390,30 @@ public class ReorderJoinRule extends Rule {
                     .setTableRowCountMayInaccurate(oldStats.isTableRowCountMayInaccurate())
                     .setShadowColumns(oldStats.getShadowColumns())
                     .addMultiColumnStatistics(oldStats.getMultiColumnCombinedStats());
+
+            // Calculate columns that must be preserved in statistics:
+            // 1. Columns used in projection expressions (e.g., columns inside CAST)
+            // 2. Columns used in predicates (WHERE conditions, JOIN conditions)
+            // These columns must be preserved even if not in output columns,
+            // because they're needed when computing statistics for expressions/predicates
+            ColumnRefSet usedColumns = new ColumnRefSet();
+            for (ScalarOperator expr : newOutputProjections.values()) {
+                usedColumns.union(expr.getUsedColumns());
+            }
+            // Preserve columns used in filter predicates
+            if (operator.getPredicate() != null) {
+                usedColumns.union(operator.getPredicate().getUsedColumns());
+            }
+            // Preserve columns used in join ON predicates
+            if (operator instanceof LogicalJoinOperator) {
+                LogicalJoinOperator joinOp = (LogicalJoinOperator) operator;
+                if (joinOp.getOnPredicate() != null) {
+                    usedColumns.union(joinOp.getOnPredicate().getUsedColumns());
+                }
+            }
+
             oldStats.getColumnStatistics().forEach((col, stat) -> {
-                if (newCols.contains(col)) {
+                if (newCols.contains(col) || usedColumns.contains(col)) {
                     newStatsBuilder.addColumnStatistic(col, stat);
                 }
             });
