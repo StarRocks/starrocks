@@ -520,9 +520,9 @@ public class ConnectContext {
             try {
                 Set<Long> defaultRoleIds;
                 if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user);
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user, getGroups());
                 } else {
-                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user, getGroups());
                 }
                 return defaultRoleIds;
             } catch (PrivilegeException e) {
@@ -553,7 +553,6 @@ public class ConnectContext {
     }
 
     public void setAuthPlugin(String authPlugin) {
-        accessControlContext.setAuthPlugin(authPlugin);
     }
 
     public String getAuthPlugin() {
