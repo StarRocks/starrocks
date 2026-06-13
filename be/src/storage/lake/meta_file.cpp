@@ -979,10 +979,12 @@ void MetaFileBuilder::apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op
         // encryption_metas / shared_files arrays are emitted only if any entry is non-trivial (matching
         // the reader's `j < size` prefix-guard and the all-or-nothing convention).
         DeltaColumnGroupVerPB neo;
-        std::vector<std::string> enc_metas; // per emitted file ("" if none)
-        std::vector<bool> shareds;          // per emitted file
+        std::vector<std::string> enc_metas;     // per emitted file ("" if none)
+        std::vector<bool> shareds;              // per emitted file
+        std::vector<ColumnPresenceListPB> cpls; // per emitted file (empty if homogeneous)
         bool any_enc = false;
         bool any_shared = false;
+        bool any_column_presence = false;
 
         auto emit = [&](const std::string& file, int64_t version, const DeltaColumnGroupColumnIdsPB& cids,
                         int64_t file_size, DeltaColumnFileKindPB kind, int64_t sparse_row_count,
@@ -995,9 +997,10 @@ void MetaFileBuilder::apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op
             neo.add_file_kinds(kind);
             neo.add_sparse_row_counts(kind == SPARSE_PERCOL ? sparse_row_count : 0);
             neo.add_presences()->CopyFrom(presence);
-            neo.add_column_presence_lists()->CopyFrom(cpl);
+            cpls.push_back(cpl);
             enc_metas.push_back(enc);
             shareds.push_back(shared);
+            if (cpl.entries_size() > 0) any_column_presence = true;
             if (!enc.empty()) any_enc = true;
             if (shared) any_shared = true;
         };
@@ -1033,6 +1036,13 @@ void MetaFileBuilder::apply_dcg_overlay_merge(const TxnLogPB_OpDcgCompaction& op
              entry.merged_file().encryption_meta(), entry.merged_file().shared());
 
         // 3. Optional 1:1 arrays: emit only when any entry is non-trivial (preserve absence otherwise).
+        //    Keeping column_presence_lists ABSENT for a homogeneous merged DCG is REQUIRED, not cosmetic:
+        //    both dcg_conflict_is_replayable() and the overlay-merge exclusion key on the ARRAY size
+        //    (column_presence_lists_size() > 0), so a full all-empty array would wrongly mark the segment
+        //    packed -- making it non-replayable on a normal-compaction conflict AND non-re-mergeable.
+        if (any_column_presence) {
+            for (auto& c : cpls) neo.add_column_presence_lists()->CopyFrom(c);
+        }
         if (any_enc) {
             for (auto& e : enc_metas) neo.add_encryption_metas(e);
         }

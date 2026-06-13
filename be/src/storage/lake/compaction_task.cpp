@@ -356,13 +356,28 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
         e->mutable_presence()->set_min_source_rowid(merged.min_source_rowid);
         e->mutable_presence()->set_max_source_rowid(merged.max_source_rowid);
         e->mutable_presence()->set_row_count(merged.num_rows);
+        // Emit per-column presence ONLY when coverage is heterogeneous (some column does not cover every
+        // union row -> the value chunk has NULL placeholders the reader must gate via the roaring). When
+        // every column covers every union row (the common "update the same columns each time" case), the
+        // merged `.spcols` is homogeneous: omit column_presence so a FUTURE overlay-merge can re-fold it.
+        // Otherwise the merged layer would itself be packed and the packed-file exclusion above would pin a
+        // merged-once segment forever (chain regrows but never re-merges -> the sustained-load residual).
+        bool heterogeneous = (static_cast<int>(merged.presences.size()) != static_cast<int>(merged.column_uids.size()));
         for (const auto& p : merged.presences) {
-            auto* cpe = e->mutable_column_presence()->add_entries();
-            cpe->set_column_uid(static_cast<uint32_t>(p.column_uid));
-            cpe->set_min_source_rowid(p.min_source_rowid);
-            cpe->set_max_source_rowid(p.max_source_rowid);
-            cpe->set_count(p.count);
-            cpe->set_roaring(p.roaring);
+            if (p.count != merged.num_rows) {
+                heterogeneous = true;
+                break;
+            }
+        }
+        if (heterogeneous) {
+            for (const auto& p : merged.presences) {
+                auto* cpe = e->mutable_column_presence()->add_entries();
+                cpe->set_column_uid(static_cast<uint32_t>(p.column_uid));
+                cpe->set_min_source_rowid(p.min_source_rowid);
+                cpe->set_max_source_rowid(p.max_source_rowid);
+                cpe->set_count(p.count);
+                cpe->set_roaring(p.roaring);
+            }
         }
         e->set_source_segment_num_rows(ver.source_segment_num_rows());
         for (int64_t v : merged_versions) {
