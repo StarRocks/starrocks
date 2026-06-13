@@ -33,6 +33,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.QueryVersionPinManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.metric.MetricRepo;
@@ -81,6 +82,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         if (FeConstants.runningUnitTest) {
             return;
+        }
+
+        if (Config.lake_enable_query_version_pinning) {
+            QueryVersionPinManager.getInstance()
+                    .cleanupStalePins(Config.lake_query_version_pin_max_age_seconds * 1000L);
         }
 
         // acquire background resource
@@ -195,6 +201,14 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             } else {
                 minRetainVersion = Math.min(minRetainVersion, visibleVersion - Config.lake_autovacuum_max_previous_versions);
+            }
+
+            // Respect query version pins: do not vacuum versions still referenced by in-flight queries
+            if (Config.lake_enable_query_version_pinning) {
+                long minPinnedVersion = QueryVersionPinManager.getInstance().getMinPinnedVersion(partition.getId());
+                if (minPinnedVersion != Long.MAX_VALUE && minPinnedVersion < minRetainVersion) {
+                    minRetainVersion = minPinnedVersion;
+                }
             }
 
             preExtraFileSize = partition.getExtraFileSize();
