@@ -82,6 +82,7 @@ set(EXEC_FILES
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/schema_loads_scanner_test.cpp
+        ./exec/schema_materialized_view_refresh_jobs_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
         ./exec/schema_task_runs_scanner_test.cpp
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
