@@ -29,6 +29,7 @@
 #include "common/statusor.h"
 #include "common/system/master_info.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_materializer.h"
@@ -233,8 +234,32 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         active_chunk->set_missing_column_provider(&lazy_ctx);
         ASSIGN_OR_RETURN(rows_survive,
                          _read_and_filter_active_columns(r, chunk_filter, active_chunk, has_filter, count, &lazy_ctx));
+        if (!rows_survive) {
+            active_chunk->set_missing_column_provider(nullptr);
+            continue;
+        }
+
+        // 2b. Evaluate compound (multi-slot) conjuncts with lazy_ctx
+        //     still attached. scanner_ctxs holds the original OR expression
+        //     after Phase 3b guard extraction. ColumnRef triggers
+        //     materialize_slot() via MissingColumnProvider when the OR
+        //     evaluator reaches a branch that references a lazy payload
+        //     column. Only reached columns are physically read; unreached
+        //     branches' columns stay unread and are skipped in
+        //     read_lazy_columns() (is_output_column() == false → skip).
+        if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+            ASSIGN_OR_RETURN(size_t compound_hit,
+                             ChunkPredicateEvaluator::eval_conjuncts_into_filter(
+                                     _param.scanner_ctx->conjuncts.scanner_ctxs, active_chunk.get(), &chunk_filter));
+            if (compound_hit == 0) {
+                _param.stats->late_materialize_skip_rows += count;
+                active_chunk->set_missing_column_provider(nullptr);
+                continue;
+            }
+            has_filter = true;
+        }
+
         active_chunk->set_missing_column_provider(nullptr);
-        if (!rows_survive) continue;
 
         // 3. Fetch variant sources (for subfield conjuncts)
         RETURN_IF_ERROR(_variant->fetch_sources(r, active_chunk));
