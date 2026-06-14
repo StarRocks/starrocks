@@ -66,6 +66,7 @@
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_context_handle.h"
 #include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks::pipeline {
@@ -658,17 +659,15 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     if (!iter2->second[0].scan_range.broker_scan_range.__isset.channel_id) {
         return Status::OK();
     }
-    std::vector<StreamLoadContext*> stream_load_contexts;
+    std::vector<std::unique_ptr<FragmentAttachment>> fragment_attachments;
 
     bool success = false;
     DeferOp defer_op([&] {
         if (!success) {
-            for (auto& ctx : stream_load_contexts) {
-                ctx->body_sink->cancel(Status::Cancelled("Failed to prepare stream load pipe"));
-                if (ctx->enable_batch_write) {
-                    exec_env->batch_write_mgr()->unregister_stream_load_pipe(ctx);
-                } else {
-                    exec_env->stream_context_mgr()->remove_channel_context(ctx);
+            const auto status = Status::Cancelled("Failed to prepare stream load pipe");
+            for (const auto& attachment : fragment_attachments) {
+                if (attachment != nullptr) {
+                    attachment->close(status);
                 }
             }
         }
@@ -693,6 +692,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                                                   exec_env, exec_env->batch_write_mgr(), db_name, table_name,
                                                   broker_scan_range.batch_write_parameters, label, txn_id, load_id,
                                                   broker_scan_range.batch_write_interval_ms));
+                    fragment_attachments.emplace_back(
+                            std::make_unique<StreamLoadContextHandle>(ctx, exec_env->batch_write_mgr()));
                 } else {
                     RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
                             exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
@@ -703,14 +704,15 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                     });
                     RETURN_IF_ERROR(
                             exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
+                    fragment_attachments.emplace_back(
+                            std::make_unique<StreamLoadContextHandle>(ctx, exec_env->stream_context_mgr()));
                 }
-                stream_load_contexts.push_back(ctx);
             }
         }
     }
 
     success = true;
-    _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
+    _fragment_ctx->set_fragment_attachments(std::move(fragment_attachments));
     return Status::OK();
 }
 
