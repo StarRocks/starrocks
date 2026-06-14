@@ -2480,7 +2480,7 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
-    TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(1: TGetTasksParams params)
+    TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(1: optional TGetTasksParams params)
     TListPipesResult listPipes(1: TListPipesParams params)
     TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 
