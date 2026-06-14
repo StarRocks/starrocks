@@ -534,6 +534,7 @@
       "additional_owned_globs": [
         "be/src/exec/runtime/fragment_runtime_state.h",
         "be/src/exec/runtime/query_runtime_state.h",
+        "be/src/exec/pipeline/adaptive/adaptive_dop_param.h",
         "be/src/exec/pipeline/group_execution/execution_group_fwd.h",
         "be/src/exec/pipeline/schedule/common.h",
         "be/src/exec/pipeline/schedule/utils.h"
@@ -544,6 +545,7 @@
         "exec/pipeline/group_execution/execution_group.h",
         "exec/pipeline/group_execution/execution_group_builder.h",
         "exec/pipeline/group_execution/execution_group_fwd.h",
+        "exec/pipeline/adaptive/adaptive_dop_param.h",
         "exec/pipeline/pipeline_driver.h",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
