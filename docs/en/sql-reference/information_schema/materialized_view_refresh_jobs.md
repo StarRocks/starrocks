@@ -19,12 +19,12 @@ The following fields are provided in `materialized_view_refresh_jobs`:
 | TABLE_NAME                         | Name of the materialized view. `NULL` if the materialized view has been dropped. |
 | TASK_ID                            | ID of the refresh task.                                      |
 | WAREHOUSE                          | Warehouse used by the refresh job.                           |
-| RESOURCE_GROUP                     | Resource group used by the refresh job. This is the materialized view's configured `session.resource_group`; returns `default_mv_wg` when not configured. |
+| RESOURCE_GROUP                     | Resource group used by the refresh job. This is the materialized view's configured `resource_group` property; returns `default_mv_wg` when not configured. |
 | CREATOR                            | User who created the materialized view (the task owner).     |
 | SUBMIT_USER                        | User who submitted the refresh job. For a manual refresh this is the user who issued it; for scheduled or base-table-change refreshes it is submitted by the system. |
 | RUN_AS_USER                        | User identity the refresh runs as.                           |
 | SUBMIT_TIME                        | Time when the job was submitted (the first task run's creation time). |
-| REFRESH_STATE                      | State of the job, rolled up from the last task run. Valid values: `PENDING`, `RUNNING`, `FAILED`, `SUCCESS`, `MERGED`, and `SKIPPED`. |
+| REFRESH_STATE                      | State of the job, rolled up from the last task run. Valid values: `PENDING`, `RUNNING`, `FAILED`, `SUCCESS`, and `SKIPPED`. |
 | FINISH_TIME                        | Time when the job finished. `NULL` if the job has not finished. |
 | DURATION_TIME                      | Wall-clock duration of the job, in seconds (the last task run's finish time minus the first task run's process-start time). `NULL` if the job has not finished. |
 | REFRESH_TRIGGER                    | How the refresh is triggered, derived from the materialized view's refresh scheme. Valid values: `MANUAL`, `SCHEDULED`, `ON_BASE_TABLE_CHANGE`, and `NONE`. `UNKNOWN` if the materialized view has been dropped. |
