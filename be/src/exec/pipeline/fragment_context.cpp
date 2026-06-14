@@ -43,13 +43,11 @@
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/runtime/query_runtime_state.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/fragment_attachment.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/logconfig.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks::pipeline {
 
@@ -91,7 +89,7 @@ private:
 FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
 FragmentContext::~FragmentContext() {
-    _close_stream_load_contexts();
+    _close_fragment_attachments();
     _data_sink.reset();
     _fragment_runtime_state.runtime_filter_hub()->close_all_in_filters(_runtime_state.get());
     close_all_execution_groups();
@@ -319,9 +317,9 @@ void FragmentContext::set_final_status(const Status& status) {
             }
         });
 
-        for (const auto& stream_load_context : _stream_load_contexts) {
-            if (stream_load_context->body_sink) {
-                stream_load_context->body_sink->cancel(s_status);
+        for (const auto& attachment : _fragment_attachments) {
+            if (attachment != nullptr) {
+                attachment->cancel(s_status);
             }
         }
     }
@@ -348,8 +346,8 @@ void FragmentContext::_set_default_workgroup() {
     set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 }
 
-void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
-    _stream_load_contexts = contexts;
+void FragmentContext::set_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments) {
+    _fragment_attachments = std::move(attachments);
 }
 
 // Note: this function should be thread safe
@@ -514,15 +512,14 @@ void FragmentContext::acquire_runtime_filters() {
     iterate_pipeline([this](Pipeline* pipeline) { pipeline->acquire_runtime_filter(this->runtime_state()); });
 }
 
-void FragmentContext::_close_stream_load_contexts() {
-    for (const auto& context : _stream_load_contexts) {
-        context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
-        if (context->enable_batch_write) {
-            runtime_services(_runtime_state.get()).batch_write_mgr->unregister_stream_load_pipe(context);
-        } else {
-            runtime_services(_runtime_state.get()).stream_context_mgr->remove_channel_context(context);
+void FragmentContext::_close_fragment_attachments() {
+    const auto status = Status::Cancelled("Close the stream load pipe");
+    for (const auto& attachment : _fragment_attachments) {
+        if (attachment != nullptr) {
+            attachment->close(status);
         }
     }
+    _fragment_attachments.clear();
 }
 
 void FragmentContext::init_event_scheduler() {
