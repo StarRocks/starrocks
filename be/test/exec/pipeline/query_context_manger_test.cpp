@@ -27,6 +27,26 @@
 
 namespace starrocks::pipeline {
 
+TEST(QueryContextManagerTest, QueryCancelReleasesRunningQueryTokenOnce) {
+    auto query_ctx = QueryContext::create();
+    auto workgroup = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    ASSIGN_OR_ASSERT_FAIL(auto token, workgroup->acquire_running_query_token(true));
+    query_ctx->_wg_running_query_token_ptr = std::move(token);
+    query_ctx->_wg_running_query_token_atomic_ptr = query_ctx->_wg_running_query_token_ptr.get();
+    ASSERT_EQ(1, workgroup->num_running_queries());
+
+    query_ctx->cancel(Status::Cancelled("cancelled by fe"), true);
+
+    EXPECT_TRUE(query_ctx->is_cancelled());
+    EXPECT_TRUE(query_ctx->is_cancelled_by_fe());
+    EXPECT_EQ(nullptr, query_ctx->_wg_running_query_token_ptr);
+    EXPECT_EQ(nullptr, query_ctx->_wg_running_query_token_atomic_ptr.load());
+    EXPECT_EQ(0, workgroup->num_running_queries());
+
+    query_ctx->cancel(Status::Cancelled("duplicate cancel"), true);
+    EXPECT_EQ(0, workgroup->num_running_queries());
+}
+
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
     {

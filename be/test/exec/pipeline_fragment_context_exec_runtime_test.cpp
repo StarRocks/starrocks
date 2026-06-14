@@ -23,6 +23,7 @@
 #include "common/system/cpu_info.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
@@ -69,6 +70,39 @@ public:
     QueryContext* last_query_ctx = nullptr;
     FragmentContext* last_fragment_ctx = nullptr;
 };
+
+std::shared_ptr<FragmentContext> make_fragment_context(const TUniqueId& query_id, const TUniqueId& fragment_id) {
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::SELECT;
+
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    fragment_ctx->set_query_id(query_id);
+    fragment_ctx->set_fragment_instance_id(fragment_id);
+    fragment_ctx->set_runtime_state(std::make_shared<RuntimeState>(fragment_id, query_options, TQueryGlobals{},
+                                                                   static_cast<const QueryExecutionServices*>(nullptr),
+                                                                   static_cast<ExecEnv*>(nullptr)));
+    return fragment_ctx;
+}
+
+TEST(FragmentContextManagerExecRuntimeTest, RegisterGetAndUnregisterFragments) {
+    FragmentContextManager manager;
+    TUniqueId query_id;
+    query_id.hi = 1;
+    query_id.lo = 2;
+    TUniqueId fragment_id;
+    fragment_id.hi = 3;
+    fragment_id.lo = 4;
+
+    auto fragment_ctx = make_fragment_context(query_id, fragment_id);
+    ASSERT_OK(manager.register_ctx(fragment_id, fragment_ctx));
+    EXPECT_EQ(fragment_ctx, manager.get(fragment_id));
+
+    auto duplicate_ctx = make_fragment_context(query_id, fragment_id);
+    EXPECT_FALSE(manager.register_ctx(fragment_id, duplicate_ctx).ok());
+
+    manager.unregister(fragment_id);
+    EXPECT_EQ(nullptr, manager.get(fragment_id));
+}
 
 TEST(FragmentContextExecRuntimeTest, FailureAuditUsesInjectedExecutionServicesWithoutExecEnv) {
     CpuInfo::init();
