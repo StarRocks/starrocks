@@ -44,9 +44,7 @@ protected:
 
     // get_next() only inspects _is_init plus the injected result vector; init() flips
     // _is_init so the test can drive fill_chunk without standing up the FE RPC start() performs.
-    void init_scanner(SchemaMaterializedViewRefreshJobsScanner& scanner) {
-        EXPECT_OK(scanner.init(&_params, &_pool));
-    }
+    void init_scanner(SchemaMaterializedViewRefreshJobsScanner& scanner) { EXPECT_OK(scanner.init(&_params, &_pool)); }
 
     SchemaScannerParam _params;
     std::string _ip = "127.0.0.1";
