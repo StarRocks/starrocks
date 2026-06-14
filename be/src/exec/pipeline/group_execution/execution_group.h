@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <unordered_set>
 
@@ -28,6 +29,10 @@
 #include "exec/pipeline/primitives/execution_group_lifecycle.h"
 #include "exec/pipeline/primitives/pipeline_group.h"
 #include "runtime/runtime_state_fwd.h"
+
+namespace starrocks {
+class PriorityThreadPool;
+}
 
 namespace starrocks::pipeline {
 
@@ -96,7 +101,9 @@ public:
 
     size_t total_active_driver_size();
 
-    void prepare_active_drivers_parallel(RuntimeState* state, std::shared_ptr<DriverPrepareSyncContext> sync_ctx);
+    void prepare_active_drivers_parallel(const std::shared_ptr<RuntimeState>& state,
+                                         PriorityThreadPool* pipeline_prepare_pool,
+                                         std::shared_ptr<DriverPrepareSyncContext> sync_ctx);
 
     Status prepare_active_drivers_sequentially(RuntimeState* state);
 

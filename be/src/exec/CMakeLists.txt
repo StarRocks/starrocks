@@ -157,8 +157,6 @@ endif()
 # module boundaries yet; keep them named by intended ownership so later
 # cycle-cut leaves can promote them into real targets incrementally.
 set(PIPELINE_GRAPH_SRCS
-    pipeline/group_execution/execution_group.cpp
-    pipeline/group_execution/execution_group_builder.cpp
 )
 
 set(PIPELINE_RUNTIME_SRCS
@@ -513,6 +511,8 @@ ENDIF()
 
 ADD_BE_LIB(ExecRuntime
     runtime/query_runtime_state.cpp
+    pipeline/group_execution/execution_group.cpp
+    pipeline/group_execution/execution_group_builder.cpp
     pipeline/pipeline.cpp
     pipeline/pipeline_driver.cpp
     pipeline/schedule/event_scheduler.cpp
