@@ -16,6 +16,7 @@
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
@@ -97,13 +98,15 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
 
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
     _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
     _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+    ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _query_ctx->attach_to_runtime_state(_runtime_state);
     _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());

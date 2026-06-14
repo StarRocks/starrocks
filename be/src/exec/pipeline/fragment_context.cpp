@@ -44,8 +44,8 @@
 #include "exec/runtime/query_runtime_state.h"
 #include "platform/query_timeout_hook.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/fragment_attachment.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 
@@ -276,9 +276,10 @@ void FragmentContext::set_final_status(const Status& status) {
 
         const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
         if (!s_status.ok() && !finished_cancel) {
-            const auto* executors = workgroup() != nullptr
-                                            ? workgroup()->executors()
-                                            : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
+            const auto* executors =
+                    workgroup() != nullptr
+                            ? workgroup()->executors()
+                            : execution_services(_runtime_state.get()).workgroup_manager->shared_executors();
             auto* executor = executors->driver_executor();
             auto* query_ctx = _runtime_state->query_ctx();
             if (query_ctx != nullptr) {
@@ -338,10 +339,6 @@ Status FragmentContext::prepare_all_pipelines() {
         RETURN_IF_ERROR(group->prepare_pipelines(_runtime_state.get()));
     }
     return Status::OK();
-}
-
-void FragmentContext::_set_default_workgroup() {
-    set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 }
 
 void FragmentContext::set_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments) {

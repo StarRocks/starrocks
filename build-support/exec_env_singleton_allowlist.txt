@@ -4,8 +4,11 @@ src/agent/heartbeat_server.cpp
 src/agent/publish_version.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
+<<<<<<< HEAD
 src/exec/cache_stats_scanner.cpp
 src/exec/pipeline/fragment_context.cpp
+=======
+>>>>>>> 1c4d677a656... [Refactor] Move FragmentContext into ExecRuntime (#74774)
 src/exec/pipeline/fragment_executor.cpp
 src/exec/pipeline/lookup/tablet_adaptor.cpp
 src/exec/pipeline/pipeline_driver_poller.cpp
