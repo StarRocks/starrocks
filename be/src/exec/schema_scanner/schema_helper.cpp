@@ -58,7 +58,8 @@ Status SchemaHelper::list_materialized_view_status(const SchemaScannerState& sta
     });
 }
 
-Status SchemaHelper::list_materialized_view_refresh_jobs(const SchemaScannerState& state, const TGetTasksParams& request,
+Status SchemaHelper::list_materialized_view_refresh_jobs(const SchemaScannerState& state,
+                                                         const TGetTasksParams& request,
                                                          TListMaterializedViewRefreshJobsResult* result) {
     return _call_rpc(state, [&request, &result](FrontendServiceConnection& client) {
         client->listMaterializedViewRefreshJobs(*result, request);
