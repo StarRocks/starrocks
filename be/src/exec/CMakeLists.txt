@@ -404,6 +404,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_columns_scanner.cpp
     schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp

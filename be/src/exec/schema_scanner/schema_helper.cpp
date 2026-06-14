@@ -58,6 +58,13 @@ Status SchemaHelper::list_materialized_view_status(const SchemaScannerState& sta
     });
 }
 
+Status SchemaHelper::list_materialized_view_refresh_jobs(const SchemaScannerState& state, const TGetTasksParams& request,
+                                                         TListMaterializedViewRefreshJobsResult* result) {
+    return _call_rpc(state, [&request, &result](FrontendServiceConnection& client) {
+        client->listMaterializedViewRefreshJobs(*result, request);
+    });
+}
+
 Status SchemaHelper::list_pipes(const SchemaScannerState& state, const TListPipesParams& req, TListPipesResult* res) {
     return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->listPipes(*res, req); });
 }
