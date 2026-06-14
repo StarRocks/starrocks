@@ -52,7 +52,7 @@ public class KuduTable extends Table {
 
     public KuduTable(String masterAddresses, String catalogName, String dbName, String tblName, String kuduTableName,
                      List<Column> schema, List<String> partColNames) {
-        super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.KUDU, schema);
+        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.KUDU, schema);
         this.masterAddresses = masterAddresses;
         this.catalogName = catalogName;
         this.databaseName = dbName;

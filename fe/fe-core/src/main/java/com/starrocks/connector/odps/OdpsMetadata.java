@@ -188,7 +188,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public Database getDb(ConnectContext context, String name) {
         try {
-            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), name);
+            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), name);
         } catch (StarRocksConnectorException e) {
             e.printStackTrace();
             return null;

@@ -304,7 +304,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             // get database from paimon catalog to see if the database exists
             paimonNativeCatalog.getDatabase(dbName);
-            Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
+            Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName);
             databases.put(dbName, db);
             return db;
         } catch (Catalog.DatabaseNotExistException e) {
@@ -369,7 +369,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         } else {
             query = paimonNativeView.query();
         }
-        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 catalogName, dbName, viewName, fullSchema, query);
         view.setComment(comment);
         return view;
