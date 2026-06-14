@@ -21,6 +21,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_PRIMITIVE_FILES
+    data_sink.cpp
     exec_node.cpp
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
@@ -55,16 +56,6 @@ target_link_libraries(ExecPrimitive PUBLIC
     Gutil
     StarRocksGen
 )
-
-set(EXEC_SINK_CORE_FILES
-    data_sink.cpp
-)
-
-ADD_BE_LIB(ExecSinkCore
-    ${EXEC_SINK_CORE_FILES}
-)
-
-target_link_libraries(ExecSinkCore PUBLIC Common Base Gutil StarRocksGen)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
@@ -547,5 +538,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)
