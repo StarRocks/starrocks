@@ -642,6 +642,10 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
             src = _ori_column;
             _ori_column = nullptr;
         } else {
+            // ── DEBUG ──
+            VLOG(1) << "[DEBUG] fill_dst_column_impl swap: dst=" << dst->get_name()
+                    << " src=" << src->get_name();
+            // ── END DEBUG ──
             dst->as_mutable_raw_ptr()->swap_column(*(src->as_mutable_raw_ptr()));
         }
     }
