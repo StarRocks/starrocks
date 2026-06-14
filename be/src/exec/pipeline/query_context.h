@@ -22,6 +22,7 @@
 
 #include "base/time/time.h"
 #include "base/uid_util.h"
+#include "compute_env/query/connector_scan_mem_share_arbitrator.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -42,8 +43,6 @@ namespace starrocks {
 class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
-
-struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public QueryContextLifetime,
@@ -120,7 +119,9 @@ public:
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
-                          RuntimeState* state = nullptr, int connector_scan_node_number = 1);
+                          RuntimeState* state = nullptr, int connector_scan_node_number = 1,
+                          int64_t connector_scan_default_data_source_mem_bytes =
+                                  ConnectorScanOperatorMemShareArbitrator::kDefaultDataSourceMemBytes);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
