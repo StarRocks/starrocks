@@ -25,18 +25,18 @@
 
 #include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
+#include "common/runtime_profile.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/query_cache/cache_param.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/adaptive_dop_param.h"
 #include "exec/pipeline/primitives/execution_group_lifecycle.h"
 #include "exec/pipeline/primitives/fragment_lifecycle.h"
+#include "exec/pipeline/primitives/morsel_queue_factory.h"
 #include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 #include "exec/runtime/fragment_runtime_state.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -44,14 +44,17 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/runtime_filter_worker.h"
-#include "runtime/runtime_state.h"
 #include "storage/primitive/predicate_tree_params.h"
 
 namespace starrocks {
 
+class DataSink;
+class ExecNode;
 class FragmentAttachment;
 class FragmentDictState;
+class MemPool;
+class RuntimeFilterPort;
+class RuntimeState;
 
 namespace pipeline {
 
@@ -67,11 +70,11 @@ public:
     FragmentContext();
     ~FragmentContext();
 
-    // Fragment-level shared MemPool — delegates to RuntimeState which owns it.
-    MemPool* fragment_mem_pool() { return _runtime_state ? _runtime_state->fragment_mem_pool() : nullptr; }
+    // Fragment-level shared MemPool - delegates to RuntimeState which owns it.
+    MemPool* fragment_mem_pool();
 
-    // PMR memory resource — delegates to RuntimeState which owns it.
-    std::pmr::memory_resource* mem_resource() { return _runtime_state ? _runtime_state->mem_resource() : nullptr; }
+    // PMR memory resource - delegates to RuntimeState which owns it.
+    std::pmr::memory_resource* mem_resource();
 
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
@@ -127,7 +130,7 @@ public:
     RuntimeFilterHub* runtime_filter_hub() { return _fragment_runtime_state.runtime_filter_hub(); }
     const RuntimeFilterHub* runtime_filter_hub() const { return _fragment_runtime_state.runtime_filter_hub(); }
 
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
+    RuntimeFilterPort* runtime_filter_port();
 
     void prepare_pass_through_chunk_buffer();
     void destroy_pass_through_chunk_buffer();

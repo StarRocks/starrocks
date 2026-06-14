@@ -31,6 +31,7 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/operator_factory.cpp
     pipeline/source_operator.cpp
     pipeline/primitives/event.cpp
+    pipeline/primitives/morsel_queue_factory.cpp
     pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
     pipeline/scan/dynamic_morsel_queue.cpp

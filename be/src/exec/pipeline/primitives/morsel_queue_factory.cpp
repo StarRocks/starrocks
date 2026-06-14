@@ -12,15 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <memory>
+#include "exec/pipeline/primitives/morsel_queue_factory.h"
 
 namespace starrocks::pipeline {
 
-struct AdaptiveDopParam {
-    size_t max_block_rows_per_driver_seq = 0;
-    int64_t max_output_amplification_factor = 0;
-};
+Status MorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
+    return Status::NotSupported("MorselQueueFactory::append_morsels not supported");
+}
+
+StatusOr<int> MorselQueueFactory::next_driver_seq() {
+    return Status::NotSupported("MorselQueueFactory::next_driver_seq not supported");
+}
+
+Status MorselQueueFactory::mark_split_source_morsel_finished() {
+    return Status::NotSupported("MorselQueueFactory::mark_split_source_morsel_finished not supported");
+}
 
 } // namespace starrocks::pipeline

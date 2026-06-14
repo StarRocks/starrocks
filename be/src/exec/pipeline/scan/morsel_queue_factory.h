@@ -18,8 +18,8 @@
 #include <map>
 #include <vector>
 
+#include "exec/pipeline/primitives/morsel_queue_factory.h"
 #include "exec/pipeline/scan/morsel_queue.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 
 namespace starrocks::pipeline {
 

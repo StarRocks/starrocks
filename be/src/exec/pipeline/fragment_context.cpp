@@ -18,6 +18,7 @@
 #include <chrono>
 #include <future>
 #include <memory>
+#include <memory_resource>
 #include <thread>
 
 #include "base/time/time.h"
@@ -35,6 +36,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/data_sink.h"
+#include "exec/exec_node.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -47,6 +49,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/fragment_attachment.h"
 #include "runtime/logconfig.h"
+#include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
@@ -88,6 +91,14 @@ private:
 
 FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
+MemPool* FragmentContext::fragment_mem_pool() {
+    return _runtime_state ? _runtime_state->fragment_mem_pool() : nullptr;
+}
+
+std::pmr::memory_resource* FragmentContext::mem_resource() {
+    return _runtime_state ? _runtime_state->mem_resource() : nullptr;
+}
+
 FragmentContext::~FragmentContext() {
     _close_fragment_attachments();
     _data_sink.reset();
@@ -127,6 +138,10 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
 void FragmentContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
     state->set_fragment_ctx(this, &fragment_runtime_state());
+}
+
+RuntimeFilterPort* FragmentContext::runtime_filter_port() {
+    return _runtime_state->runtime_filter_port();
 }
 
 void FragmentContext::count_down_execution_group(size_t val) {

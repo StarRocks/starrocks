@@ -472,6 +472,7 @@
       "owned_targets": ["ExecPrimitive"],
       "additional_owned_globs": [
         "be/src/exec/runtime_filter/**",
+        "be/src/exec/pipeline/primitives/adaptive_dop_param.h",
         "be/src/exec/pipeline/primitives/driver_executor.h",
         "be/src/exec/pipeline/primitives/driver_observer.h",
         "be/src/exec/pipeline/primitives/operator_exec_stats.h",
