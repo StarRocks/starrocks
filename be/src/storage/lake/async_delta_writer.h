@@ -20,11 +20,11 @@
 #include <utility>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 
 namespace starrocks {

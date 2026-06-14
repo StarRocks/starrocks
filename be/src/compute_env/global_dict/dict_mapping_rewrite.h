@@ -14,23 +14,15 @@
 
 #pragma once
 
-#include "column/column.h"
+#include "common/global_types.h"
 #include "common/status.h"
 
 namespace starrocks {
 
-class GlobalDictDecoder {
-public:
-    virtual ~GlobalDictDecoder() = default;
+class Expr;
+class ExprContext;
+class RuntimeState;
 
-    virtual Status decode_string(const Column* in, Column* out) = 0;
-
-    virtual Status decode_array(const Column* in, Column* out) = 0;
-};
-
-using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;
-
-template <typename DictType>
-GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict);
+Status rewrite_global_dict_mapping_expr(RuntimeState* state, ExprContext* context, Expr* expr, SlotId output_id);
 
 } // namespace starrocks

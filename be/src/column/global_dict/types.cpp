@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <iostream>
-#include <string>
-
-#include "runtime/global_dict/types_fwd_decl.h"
-// For esay of use these types, include phmap.h here
-#include "base/phmap/phmap.h"
+#include "column/global_dict/types.h"
 
 namespace starrocks {
 
-extern ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
+ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
 
-std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map);
-std::ostream& operator<<(std::ostream& stream, const GlobalDictMap& map);
+std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map) {
+    stream << "[";
+    for (const auto& [k, v] : map) {
+        stream << "(" << k << "," << v << "),";
+    }
+    stream << "]";
+    return stream;
+}
+
+std::ostream& operator<<(std::ostream& stream, const GlobalDictMap& map) {
+    stream << "[";
+    for (const auto& [k, v] : map) {
+        stream << "(" << k << "," << v << "),";
+    }
+    stream << "]";
+    return stream;
+}
 
 } // namespace starrocks

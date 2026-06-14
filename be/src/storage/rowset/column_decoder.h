@@ -17,9 +17,9 @@
 #include <optional>
 
 #include "column/binary_column.h"
+#include "column/global_dict/types.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "runtime/global_dict/types.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {

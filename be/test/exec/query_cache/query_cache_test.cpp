@@ -44,7 +44,9 @@ struct QueryCacheTest : public ::testing::Test {
     std::unique_ptr<pipeline::QueryContext> query_ctx = std::make_unique<pipeline::QueryContext>();
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 
-    void SetUp() override { state.set_query_ctx(query_ctx.get(), &query_ctx->query_runtime_state()); }
+    void SetUp() override {
+        state.set_query_ctx(query_ctx.get(), &query_ctx->query_runtime_state(), query_ctx->object_pool());
+    }
 };
 
 TEST_F(QueryCacheTest, testLaneArbiter) {

@@ -18,11 +18,11 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
+#include "column/global_dict/types.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/walltime.h"
-#include "runtime/global_dict/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/primitive/empty_iterator.h"

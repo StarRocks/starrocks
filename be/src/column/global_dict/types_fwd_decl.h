@@ -18,7 +18,7 @@
 #include "base/phmap/phmap_hash.h"
 #include "base/string/slice.h"
 #include "column/column_hash.h"
-#include "runtime/global_dict/config.h"
+#include "column/global_dict/config.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

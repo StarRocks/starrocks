@@ -138,7 +138,9 @@ public:
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
-    void set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state);
+    ObjectPool* global_obj_pool() const { return _query_obj_pool == nullptr ? _obj_pool.get() : _query_obj_pool; }
+    void set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state,
+                       ObjectPool* query_obj_pool);
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
     const pipeline::QueryContext* query_ctx() const { return _query_ctx; }
     // For contexts without a QueryContext (ExecRuntime-level tests); production code attaches both via
@@ -717,6 +719,7 @@ private:
     std::unique_ptr<MemPoolResource> _mem_resource;
 
     std::shared_ptr<ObjectPool> _obj_pool;
+    ObjectPool* _query_obj_pool = nullptr;
 
     // if true, execution should stop with a CANCELLED status
     std::atomic<bool> _is_cancelled{false};

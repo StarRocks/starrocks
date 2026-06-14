@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/parser.h"
 #include "connector/lake_connector.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
@@ -28,7 +29,6 @@
 #include "gutil/walltime.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

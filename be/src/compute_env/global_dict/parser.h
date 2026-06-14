@@ -21,11 +21,11 @@
 #include <vector>
 
 #include "column/column.h"
+#include "column/global_dict/types.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "runtime/global_dict/types.h"
 
 namespace starrocks {
 
@@ -34,7 +34,6 @@ class ExprContext;
 class Expr;
 class TExpr;
 class SlotDescriptor;
-class DictMappingExpr;
 
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/global_dict/miscs.h"
+#include "column/global_dict/miscs.h"
 
 #include <vector>
 

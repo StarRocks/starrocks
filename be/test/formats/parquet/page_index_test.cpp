@@ -21,6 +21,7 @@
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "formats/parquet/file_reader.h"
@@ -29,7 +30,6 @@
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::parquet {

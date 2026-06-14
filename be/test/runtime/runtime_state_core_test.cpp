@@ -58,15 +58,18 @@ TEST(RuntimeStateCoreTest, QueryCtxAndQueryRuntimeStateDefaultNull) {
     RuntimeState state;
     EXPECT_EQ(nullptr, state.query_ctx());
     EXPECT_EQ(nullptr, state.query_runtime_state());
+    EXPECT_EQ(state.obj_pool(), state.global_obj_pool());
 }
 
-TEST(RuntimeStateCoreTest, SetQueryCtxAlsoSetsQueryRuntimeState) {
+TEST(RuntimeStateCoreTest, SetQueryCtxAlsoSetsQueryRuntimeStateAndGlobalObjectPool) {
     RuntimeState state;
     auto* query_ctx = reinterpret_cast<pipeline::QueryContext*>(static_cast<uintptr_t>(0x1234));
     auto* query_runtime_state = reinterpret_cast<pipeline::QueryRuntimeState*>(static_cast<uintptr_t>(0x3456));
-    state.set_query_ctx(query_ctx, query_runtime_state);
+    auto* query_obj_pool = reinterpret_cast<ObjectPool*>(static_cast<uintptr_t>(0x5678));
+    state.set_query_ctx(query_ctx, query_runtime_state, query_obj_pool);
     EXPECT_EQ(query_ctx, state.query_ctx());
     EXPECT_EQ(query_runtime_state, state.query_runtime_state());
+    EXPECT_EQ(query_obj_pool, state.global_obj_pool());
 }
 
 TEST(RuntimeStateCoreTest, FragmentRuntimeStateDefaultNull) {

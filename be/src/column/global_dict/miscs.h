@@ -12,28 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/global_dict/types.h"
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+#include "column/global_dict/types.h"
+#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 
-ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
-
-std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map) {
-    stream << "[";
-    for (const auto& [k, v] : map) {
-        stream << "(" << k << "," << v << "),";
-    }
-    stream << "]";
-    return stream;
-}
-
-std::ostream& operator<<(std::ostream& stream, const GlobalDictMap& map) {
-    stream << "[";
-    for (const auto& [k, v] : map) {
-        stream << "(" << k << "," << v << "),";
-    }
-    stream << "]";
-    return stream;
-}
+std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
 
 } // namespace starrocks

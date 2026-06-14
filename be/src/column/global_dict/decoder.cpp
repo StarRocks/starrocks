@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/global_dict/decoder.h"
+#include "column/global_dict/decoder.h"
 
 #include <utility>
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/const_column.h"
+#include "column/global_dict/config.h"
+#include "column/global_dict/types.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/global_dict/config.h"
-#include "runtime/global_dict/types.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 

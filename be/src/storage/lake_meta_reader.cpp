@@ -18,9 +18,9 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/global_dict/config.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
-#include "runtime/global_dict/config.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"

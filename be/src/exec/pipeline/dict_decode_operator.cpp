@@ -15,10 +15,10 @@
 #include "exec/pipeline/dict_decode_operator.h"
 
 #include "column/column_helper.h"
+#include "column/global_dict/decoder.h"
 #include "common/logging.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exprs/expr_executor.h"
-#include "runtime/global_dict/decoder.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

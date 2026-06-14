@@ -33,9 +33,6 @@ set(RUNTIME_CORE_FILES
     query_statistics.cpp
     runtime_metrics.cpp
     stream_load/stream_load_metrics.cpp
-    global_dict/decoder.cpp
-    global_dict/miscs.cpp
-    global_dict/types.cpp
     type_pack.cpp
     load_fail_point.cpp
     memory/roaring_hook.cpp
@@ -119,8 +116,6 @@ set(RUNTIME_FILES
     tablets_channel.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
-    global_dict/fragment_dict_state.cpp
-    global_dict/parser.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     command_executor.cpp
