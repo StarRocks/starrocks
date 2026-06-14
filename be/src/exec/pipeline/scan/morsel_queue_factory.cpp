@@ -48,18 +48,6 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
     return total;
 }
 
-Status MorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
-    return Status::NotSupported("MorselQueueFactory::append_morsels not supported");
-}
-
-StatusOr<int> MorselQueueFactory::next_driver_seq() {
-    return Status::NotSupported("MorselQueueFactory::next_driver_seq not supported");
-}
-
-Status MorselQueueFactory::mark_split_source_morsel_finished() {
-    return Status::NotSupported("MorselQueueFactory::mark_split_source_morsel_finished not supported");
-}
-
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
                                                            bool could_local_shuffle,
                                                            bool enable_random_append_split_morsel)

@@ -27,9 +27,9 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
+#include "platform/query_timeout_hook.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/logconfig.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {

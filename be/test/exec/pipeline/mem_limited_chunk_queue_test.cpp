@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
 #include <memory>

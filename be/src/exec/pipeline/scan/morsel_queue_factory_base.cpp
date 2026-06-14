@@ -12,11 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 
-#include <cstddef>
+namespace starrocks::pipeline {
 
-namespace starrocks {
-class TUniqueId;
-void hook_on_query_timeout(const TUniqueId& query_id, size_t timeout_seconds);
-} // namespace starrocks
+Status MorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
+    return Status::NotSupported("MorselQueueFactory::append_morsels not supported");
+}
+
+StatusOr<int> MorselQueueFactory::next_driver_seq() {
+    return Status::NotSupported("MorselQueueFactory::next_driver_seq not supported");
+}
+
+Status MorselQueueFactory::mark_split_source_morsel_finished() {
+    return Status::NotSupported("MorselQueueFactory::mark_split_source_morsel_finished not supported");
+}
+
+} // namespace starrocks::pipeline

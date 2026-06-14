@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "base/brpc/reusable_closure.h"
+#include "base/brpc/ref_count_closure.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/fragment_context.h"

@@ -21,7 +21,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/common.h"
-#include "runtime/logconfig.h"
+#include "platform/query_timeout_hook.h"
 
 namespace starrocks::pipeline {
 void CheckFragmentTimeout::Run() {

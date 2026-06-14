@@ -23,6 +23,7 @@ set(PLATFORM_FILES
   platform_metrics.cpp
   path_rw.cpp
   python/env.cpp
+  query_timeout_hook.cpp
   store_path.cpp
   thrift_rpc_helper.cpp
   udf_downloader.cpp
