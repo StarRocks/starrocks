@@ -20,8 +20,8 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedViewStatus;
-import mockit.Mock;
-import mockit.MockUp;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,26 +32,25 @@ import java.util.List;
 
 public class ShowMaterializedViewStatusTest {
 
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    private TaskManager taskManager;
+
     @BeforeEach
     public void setUp() {
-        // fromTaskRuns looks up the task owner via the global task manager; keep it offline in this unit test.
-        TaskManager taskManager = new MockUp<TaskManager>() {
-            @Mock
-            public Task getTask(String taskName) {
-                return null;
-            }
-        }.getMockInstance();
-        MockUp<GlobalStateMgr> globalStateMgrMock = new MockUp<GlobalStateMgr>() {
-            @Mock
-            public TaskManager getTaskManager() {
-                return taskManager;
-            }
-        };
-        GlobalStateMgr mockGlobalStateMgr = globalStateMgrMock.getMockInstance();
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public GlobalStateMgr getCurrentState() {
-                return mockGlobalStateMgr;
+        // fromTaskRuns looks up the task owner via the global task manager; keep it offline in this unit test
+        // (the mocked TaskManager returns null for getTask, so no task owner is resolved).
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.getTaskManager();
+                result = taskManager;
+                minTimes = 0;
             }
         };
     }
