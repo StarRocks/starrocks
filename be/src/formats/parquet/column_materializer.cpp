@@ -264,6 +264,9 @@ Status ColumnMaterializer::fill_dst_column(SlotId slot_id, ColumnPtr& dst, Colum
 void ColumnMaterializer::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end,
                                            ColumnIOTypeFlags types) {
     _read_range_planner->collect_ranges(_active_column_indices, true, ranges, end, types);
+    // Still plan lazy column ranges so that materialize_slot() can read them
+    // when triggered during compound OR eval.  Range planning alone does NOT
+    // cause IO — only read_range() does.
     _read_range_planner->pre_plan_lazy_ranges(_lazy_column_indices, end, types);
     const auto& lazy_ranges = _read_range_planner->lazy_ranges();
     ranges->insert(ranges->end(), lazy_ranges.begin(), lazy_ranges.end());
@@ -272,11 +275,9 @@ void ColumnMaterializer::collect_io_ranges(std::vector<SharedBufferedInputStream
 Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
                                              const Range<uint64_t>& post_filter_range, const Filter& post_filter,
                                              const Filter& chunk_filter, bool has_filter, ChunkPtr& active_chunk) {
-    // Separate triggered lazy columns (materialized on-demand during predicate
-    // evaluation via LazyMaterializationContext) from untriggered ones.
-    // Triggered columns already have full_range data in _read_chunk; apply
-    // chunk_filter to match active_chunk's row count.
-    // Untriggered columns go through the normal post_filter_range read path.
+    // Separate triggered lazy columns from untriggered ones.
+    // Triggered: read on-demand during predicate eval → filter and append.
+    // Untriggered: backfill (output) or null-fill (predicate-only).
     std::vector<int> untriggered_indices;
     for (int col_idx : _lazy_column_indices) {
         SlotId slot_id = _param.read_cols[col_idx].slot_id();
@@ -297,27 +298,44 @@ Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
     }
 
     if (!untriggered_indices.empty()) {
-        std::vector<SlotId> untriggered_slot_ids;
-        untriggered_slot_ids.reserve(untriggered_indices.size());
+        // Output columns → backfill from disk.
+        // Predicate-only columns → null-fill (no IO, values unused downstream).
+        std::vector<int> backfill_indices;
+        size_t rows = active_chunk->num_rows();
         for (int col_idx : untriggered_indices) {
-            untriggered_slot_ids.push_back(_param.read_cols[col_idx].slot_id());
-        }
-        ChunkPtr lazy_chunk = create_read_chunk(untriggered_slot_ids, false);
-        {
-            SCOPED_RAW_TIMER(&_param.stats->parquet_lazy_read_ns);
-            _param.stats->parquet_lazy_read_count += untriggered_indices.size();
-            if (has_filter) {
-                RETURN_IF_ERROR(read_range(untriggered_indices, post_filter_range, &post_filter, &lazy_chunk, true));
-                lazy_chunk->filter_range(post_filter, 0, post_filter_range.span_size());
+            const auto& col_info = _param.read_cols[col_idx];
+            if (col_info.slot_desc->is_output_column()) {
+                backfill_indices.push_back(col_idx);
             } else {
-                RETURN_IF_ERROR(read_range(untriggered_indices, full_range, nullptr, &lazy_chunk, true));
+                auto col = _read_chunk->get_column_by_slot_id(col_info.slot_id())->clone_empty();
+                col->append_nulls(rows);
+                active_chunk->append_column(col, col_info.slot_id());
             }
         }
-        if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
-            return Status::InternalError(fmt::format("Unmatched row count, active_rows={}, lazy_rows={}",
-                                                     active_chunk->num_rows(), lazy_chunk->num_rows()));
+
+        if (!backfill_indices.empty()) {
+            std::vector<SlotId> backfill_slot_ids;
+            backfill_slot_ids.reserve(backfill_indices.size());
+            for (int col_idx : backfill_indices) {
+                backfill_slot_ids.push_back(_param.read_cols[col_idx].slot_id());
+            }
+            ChunkPtr lazy_chunk = create_read_chunk(backfill_slot_ids, false);
+            {
+                SCOPED_RAW_TIMER(&_param.stats->parquet_lazy_read_ns);
+                _param.stats->parquet_lazy_read_count += backfill_indices.size();
+                if (has_filter) {
+                    RETURN_IF_ERROR(read_range(backfill_indices, post_filter_range, &post_filter, &lazy_chunk, true));
+                    lazy_chunk->filter_range(post_filter, 0, post_filter_range.span_size());
+                } else {
+                    RETURN_IF_ERROR(read_range(backfill_indices, full_range, nullptr, &lazy_chunk, true));
+                }
+            }
+            if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
+                return Status::InternalError(fmt::format("Unmatched row count, active_rows={}, lazy_rows={}",
+                                                         active_chunk->num_rows(), lazy_chunk->num_rows()));
+            }
+            active_chunk->merge(std::move(*lazy_chunk));
         }
-        active_chunk->merge(std::move(*lazy_chunk));
     }
 
     _lazy_column_needed = true;
