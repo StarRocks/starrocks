@@ -17,6 +17,9 @@
 #include <cstddef>
 
 namespace starrocks {
+
 class TUniqueId;
+
 void hook_on_query_timeout(const TUniqueId& query_id, size_t timeout_seconds);
+
 } // namespace starrocks

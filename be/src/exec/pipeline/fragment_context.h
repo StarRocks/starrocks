@@ -165,7 +165,7 @@ public:
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
-    void init_jit_profile();
+    void init_jit_profile(bool jit_enabled);
 
     void update_jit_profile(int64_t time_ns);
 

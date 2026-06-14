@@ -42,11 +42,10 @@
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/runtime/query_runtime_state.h"
+#include "platform/query_timeout_hook.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_attachment.h"
-#include "runtime/logconfig.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -398,8 +397,8 @@ TQueryType::type FragmentContext::query_type() const {
     return _runtime_state->query_options().query_type;
 }
 
-void FragmentContext::init_jit_profile() {
-    if (runtime_state() && RuntimeStateHelper::is_jit_enabled(runtime_state()) && runtime_state()->runtime_profile()) {
+void FragmentContext::init_jit_profile(bool jit_enabled) {
+    if (runtime_state() && jit_enabled && runtime_state()->runtime_profile()) {
         _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
         _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
     }
