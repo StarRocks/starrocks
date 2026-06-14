@@ -543,6 +543,7 @@
         "compute_env/",
         "exec/runtime/",
         "exec/pipeline/fragment_context.h",
+        "exec/pipeline/fragment_context_manager.h",
         "exec/pipeline/group_execution/execution_group.h",
         "exec/pipeline/group_execution/execution_group_builder.h",
         "exec/pipeline/group_execution/execution_group_fwd.h",
