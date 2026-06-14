@@ -468,7 +468,7 @@
     {
       "id": "execprimitive",
       "doc_label": "ExecPrimitive",
-      "summary": "Primitive execution contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.",
+      "summary": "Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.",
       "owned_targets": ["ExecPrimitive"],
       "additional_owned_globs": [
         "be/src/exec/runtime_filter/**",
@@ -485,6 +485,7 @@
         "be/src/exec/pipeline/scan/split_morsel_ticket_checker.h"
       ],
       "allowed_include_prefixes": [
+        "exec/data_sink.h",
         "exec/runtime_filter/",
         "exec/pipeline/pipeline_fwd.h",
         "exec/pipeline/operator.h",
@@ -512,7 +513,6 @@
       ],
       "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "storage/", "service/", "http/", "connector/", "cache/", "util/"],
       "forbidden_includes": [
-        "exec/data_sink.h",
         "exec/pipeline/fragment_context.h",
         "exec/pipeline/pipeline.h",
         "exec/pipeline/pipeline_driver.h",
@@ -524,7 +524,7 @@
       "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_primitive_test"],
       "allowed_test_link_deps": ["ExecPrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExecPrimitive limited to execution contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, storage, service, and connector integration upward."
+      "remediation": "Keep ExecPrimitive limited to execution contracts, the DataSink base contract, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, concrete sinks, storage, service, and connector integration upward."
     },
     {
       "id": "execruntime",
@@ -755,23 +755,6 @@
       "forbidden_include_prefixes": ["exec/", "runtime/", "storage/", "service/", "http/", "cache/", "util/"],
       "allowed_target_deps": ["Connector", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target."
-    },
-    {
-      "id": "execsinkcore",
-      "doc_label": "ExecSinkCore",
-      "summary": "DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.",
-      "owned_targets": ["ExecSinkCore"],
-      "allowed_include_prefixes": ["exec/data_sink.h", "exec/pipeline/pipeline_fwd.h", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/pipeline/", "connector/", "storage/", "http/", "service/", "cache/", "runtime/"],
-      "forbidden_includes": [
-        "exec/exec_node.h",
-        "exec/multi_olap_table_sink.h",
-        "exec/tablet_sink.h"
-      ],
-      "allowed_target_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["data_sink_core_test"],
-      "allowed_test_link_deps": ["ExecSinkCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExecSinkCore limited to the DataSink base contract; move construction, concrete sinks, pipeline decomposition, and future sink IO behavior into higher modules."
     },
     {
       "id": "execschemascannercore",
