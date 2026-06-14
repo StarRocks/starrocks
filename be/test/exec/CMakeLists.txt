@@ -59,6 +59,7 @@ set(EXEC_RUNTIME_TEST_FILES
     pipeline_driver_exec_runtime_test.cpp
     pipeline_event_scheduler_exec_runtime_test.cpp
     pipeline_execution_group_exec_runtime_test.cpp
+    pipeline_fragment_context_exec_runtime_test.cpp
     pipeline_fragment_runtime_state_exec_runtime_test.cpp
     pipeline_query_runtime_state_exec_runtime_test.cpp
 )
