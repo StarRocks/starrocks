@@ -125,9 +125,10 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
         for (Map.Entry<String, List<TaskRunStatus>> entry : jobToRuns.entrySet()) {
             String key = entry.getKey();
             List<TaskRunStatus> batch = entry.getValue();
-            // getMatchedTaskRunStatus concatenates pending/running/history and history is newest-first,
-            // so encounter order is not chronological; sort ascending so "latest run wins" is well-defined.
-            batch.sort(Comparator.comparingLong(TaskRunStatus::getProcessStartTime));
+            // getMatchedTaskRunStatus concatenates pending/running/history and history is newest-first, so
+            // encounter order is not chronological. Sort by createTime (always set, unlike processStartTime
+            // which is 0 for pending/legacy runs) so the latest run sorts last for the JSON merge below.
+            batch.sort(Comparator.comparingLong(TaskRunStatus::getCreateTime));
             TaskRunStatus anyRun = batch.get(0);
 
             Map<String, String> props = anyRun.getProperties();
@@ -189,7 +190,7 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
 
             TaskRunStatus failed = batch.stream()
                     .filter(run -> run.getState() == Constants.TaskRunState.FAILED)
-                    .reduce((first, second) -> second)   // latest failure: batch is sorted by processStartTime ascending
+                    .max(Comparator.comparingLong(TaskRunStatus::getCreateTime))
                     .orElse(null);
             if (failed != null) {
                 info.setFailed_task_run_id(failed.getTaskRunId());

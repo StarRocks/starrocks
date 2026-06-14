@@ -155,18 +155,21 @@ public class MaterializedViewRefreshJobsSystemTableTest {
     public void testFailedRunColumnsComeFromLatestFailure(
             @Mocked GlobalStateMgr globalStateMgr,
             @Mocked TaskManager taskManager) throws TException {
-        TaskRunStatus earlierFailure = newRun("job-failed", "query-early", "FAILED", Constants.TaskRunState.FAILED, 1000L);
-        earlierFailure.setTaskRunId("taskrun-early");
-        earlierFailure.setErrorCode(1);
-        earlierFailure.setErrorMessage("early failure");
+        TaskRunStatus olderFailure = newRun("job-failed", "query-old", "FAILED", Constants.TaskRunState.FAILED, 1000L);
+        olderFailure.setCreateTime(1000L);
+        olderFailure.setTaskRunId("taskrun-old");
+        olderFailure.setErrorCode(1);
+        olderFailure.setErrorMessage("old failure");
 
-        TaskRunStatus laterFailure = newRun("job-failed", "query-late", "FAILED", Constants.TaskRunState.FAILED, 2000L);
-        laterFailure.setTaskRunId("taskrun-late");
-        laterFailure.setErrorCode(42);
-        laterFailure.setErrorMessage("late failure");
+        // The latest failure has processStartTime 0 (a pending/legacy row): selecting by createTime picks it,
+        // whereas selecting by processStartTime would wrongly rank it before olderFailure.
+        TaskRunStatus latestFailure = newRun("job-failed", "query-latest", "FAILED", Constants.TaskRunState.FAILED, 0L);
+        latestFailure.setCreateTime(2000L);
+        latestFailure.setTaskRunId("taskrun-latest");
+        latestFailure.setErrorCode(42);
+        latestFailure.setErrorMessage("latest failure");
 
-        // Reverse-chronological input: the latest failure only wins after query() sorts the batch by processStartTime.
-        mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(laterFailure, earlierFailure));
+        mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(latestFailure, olderFailure));
         mockAuthorizerPass();
 
         TListMaterializedViewRefreshJobsResult result =
@@ -174,10 +177,10 @@ public class MaterializedViewRefreshJobsSystemTableTest {
 
         Assertions.assertEquals(1, result.getJobs().size());
         TMaterializedViewRefreshJobInfo job = result.getJobs().get(0);
-        Assertions.assertEquals("taskrun-late", job.getFailed_task_run_id());
-        Assertions.assertEquals("query-late", job.getFailed_query_id());
+        Assertions.assertEquals("taskrun-latest", job.getFailed_task_run_id());
+        Assertions.assertEquals("query-latest", job.getFailed_query_id());
         Assertions.assertEquals("42", job.getError_code());
-        Assertions.assertEquals("late failure", job.getError_message());
+        Assertions.assertEquals("latest failure", job.getError_message());
     }
 
     @Test
