@@ -133,7 +133,7 @@ public:
     void destroy_pass_through_chunk_buffer();
 
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
-    Status set_pipeline_timer(PipelineTimer* pipeline_timer);
+    Status set_pipeline_timer(PipelineTimer* pipeline_timer, std::shared_ptr<PipelineTimerTask> timeout_task);
     void clear_pipeline_timer();
     PipelineTimerContextPtr pipeline_timer_context() const { return _pipeline_timer_context; }
 

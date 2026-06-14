@@ -41,7 +41,6 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/runtime/query_runtime_state.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
@@ -372,9 +371,10 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
     _pass_through_chunk_buffer_guard.reset();
 }
 
-Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
+Status FragmentContext::set_pipeline_timer(PipelineTimer* timer, std::shared_ptr<PipelineTimerTask> timeout_task) {
+    DCHECK(timeout_task != nullptr);
     _pipeline_timer_context = std::make_shared<PipelineTimerContext>(timer);
-    _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
+    _timeout_task = std::move(timeout_task);
     timespec tm = butil::seconds_from_now(runtime_state()->query_runtime_state()->get_query_expire_seconds());
     RETURN_IF_ERROR(_pipeline_timer_context->schedule(_timeout_task.get(), tm));
     return Status::OK();
