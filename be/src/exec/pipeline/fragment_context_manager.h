@@ -36,7 +36,6 @@ public:
     FragmentContextManager& operator=(const FragmentContextManager&) = delete;
     FragmentContextManager& operator=(FragmentContextManager&&) = delete;
 
-    FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
 
     Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);

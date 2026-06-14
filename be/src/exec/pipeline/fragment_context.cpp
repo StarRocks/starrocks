@@ -340,10 +340,6 @@ Status FragmentContext::prepare_all_pipelines() {
     return Status::OK();
 }
 
-void FragmentContext::_set_default_workgroup() {
-    set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
-}
-
 void FragmentContext::set_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments) {
     _fragment_attachments = std::move(attachments);
 }

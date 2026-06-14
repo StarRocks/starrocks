@@ -188,7 +188,6 @@ public:
     void init_event_scheduler();
 
 private:
-    void _set_default_workgroup();
     void _close_fragment_attachments();
 
     bool _enable_group_execution = false;
