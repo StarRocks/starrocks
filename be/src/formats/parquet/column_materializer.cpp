@@ -308,7 +308,7 @@ Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
                 backfill_indices.push_back(col_idx);
             } else {
                 auto col = _read_chunk->get_column_by_slot_id(col_info.slot_id())->clone_empty();
-                col->append_nulls(rows);
+                col->append_default(rows);
                 active_chunk->append_column(col, col_info.slot_id());
             }
         }
@@ -338,7 +338,7 @@ Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
         }
     }
 
-    _lazy_column_needed = true;
+    _lazy_column_needed = !untriggered_indices.empty() || !_slot_cache.empty();
     return Status::OK();
 }
 
