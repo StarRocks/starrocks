@@ -159,7 +159,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver_poller.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
-    pipeline/fragment_context.cpp
     pipeline/fragment_context_cancel.cpp
     pipeline/fragment_context_manager.cpp
     pipeline/query_context.cpp
@@ -507,6 +506,7 @@ ADD_BE_LIB(ExecRuntime
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/pipeline.cpp
     pipeline/pipeline_driver.cpp
+    pipeline/fragment_context.cpp
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/pipeline_driver_observer.cpp
 )

@@ -542,6 +542,7 @@
       "allowed_include_prefixes": [
         "compute_env/",
         "exec/runtime/",
+        "exec/pipeline/fragment_context.h",
         "exec/pipeline/group_execution/execution_group.h",
         "exec/pipeline/group_execution/execution_group_builder.h",
         "exec/pipeline/group_execution/execution_group_fwd.h",
@@ -579,7 +580,6 @@
       ],
       "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "cache/", "http/", "agent/", "util/"],
       "forbidden_includes": [
-        "exec/pipeline/fragment_context.h",
         "exec/pipeline/pipeline_driver_executor.h",
         "exec/pipeline/pipeline_driver_queue.h",
         "exec/pipeline/pipeline_driver_poller.h",
