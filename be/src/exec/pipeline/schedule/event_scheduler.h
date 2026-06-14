@@ -30,7 +30,7 @@ public:
 
     void try_schedule(const DriverRawPtr driver);
 
-    std::unique_ptr<PipelineObserver> create_driver_observer(DriverRawPtr driver) const;
+    std::unique_ptr<PipelineObserver> create_driver_observer(DriverRawPtr driver);
 
     void attach_queue(DriverQueue* queue) {
         if (_driver_queue == nullptr) {

@@ -17,6 +17,7 @@
 #include <atomic>
 #include <utility>
 
+#include "base/time/time.h"
 #include "common/status.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/runtime_filter_hub.h"
@@ -61,6 +62,8 @@ public:
         return status == nullptr ? Status::OK() : *status;
     }
 
+    int64_t last_report_exec_state_ns() const { return _last_report_exec_state_ns.load(); }
+
 private:
     TUniqueId _fragment_instance_id;
     RuntimeFilterHub _runtime_filter_hub;
@@ -69,6 +72,7 @@ private:
     bool _enable_adaptive_dop = false;
     PredicateTreeParams _pred_tree_params;
     workgroup::WorkGroupPtr _workgroup = nullptr;
+    std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
     std::atomic<Status*> _final_status = nullptr;
     Status _s_status;
 };

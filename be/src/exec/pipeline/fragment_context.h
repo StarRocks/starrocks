@@ -24,7 +24,6 @@
 #include <vector>
 
 #include "base/hash/hash_std.hpp"
-#include "base/time/time.h"
 #include "base/uid_util.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
@@ -162,7 +161,7 @@ public:
     bool enable_resource_group() const { return workgroup() != nullptr; }
     TQueryType::type query_type() const;
 
-    size_t expired_log_count() { return _expired_log_count; }
+    size_t expired_log_count() const { return _expired_log_count; }
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
@@ -212,12 +211,13 @@ private:
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
+    // Must outlive PipelineDriver observers owned by _pipelines.
+    std::unique_ptr<EventScheduler> _event_scheduler;
     Pipelines _pipelines;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
     FragmentLifecycleWeakPtr _fragment_lifecycle;
 
-    std::unique_ptr<EventScheduler> _event_scheduler;
     PipelineTimerContextPtr _pipeline_timer_context = nullptr;
     std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
     std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
@@ -233,8 +233,6 @@ private:
     AdaptiveDopParam _adaptive_dop_param;
 
     size_t _expired_log_count = 0;
-
-    std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
 
     RuntimeProfile::Counter* _jit_counter = nullptr;
     RuntimeProfile::Counter* _jit_timer = nullptr;
