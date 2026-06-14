@@ -146,6 +146,9 @@ void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
     Status* old_status = nullptr;
     if (_cancelled_status.compare_exchange_strong(old_status, &_s_status)) {
         _s_status = status;
+        if (!status.ok()) {
+            release_workgroup_token_once();
+        }
     }
     _fragment_mgr->cancel(status);
 }

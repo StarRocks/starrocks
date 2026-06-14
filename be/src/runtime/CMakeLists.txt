@@ -128,4 +128,5 @@ ADD_BE_LIB(Runtime
     )
 
 target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive Platform)
+target_link_libraries(Runtime PRIVATE ExecRuntime)
 target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

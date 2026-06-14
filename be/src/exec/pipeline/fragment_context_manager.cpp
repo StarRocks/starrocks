@@ -22,7 +22,6 @@
 #include "common/logging.h"
 #include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_cancel.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
@@ -101,8 +100,9 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
 
 void FragmentContextManager::cancel(const Status& status) {
     std::lock_guard<std::mutex> lock(_lock);
+    // Query-level cleanup is owned by the caller; this manager only fans out to fragments.
     for (auto& _fragment_context : _fragment_contexts) {
-        cancel_fragment_context(_fragment_context.second.get(), status);
+        _fragment_context.second->cancel(status);
     }
 }
 
