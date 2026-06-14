@@ -175,8 +175,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/query_context.cpp
     pipeline/query_context_manager.cpp
     pipeline/schedule/timeout_tasks.cpp
-    pipeline/schedule/event_scheduler.cpp
-    pipeline/schedule/pipeline_driver_observer.cpp
     pipeline/runtime_filter_types.cpp
 )
 
@@ -517,6 +515,8 @@ ADD_BE_LIB(ExecRuntime
     runtime/query_runtime_state.cpp
     pipeline/pipeline.cpp
     pipeline/pipeline_driver.cpp
+    pipeline/schedule/event_scheduler.cpp
+    pipeline/schedule/pipeline_driver_observer.cpp
 )
 
 target_link_libraries(ExecRuntime PUBLIC
