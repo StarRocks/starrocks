@@ -1360,7 +1360,7 @@ public class InsertPlanTest extends PlanTestBase {
                 .collect(java.util.stream.Collectors.toList());
 
         HiveTable hiveTable = HiveTable.builder()
-                .setId(com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(tableName)
                 .setCatalogName(catalogName)
                 .setResourceName(com.starrocks.server.CatalogMgr.ResourceMappingCatalog
