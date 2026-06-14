@@ -91,8 +91,20 @@ void ExecutionGroup::prepare_active_drivers_parallel(const std::shared_ptr<Runti
     DCHECK(pipeline_prepare_pool != nullptr);
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
-        // Since prepare is async, hold both the runtime state and driver until the task finishes.
-        bool submitted = pipeline_prepare_pool->try_offer([sync_ctx, driver, runtime_state_holder = state]() {
+        // Capture the runtime state by value to keep it alive across the async prepare, but capture
+        // `driver` by reference -- the worker must NOT own the driver. The reference binds to the
+        // stable element in `pipeline->drivers()`, which the wait barrier below keeps alive until
+        // every task finishes; the worker only touches it inside prepare_local_state().
+        //
+        // Do NOT capture the driver by value (shared_ptr). The waiter wakes as soon as pending_tasks
+        // hits 0 and, on prepare error, tears down the fragment -- destroying each Pipeline and its
+        // operator factories. Some operators (e.g. OlapScanOperator) hold a context whose buffer is
+        // owned by an operator factory (OlapScanContext -> OlapScanContextFactory::_chunk_buffer). If
+        // the worker owned the driver, it could become the last owner and run ~PipelineDriver on the
+        // prepare thread AFTER those factories were freed, closing a dangling buffer (use-after-free).
+        // Keeping the worker non-owning ensures the driver is destroyed only by ~Pipeline, in the safe
+        // _drivers-before-_op_factories order, on the fragment thread.
+        bool submitted = pipeline_prepare_pool->try_offer([sync_ctx, &driver, runtime_state_holder = state]() {
             auto runtime_state = runtime_state_holder.get();
             // make sure mem tracker is instance level
             auto mem_tracker = runtime_state->instance_mem_tracker();
