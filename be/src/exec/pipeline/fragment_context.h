@@ -44,7 +44,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "storage/primitive/predicate_tree_params.h"
 
@@ -52,6 +51,7 @@ namespace starrocks {
 
 class FragmentAttachment;
 class FragmentDictState;
+class RuntimeFilterPort;
 
 namespace pipeline {
 
@@ -133,7 +133,7 @@ public:
     void destroy_pass_through_chunk_buffer();
 
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
-    Status set_pipeline_timer(PipelineTimer* pipeline_timer);
+    Status set_pipeline_timer(PipelineTimer* pipeline_timer, std::shared_ptr<PipelineTimerTask> timeout_task);
     void clear_pipeline_timer();
     PipelineTimerContextPtr pipeline_timer_context() const { return _pipeline_timer_context; }
 
@@ -165,7 +165,7 @@ public:
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
-    void init_jit_profile();
+    void init_jit_profile(bool jit_enabled);
 
     void update_jit_profile(int64_t time_ns);
 

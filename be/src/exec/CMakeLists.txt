@@ -37,6 +37,7 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
+    pipeline/scan/morsel_queue_factory_base.cpp
     pipeline/scan/scan_morsel.cpp
     pipeline/scan/split_morsel_ticket_checker.cpp
 )

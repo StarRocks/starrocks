@@ -56,6 +56,7 @@
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/common.h"
+#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
 #include "gutil/casts.h"
@@ -64,6 +65,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_context_handle.h"
@@ -325,7 +327,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         runtime_state->debug_action_mgr().add_action(action);
     }
 
-    _fragment_ctx->init_jit_profile();
+    _fragment_ctx->init_jit_profile(RuntimeStateHelper::is_jit_enabled(runtime_state));
     return Status::OK();
 }
 
@@ -800,7 +802,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         all_support_event_scheduler = all_support_event_scheduler && !runtime_state->enable_wait_dependent_event();
         if (all_support_event_scheduler) {
             _fragment_ctx->init_event_scheduler();
-            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->compute_env()->pipeline_timer()));
+            auto timeout_task = std::make_shared<CheckFragmentTimeout>(_fragment_ctx.get());
+            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->compute_env()->pipeline_timer(),
+                                                              std::move(timeout_task)));
         }
     }
     runtime_state->set_enable_event_scheduler(_fragment_ctx->enable_event_scheduler());

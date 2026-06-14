@@ -41,13 +41,11 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/runtime/query_runtime_state.h"
+#include "platform/query_timeout_hook.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_attachment.h"
-#include "runtime/logconfig.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -372,9 +370,10 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
     _pass_through_chunk_buffer_guard.reset();
 }
 
-Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
+Status FragmentContext::set_pipeline_timer(PipelineTimer* timer, std::shared_ptr<PipelineTimerTask> timeout_task) {
+    DCHECK(timeout_task != nullptr);
     _pipeline_timer_context = std::make_shared<PipelineTimerContext>(timer);
-    _timeout_task = std::make_shared<CheckFragmentTimeout>(this);
+    _timeout_task = std::move(timeout_task);
     timespec tm = butil::seconds_from_now(runtime_state()->query_runtime_state()->get_query_expire_seconds());
     RETURN_IF_ERROR(_pipeline_timer_context->schedule(_timeout_task.get(), tm));
     return Status::OK();
@@ -398,8 +397,8 @@ TQueryType::type FragmentContext::query_type() const {
     return _runtime_state->query_options().query_type;
 }
 
-void FragmentContext::init_jit_profile() {
-    if (runtime_state() && RuntimeStateHelper::is_jit_enabled(runtime_state()) && runtime_state()->runtime_profile()) {
+void FragmentContext::init_jit_profile(bool jit_enabled) {
+    if (runtime_state() && jit_enabled && runtime_state()->runtime_profile()) {
         _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
         _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
     }
