@@ -479,7 +479,7 @@ Status FragmentContext::prepare_active_drivers() {
     sync_ctx->pending_tasks = total_active_driver_size;
 
     for (auto& group : _execution_groups) {
-        group->prepare_active_drivers_parallel(runtime_state(), sync_ctx);
+        group->prepare_active_drivers_parallel(_runtime_state, pipeline_prepare_pool, sync_ctx);
     }
 
     // wait for all the tasks finished

@@ -18,13 +18,11 @@
 
 #include "common/logging.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -86,40 +84,39 @@ size_t ExecutionGroup::total_active_driver_size() {
     return total;
 }
 
-void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
+void ExecutionGroup::prepare_active_drivers_parallel(const std::shared_ptr<RuntimeState>& state,
+                                                     PriorityThreadPool* pipeline_prepare_pool,
                                                      std::shared_ptr<DriverPrepareSyncContext> sync_ctx) {
-    auto* query_execution_services = state->query_execution_services();
-    auto pipeline_prepare_pool = query_execution_services->execution->pipeline_prepare_pool;
+    DCHECK(state != nullptr);
+    DCHECK(pipeline_prepare_pool != nullptr);
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
-        // since prepare is async, we must hold the runtime state ptr
-        auto runtime_state_holder = state->fragment_ctx()->runtime_state_ptr();
-        bool submitted = pipeline_prepare_pool->try_offer(
-                [sync_ctx, &driver, runtime_state_holder = std::move(runtime_state_holder)]() {
-                    auto runtime_state = runtime_state_holder.get();
-                    // make sure mem tracker is instance level
-                    auto mem_tracker = runtime_state->instance_mem_tracker();
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
-                    // do the thread-safe prepare operation
-                    Status status = driver->prepare_local_state(runtime_state);
+        // Since prepare is async, hold both the runtime state and driver until the task finishes.
+        bool submitted = pipeline_prepare_pool->try_offer([sync_ctx, driver, runtime_state_holder = state]() {
+            auto runtime_state = runtime_state_holder.get();
+            // make sure mem tracker is instance level
+            auto mem_tracker = runtime_state->instance_mem_tracker();
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            // do the thread-safe prepare operation
+            Status status = driver->prepare_local_state(runtime_state);
 
-                    if (!status.ok()) {
-                        Status* expected = nullptr;
-                        Status* new_error = new Status(status);
-                        if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
-                            // Another thread already set the error, clean up our allocation
-                            delete new_error;
-                        }
-                    }
+            if (!status.ok()) {
+                Status* expected = nullptr;
+                Status* new_error = new Status(status);
+                if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
+                    // Another thread already set the error, clean up our allocation
+                    delete new_error;
+                }
+            }
 
-                    if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
-                        std::lock_guard<std::mutex> lock(sync_ctx->mutex);
-                        sync_ctx->cv.notify_one();
-                    }
-                });
+            if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
+                std::lock_guard<std::mutex> lock(sync_ctx->mutex);
+                sync_ctx->cv.notify_one();
+            }
+        });
 
         if (!submitted) {
-            Status status = driver->prepare_local_state(state);
+            Status status = driver->prepare_local_state(state.get());
             if (!status.ok()) {
                 Status* expected = nullptr;
                 Status* new_error = new Status(status);
