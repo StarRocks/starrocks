@@ -42,7 +42,7 @@ public:
         auto rs = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
         TUniqueId query_id;
         rs->init_mem_trackers(query_id);
-        rs->set_query_ctx(query_ctx, &query_ctx->query_runtime_state());
+        rs->set_query_ctx(query_ctx, &query_ctx->query_runtime_state(), query_ctx->object_pool());
         rs->set_desc_tbl(desc_tbl);
         return rs;
     }

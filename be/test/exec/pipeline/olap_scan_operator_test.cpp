@@ -63,7 +63,7 @@ void OlapScanOperatorTest::SetUp() {
     _chunk_buffer_limiter = std::make_unique<UnlimitedChunkBufferLimiter>();
 
     _query_ctx.init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
-    _runtime_state.set_query_ctx(&_query_ctx, &_query_ctx.query_runtime_state());
+    _runtime_state.set_query_ctx(&_query_ctx, &_query_ctx.query_runtime_state(), _query_ctx.object_pool());
 }
 
 TEST_F(OlapScanOperatorTest, test_finish_sequence) {

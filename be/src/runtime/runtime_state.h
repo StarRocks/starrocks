@@ -139,8 +139,8 @@ public:
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
     ObjectPool* global_obj_pool() const { return _query_obj_pool == nullptr ? _obj_pool.get() : _query_obj_pool; }
-    void set_query_obj_pool(ObjectPool* obj_pool) { _query_obj_pool = obj_pool; }
-    void set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state);
+    void set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state,
+                       ObjectPool* query_obj_pool);
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
     const pipeline::QueryContext* query_ctx() const { return _query_ctx; }
     // For contexts without a QueryContext (ExecRuntime-level tests); production code attaches both via

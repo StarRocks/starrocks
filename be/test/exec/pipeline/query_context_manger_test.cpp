@@ -522,6 +522,7 @@ TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
 
     ASSERT_EQ(query_ctx.get(), runtime_state.query_ctx());
     ASSERT_EQ(&query_ctx->query_runtime_state(), runtime_state.query_runtime_state());
+    EXPECT_EQ(query_ctx->object_pool(), runtime_state.global_obj_pool());
     EXPECT_EQ(3, runtime_state.query_runtime_state()->query_id().hi);
     EXPECT_EQ(4, runtime_state.query_runtime_state()->query_id().lo);
     EXPECT_FALSE(runtime_state.query_runtime_state()->is_delivery_expired());
