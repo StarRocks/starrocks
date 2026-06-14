@@ -27,6 +27,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/status.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -39,7 +40,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

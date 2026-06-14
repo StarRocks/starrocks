@@ -21,6 +21,8 @@
 #include "cache/datacache.h"
 #endif
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 #include "exec/hdfs_scanner/hdfs_scanner_avro.h"
@@ -40,8 +42,6 @@
 #include "fs/fs_factory.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {

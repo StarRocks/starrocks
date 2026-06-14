@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "runtime/global_dict/dict_mapping_rewrite.h"
+#include "compute_env/global_dict/dict_mapping_rewrite.h"
 
 namespace starrocks {
 DictMappingExpr::DictMappingExpr(const TExprNode& node) : Expr(node, false) {}

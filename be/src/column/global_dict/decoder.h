@@ -14,15 +14,25 @@
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
-#include <utility>
 
-#include "column/vectorized_fwd.h"
-#include "runtime/global_dict/types.h"
+#include "column/column.h"
+#include "common/status.h"
 
 namespace starrocks {
 
-std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
+class GlobalDictDecoder {
+public:
+    virtual ~GlobalDictDecoder() = default;
+
+    virtual Status decode_string(const Column* in, Column* out) = 0;
+
+    virtual Status decode_array(const Column* in, Column* out) = 0;
+};
+
+using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;
+
+template <typename DictType>
+GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict);
 
 } // namespace starrocks

@@ -18,10 +18,10 @@
 #include <memory>
 #include <vector>
 
+#include "column/global_dict/types.h"
 #include "common/status.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/global_dict/types.h"
 
 namespace starrocks {
 

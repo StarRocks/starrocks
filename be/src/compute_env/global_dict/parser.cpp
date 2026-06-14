@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/global_dict/parser.h"
+#include "compute_env/global_dict/parser.h"
 
 #include "base/simd/gather.h"
 #include "column/array_column.h"
@@ -20,9 +20,15 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/global_dict/config.h"
+#include "column/global_dict/dict_column.h"
+#include "column/global_dict/miscs.h"
+#include "column/global_dict/types.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/statusor.h"
+#include "compute_env/global_dict/dict_mapping_rewrite.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exprs/dictmapping_expr_interface.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -30,15 +36,8 @@
 #include "exprs/placeholder_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/global_dict/config.h"
-#include "runtime/global_dict/dict_column.h"
-#include "runtime/global_dict/dict_mapping_rewrite.h"
-#include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/global_dict/miscs.h"
-#include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -526,8 +525,7 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
 
     for (auto& slot_desc : *slot_descs) {
         if (global_dict.count(slot_desc->id()) && slot_desc->type().type == LowCardDictType) {
-            SlotDescriptor* newSlot =
-                    RuntimeStateHelper::global_obj_pool(runtime_state)->add(new SlotDescriptor(*slot_desc));
+            SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*slot_desc));
             newSlot->type().type = TYPE_VARCHAR;
             slot_desc = newSlot;
         }

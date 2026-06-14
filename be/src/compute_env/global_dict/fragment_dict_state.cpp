@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 
 #include <cstring>
 #include <memory>
 
-#include "runtime/global_dict/parser.h"
+#include "compute_env/global_dict/parser.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 
