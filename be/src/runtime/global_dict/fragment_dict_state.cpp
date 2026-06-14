@@ -15,21 +15,31 @@
 #include "runtime/global_dict/fragment_dict_state.h"
 
 #include <cstring>
+#include <memory>
 
+#include "runtime/global_dict/parser.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 
+FragmentDictState::FragmentDictState() : _dict_optimize_parser(std::make_unique<DictOptimizeParser>()) {}
+
+FragmentDictState::~FragmentDictState() = default;
+
+DictOptimizeParser* FragmentDictState::mutable_dict_optimize_parser() {
+    return _dict_optimize_parser.get();
+}
+
 Status FragmentDictState::init_query_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list) {
     RETURN_IF_ERROR(
             _build_global_dict(runtime_state->instance_mem_pool(), global_dict_list, &_query_global_dicts, nullptr));
-    _dict_optimize_parser.set_mutable_dict_maps(&_query_global_dicts);
+    _dict_optimize_parser->set_mutable_dict_maps(&_query_global_dicts);
     return Status::OK();
 }
 
 Status FragmentDictState::init_query_global_dict_exprs(RuntimeState* runtime_state, const std::map<int, TExpr>& exprs) {
-    return _dict_optimize_parser.init_dict_exprs(runtime_state, exprs);
+    return _dict_optimize_parser->init_dict_exprs(runtime_state, exprs);
 }
 
 Status FragmentDictState::init_load_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list) {
@@ -38,7 +48,7 @@ Status FragmentDictState::init_load_global_dict(RuntimeState* runtime_state, con
 }
 
 void FragmentDictState::close(RuntimeState* runtime_state) noexcept {
-    _dict_optimize_parser.close(runtime_state);
+    _dict_optimize_parser->close(runtime_state);
 }
 
 Status FragmentDictState::_build_global_dict(MemPool* mem_pool, const GlobalDictLists& global_dict_list,

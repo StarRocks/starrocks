@@ -34,7 +34,6 @@ class ExprContext;
 class Expr;
 class TExpr;
 class SlotDescriptor;
-class DictMappingExpr;
 
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;

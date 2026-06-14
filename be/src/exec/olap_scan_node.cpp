@@ -54,6 +54,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/global_dict/parser.h"
 #include "storage/chunk_helper.h"
 #include "storage/primitive/storage_ids.h"
 #include "storage/primitive/storage_version.h"

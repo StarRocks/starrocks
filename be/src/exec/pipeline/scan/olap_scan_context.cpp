@@ -22,6 +22,7 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state_helper.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_pass.h"

@@ -17,6 +17,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exprs/expr_executor.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 

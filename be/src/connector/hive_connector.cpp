@@ -41,6 +41,7 @@
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
