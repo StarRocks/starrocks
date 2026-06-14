@@ -317,11 +317,24 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     // Fill data for subfield column reader
     size_t real_read = 0;
     bool first_read = true;
+    // ── DEBUG ──
+    LOG(INFO) << "[DEBUG] StructColumnReader::read_range parquet_field=" << get_column_parquet_field()->name
+              << " num_fields=" << field_names.size()
+              << " dst_is_nullable=" << dst->is_nullable();
+    // ── END DEBUG ──
     for (size_t i = 0; i < field_names.size(); i++) {
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] != nullptr) {
                 ASSIGN_OR_RETURN(auto& child_column, struct_column->field_column(field_name));
+                // ── DEBUG ──
+                const Column* child_data_col = ColumnHelper::get_data_column(child_column.get());
+                LOG(INFO) << "[DEBUG]   subfield[" << i << "] name=" << field_name
+                          << " col_type=" << child_column->get_name()
+                          << " is_binary=" << child_column->is_binary()
+                          << " data_type=" << child_data_col->get_name()
+                          << " data_is_binary=" << child_data_col->is_binary();
+                // ── END DEBUG ──
                 RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                 real_read = child_column->size();
                 first_read = false;

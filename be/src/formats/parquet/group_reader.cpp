@@ -247,6 +247,30 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         //     column. Only reached columns are physically read; unreached
         //     branches' columns stay unread and are skipped in
         //     read_lazy_columns() (is_output_column() == false → skip).
+        // ── DEBUG ──
+        {
+            LOG(INFO) << "[DEBUG] Step 2b pre-eval: rows=" << active_chunk->num_rows()
+                      << " cols=" << active_chunk->num_columns()
+                      << " scanner_ctxs_count=" << _param.scanner_ctx->conjuncts.scanner_ctxs.size()
+                      << " conjunct_ctxs_by_slot_count="
+                      << _param.scanner_ctx->conjunct_ctxs_by_slot.size();
+            const auto& slot_map = active_chunk->get_slot_id_to_index_map();
+            for (const auto& [sid, idx] : slot_map) {
+                auto col = active_chunk->get_column_by_slot_id(sid);
+                LOG(INFO) << "[DEBUG]   slot_id=" << sid << " idx=" << idx
+                          << " col_size=" << (col ? col->size() : 0);
+            }
+            if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+                LOG(INFO) << "[DEBUG] scanner_ctxs: "
+                          << Expr::debug_string(_param.scanner_ctx->conjuncts.scanner_ctxs);
+            }
+            // Also print conjunct_ctxs_by_slot keys
+            LOG(INFO) << "[DEBUG] conjunct_ctxs_by_slot slot_ids:";
+            for (const auto& [sid, ctxs] : _param.scanner_ctx->conjunct_ctxs_by_slot) {
+                LOG(INFO) << "[DEBUG]   slot_id=" << sid << " ctx_count=" << ctxs.size();
+            }
+        }
+        // ── END DEBUG ──
         if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
             ASSIGN_OR_RETURN(size_t compound_hit,
                              ChunkPredicateEvaluator::eval_conjuncts_into_filter(
