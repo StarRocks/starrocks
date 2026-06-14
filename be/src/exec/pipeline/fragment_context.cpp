@@ -28,6 +28,7 @@
 #include "common/thread/threadpool.h"
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/profile_report_worker.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
@@ -45,7 +46,6 @@
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_attachment.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/logconfig.h"
 #include "runtime/runtime_state_helper.h"
 

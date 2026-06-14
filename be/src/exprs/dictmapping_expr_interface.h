@@ -14,15 +14,24 @@
 
 #pragma once
 
-#include <cstdint>
-#include <memory>
-#include <utility>
+#include <functional>
 
-#include "column/vectorized_fwd.h"
-#include "runtime/global_dict/types.h"
+#include "common/global_types.h"
+#include "common/statusor.h"
 
 namespace starrocks {
 
-std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
+class Expr;
+
+class DictMappingExprInterface {
+public:
+    virtual ~DictMappingExprInterface() = default;
+
+    virtual SlotId dict_mapping_slot_id() const = 0;
+    virtual Expr* dict_mapping_origin_expr() const = 0;
+    virtual Status rewrite_dict_mapping_expr(const std::function<StatusOr<Expr*>()>& rewriter) = 0;
+    virtual void set_dict_mapping_output_id(SlotId id) = 0;
+    virtual void disable_dict_mapping_open_rewrite() = 0;
+};
 
 } // namespace starrocks

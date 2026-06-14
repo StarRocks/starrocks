@@ -15,16 +15,17 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <vector>
 
+#include "column/global_dict/types.h"
 #include "common/status.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/global_dict/parser.h"
-#include "runtime/global_dict/types.h"
 
 namespace starrocks {
 
+class DictOptimizeParser;
 class MemPool;
 class RuntimeState;
 
@@ -32,13 +33,16 @@ class FragmentDictState {
 public:
     using GlobalDictLists = std::vector<TGlobalDict>;
 
+    FragmentDictState();
+    ~FragmentDictState();
+
     const GlobalDictMaps& query_global_dicts() const { return _query_global_dicts; }
     GlobalDictMaps* mutable_query_global_dicts() { return &_query_global_dicts; }
 
     const GlobalDictMaps& load_global_dicts() const { return _load_global_dicts; }
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() const { return _load_dict_versions; }
 
-    DictOptimizeParser* mutable_dict_optimize_parser() { return &_dict_optimize_parser; }
+    DictOptimizeParser* mutable_dict_optimize_parser();
 
     Status init_query_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list);
     Status init_query_global_dict_exprs(RuntimeState* runtime_state, const std::map<int, TExpr>& exprs);
@@ -53,7 +57,7 @@ private:
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
-    DictOptimizeParser _dict_optimize_parser;
+    std::unique_ptr<DictOptimizeParser> _dict_optimize_parser;
 };
 
 } // namespace starrocks

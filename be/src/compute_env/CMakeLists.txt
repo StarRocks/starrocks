@@ -69,6 +69,11 @@ set(COMPUTE_ENV_QUERY_CACHE_FILES
     query_cache/lane_arbiter.cpp
 )
 
+set(COMPUTE_ENV_GLOBAL_DICT_FILES
+    global_dict/fragment_dict_state.cpp
+    global_dict/parser.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -86,6 +91,7 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_WORKGROUP_FILES}
     ${COMPUTE_ENV_SPILL_FILES}
     ${COMPUTE_ENV_QUERY_CACHE_FILES}
+    ${COMPUTE_ENV_GLOBAL_DICT_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC

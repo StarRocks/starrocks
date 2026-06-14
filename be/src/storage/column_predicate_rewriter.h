@@ -16,9 +16,9 @@
 
 #include <cstdint>
 
+#include "column/global_dict/types.h"
 #include "column/schema.h"
 #include "common/object_pool.h"
-#include "runtime/global_dict/types.h"
 #include "storage/column_predicate.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/olap_common.h"

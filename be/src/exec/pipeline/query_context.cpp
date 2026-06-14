@@ -129,7 +129,7 @@ void QueryContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
     auto lifetime = weak_from_this();
     DCHECK(!lifetime.expired());
-    state->set_query_ctx(this, &query_runtime_state());
+    state->set_query_ctx(this, &query_runtime_state(), object_pool());
     state->set_query_ctx_lifetime(std::move(lifetime));
 }
 
