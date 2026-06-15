@@ -20,7 +20,6 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_scan_io_fwd.h"
-#include "compute_env/compute_env.h"
 #include "compute_env/query/connector_scan_mem_share_arbitrator.h"
 #include "compute_env/query/global_late_materialization_context.h"
 #include "compute_env/spill/query_spill_manager.h"
@@ -29,11 +28,12 @@
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 
@@ -91,8 +91,8 @@ QueryContext::~QueryContext() noexcept {
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
     if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
-        if (_is_runtime_filter_coordinator) {
-            services->runtime_filter_worker->close_query(query_id());
+        if (_is_runtime_filter_coordinator && services->runtime_filter_query_lifecycle != nullptr) {
+            services->runtime_filter_query_lifecycle->close_query(query_id());
         }
         services->runtime_filter_cache->remove(query_id());
     }
@@ -220,14 +220,11 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
         auto* services = runtime_services(_query_execution_services);
-        auto* compute_env = ExecEnv::GetInstance()->compute_env();
         auto* g_spill_manager = services != nullptr ? services->global_spill_manager : nullptr;
-        if (g_spill_manager == nullptr && compute_env != nullptr) {
-            g_spill_manager = compute_env->global_spill_manager();
-        }
         auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : nullptr;
-        if (spill_dir_mgr == nullptr && compute_env != nullptr) {
-            spill_dir_mgr = compute_env->spill_dir_mgr();
+        if (g_spill_manager == nullptr || spill_dir_mgr == nullptr) {
+            st = Status::InternalError("Query spill services are not initialized");
+            return;
         }
         _spill_manager = std::make_unique<spill::QuerySpillManager>(query_id(), g_spill_manager, spill_dir_mgr);
         _query_runtime_state.set_query_spill_manager(_spill_manager.get());
