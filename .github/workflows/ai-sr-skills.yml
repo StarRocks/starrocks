@@ -10,13 +10,8 @@ on:
       - synchronize          # re-brief on every push so the comment tracks the live diff
       - ready_for_review     # brief when a draft is marked ready
 
-concurrency:
-  group: AI-SR-SKILLS-${{ github.event.number }}
-  cancel-in-progress: true
-
 permissions:
   pull-requests: write
-  issues: write          # the upsert step posts/edits via the Issues comments API (gh pr comment / /issues/{n}/comments)
 
 jobs:
   assign-reviewer:
@@ -246,6 +241,18 @@ jobs:
   # For an external PR a maintainer can still run /github-pr-module-risk:review manually.
   module-risk:
     runs-on: [self-hosted, normal]
+    # Dedup rapid pushes for THIS job only (a new event cancels the in-flight briefing run).
+    # Job-scoped — NOT workflow-wide — so a synchronize run never cancels the opened-only
+    # assign-reviewer job (which would otherwise miss reviewer assignment + Slack).
+    concurrency:
+      group: ai-sr-skills-module-risk-${{ github.event.number }}
+      cancel-in-progress: true
+    # Least privilege: only this job posts the sticky comment (Issues comments API), so issues:write
+    # lives here, not workflow-wide where it would also reach assign-reviewer's GITHUB_TOKEN.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
     continue-on-error: true
     if: >
       (github.event.action == 'opened' || github.event.action == 'reopened' ||
