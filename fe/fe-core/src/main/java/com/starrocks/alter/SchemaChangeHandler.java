@@ -71,6 +71,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.AutoHeavySchemaChangeForbiddenException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -2401,6 +2402,14 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         if (!fastSchemaEvolution) {
+            // This change needs a full table rewrite. An automatic driver (Avro routine-load schema
+            // evolution) can ask to be refused here rather than silently launching the heavy AlterJobV2;
+            // it then reports the skipped change. A user-issued ALTER never sets this flag.
+            ConnectContext ctx = ConnectContext.get();
+            if (ctx != null && ctx.isForbidAutoHeavySchemaChange()) {
+                throw new AutoHeavySchemaChangeForbiddenException("schema change on table '" + olapTable.getName()
+                        + "' requires a full table rewrite");
+            }
             return createJob(schemaChangeData);
         } else if (RunMode.isSharedNothingMode() ||
                 (olapTable instanceof LakeTable && ((LakeTable) olapTable).isFastSchemaEvolutionV2()) ||

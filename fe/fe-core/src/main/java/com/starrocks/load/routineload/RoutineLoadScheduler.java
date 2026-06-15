@@ -133,6 +133,28 @@ public class RoutineLoadScheduler extends LeaderDaemon {
 
         // check timeout tasks
         routineLoadManager.processTimeoutTasks();
+
+        // apply any pending Avro schema evolutions detected by routine-load tasks
+        processPendingSchemaChanges();
+    }
+
+    // Apply pending Avro schema evolutions: a job whose task reported an uncovered writer schema holds a
+    // marker (set on the txn thread in RoutineLoadJob.afterAborted). Here, off that thread and holding no job
+    // lock, each such job ALTERs its table and then resumes or pauses. Runs RUNNING jobs only; the marker is
+    // transient runtime state.
+    private void processPendingSchemaChanges() {
+        List<RoutineLoadJob> jobs = routineLoadManager.getRoutineLoadJobByState(
+                Sets.newHashSet(RoutineLoadJob.JobState.RUNNING));
+        for (RoutineLoadJob job : jobs) {
+            if (!job.hasPendingSchemaChange()) {
+                continue;
+            }
+            try {
+                job.tryEvolveSchema();
+            } catch (Exception e) {
+                LOG.warn("failed to evolve Avro schema for routine load job {}", job.getId(), e);
+            }
+        }
     }
 
     private List<RoutineLoadJob> getNeedScheduleRoutineJobs() {

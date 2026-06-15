@@ -908,6 +908,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to collect Routine Load Kafka partition offset lag metrics. Please note that set this item to `true` will call the Kafka API to get the partition's latest offset.
 - Introduced in: -
 
+### `enable_routine_load_native_avro_reader`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: The default Avro reader for Routine Load jobs that do not set the `avro.use_native_reader` property. When `true`, such jobs use the native (avrocpp) reader, which loads Avro `record`/`map` fields as `STRUCT`/`MAP` columns and interprets Avro logical types (`date` → DATE, `timestamp` → DATETIME, `decimal` → DECIMAL); when `false`, the legacy reader is used. The reader choice is resolved when a job is created, so changing this item only affects newly created jobs, not existing ones.
+- Introduced in: -
+
 ### `enable_sync_publish`
 
 - Default: true

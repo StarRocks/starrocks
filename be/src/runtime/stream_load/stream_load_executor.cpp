@@ -97,6 +97,15 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());
                 ctx->fail_infos = std::move(executor->runtime_state()->tablet_fail_infos());
                 Status status = executor->status();
+                // Avro schema evolution drives a failed task (the scanner returns an error), so copy
+                // the detected schema out before the status branch below — the rollback attachment
+                // carries it to FE.
+                if (executor->runtime_state()->has_avro_schema_change()) {
+                    ctx->schema_change_needed = true;
+                    ctx->detected_schema_id = executor->runtime_state()->avro_schema_change_id();
+                    ctx->detected_schema_columns = executor->runtime_state()->avro_schema_columns();
+                    ctx->detected_widen_columns = executor->runtime_state()->avro_widen_columns();
+                }
                 if (status.ok()) {
                     ctx->number_total_rows = executor->runtime_state()->num_rows_load_sink() +
                                              executor->runtime_state()->num_rows_load_filtered() +
@@ -469,6 +478,16 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
         if (!ctx->status.ok() && is_non_retryable_load_error(ctx->status.message())) {
             rl_attach.__set_nonRetryable(true);
+        }
+        if (ctx->schema_change_needed) {
+            rl_attach.__set_schemaChangeNeeded(true);
+            rl_attach.__set_detectedSchemaId(ctx->detected_schema_id);
+            if (!ctx->detected_schema_columns.empty()) {
+                rl_attach.__set_detectedSchemaColumns(ctx->detected_schema_columns);
+            }
+            if (!ctx->detected_widen_columns.empty()) {
+                rl_attach.__set_detectedWidenColumns(ctx->detected_widen_columns);
+            }
         }
 
         attach->rlTaskTxnCommitAttachment = rl_attach;

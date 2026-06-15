@@ -399,6 +399,11 @@ struct TQueryOptions {
   // hardcoded "stream-load-pipe" filename. Optional and unused for
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
+
+  // Avro routine load only: when true, the Avro scanner detects message fields that have no
+  // matching table column and fails the task with the new-column list so FE can ALTER and retry.
+  // Threaded from TRoutineLoadTask.enable_schema_evolution by the routine load task executor.
+  219: optional bool enable_avro_schema_evolution = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

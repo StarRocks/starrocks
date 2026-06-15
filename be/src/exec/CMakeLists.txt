@@ -377,12 +377,16 @@ set(EXEC_NON_PIPELINE_FILES
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
     file_scanner/avro_cpp_scanner.cpp
+    file_scanner/avro_datum_path.cpp
     file_scanner/avro_scanner.cpp
+    file_scanner/avro_stream_scanner.cpp
+    file_scanner/confluent_avro_decoder.cpp
     file_scanner/csv_scanner.cpp
     file_scanner/file_scanner.cpp
     file_scanner/json_scanner.cpp
     file_scanner/orc_scanner.cpp
     file_scanner/parquet_scanner.cpp
+    file_scanner/stream_source_meta.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp

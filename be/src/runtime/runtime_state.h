@@ -52,6 +52,7 @@
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/logging.h"
+#include "gen_cpp/Descriptors_types.h"     // for TColumn
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/arena_allocator.h"
@@ -561,6 +562,31 @@ public:
         _sink_commit_infos.emplace_back(sink_commit_info);
     }
 
+    // Avro routine-load schema evolution: set once by the Avro scanner when it reads a message whose
+    // schema is not yet covered by the table. Carries the full writer schema (every top-level field with
+    // its type), not a diff — the FE diffs it and decides the DDL. Read by the load task after the
+    // fragment finishes, to drive ALTER + retry. Single writer (one scan instance), read after the
+    // fragment completes, so no lock is needed.
+    void set_avro_schema_change(int32_t schema_id, std::vector<TColumn> schema_columns) {
+        _avro_schema_change_id = schema_id;
+        _avro_schema_columns = std::move(schema_columns);
+    }
+
+    // A varchar/varbinary column whose width an avro value overran; the FE widens it (to the varchar max).
+    // Length is not part of the avro schema, so this is detected per value, not at the schema-id gate.
+    void add_avro_widen_column(int32_t schema_id, std::string column_name) {
+        _avro_schema_change_id = schema_id;
+        _avro_widen_columns.emplace_back(std::move(column_name));
+    }
+
+    bool has_avro_schema_change() const { return !_avro_schema_columns.empty() || !_avro_widen_columns.empty(); }
+
+    int32_t avro_schema_change_id() const { return _avro_schema_change_id; }
+
+    const std::vector<TColumn>& avro_schema_columns() const { return _avro_schema_columns; }
+
+    const std::vector<std::string>& avro_widen_columns() const { return _avro_widen_columns; }
+
     // get mem limit for load channel
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
@@ -790,6 +816,11 @@ private:
 
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
+
+    // Avro routine-load schema evolution; see set_avro_schema_change() / add_avro_widen_column().
+    int32_t _avro_schema_change_id = -1;
+    std::vector<TColumn> _avro_schema_columns;
+    std::vector<std::string> _avro_widen_columns;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
     RuntimeFilterRegistry* _runtime_filter_registry = nullptr;

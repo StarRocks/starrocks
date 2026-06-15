@@ -1117,6 +1117,17 @@ struct TRLTaskTxnCommitAttachment {
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
     // If true, the error is non-retryable and routine load job should be paused
     13: optional bool nonRetryable
+    // Avro schema evolution: set when the task was aborted because a message carried a schema the table
+    // does not yet cover. detectedSchemaColumns is the full writer schema (every top-level field as name +
+    // type_desc + is_allow_null), not a diff: the FE diffs it against the live table and decides the DDL
+    // (ADD COLUMN / ADD FIELD / MODIFY) or fails the job on a metadata-column collision, then resubmits the
+    // task from the same offset. detectedWidenColumns names varchar/varbinary columns an over-length value
+    // overran (length is not in the avro schema, so it is detected per value): the FE widens them to the
+    // varchar max. The two lists are independent; either may be set.
+    14: optional bool schemaChangeNeeded
+    15: optional i32 detectedSchemaId
+    16: optional list<Descriptors.TColumn> detectedSchemaColumns
+    17: optional list<string> detectedWidenColumns
 }
 
 struct TMiniLoadTxnCommitAttachment {
