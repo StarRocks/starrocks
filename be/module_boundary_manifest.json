@@ -353,6 +353,7 @@
       ],
       "allowed_test_targets": ["format_test"],
       "allowed_test_link_deps": [
+        "FormatJson",
         "FormatCsv",
         "FormatCore",
         "ExprCore",

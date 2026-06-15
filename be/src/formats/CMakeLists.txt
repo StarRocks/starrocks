@@ -60,13 +60,18 @@ ADD_BE_LIB(FormatCsv
 
 target_link_libraries(FormatCsv PUBLIC FormatCore)
 
-ADD_BE_LIB(Formats
+ADD_BE_LIB(FormatJson
         json/json_utils.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
         json/struct_column.cpp
         json/map_column.cpp
+        )
+
+target_link_libraries(FormatJson PUBLIC FormatCore)
+
+ADD_BE_LIB(Formats
         avro/nullable_column.cpp
         avro/numeric_column.cpp
         avro/binary_column.cpp
@@ -125,6 +130,6 @@ ADD_BE_LIB(Formats
         parquet/parquet_pos_reader.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatCsv FormatCore Cache)
+target_link_libraries(Formats PUBLIC FormatJson FormatCsv FormatCore Cache)
 
 add_subdirectory(orc/apache-orc)

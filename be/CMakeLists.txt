@@ -555,6 +555,7 @@ set(STARROCKS_LINK_LIBS
     orc
     ${WL_END_GROUP}
     FormatCsv
+    FormatJson
     FormatCore
     ExecRuntime
     ComputeEnv
