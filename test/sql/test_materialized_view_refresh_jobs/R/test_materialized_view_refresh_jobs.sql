@@ -45,7 +45,7 @@ function: assert_query_contains("SELECT TABLE_SCHEMA FROM information_schema.mat
 -- result:
 None
 -- !result
-function: assert_query_contains("SELECT (IMV_SOURCE_VERSION_RANGE='{}' AND IMV_SOURCE_TIMESTAMP_RANGE='{}' AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP='{}') FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "1")
+function: assert_query_contains("SELECT (IMV_SOURCE_VERSION_RANGE IS NULL AND IMV_SOURCE_TIMESTAMP_RANGE IS NULL AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP IS NULL) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "1")
 -- result:
 None
 -- !result

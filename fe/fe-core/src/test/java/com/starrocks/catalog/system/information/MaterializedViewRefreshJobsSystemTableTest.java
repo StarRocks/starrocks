@@ -16,15 +16,20 @@ package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TListMaterializedViewRefreshJobsResult;
@@ -107,10 +112,10 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         Assertions.assertEquals("job1", job.getJob_id());
         Assertions.assertEquals("100", job.getMaterialized_view_id());
         Assertions.assertEquals("db1", job.getTable_schema());
-        // Empty extra-message maps serialize to "{}" rather than null.
-        Assertions.assertEquals("{}", job.getImv_source_version_range());
-        Assertions.assertEquals("{}", job.getImv_source_timestamp_range());
-        Assertions.assertEquals("{}", job.getImv_source_pinned_snapshot_id_map());
+        // A non-IMV job consumed no source ranges and pinned no snapshots: these columns are NULL, not "{}".
+        Assertions.assertNull(job.getImv_source_version_range());
+        Assertions.assertNull(job.getImv_source_timestamp_range());
+        Assertions.assertNull(job.getImv_source_pinned_snapshot_id_map());
     }
 
     @Test
@@ -179,6 +184,78 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         Assertions.assertNull(job.getResource_group());
         Assertions.assertNull(job.getRefresh_mode());
         Assertions.assertEquals("UNKNOWN", job.getRefresh_trigger());
+    }
+
+    @Test
+    public void testManualRunReportsManualTrigger(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked TaskManager taskManager) throws TException {
+        // REFRESH_TRIGGER is per-job: a manually-submitted run reports MANUAL from its ExecuteOption.isManual,
+        // independent of the MV's configured scheme (here the MV is absent, which would otherwise be UNKNOWN).
+        TaskRunStatus run = newRun("job-manual", "run-manual", "SUCCESS", Constants.TaskRunState.SUCCESS, 1000L);
+        ExecuteOption manualOption = new ExecuteOption(0, false, new HashMap<>());
+        manualOption.setManual(true);
+        run.getMvTaskRunExtraMessage().setExecuteOption(manualOption);
+
+        mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(run));
+        mockAuthorizerPass();
+
+        TListMaterializedViewRefreshJobsResult result =
+                MaterializedViewRefreshJobsSystemTable.query(new TGetTasksParams(), new ConnectContext());
+
+        Assertions.assertEquals(1, result.getJobs().size());
+        Assertions.assertEquals("MANUAL", result.getJobs().get(0).getRefresh_trigger());
+    }
+
+    @Test
+    public void testUnauthorizedMvIsFiltered(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked TaskManager taskManager,
+            @Mocked LocalMetastore localMetastore,
+            @Mocked Database database,
+            @Mocked MaterializedView mv) throws TException {
+        // A live MV is authorized per object (like information_schema.materialized_views): a caller lacking
+        // access to the MV must not see its job, else error/query-id/IMV details would leak.
+        TaskRunStatus run = newRun("job-unauth", "run-unauth", "SUCCESS", Constants.TaskRunState.SUCCESS, 1000L);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getTaskManager();
+                minTimes = 0;
+                result = taskManager;
+
+                taskManager.getMatchedTaskRunStatus((TGetTasksParams) any);
+                result = Lists.newArrayList(run);
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+
+                localMetastore.getDb("db1");
+                minTimes = 0;
+                result = database;
+
+                localMetastore.getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = mv;
+            }
+        };
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnTableLikeObject(ConnectContext context, String dbName, BasicTable table)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException("denied");
+            }
+        };
+
+        TListMaterializedViewRefreshJobsResult result =
+                MaterializedViewRefreshJobsSystemTable.query(new TGetTasksParams(), new ConnectContext());
+
+        Assertions.assertTrue(result.getJobs().isEmpty());
     }
 
     @Test

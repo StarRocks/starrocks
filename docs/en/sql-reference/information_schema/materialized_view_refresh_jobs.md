@@ -27,12 +27,12 @@ The following fields are provided in `materialized_view_refresh_jobs`:
 | REFRESH_STATE                      | State of the job, rolled up from the last task run. Valid values: `PENDING`, `RUNNING`, `FAILED`, `SUCCESS`, and `SKIPPED`. |
 | FINISH_TIME                        | Time when the job finished. `NULL` if the job has not finished. |
 | DURATION_TIME                      | Wall-clock duration of the job, in seconds (the last task run's finish time minus the first task run's process-start time). `NULL` if the job has not finished. |
-| REFRESH_TRIGGER                    | How the refresh is triggered, derived from the materialized view's refresh scheme. Valid values: `MANUAL`, `SCHEDULED`, `ON_BASE_TABLE_CHANGE`, and `NONE`. `UNKNOWN` if the materialized view has been dropped. |
+| REFRESH_TRIGGER                    | How this job was triggered. `MANUAL` for a manually-issued `REFRESH MATERIALIZED VIEW` (even when the materialized view's scheme is scheduled or automatic); otherwise the materialized view's configured scheme. Valid values: `MANUAL`, `SCHEDULED`, `ON_BASE_TABLE_CHANGE`, and `NONE`. `UNKNOWN` if the materialized view has been dropped and the job was not manual. |
 | REFRESH_MODE                       | The materialized view's configured refresh mode. Valid values: `AUTO`, `PCT`, and `INCREMENTAL`. `NULL` if the materialized view has been dropped. |
-| IMV_SOURCE_VERSION_RANGE           | JSON of the source version ranges consumed by an incremental refresh. Returns `{}` when not applicable. |
-| IMV_SOURCE_TIMESTAMP_RANGE         | JSON of the source timestamp ranges consumed by an incremental refresh. Returns `{}` when not applicable. |
-| IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP  | JSON of pinned source snapshot IDs for an incremental refresh. Returns `{}` when not applicable. |
-| FAILED_TASK_RUN_ID                 | Task-run ID of the failed run within the job. `NULL` if no run failed. |
+| IMV_SOURCE_VERSION_RANGE           | JSON of the source version ranges consumed by an incremental refresh. Returns `NULL` for a non-incremental (PCT) refresh or when no source ranges were consumed. |
+| IMV_SOURCE_TIMESTAMP_RANGE         | JSON of the source timestamp ranges consumed by an incremental refresh. Returns `NULL` for a non-incremental (PCT) refresh or when no source ranges were consumed. |
+| IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP  | JSON of pinned source snapshot IDs. Its JSON key is the connector table identifier (for Iceberg, `<table>:<uuid>`), which differs from the `<catalog>.<db>.<table>` key used by IMV_SOURCE_VERSION_RANGE and IMV_SOURCE_TIMESTAMP_RANGE. Populated on the baseline/PCT-path refresh; returns `NULL` on a pure incremental run or when no snapshot was pinned. |
+| FAILED_TASK_RUN_ID                 | Task-run ID of the failed run within the job. `NULL` if no run failed. To drill down into `task_runs`, join on `FAILED_QUERY_ID = task_runs.QUERY_ID` (or on `JOB_ID`); `task_runs` does not expose a task-run-id column. |
 | FAILED_QUERY_ID                    | Query ID of the failed run. `NULL` if no run failed.         |
 | ERROR_CODE                         | Error code of the failed run. `NULL` if no run failed.       |
 | ERROR_MESSAGE                      | Error message of the failed run. `NULL` if no run failed.    |

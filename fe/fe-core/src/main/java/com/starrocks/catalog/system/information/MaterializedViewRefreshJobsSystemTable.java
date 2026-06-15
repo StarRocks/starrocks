@@ -142,14 +142,20 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 continue;
             }
             String dbName = anyRun.getDbName();
+            MaterializedView mv = mvCache.computeIfAbsent(mvId, id -> lookupMv(dbName, id));
 
+            // Authorize per MV (like information_schema.materialized_views) so a job's details aren't leaked to a
+            // user lacking access to that MV; a dropped MV has no object to check, so fall back to a db-level check.
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+                if (mv != null) {
+                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, mv);
+                } else {
+                    Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+                }
             } catch (AccessDeniedException e) {
                 continue;
             }
 
-            MaterializedView mv = mvCache.computeIfAbsent(mvId, id -> lookupMv(dbName, id));
             RefreshJobStatus rjs = ShowMaterializedViewStatus.fromTaskRuns(batch);
 
             TMaterializedViewRefreshJobInfo info = new TMaterializedViewRefreshJobInfo();
@@ -174,7 +180,7 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 info.setSubmit_time(TimeUtils.longToTimeString(rjs.getMvRefreshStartTime()));
             }
             info.setRefresh_state(String.valueOf(rjs.getRefreshState()));
-            info.setRefresh_trigger(mv == null ? "UNKNOWN" : mv.getRefreshTriggerString());
+            info.setRefresh_trigger(resolveRefreshTrigger(anyRun, mv));
 
             if (rjs.isRefreshFinished()) {
                 info.setFinish_time(TimeUtils.longToTimeString(rjs.getMvRefreshEndTime()));
@@ -185,9 +191,19 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 info.setDuration_time(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(wallMs / 1000D));
             }
 
-            info.setImv_source_version_range(mergeRangeToJson(batch, MVTaskRunExtraMessage::getImvSourceVersionRange));
-            info.setImv_source_timestamp_range(mergeRangeToJson(batch, MVTaskRunExtraMessage::getImvSourceTimestampRange));
-            info.setImv_source_pinned_snapshot_id_map(mergeToJson(batch, MVTaskRunExtraMessage::getPinnedSnapshotIdMap));
+            // IMV columns stay NULL (not "{}") when the job consumed no source ranges / pinned no snapshots.
+            String versionRange = mergeRangeToJson(batch, MVTaskRunExtraMessage::getImvSourceVersionRange);
+            if (versionRange != null) {
+                info.setImv_source_version_range(versionRange);
+            }
+            String timestampRange = mergeRangeToJson(batch, MVTaskRunExtraMessage::getImvSourceTimestampRange);
+            if (timestampRange != null) {
+                info.setImv_source_timestamp_range(timestampRange);
+            }
+            String pinnedSnapshotIdMap = mergeToJson(batch, MVTaskRunExtraMessage::getPinnedSnapshotIdMap);
+            if (pinnedSnapshotIdMap != null) {
+                info.setImv_source_pinned_snapshot_id_map(pinnedSnapshotIdMap);
+            }
 
             TaskRunStatus failed = batch.stream()
                     .filter(run -> run.getState() == Constants.TaskRunState.FAILED)
@@ -203,6 +219,16 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
             jobs.add(info);
         }
         return result;
+    }
+
+    // Per-job trigger source: a run records only manual-vs-auto (ExecuteOption.isManual), so a manual refresh
+    // of a scheduled MV reports MANUAL for that job; auto runs fall back to the MV's configured scheme.
+    private static String resolveRefreshTrigger(TaskRunStatus firstRun, MaterializedView mv) {
+        MVTaskRunExtraMessage extra = firstRun.getMvTaskRunExtraMessage();
+        if (extra != null && extra.getExecuteOption() != null && extra.getExecuteOption().isManual()) {
+            return "MANUAL";
+        }
+        return mv == null ? "UNKNOWN" : mv.getRefreshTriggerString();
     }
 
     private static MaterializedView lookupMv(String dbName, long mvId) {
@@ -229,7 +255,7 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 merged.putAll(part);
             }
         }
-        return GsonUtils.GSON.toJson(merged);
+        return merged.isEmpty() ? null : GsonUtils.GSON.toJson(merged);
     }
 
     // Merges per-base-table {start,end} version/timestamp ranges across the job's runs. Each run records
@@ -261,6 +287,8 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 }
             }
         }
-        return GsonUtils.GSON.toJson(merged);
+        // Drop base tables that contributed no start/end so an all-empty result is NULL, not {"tbl":{}}.
+        merged.values().removeIf(Map::isEmpty);
+        return merged.isEmpty() ? null : GsonUtils.GSON.toJson(merged);
     }
 }

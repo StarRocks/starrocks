@@ -23,7 +23,7 @@ function: assert_query_contains("SELECT REFRESH_TRIGGER FROM information_schema.
 function: assert_query_contains("SELECT REFRESH_MODE FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "PCT")
 function: assert_query_contains("SELECT RESOURCE_GROUP FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "default_mv_wg")
 function: assert_query_contains("SELECT TABLE_SCHEMA FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "db_${uuid0}")
-function: assert_query_contains("SELECT (IMV_SOURCE_VERSION_RANGE='{}' AND IMV_SOURCE_TIMESTAMP_RANGE='{}' AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP='{}') FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "1")
+function: assert_query_contains("SELECT (IMV_SOURCE_VERSION_RANGE IS NULL AND IMV_SOURCE_TIMESTAMP_RANGE IS NULL AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP IS NULL) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "1")
 
 -- All failure/error columns are NULL for a successful job.
 function: assert_query_contains("SELECT ifnull(ERROR_CODE, 'NULL'), ifnull(ERROR_MESSAGE, 'NULL'), ifnull(FAILED_TASK_RUN_ID, 'NULL'), ifnull(FAILED_QUERY_ID, 'NULL') FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "NULL")
