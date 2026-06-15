@@ -671,12 +671,14 @@ public class InsertFromTablePreSplitHookTest {
     private static void invokeRunSinglePartitionFlow(
             Database database, OlapTable table, OlapTable sourceTable, String sourceFromSql,
             String wherePredicateSql, InsertSelectSourceColumns mapping, ConnectContext context) throws Exception {
+        InsertFromTableScanContext scanContext = scanContextOf(sourceTable, sourceFromSql, wherePredicateSql, mapping,
+                context);
         Method method = InsertFromTablePreSplitHook.class.getDeclaredMethod(
                 "runSinglePartitionFlow", Database.class, OlapTable.class, OlapTable.class,
-                String.class, String.class, InsertSelectSourceColumns.class, ConnectContext.class);
+                InsertFromTableScanContext.class, ConnectContext.class);
         method.setAccessible(true);
         try {
-            method.invoke(null, database, table, sourceTable, sourceFromSql, wherePredicateSql, mapping, context);
+            method.invoke(null, database, table, sourceTable, scanContext, context);
         } catch (InvocationTargetException invocationFailure) {
             Throwable cause = invocationFailure.getCause();
             throw cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
@@ -687,18 +689,38 @@ public class InsertFromTablePreSplitHookTest {
             Database database, OlapTable table, OlapTable sourceTable, String sourceFromSql,
             String wherePredicateSql, InsertSelectSourceColumns mapping,
             List<Column> sortKeyColumns, List<Column> partitionColumns, ConnectContext context) throws Exception {
+        InsertFromTableScanContext scanContext = scanContextOf(sourceTable, sourceFromSql, wherePredicateSql, mapping,
+                context);
         Method method = InsertFromTablePreSplitHook.class.getDeclaredMethod(
                 "runMultiPartitionFlow", Database.class, OlapTable.class, OlapTable.class,
-                String.class, String.class, InsertSelectSourceColumns.class,
-                List.class, List.class, ConnectContext.class);
+                InsertFromTableScanContext.class, List.class, List.class, ConnectContext.class);
         method.setAccessible(true);
         try {
-            method.invoke(null, database, table, sourceTable, sourceFromSql, wherePredicateSql,
-                    mapping, sortKeyColumns, partitionColumns, context);
+            method.invoke(null, database, table, sourceTable, scanContext,
+                    sortKeyColumns, partitionColumns, context);
         } catch (InvocationTargetException invocationFailure) {
             Throwable cause = invocationFailure.getCause();
             throw cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
         }
+    }
+
+    /**
+     * Builds the shared scan context the way {@code tryRunPreSplit} does before
+     * the partition branch, so the reflection drivers can exercise the flow
+     * methods against their post-cleanup signatures. Falls back to a fresh
+     * compute-resource mock when the context does not stub one (the scan-context
+     * record requires a non-null compute resource).
+     */
+    private static InsertFromTableScanContext scanContextOf(
+            OlapTable sourceTable, String sourceFromSql, String wherePredicateSql,
+            InsertSelectSourceColumns mapping, ConnectContext context) {
+        ComputeResource computeResource = context.getCurrentComputeResource();
+        if (computeResource == null) {
+            computeResource = mock(ComputeResource.class);
+        }
+        return new InsertFromTableScanContext(
+                sourceTable, sourceFromSql, mapping.sortKeySourceColumnNames(),
+                mapping.partitionSourceColumnNames(), wherePredicateSql, computeResource);
     }
 
     // ---------- Shared fixtures ----------

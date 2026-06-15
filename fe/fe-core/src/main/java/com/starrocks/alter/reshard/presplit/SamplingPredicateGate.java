@@ -57,65 +57,44 @@ final class SamplingPredicateGate {
             return true;
         }
 
-        // Reject non-deterministic and information functions.
-        // Use allNonDeterministicFunctions (covers time functions like now(), current_timestamp())
-        // plus INFORMATION_FUNCTIONS (database(), current_user(), etc. resolve from context).
-        // Note: some information functions (current_user, database) are parsed as InformationFunction
-        // nodes rather than FunctionCallExpr — both must be rejected.
-        List<FunctionCallExpr> functions = new ArrayList<>();
-        wherePredicate.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, functions);
-        for (FunctionCallExpr function : functions) {
-            String name = function.getFunctionName();
-            if (FunctionSet.allNonDeterministicFunctions.contains(name)
-                    || FunctionSet.INFORMATION_FUNCTIONS.contains(name)) {
-                return false;
-            }
-        }
-        List<InformationFunction> infoFunctions = new ArrayList<>();
-        wherePredicate.collectAll((Predicate<Expr>) e -> e instanceof InformationFunction, infoFunctions);
-        if (!infoFunctions.isEmpty()) {
-            return false;
-        }
-
-        // Session variables, user variables, and prepared-statement parameters resolve from the
-        // caller's ConnectContext; the ROOT sampling context evaluates them differently.
-        List<Expr> contextVariables = new ArrayList<>();
+        // One walk collects every node that resolves differently in the ROOT
+        // sampling context than in the user's INSERT context, or that the
+        // sampler cannot copy verbatim. The predicate rejects, in one pass:
+        //   - non-deterministic / information FunctionCallExpr (e.g. now(), database());
+        //     some information functions parse as InformationFunction nodes instead, so
+        //     both shapes are matched;
+        //   - session / user variables and prepared-statement parameters, which resolve
+        //     from the caller's ConnectContext;
+        //   - any subquery shape (scalar, IN-subquery, EXISTS holds its Subquery as a child);
+        //   - IN predicates not backed by a constant value list;
+        //   - column references qualified with a table other than the source relation.
+        List<Expr> rejected = new ArrayList<>();
         wherePredicate.collectAll(
-                (Predicate<Expr>) e -> e instanceof VariableExpr || e instanceof UserVariableExpr
-                        || e instanceof Parameter,
-                contextVariables);
-        if (!contextVariables.isEmpty()) {
-            return false;
-        }
+                (Predicate<Expr>) e -> isUnsafe(e, normalizedSourceName, sourceAlias), rejected);
+        return rejected.isEmpty();
+    }
 
-        // Reject all subquery shapes (scalar, IN-subquery, EXISTS). EXISTS holds its Subquery as a
-        // child, so this single pass covers it too.
-        List<Subquery> subqueries = new ArrayList<>();
-        wherePredicate.collectAll((Predicate<Expr>) e -> e instanceof Subquery, subqueries);
-        if (!subqueries.isEmpty()) {
-            return false;
+    private static boolean isUnsafe(Expr expr, TableName normalizedSourceName, String sourceAlias) {
+        if (expr instanceof FunctionCallExpr function) {
+            String name = function.getFunctionName();
+            return FunctionSet.allNonDeterministicFunctions.contains(name)
+                    || FunctionSet.INFORMATION_FUNCTIONS.contains(name);
         }
-
-        // Reject IN predicates backed by a subquery; allow literal-list IN.
-        List<InPredicate> ins = new ArrayList<>();
-        wherePredicate.collectAll((Predicate<Expr>) e -> e instanceof InPredicate, ins);
-        for (InPredicate in : ins) {
-            if (!in.isConstantValues()) {
-                return false;
-            }
+        if (expr instanceof InformationFunction
+                || expr instanceof VariableExpr
+                || expr instanceof UserVariableExpr
+                || expr instanceof Parameter
+                || expr instanceof Subquery) {
+            return true;
         }
-
-        // Reject column references qualified with a table other than the source relation.
-        List<SlotRef> slots = new ArrayList<>();
-        wherePredicate.collectAll((Predicate<Expr>) e -> e instanceof SlotRef, slots);
-        for (SlotRef slot : slots) {
-            if (slot.getTblName() != null
-                    && !InsertSelectSourceColumns.matchesSource(slot.getTblName(), normalizedSourceName, sourceAlias)) {
-                return false;
-            }
+        if (expr instanceof InPredicate in) {
+            return !in.isConstantValues();
         }
-
-        return true;
+        if (expr instanceof SlotRef slot) {
+            return slot.getTblName() != null
+                    && !InsertSelectSourceColumns.matchesSource(slot.getTblName(), normalizedSourceName, sourceAlias);
+        }
+        return false;
     }
 
     /**

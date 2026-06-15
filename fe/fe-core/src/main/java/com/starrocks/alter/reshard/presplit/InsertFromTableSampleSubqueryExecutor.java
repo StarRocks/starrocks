@@ -16,10 +16,6 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.SqlUtils;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Data-tier {@link SampleSubqueryExecutor} for the INSERT-from-OLAP-table path.
@@ -39,7 +35,7 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
     private static final String ERROR_PREFIX = "INSERT-from-table data tier ";
 
     InsertFromTableSampleSubqueryExecutor() {
-        super(ERROR_PREFIX);
+        super(ERROR_PREFIX, "TabletPreSplitDataTierTableSubquery");
     }
 
     @VisibleForTesting
@@ -64,13 +60,5 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
                 identsOf(context.partitionSourceColumnNames()),
                 request.getSortKey(),
                 request.getPartitionSourceColumns());
-    }
-
-    /**
-     * Converts a list of raw column names into backtick-quoted SQL identifiers
-     * suitable for embedding in a SELECT projection.
-     */
-    private static List<String> identsOf(List<String> columnNames) {
-        return columnNames.stream().map(SqlUtils::getIdentSql).collect(Collectors.toList());
     }
 }

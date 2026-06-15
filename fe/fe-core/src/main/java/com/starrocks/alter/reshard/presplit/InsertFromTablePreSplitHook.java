@@ -190,35 +190,39 @@ public final class InsertFromTablePreSplitHook {
             return;
         }
 
+        // The scan context depends only on the SOURCE table + resolved mapping —
+        // it is independent of which eligible TARGET partition the flow picks —
+        // so build it once here and share it across both partition branches.
+        ComputeResource computeResource = context.getCurrentComputeResource();
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
+                mapping.sortKeySourceColumnNames(), mapping.partitionSourceColumnNames(),
+                wherePredicateSql, computeResource);
+
         if (target.getPartitionInfo().isPartitioned()) {
             runMultiPartitionFlow(resolvedTable.database(), target, resolvedSource.sourceTable(),
-                    resolvedSource.sourceFromSql(), wherePredicateSql, mapping,
-                    sortKeyColumns, partitionColumns, context);
+                    scanContext, sortKeyColumns, partitionColumns, context);
         } else {
             runSinglePartitionFlow(resolvedTable.database(), target, resolvedSource.sourceTable(),
-                    resolvedSource.sourceFromSql(), wherePredicateSql, mapping, context);
+                    scanContext, context);
         }
     }
 
     /**
      * Legacy single-partition path: resolve the unique partition + base tablet,
-     * build the {@link InsertFromTableScanContext}, then go through
-     * {@link DefaultPreSplitPipeline} + {@link TabletPreSplitCoordinator#submitAsynchronously}
-     * + {@link TabletPreSplitCoordinator#awaitFinishedAllowingFallback}.
+     * then go through {@link DefaultPreSplitPipeline}
+     * + {@link TabletPreSplitCoordinator#submitAsynchronously}
+     * + {@link TabletPreSplitCoordinator#awaitFinishedAllowingFallback} using the
+     * shared {@link InsertFromTableScanContext}.
      */
     private static void runSinglePartitionFlow(
             Database database, OlapTable table, OlapTable sourceTable,
-            String sourceFromSql, String wherePredicateSql, InsertSelectSourceColumns mapping,
-            ConnectContext context) {
+            InsertFromTableScanContext scanContext, ConnectContext context) {
         PreSplitTargets.EligibleTarget target = PreSplitTargets.findEligibleTarget(database, table);
         if (target == null) {
             return;
         }
-        ComputeResource computeResource = context.getCurrentComputeResource();
-        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
-                sourceTable, sourceFromSql, mapping.sortKeySourceColumnNames(),
-                mapping.partitionSourceColumnNames(), wherePredicateSql, computeResource);
-        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(context.getCurrentComputeResource());
         long estimatedBytes = Math.max(0L, sourceTable.getDataSize());
 
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
@@ -252,14 +256,10 @@ public final class InsertFromTablePreSplitHook {
      */
     private static void runMultiPartitionFlow(
             Database database, OlapTable table, OlapTable sourceTable,
-            String sourceFromSql, String wherePredicateSql, InsertSelectSourceColumns mapping,
+            InsertFromTableScanContext scanContext,
             List<Column> sortKeyColumns, List<Column> partitionColumns, ConnectContext context) {
-        ComputeResource computeResource = context.getCurrentComputeResource();
-        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(context.getCurrentComputeResource());
         long estimatedBytes = Math.max(0L, sourceTable.getDataSize());
-        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
-                sourceTable, sourceFromSql, mapping.sortKeySourceColumnNames(),
-                mapping.partitionSourceColumnNames(), wherePredicateSql, computeResource);
 
         SampleSet samples = runDataTierSampler(table, scanContext, sortKeyColumns, partitionColumns);
         if (samples == null) {
@@ -412,9 +412,9 @@ public final class InsertFromTablePreSplitHook {
         if (items.isEmpty()) {
             return false;
         }
-        if (items.size() == 1 && items.get(0).isStar()) {
-            SelectListItem star = items.get(0);
-            if (star.getTblName() != null || !star.getExcludedColumns().isEmpty() || star.getAlias() != null) {
+        SelectListItem first = items.get(0);
+        if (items.size() == 1 && first.isStar()) {
+            if (first.getTblName() != null || !first.getExcludedColumns().isEmpty() || first.getAlias() != null) {
                 return false;
             }
         } else {

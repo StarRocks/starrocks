@@ -83,10 +83,6 @@ final class InsertSelectSourceColumns {
         for (Column column : sourceCols) {
             sourceColumnMap.put(column.getName().toLowerCase(), column.getName());
         }
-        Set<String> targetNames = new HashSet<>();
-        for (Column column : targetCols) {
-            targetNames.add(column.getName().toLowerCase());
-        }
 
         boolean isStar = items.size() == 1 && items.get(0).isStar();
         Map<String, String> targetToSource = new HashMap<>();
@@ -97,12 +93,12 @@ final class InsertSelectSourceColumns {
             }
             if (byName) {
                 // Exact-set match: reject source columns absent from the target, and vice versa.
-                if (!sourceColumnMap.keySet().equals(targetNames)) {
+                if (!sourceColumnMap.keySet().equals(targetNames(targetCols))) {
                     return null;
                 }
                 for (Column targetCol : targetCols) {
-                    targetToSource.put(targetCol.getName().toLowerCase(),
-                            sourceColumnMap.get(targetCol.getName().toLowerCase()));
+                    String targetName = targetCol.getName().toLowerCase();
+                    targetToSource.put(targetName, sourceColumnMap.get(targetName));
                 }
             } else {
                 if (sourceCols.size() != targetCols.size()) {
@@ -139,7 +135,7 @@ final class InsertSelectSourceColumns {
                     }
                 }
                 // Exact-set match: output names must be exactly the target non-generated columns.
-                if (!targetToSource.keySet().equals(targetNames)) {
+                if (!targetToSource.keySet().equals(targetNames(targetCols))) {
                     return null;
                 }
             } else {
@@ -161,6 +157,14 @@ final class InsertSelectSourceColumns {
             return null;
         }
         return new InsertSelectSourceColumns(sortKeyNames, partitionNames);
+    }
+
+    private static Set<String> targetNames(List<Column> targetCols) {
+        Set<String> names = new HashSet<>();
+        for (Column column : targetCols) {
+            names.add(column.getName().toLowerCase());
+        }
+        return names;
     }
 
     private static List<String> lookup(List<Column> columns, Map<String, String> targetToSource) {

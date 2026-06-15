@@ -56,7 +56,7 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
     }
 
     FilesSampleSubqueryExecutor(String errorPrefix) {
-        super(errorPrefix);
+        super(errorPrefix, "TabletPreSplitDataTierFilesSubquery");
     }
 
     @VisibleForTesting
@@ -80,11 +80,11 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
         List<Column> partitionSourceColumns = request.getPartitionSourceColumns();
         return new SampleSpec(fromClauseSql, /*whereClauseSqlOrNull=*/ null,
                 source.totalFileBytes(), source.computeResource(),
-                identsOf(sortKeyColumns), identsOf(partitionSourceColumns),
+                columnIdentsOf(sortKeyColumns), columnIdentsOf(partitionSourceColumns),
                 sortKeyColumns, partitionSourceColumns);
     }
 
-    private static List<String> identsOf(List<Column> columns) {
+    private static List<String> columnIdentsOf(List<Column> columns) {
         return columns.stream()
                 .map(column -> SqlUtils.getIdentSql(column.getName()))
                 .collect(Collectors.toList());

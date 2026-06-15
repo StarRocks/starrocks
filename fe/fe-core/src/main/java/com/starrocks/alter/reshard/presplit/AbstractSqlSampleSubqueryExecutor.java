@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Shared scaffolding for data-tier sample sub-query executors that synthesize a
@@ -49,15 +50,6 @@ import java.util.Objects;
  * here.
  */
 abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecutor {
-
-    // This name is FILES-path-flavored but currently shared by every subclass (the Broker-load
-    // executor already reuses it as pre-existing GA behavior). A future OLAP-table executor should
-    // parameterize the executor name via a constructor argument so its audit/profile attribution is
-    // distinct from the FILES path.
-    private static final String EXECUTOR_NAME = "TabletPreSplitDataTierFilesSubquery";
-
-    private static final SimpleExecutor PRODUCTION_SIMPLE_EXECUTOR =
-            new SimpleExecutor(EXECUTOR_NAME, TResultSinkType.HTTP_PROTOCAL);
 
     /** Soft target row count the sampling rate is sized to deliver. */
     static final int TARGET_SAMPLE_ROW_COUNT = 50_000;
@@ -138,14 +130,26 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private final String errorPrefix;
     private final SampleQueryRunner sampleQueryRunner;
 
-    AbstractSqlSampleSubqueryExecutor(String errorPrefix) {
-        this(errorPrefix, AbstractSqlSampleSubqueryExecutor::runViaSimpleExecutor);
+    AbstractSqlSampleSubqueryExecutor(String errorPrefix, String executorName) {
+        this(errorPrefix, defaultRunner(executorName));
     }
 
     @VisibleForTesting
     AbstractSqlSampleSubqueryExecutor(String errorPrefix, SampleQueryRunner sampleQueryRunner) {
         this.errorPrefix = Objects.requireNonNull(errorPrefix, "errorPrefix");
         this.sampleQueryRunner = Objects.requireNonNull(sampleQueryRunner, "sampleQueryRunner");
+    }
+
+    /**
+     * Builds the production sub-query runner backed by a {@link SimpleExecutor}
+     * named {@code executorName}, so each load path's sample sub-query carries
+     * its own audit / profile attribution.
+     */
+    private static SampleQueryRunner defaultRunner(String executorName) {
+        Objects.requireNonNull(executorName, "executorName");
+        SimpleExecutor simpleExecutor = new SimpleExecutor(executorName, TResultSinkType.HTTP_PROTOCAL);
+        return (sampleSql, computeResource, queryTimeoutSeconds) ->
+                runViaSimpleExecutor(simpleExecutor, sampleSql, computeResource, queryTimeoutSeconds);
     }
 
     /**
@@ -241,13 +245,14 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * pattern {@code SimpleExecutor.executeDQL(String)} uses internally.
      */
     private static List<TResultBatch> runViaSimpleExecutor(
-            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) {
+            SimpleExecutor simpleExecutor, String sampleSql, ComputeResource computeResource,
+            int queryTimeoutSeconds) {
         ConnectContext priorContext = ConnectContext.get();
         ConnectContext sampleContext = configureSampleContext(
                 StatisticUtils.buildConnectContext(), computeResource, queryTimeoutSeconds);
         sampleContext.setThreadLocalInfo();
         try {
-            return PRODUCTION_SIMPLE_EXECUTOR.executeDQL(sampleSql, sampleContext);
+            return simpleExecutor.executeDQL(sampleSql, sampleContext);
         } finally {
             ConnectContext.remove();
             if (priorContext != null) {
@@ -400,4 +405,12 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     private static final String COLUMN_ROLE_SORT_KEY = "sort-key";
     private static final String COLUMN_ROLE_PARTITION_SOURCE = "partition-source";
+
+    /**
+     * Converts a list of raw column names into backtick-quoted SQL identifiers
+     * suitable for embedding in a SELECT projection.
+     */
+    protected static List<String> identsOf(List<String> columnNames) {
+        return columnNames.stream().map(SqlUtils::getIdentSql).collect(Collectors.toList());
+    }
 }
