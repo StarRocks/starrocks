@@ -1268,4 +1268,19 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
+
+    @Test
+    public void testJoinReorderKeepPredicateColumn() throws Exception {
+        // Regression for join-reorder dropping a predicate-referenced column. During reorder,
+        // OutputColumnsPrune pruned the pass-through column brand_name out of an iceberg scan
+        // projection (only the upper()/cast() expression outputs were required upstream), while the
+        // scan still carried the derived predicate "upper(brand_name) IS NOT NULL". The rebuilt scan
+        // statistics then lacked brand_name, and PredicateStatisticsCalculator.visitIsNullPredicate ->
+        // Statistics.getColumnStatistic threw "missing statistic of col: ... brand_name".
+        // The fix keeps predicate-referenced columns required during pruning; this dump must now plan.
+        String dumpString = getDumpInfoFromFile("query_dump/iceberg_isnull_missing_stats");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString, null);
+        Assertions.assertNotNull(replayPair.second);
+    }
+
 }
