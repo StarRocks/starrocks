@@ -20,6 +20,7 @@
 #include "base/status.h"
 #include "base/status_fmt.hpp"
 #include "base/statusor.h"
+#include "common/config.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -232,6 +233,10 @@ auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
+    // Mirror the normal scan path: the late-materialization lookup must honor the
+    // page cache (gated by the same config as the scan), otherwise every fetched
+    // column page is re-decompressed per row locator. See lake_connector.cpp.
+    rs_opts.use_page_cache = !config::disable_storage_page_cache;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;
@@ -343,6 +348,11 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
+    // Mirror the normal scan path: the late-materialization lookup must honor the
+    // page cache (gated by the same config as the scan), otherwise every fetched
+    // column page is re-decompressed per row locator. See lake_connector.cpp.
+    rs_opts.use_page_cache = !config::disable_storage_page_cache;
+    rs_opts.lake_io_opts.fill_data_cache = true;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;
