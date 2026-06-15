@@ -18,10 +18,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.PrimitiveType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.orc.ColumnStatistics;
+import org.apache.orc.DateColumnStatistics;
 import org.apache.orc.IntegerColumnStatistics;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
@@ -30,6 +32,7 @@ import org.apache.orc.StripeStatistics;
 import org.apache.orc.TypeDescription;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -41,16 +44,18 @@ import java.util.Objects;
  * tuples already carry the StarRocks-side primitive type and feed the same
  * format-agnostic {@link ParquetMetadataSampler}.
  *
- * <p>Supported type window (intentionally conservative, matching the Parquet
- * reader's integer subset):
+ * <p>Supported type window:
  * <ul>
  *   <li>ORC BYTE/SHORT/INT/LONG → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
+ *   <li>ORC DATE → StarRocks DATE (day-of-epoch, timezone-free), gated to
+ *       {@code [1970-01-01, 9999-12-31]} — values outside that window (year &le; 0
+ *       rendering, pre-1582 proleptic/hybrid calendar ambiguity) fall back to data tier</li>
  * </ul>
- * Everything else — STRING/CHAR/VARCHAR (whose stats would always need data-tier
- * fallback anyway), BOOLEAN, FLOAT/DOUBLE, DATE, TIMESTAMP, DECIMAL, and any
- * complex type — makes the reader throw {@link MetaTierUnavailableException} so
- * the pipeline falls back to data tier. That is NOT a load failure. Pure I/O
- * failures surface as {@link StarRocksException}.
+ * Everything else — STRING/CHAR/VARCHAR (data-tier fallback anyway), BOOLEAN,
+ * FLOAT/DOUBLE, TIMESTAMP/TIMESTAMP_INSTANT (reader-local-tz stats, deferred),
+ * DECIMAL, and any complex type — makes the reader throw
+ * {@link MetaTierUnavailableException} so the pipeline falls back to data tier. That is
+ * NOT a load failure. Pure I/O failures surface as {@link StarRocksException}.
  */
 public final class OrcStripeStatisticsReader {
 
@@ -129,15 +134,18 @@ public final class OrcStripeStatisticsReader {
     /**
      * Reject ORC/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating stripes. Anything outside the window means "fall
-     * back to data tier", not "fail the load". Only the unannotated integer
-     * categories are admitted in v1; string, boolean, floating-point, and the
-     * logical date/decimal/timestamp categories are deferred.
+     * back to data tier", not "fail the load". The supported window is the unannotated
+     * integer categories plus ORC DATE → StarRocks DATE. String, boolean, floating-point,
+     * TIMESTAMP/TIMESTAMP_INSTANT, decimal, and complex types are deferred (fall back to
+     * data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             TypeDescription.Category orcCategory, Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (orcCategory) {
             case BYTE, SHORT, INT, LONG -> starRocksPrimitive.isIntegerType();
+            // ORC DATE is day-of-epoch (no timezone) → StarRocks DATE only.
+            case DATE -> starRocksPrimitive == PrimitiveType.DATE;
             default -> false;
         };
         if (!compatible) {
@@ -148,20 +156,28 @@ public final class OrcStripeStatisticsReader {
     }
 
     private static RowGroupStatistics convertStripe(
-            StripeStatistics stripeStatistics, StripeInformation stripeInfo, SortKeyLocation location)
+            StripeStatistics stripeStatistics, StripeInformation stripeInformation, SortKeyLocation location)
             throws MetaTierUnavailableException {
-        long rowCount = stripeInfo.getNumberOfRows();
+        long rowCount = stripeInformation.getNumberOfRows();
         ColumnStatistics[] columnStatistics = stripeStatistics.getColumnStatistics();
         ColumnStatistics sortKeyStatistics =
                 location.columnId < columnStatistics.length ? columnStatistics[location.columnId] : null;
-        // ORC integer stats expose no presence flag (getMinimum() returns a default
-        // when the stripe has no values), so we must treat absent / all-null stats
-        // as missing explicitly rather than emit a bogus min/max. The instanceof
-        // pattern also absorbs the out-of-bounds (null) case above.
-        if (!(sortKeyStatistics instanceof IntegerColumnStatistics integerStatistics)
-                || integerStatistics.getNumberOfValues() == 0) {
-            return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+        if (sortKeyStatistics instanceof IntegerColumnStatistics integerStatistics
+                && integerStatistics.getNumberOfValues() > 0) {
+            return convertIntegerStripe(integerStatistics, rowCount, location);
         }
+        if (sortKeyStatistics instanceof DateColumnStatistics dateStatistics
+                && dateStatistics.getNumberOfValues() > 0) {
+            return convertDateStripe(dateStatistics, rowCount, location);
+        }
+        // Absent / all-null stats (no presence flag on ORC numeric/date stats, so an
+        // empty stripe is detected via getNumberOfValues() == 0) → missing min/max.
+        return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertIntegerStripe(
+            IntegerColumnStatistics integerStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
         Variant minVariant;
         Variant maxVariant;
         try {
@@ -178,10 +194,35 @@ public final class OrcStripeStatisticsReader {
         }
         // ORC integer statistics are always exact (no truncation like Parquet binary).
         return new RowGroupStatistics(
-                new Tuple(List.of(minVariant)),
-                new Tuple(List.of(maxVariant)),
-                rowCount,
-                /*truncated=*/ false);
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertDateStripe(
+            DateColumnStatistics dateStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        Variant minVariant;
+        Variant maxVariant;
+        try {
+            // getMinimumDayOfEpoch() is day-of-epoch (timezone-free).
+            LocalDate minDate = LocalDate.ofEpochDay(dateStatistics.getMinimumDayOfEpoch());
+            LocalDate maxDate = LocalDate.ofEpochDay(dateStatistics.getMaximumDayOfEpoch());
+            // rejectDateOutsideWindow throws a checked MetaTierUnavailableException (not a
+            // RuntimeException), so a window rejection propagates past the catch below keeping its
+            // own message. ofEpochDay and Variant.of RuntimeExceptions are wrapped as a meta-tier
+            // fallback signal — mirroring convertIntegerStripe — so any unrepresentable value falls
+            // back to data tier instead of escaping read() (which only catches IOException) as an
+            // uncaught exception that would skip pre-split entirely.
+            MetaTierTemporalWindow.rejectDateOutsideWindow(minDate);
+            MetaTierTemporalWindow.rejectDateOutsideWindow(maxDate);
+            minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER));
+        } catch (RuntimeException conversionFailure) {
+            throw new MetaTierUnavailableException(String.format(
+                    "ORC date stats value not representable for sort-key column \"%s\": %s",
+                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
+        }
+        return new RowGroupStatistics(
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
     }
 
     private record SortKeyLocation(int columnId, Column starRocksColumn) {
