@@ -54,19 +54,10 @@ public class CredentialUtil {
         doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY);
 
-<<<<<<< HEAD
-=======
-        // Mask for huawei obs credential
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY);
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT);
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT);
-
         // Mask for tencent's credential
         doMask(properties, CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.TENCENT_COS_SECRET_KEY);
 
->>>>>>> 24c10f8c66 ([BugFix] Mask tencent.cos and iceberg.jdbc.password in SHOW CREATE CATALOG (#74696))
         // Mask for iceberg rest catalog credential
         doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 OAuth2SecurityConfig.OAUTH2_CREDENTIAL);
