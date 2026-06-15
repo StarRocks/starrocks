@@ -440,6 +440,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BEノードのCPUコアごとにPipeline Connectorに割り当てられるスキャン・スレッドの数。この設定はv3.1.7以降、動的に変更されます。
 - 導入バージョン: -
 
+### iceberg_metadata_table_cache_capacity
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: JNI メタデータスキャナーが BE/CN ノードでキャッシュする Iceberg テーブルの数。メタデータスキャン中、テーブルのメタデータはタスクごとではなく 1 回だけデシリアライズされ、そのテーブルのすべてのスキャンタスクで再利用されます。メタデータスキャナーがキャッシュの退避をログに記録する場合は、この値を大きくしてください。
+- 導入バージョン: -
+
 ### pipeline_poller_timeout_guard_ms
 
 - デフォルト: -1

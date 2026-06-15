@@ -53,6 +53,12 @@ CONF_Int32(metric_late_materialization_ratio, "1000");
 // Do pre-aggregate if effect greater than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
+// Max number of distinct iceberg tables whose deserialized metadata is cached and shared across
+// metadata scan tasks on one BE/CN. One entry holds one table's metadata reused by all its
+// concurrent scan tasks, so the cap is the number of distinct tables scanned at once, not the task
+// count. Raise it if the JNI metadata scanner logs eviction under size pressure.
+CONF_mInt32(iceberg_metadata_table_cache_capacity, "128");
+
 CONF_mBool(use_default_dop_when_shared_scan, "true");
 
 /// For parallel scan on the single tablet.

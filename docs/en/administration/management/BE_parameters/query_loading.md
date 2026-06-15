@@ -439,6 +439,15 @@ This topic introduces the following types of BE configurations:
 - Description: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
+### iceberg_metadata_table_cache_capacity
+
+- Default: 128
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of Iceberg tables the JNI metadata scanner caches on a BE/CN node. During a metadata scan, a table's metadata is deserialized once and reused by all scan tasks of that table instead of once per task. Increase it if the metadata scanner logs cache eviction.
+- Introduced in: -
+
 ### pipeline_enable_large_column_checker
 
 - Default: true

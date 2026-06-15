@@ -29,17 +29,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TimeZone;
 
-import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
-
 public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     private static final Logger LOG = LogManager.getLogger(AbstractIcebergMetadataScanner.class);
-    protected final String serializedTable;
+    protected String serializedTable;
     protected final String[] requiredFields;
     private final String[] metadataColumnNames;
     private final String[] metadataColumnTypes;
     private ColumnType[] requiredTypes;
     private final String[] nestedFields;
     private final int fetchSize;
+    private final int tableCacheMaxEntries;
     protected final ClassLoader classLoader;
     protected Table table;
     protected FileIO fileIO;
@@ -49,6 +48,16 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     // max 1000 entries large enough for most use cases
     private static final TableFileIOCache TABLE_FILE_IO_CACHE = new TableFileIOCache(600, 1000);
 
+    // Shares the deserialized table across scan tasks of the same payload so heap is
+    // O(distinct_concurrent_tables * metadata_size) instead of O(scan_pool_size * metadata_size).
+    // Same 600s TTL as the FileIO cache since the table carries credential-bound FileIO. Built lazily
+    // on first scan (its capacity comes from the BE config via params, which a static initializer
+    // cannot see) and rebuilt when that mutable capacity changes at runtime.
+    private static final long TABLE_CACHE_TTL_SECONDS = 600;
+    private static final int DEFAULT_TABLE_CACHE_MAX_ENTRIES = 128;
+    private static volatile DeserializedTableCache tableCache;
+    private static volatile int tableCacheCapacity = -1;
+
     public AbstractIcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.requiredFields = params.get("required_fields").split(",");
@@ -57,13 +66,34 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         this.metadataColumnTypes = params.get("metadata_column_types").split("#");
         this.serializedTable = params.get("serialized_table");
         this.timezone = params.getOrDefault("time_zone", TimeZone.getDefault().getID());
+        this.tableCacheMaxEntries = Integer.parseInt(
+                params.getOrDefault("table_cache_max_entries", String.valueOf(DEFAULT_TABLE_CACHE_MAX_ENTRIES)));
         this.classLoader = this.getClass().getClassLoader();
+    }
+
+    // BE passes the current iceberg_metadata_table_cache_capacity on every scanner, so a runtime
+    // change to that mutable config takes effect on the next scan: the cache is rebuilt with the new
+    // capacity. Rebuilding drops cached entries, but capacity changes are rare.
+    static DeserializedTableCache tableCache(int maxEntries) {
+        DeserializedTableCache cache = tableCache;
+        if (cache != null && tableCacheCapacity == maxEntries) {
+            return cache;
+        }
+        synchronized (AbstractIcebergMetadataScanner.class) {
+            if (tableCache == null || tableCacheCapacity != maxEntries) {
+                tableCache = new DeserializedTableCache(TABLE_CACHE_TTL_SECONDS, maxEntries);
+                tableCacheCapacity = maxEntries;
+            }
+            return tableCache;
+        }
     }
 
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            this.table = deserializeFromBase64(serializedTable);
+            this.table = tableCache(tableCacheMaxEntries).get(serializedTable);
+            // the base64 payload is tens of MB; drop the reference once the shared table is resolved
+            this.serializedTable = null;
             this.fileIO = TABLE_FILE_IO_CACHE.get(table);
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);

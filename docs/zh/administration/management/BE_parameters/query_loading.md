@@ -427,6 +427,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
 - 引入版本：-
 
+### iceberg_metadata_table_cache_capacity
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：JNI 元数据扫描器在单个 BE/CN 节点上缓存的 Iceberg 表数量。在元数据扫描期间，一张表的元数据只反序列化一次，并由该表的所有扫描任务复用，而不是每个任务各反序列化一次。如果元数据扫描器在日志中记录到缓存逐出，可调大该值。
+- 引入版本：-
+
 ### pipeline_enable_large_column_checker
 
 - 默认值：true

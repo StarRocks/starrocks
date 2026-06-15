@@ -1079,6 +1079,11 @@ CONF_mBool(pipeline_enable_large_column_checker, "true");
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
+// Max number of distinct iceberg tables whose deserialized metadata is cached and shared across
+// metadata scan tasks on one BE/CN. One entry holds one table's metadata reused by all its
+// concurrent scan tasks, so the cap is the number of distinct tables scanned at once, not the task
+// count. Raise it if the JNI metadata scanner logs eviction under size pressure.
+CONF_mInt32(iceberg_metadata_table_cache_capacity, "128");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
