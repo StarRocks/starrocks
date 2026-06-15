@@ -16,11 +16,16 @@ package com.starrocks.sql.analyzer.mv;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,5 +79,59 @@ public class IvmRefreshDefinitionTest extends MVIVMIcebergTestBase {
         String msg = ex.getMessage().toLowerCase();
         assertTrue(msg.contains("strategy") || msg.contains("drop"),
                 "error must mention the strategy gate / drop-recreate, got: " + ex.getMessage());
+    }
+
+    /** Pins the load-bearing assumption: derive() output re-parses + re-serializes to itself. */
+    @Test
+    public void testDeriveRoundTripStable() throws Exception {
+        assertRoundTripStable("scan",
+                "SELECT id, data FROM `iceberg0`.`unpartitioned_db`.`t0`");
+        assertRoundTripStable("group-by-column",
+                "SELECT id, count(data) AS c FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
+        assertRoundTripStable("group-by-ordinal",
+                "SELECT id, count(data) AS c FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY 1");
+        assertRoundTripStable("distinct",
+                "SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0`");
+        assertRoundTripStable("all-constant-group-by",
+                "SELECT 1, count(data) AS c FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY 1");
+        assertRoundTripStable("sum",
+                "SELECT id, sum(c1) AS s FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+        assertRoundTripStable("max",
+                "SELECT id, max(c1) AS m FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+    }
+
+    private void assertRoundTripStable(String label, String query) throws Exception {
+        String mvName = "mv_rt_" + label.replace('-', '_');
+        String ddl = "CREATE MATERIALIZED VIEW " + mvName + " "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS " + query;
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", mvName);
+            String once = IvmRefreshDefinition.derive(connectContext, mv);
+
+            QueryStatement reparsed = (QueryStatement) SqlParser.parse(once,
+                    connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(reparsed, connectContext);
+            assertEquals(once, AstToSQLBuilder.buildSimple(reparsed),
+                    "buildSimple not idempotent for: " + label);
+        });
+    }
+
+    /** Pins retroactivity: derive() re-derives the query and ignores any persisted frozen ivmDefineSql. */
+    @Test
+    public void testDeriveIgnoresFrozenIvmDefineSql() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_frozen_ignored "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_frozen_ignored");
+            String derived = IvmRefreshDefinition.derive(connectContext, mv);
+
+            mv.setIvmDefineSql("SELECT 1 AS broken");
+            assertEquals(derived, IvmRefreshDefinition.derive(connectContext, mv),
+                    "derive must re-derive from the user query, not consult the frozen ivmDefineSql");
+        });
     }
 }

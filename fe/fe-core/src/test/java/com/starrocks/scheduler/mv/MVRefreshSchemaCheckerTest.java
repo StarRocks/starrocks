@@ -15,6 +15,8 @@
 package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.mv.IvmSchemaCompat;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.CharType;
@@ -28,6 +30,7 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -39,7 +42,17 @@ import java.util.Arrays;
  * rejects {@code ALTER ... ADD FIELD / DROP FIELD} clauses on non-OLAP tables, but the iceberg
  * table can still be modified out of band.
  */
-public class MVRefreshSchemaCheckerTest {
+public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        MVIVMIcebergTestBase.beforeClass();
+    }
+
+    @Override
+    public void advanceTableVersionTo(long toVersion) {
+        // the checker only parses/analyzes against the current schema; no refresh is run here.
+    }
 
     private static boolean isCompatible(Column existed, Type derivedType) {
         return IvmSchemaCompat.isColumnCompatible(existed, derivedType);
@@ -162,5 +175,27 @@ public class MVRefreshSchemaCheckerTest {
         StructType driftedElem = struct(new StructField("a", IntegerType.BIGINT));
         Column existed = new Column("arr", new ArrayType(originalElem));
         Assertions.assertFalse(isCompatible(existed, new ArrayType(driftedElem)));
+    }
+
+    /**
+     * Pins Task 6: with no frozen ivmDefineSql (every new IVM MV), the checker must re-derive the
+     * rewritten query so its arity (including the hidden __ROW_ID__/__AGG_STATE columns) matches the
+     * stored schema, rather than tripping "column count" on the original user-query fallback and
+     * falsely inactivating the MV.
+     */
+    @Test
+    public void testCheckerOnNewIvmMvNoFrozenTextDoesNotFalseDrift() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_checker_no_drift "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_checker_no_drift");
+            Assertions.assertTrue(mv.getCurrentRefreshMode().isIncremental(),
+                    "guard: this shape must resolve to an incremental MV, else the test is vacuous");
+            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            Assertions.assertTrue(mv.isActive(),
+                    "new IVM MV with unchanged external base must stay active, not false-trip schema drift");
+        });
     }
 }
