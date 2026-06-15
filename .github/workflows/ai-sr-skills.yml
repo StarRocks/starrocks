@@ -7,10 +7,8 @@ on:
     types:
       - opened
       - reopened
-
-concurrency:
-  group: AI-SR-SKILLS-${{ github.event.number }}
-  cancel-in-progress: true
+      - synchronize          # re-brief on every push so the comment tracks the live diff
+      - ready_for_review     # brief when a draft is marked ready
 
 permissions:
   pull-requests: write
@@ -243,9 +241,22 @@ jobs:
   # For an external PR a maintainer can still run /github-pr-module-risk:review manually.
   module-risk:
     runs-on: [self-hosted, normal]
+    # Dedup rapid pushes for THIS job only (a new event cancels the in-flight briefing run).
+    # Job-scoped — NOT workflow-wide — so a synchronize run never cancels the opened-only
+    # assign-reviewer job (which would otherwise miss reviewer assignment + Slack).
+    concurrency:
+      group: ai-sr-skills-module-risk-${{ github.event.number }}
+      cancel-in-progress: true
+    # Least privilege: only this job posts the sticky comment (Issues comments API), so issues:write
+    # lives here, not workflow-wide where it would also reach assign-reviewer's GITHUB_TOKEN.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
     continue-on-error: true
     if: >
-      (github.event.action == 'opened' || github.event.action == 'reopened') &&
+      (github.event.action == 'opened' || github.event.action == 'reopened' ||
+       github.event.action == 'synchronize' || github.event.action == 'ready_for_review') &&
       !startsWith(github.head_ref, 'mergify/') &&
       !contains(github.head_ref, '-sync-pr-') &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
@@ -253,6 +264,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       PR_URL: ${{ github.event.pull_request.html_url }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Module-risk briefing (AI, read-only)
         run: |
@@ -282,7 +294,14 @@ jobs:
             echo "no high-confidence, diff-aligned module risk — not commenting"
             exit 0
           fi
-          printf '%s\n' "$body" > "${RUNNER_TEMP}/mr_body.md"
+          # Stamp the PR head SHA as line 2 (right after the marker, which sed guaranteed is line 1)
+          # so reviewers can detect a briefing that predates the latest push. awk avoids sed escaping
+          # pitfalls; the SHA is hex so it is injection-safe. Applies to both the real briefing and the
+          # incomplete-coverage caveat (both carry the marker as line 1).
+          sha_line="<!-- module-risk-head-sha: ${PR_HEAD_SHA} -->"
+          printf '%s\n' "$body" \
+            | awk -v s="$sha_line" 'NR==1{print; print s; next} {print}' \
+            > "${RUNNER_TEMP}/mr_body.md"
           # Sticky: edit our existing marked comment if present, else create one. Idempotent across
           # reopen / workflow rerun (the marker identifies our comment; gh is host-side, not in the
           # container). PATCH body is JSON-built with jq so markdown is escaped correctly.
