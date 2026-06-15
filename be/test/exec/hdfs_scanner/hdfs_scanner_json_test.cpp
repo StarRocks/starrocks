@@ -229,8 +229,7 @@ std::string build_split_content(const std::string& mb, size_t lead_off, std::str
     const size_t row2_start = lead_off - head2.size();
     const size_t pad = row2_start - head1.size() - 3; // 3 = '"' '}' '\n' that close row1
     *c2_row2 = mb + "Z";
-    return head1 + std::string(pad, 'A') + "\"}\n" + head2 + *c2_row2 + "\"}\n" +
-           R"({"c1":3,"c2":"end"})" + "\n";
+    return head1 + std::string(pad, 'A') + "\"}\n" + head2 + *c2_row2 + "\"}\n" + R"({"c1":3,"c2":"end"})" + "\n";
 }
 } // namespace
 
