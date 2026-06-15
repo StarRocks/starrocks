@@ -148,5 +148,5 @@ public class SystemId {
     public static final long TABLET_RESHARD_JOBS_ID = 170L;
 
     // ==================  Materialized View  ===================== //
-    public static final long MATERIALIZED_VIEW_REFRESH_JOBS_ID = 171L;
+    public static final long MATERIALIZED_VIEW_REFRESH_JOBS_ID = 180L;
 }
