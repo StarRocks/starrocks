@@ -26,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.analyzer.mv.IvmSchemaCompat;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -79,10 +80,10 @@ public final class MVRefreshSchemaChecker {
             return;
         }
 
-        // Use the same query refresh actually runs: ivmDefineSql for IVM (post-rewrite, with
-        // synthetic state-column expressions like sum_state_merge(...)), and viewDefineSql
-        // for PCT via the fallback in getMVQueryDefinedSql.
-        String selectSql = mv.getMVQueryDefinedSql();
+        // IVM derives its rewritten query (with hidden __ROW_ID__ / __AGG_STATE_* columns) at
+        // refresh time, so the schema check must compare against that same rewrite, not the
+        // original user query. PCT compares against viewDefineSql directly.
+        String selectSql = mv.getViewDefineSql();
         if (Strings.isNullOrEmpty(selectSql)) {
             return;
         }
@@ -130,12 +131,17 @@ public final class MVRefreshSchemaChecker {
         Optional<Database> mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(mv.getDbId());
         mvDb.map(Database::getFullName).ifPresent(context::setDatabase);
 
-        List<StatementBase> statements = SqlParser.parse(selectSql, context.getSessionVariable());
-        if (statements.isEmpty() || !(statements.get(0) instanceof QueryStatement)) {
-            return;
+        QueryStatement queryStmt;
+        if (mv.getCurrentRefreshMode().isIncremental()) {
+            queryStmt = IvmRefreshDefinition.deriveRewrittenQuery(context, mv);
+        } else {
+            List<StatementBase> statements = SqlParser.parse(selectSql, context.getSessionVariable());
+            if (statements.isEmpty() || !(statements.get(0) instanceof QueryStatement)) {
+                return;
+            }
+            queryStmt = (QueryStatement) statements.get(0);
+            Analyzer.analyze(queryStmt, context);
         }
-        QueryStatement queryStmt = (QueryStatement) statements.get(0);
-        Analyzer.analyze(queryStmt, context);
 
         List<Field> derivedFields = queryStmt.getQueryRelation().getRelationFields().getAllFields();
         IvmSchemaCompat.compare(derivedFields, mv);

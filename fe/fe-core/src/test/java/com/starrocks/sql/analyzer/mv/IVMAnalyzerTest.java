@@ -735,8 +735,9 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
 
     /**
      * Aggregate incremental MV (QUERY_COMPUTED): refresh SQL uses positional form since
-     * the schema has no AUTO_INCREMENT columns; the query itself produces {@code __ROW_ID__}
-     * via encode(group_by_keys).
+     * the schema has no AUTO_INCREMENT columns. New MVs no longer persist the rewritten
+     * ivmDefineSql, so the no-arg task definition falls back to the original user query;
+     * the __ROW_ID__-producing rewrite is re-derived at refresh time, not frozen here.
      */
     @Test
     public void testGetIVMTaskDefinitionForQueryComputedUsesPositionalForm() throws Exception {
@@ -752,8 +753,28 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     "aggregate MV uses positional INSERT, got: " + sql);
             assertFalse(sql.startsWith("INSERT INTO `mv_taskdef_agg` ("),
                     "no explicit column list expected (no AUTO_INCREMENT columns), got: " + sql);
-            assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID),
-                    "__ROW_ID__ must appear in the SELECT alias (produced by encode), got: " + sql);
+            assertFalse(sql.contains(IvmOpUtils.COLUMN_ROW_ID),
+                    "no-arg task definition falls back to the original query (no frozen __ROW_ID__), got: " + sql);
+        });
+    }
+
+    /**
+     * New IVM MVs no longer persist the rewritten ivmDefineSql (refresh re-derives it), but
+     * CREATE must still derive the column schema from the rewritten tree — including the
+     * hidden __ROW_ID__ column.
+     */
+    @Test
+    public void testIncrementalMvDoesNotPersistIvmDefineSqlButKeepsRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_no_frozen_ivmdef "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_no_frozen_ivmdef");
+            assertTrue(mv.getIvmDefineSql() == null || mv.getIvmDefineSql().isEmpty(),
+                    "new IVM MV must not persist a frozen ivmDefineSql, got: " + mv.getIvmDefineSql());
+            assertNotNull(mv.getColumn(IvmOpUtils.COLUMN_ROW_ID),
+                    "schema derivation must still add the hidden __ROW_ID__ column");
         });
     }
 
