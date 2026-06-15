@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.KeysType;
@@ -793,6 +794,28 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
             assertTrue(idPos < dataPos && dataPos < datePos,
                     "INSERT column list must be in SELECT order (id, data, date), got: " + sql);
         });
+    }
+
+    @Test
+    public void testRewriteForRefreshUsesPinnedVersionAndStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_rf "
+                + "REFRESH DEFERRED MANUAL PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, null, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> r =
+                analyzer.rewriteForRefresh(MaterializedView.RefreshMode.INCREMENTAL, 0);
+
+        assertTrue(r.isPresent(), "GROUP BY query must be retractable");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, r.get().rowIdStrategy());
+        // Re-analyze so buildSimple sees the prepended __ROW_ID__/__AGG_STATE columns,
+        // mirroring the CREATE path (MaterializedViewAnalyzer re-analyzes before serializing).
+        Analyzer.analyze(r.get().queryStatement(), connectContext);
+        String sql = AstToSQLBuilder.buildSimple(r.get().queryStatement());
+        assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID), "rewritten query must project __ROW_ID__, got: " + sql);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
