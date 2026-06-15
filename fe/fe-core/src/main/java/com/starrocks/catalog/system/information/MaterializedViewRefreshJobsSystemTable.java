@@ -111,10 +111,9 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                     || run.getState() == Constants.TaskRunState.MERGED || run.getDbName() == null) {
                 continue;
             }
+            // Key strictly on startTaskRunId so JOB_ID matches task_runs.JOB_ID (which has no fallback) and
+            // the documented drill-down join holds; MV runs always carry it, so the empty case is defensive.
             String key = run.getStartTaskRunId();
-            if (Strings.isNullOrEmpty(key)) {
-                key = run.getTaskRunId();
-            }
             if (Strings.isNullOrEmpty(key)) {
                 continue;
             }
@@ -171,7 +170,9 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
             if (anyRun.getUserIdentity() != null) {
                 info.setRun_as_user(anyRun.getUserIdentity().toString());
             }
-            info.setSubmit_time(TimeUtils.longToTimeString(rjs.getMvRefreshStartTime()));
+            if (rjs.getMvRefreshStartTime() > 0) {
+                info.setSubmit_time(TimeUtils.longToTimeString(rjs.getMvRefreshStartTime()));
+            }
             info.setRefresh_state(String.valueOf(rjs.getRefreshState()));
             info.setRefresh_trigger(mv == null ? "UNKNOWN" : mv.getRefreshTriggerString());
 
@@ -184,8 +185,8 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 info.setDuration_time(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(wallMs / 1000D));
             }
 
-            info.setImv_source_version_range(mergeToJson(batch, MVTaskRunExtraMessage::getImvSourceVersionRange));
-            info.setImv_source_timestamp_range(mergeToJson(batch, MVTaskRunExtraMessage::getImvSourceTimestampRange));
+            info.setImv_source_version_range(mergeRangeToJson(batch, MVTaskRunExtraMessage::getImvSourceVersionRange));
+            info.setImv_source_timestamp_range(mergeRangeToJson(batch, MVTaskRunExtraMessage::getImvSourceTimestampRange));
             info.setImv_source_pinned_snapshot_id_map(mergeToJson(batch, MVTaskRunExtraMessage::getPinnedSnapshotIdMap));
 
             TaskRunStatus failed = batch.stream()
@@ -213,8 +214,10 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
         return (table instanceof MaterializedView) ? (MaterializedView) table : null;
     }
 
+    // Merges a per-base-table scalar map (the pinned snapshot id) across the job's runs. The pinned
+    // snapshot is fixed for a job, so last-wins on key collision is fine.
     private static <V> String mergeToJson(List<TaskRunStatus> batch,
-                                           Function<MVTaskRunExtraMessage, Map<String, V>> extractor) {
+                                          Function<MVTaskRunExtraMessage, Map<String, V>> extractor) {
         Map<String, V> merged = Maps.newHashMap();
         for (TaskRunStatus run : batch) {
             MVTaskRunExtraMessage extra = run.getMvTaskRunExtraMessage();
@@ -223,8 +226,39 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
             }
             Map<String, V> part = extractor.apply(extra);
             if (part != null) {
-                // batch is time-sorted, so a later run's value wins on key collision (latest run wins)
                 merged.putAll(part);
+            }
+        }
+        return GsonUtils.GSON.toJson(merged);
+    }
+
+    // Merges per-base-table {start,end} version/timestamp ranges across the job's runs. Each run records
+    // only its own delta slice, so the job-level range keeps the earliest run's start and the latest run's
+    // end (batch is createTime-sorted) rather than just the last run's slice.
+    private static String mergeRangeToJson(List<TaskRunStatus> batch,
+                                           Function<MVTaskRunExtraMessage, Map<String, Map<String, String>>> extractor) {
+        Map<String, Map<String, String>> merged = Maps.newLinkedHashMap();
+        for (TaskRunStatus run : batch) {
+            MVTaskRunExtraMessage extra = run.getMvTaskRunExtraMessage();
+            if (extra == null) {
+                continue;
+            }
+            Map<String, Map<String, String>> part = extractor.apply(extra);
+            if (part == null) {
+                continue;
+            }
+            for (Map.Entry<String, Map<String, String>> entry : part.entrySet()) {
+                Map<String, String> runRange = entry.getValue();
+                if (runRange == null) {
+                    continue;
+                }
+                Map<String, String> range = merged.computeIfAbsent(entry.getKey(), k -> Maps.newLinkedHashMap());
+                if (runRange.containsKey("start")) {
+                    range.putIfAbsent("start", runRange.get("start"));
+                }
+                if (runRange.containsKey("end")) {
+                    range.put("end", runRange.get("end"));
+                }
             }
         }
         return GsonUtils.GSON.toJson(merged);

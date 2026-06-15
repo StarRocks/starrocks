@@ -114,21 +114,51 @@ public class MaterializedViewRefreshJobsSystemTableTest {
     }
 
     @Test
-    public void testGroupingFallsBackToTaskRunIdAndDropsIdlessRun(
+    public void testGroupingKeyedByStartTaskRunIdDropsRunsWithoutIt(
             @Mocked GlobalStateMgr globalStateMgr,
             @Mocked TaskManager taskManager) throws TException {
-        TaskRunStatus fallback = newRun(null, "query-fb", "SUCCESS", Constants.TaskRunState.SUCCESS, 1000L);
-        fallback.setTaskRunId("taskrun-fb");
-        TaskRunStatus idless = newRun(null, "query-idless", "SUCCESS", Constants.TaskRunState.SUCCESS, 2000L);
+        // JOB_ID is keyed strictly on startTaskRunId so it matches task_runs.JOB_ID; a run without one is
+        // dropped rather than falling back to taskRunId (which would not drill down to task_runs).
+        TaskRunStatus withStart = newRun("job-x", "query-x", "SUCCESS", Constants.TaskRunState.SUCCESS, 1000L);
+        withStart.setTaskRunId("taskrun-x");
+        TaskRunStatus noStart = newRun(null, "query-nostart", "SUCCESS", Constants.TaskRunState.SUCCESS, 2000L);
+        noStart.setTaskRunId("taskrun-nostart");
 
-        mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(fallback, idless));
+        mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(withStart, noStart));
         mockAuthorizerPass();
 
         TListMaterializedViewRefreshJobsResult result =
                 MaterializedViewRefreshJobsSystemTable.query(new TGetTasksParams(), new ConnectContext());
 
         Assertions.assertEquals(1, result.getJobs().size());
-        Assertions.assertEquals("taskrun-fb", result.getJobs().get(0).getJob_id());
+        Assertions.assertEquals("job-x", result.getJobs().get(0).getJob_id());
+    }
+
+    @Test
+    public void testImvSourceVersionRangeUnionsDeltaRunsByCreateTime(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked TaskManager taskManager) throws TException {
+        // Two incremental runs of one job record adjacent delta ranges for the same base table; the job-level
+        // range must keep the earliest run's start and the latest run's end, not just the last run's slice.
+        TaskRunStatus run1 = newRun("job-r", "query-r1", "SUCCESS", Constants.TaskRunState.SUCCESS, 1000L);
+        run1.setCreateTime(1000L);
+        run1.getMvTaskRunExtraMessage().setImvSourceVersionRange(Map.of("baseT", Map.of("start", "1", "end", "3")));
+        TaskRunStatus run2 = newRun("job-r", "query-r2", "SUCCESS", Constants.TaskRunState.SUCCESS, 2000L);
+        run2.setCreateTime(2000L);
+        run2.getMvTaskRunExtraMessage().setImvSourceVersionRange(Map.of("baseT", Map.of("start", "3", "end", "7")));
+
+        // Reverse-chronological input to prove the merge orders by createTime, not encounter order.
+        mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(run2, run1));
+        mockAuthorizerPass();
+
+        TListMaterializedViewRefreshJobsResult result =
+                MaterializedViewRefreshJobsSystemTable.query(new TGetTasksParams(), new ConnectContext());
+
+        Assertions.assertEquals(1, result.getJobs().size());
+        String versionRange = result.getJobs().get(0).getImv_source_version_range();
+        Assertions.assertTrue(versionRange.contains("\"start\":\"1\""), versionRange);
+        Assertions.assertTrue(versionRange.contains("\"end\":\"7\""), versionRange);
+        Assertions.assertFalse(versionRange.contains("\"start\":\"3\""), versionRange);
     }
 
     @Test
