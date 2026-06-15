@@ -17,7 +17,7 @@
 #include <cstddef>
 #include <unordered_map>
 
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
 
 namespace starrocks {
 class TGroupExecutionParam;

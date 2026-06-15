@@ -18,8 +18,8 @@
 
 #include "base/testutil/assert.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context.h"
+#include "exec/runtime/query_context_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"

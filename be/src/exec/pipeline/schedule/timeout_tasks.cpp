@@ -17,10 +17,10 @@
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/schedule/common.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/schedule/common.h"
 #include "platform/query_timeout_hook.h"
 
 namespace starrocks::pipeline {

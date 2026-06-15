@@ -21,14 +21,13 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
-#include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
-class ExecNode;
 namespace pipeline {
 
 class PipelineBuilderContext {
@@ -204,9 +203,6 @@ private:
 class PipelineBuilder {
 public:
     explicit PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
-
-    // Build pipeline from exec node tree
-    StatusOr<OpFactories> decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node);
 
     std::pair<ExecutionGroups, Pipelines> build();
 

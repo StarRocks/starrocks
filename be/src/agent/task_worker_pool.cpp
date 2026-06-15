@@ -62,7 +62,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/DataCache_types.h"
 #include "gen_cpp/Types_types.h"

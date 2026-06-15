@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/fragment_context.h"
+#include "exec/runtime/fragment_context.h"
 
 #include <atomic>
 #include <chrono>
@@ -35,13 +35,13 @@
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/data_sink.h"
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "exec/runtime/query_runtime_state.h"
+#include "exec/runtime/schedule/event_scheduler.h"
 #include "platform/query_timeout_hook.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/fragment_attachment.h"

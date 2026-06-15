@@ -23,11 +23,11 @@
 #include <unordered_set>
 
 #include "common/status.h"
-#include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/execution_group_lifecycle.h"
 #include "exec/pipeline/primitives/pipeline_group.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
