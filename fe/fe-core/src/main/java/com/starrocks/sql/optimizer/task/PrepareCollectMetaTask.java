@@ -65,19 +65,41 @@ public class PrepareCollectMetaTask extends OptimizerTask {
                 new ThreadFactoryBuilder().setNameFormat(String.format("prepare-metadata-%s", queryId)).build());
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Tracers tracers = Tracers.get();
+        Tracers ownerTracers = Tracers.get();
         ConnectContext connectContext = ConnectContext.get();
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_prepare_metadata")) {
-            CompletableFuture<Void> allFutures = CompletableFuture.allOf(scanOperators.stream()
-                    .map(op -> CompletableFuture.supplyAsync(() ->
+        try {
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_prepare_metadata")) {
+                // Fork tracers for each parallel task on the owner thread
+                int numTasks = scanOperators.size();
+                List<Tracers> forks = new ArrayList<>(numTasks);
+                CompletableFuture<?>[] futures = new CompletableFuture[numTasks];
+                for (int i = 0; i < numTasks; i++) {
+                    LogicalScanOperator op = scanOperators.get(i);
+                    Tracers forked = ownerTracers.fork(true);
+                    forks.add(forked);
+                    futures[i] = CompletableFuture.supplyAsync(() ->
                                     metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
                                             new MetaPreparationItem(op.getTable(), op.getPredicate(),
+<<<<<<< HEAD
                                                     op.getLimit(), op.getTableVersionRange()),
                                             tracers, connectContext),
                             executorService)).toArray(CompletableFuture[]::new));
             allFutures.join();
+=======
+                                                    op.getLimit(), op.getTvrVersionRange()),
+                                            forked, connectContext),
+                            executorService);
+                }
+                CompletableFuture.allOf(futures).join();
+                // Merge all forks back on the owner thread (single-threaded, no race)
+                for (Tracers f : forks) {
+                    ownerTracers.mergeFrom(f);
+                }
+            }
+        } finally {
+            executorService.shutdown();
+>>>>>>> 1758a405aa ([BugFix] Make Tracers fork-aware to prevent `IllegalStateException` in parallel profile collection (#74746))
         }
-        executorService.shutdown();
     }
 
     private List<LogicalScanOperator> collectScanOperators(OptExpression tree) {
