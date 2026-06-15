@@ -263,7 +263,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_metrics) {
 
     // Snapshot the metrics before compaction. The metrics are process-global and shared across
     // tests, so assert on the before/after delta rather than absolute values.
-    const int64_t put_count_before = StorageMetrics::instance()->lake_compaction_object_storage_put_count.value();
+    const int64_t put_count_before = StorageMetrics::instance()->lake_compaction_remote_write_count.value();
     const int64_t size_recorded_before = lake_compaction_output_segment_size_recorded_count();
 
     auto txn_id = next_id();
@@ -284,7 +284,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_metrics) {
     // One PUT per output segment plus one for the txn log write (this is a duplicate-key,
     // non-PK compaction, so there are no sst or .lcrm files).
     EXPECT_EQ(output_segments + 1,
-              StorageMetrics::instance()->lake_compaction_object_storage_put_count.value() - put_count_before);
+              StorageMetrics::instance()->lake_compaction_remote_write_count.value() - put_count_before);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,

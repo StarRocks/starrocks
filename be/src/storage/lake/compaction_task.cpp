@@ -78,7 +78,7 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
                     ++index_sst_puts;
                 }
                 if (index_sst_puts > 0) {
-                    StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(index_sst_puts);
+                    StorageMetrics::instance()->lake_compaction_remote_write_count.increment(index_sst_puts);
                 }
             }
             return Status::OK();
@@ -153,7 +153,7 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     if (is_lcrm(writer->lcrm_file().path)) {
         ++put_count;
     }
-    StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(put_count);
+    StorageMetrics::instance()->lake_compaction_remote_write_count.increment(put_count);
     return Status::OK();
 }
 

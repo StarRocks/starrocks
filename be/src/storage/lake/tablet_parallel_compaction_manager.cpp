@@ -1588,7 +1588,7 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
             ++index_sst_puts;
         }
         if (index_sst_puts > 0) {
-            StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(index_sst_puts);
+            StorageMetrics::instance()->lake_compaction_remote_write_count.increment(index_sst_puts);
         }
 
         // Log SST compaction results
@@ -2366,7 +2366,7 @@ Status TabletParallelCompactionManager::_merge_subtask_lcrm_files(int64_t tablet
             // Observability: each successful merge writes one new .lcrm file to object storage.
             // The per-subtask writer->lcrm_file() PUTs are counted by fill_compaction_segment_info();
             // this is an extra file produced by the parallel manager itself.
-            StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(1);
+            StorageMetrics::instance()->lake_compaction_remote_write_count.increment(1);
             VLOG(1) << "Merged " << lcrm_files.size() << " subtask LCRM files into " << file_info.path
                     << ", tablet=" << tablet_id << ", txn_id=" << txn_id << ", total_rows=" << total_rows
                     << ", size=" << (file_info.size.has_value() ? file_info.size.value() : -1);

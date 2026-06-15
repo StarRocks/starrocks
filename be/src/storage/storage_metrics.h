@@ -129,11 +129,13 @@ public:
     METRIC_DEFINE_INT_COUNTER(update_compaction_outputs_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(update_compaction_duration_us, MetricUnit::MICROSECONDS);
 
-    // Number of object-storage PUT calls issued by lake compaction tasks. Counted as one PUT
-    // per file close (output segment, sst, .lcrm, and txn log). This is an approximation:
-    // multipart uploads of large files issue several real PUTs, and the publish-time tablet
-    // metadata write is not counted here (it happens outside the compaction task).
-    METRIC_DEFINE_INT_COUNTER(lake_compaction_object_storage_put_count, MetricUnit::OPERATIONS);
+    // Number of remote-storage writes issued by lake compaction tasks. "remote" is backend-
+    // neutral: covers object-storage backends (S3, OSS, GCS, Azure Blob) and HDFS. Counted as
+    // one write per file close (output segment, sst, .lcrm, and txn log). This is an
+    // approximation: multipart uploads of large files issue several real PUTs underneath, and
+    // the publish-time tablet metadata write is not counted here (it happens outside the
+    // compaction task).
+    METRIC_DEFINE_INT_COUNTER(lake_compaction_remote_write_count, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_total, MetricUnit::OPERATIONS);

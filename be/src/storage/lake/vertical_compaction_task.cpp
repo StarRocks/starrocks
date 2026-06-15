@@ -120,7 +120,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         // The txn log write is one object-storage PUT; segment/sst/lcrm PUTs are counted in
         // fill_compaction_segment_info(). When skip_write_txnlog is set the write is deferred to
         // the caller, so it is not counted here.
-        StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(1);
+        StorageMetrics::instance()->lake_compaction_remote_write_count.increment(1);
     }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state

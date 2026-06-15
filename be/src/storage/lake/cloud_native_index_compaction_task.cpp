@@ -38,7 +38,7 @@ Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPoo
         // One PUT for the txn log itself; the PK index SST PUTs were already counted inside
         // execute_index_major_compaction(). When skip_write_txnlog is set the write is deferred
         // to the caller, so it is not counted here.
-        StorageMetrics::instance()->lake_compaction_object_storage_put_count.increment(1);
+        StorageMetrics::instance()->lake_compaction_remote_write_count.increment(1);
     }
     VLOG(2) << "CloudNative Index compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
             << ", statistics: " << _context->stats->to_json_stats();
