@@ -90,6 +90,50 @@ public class CredentialUtilTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testMaskHuaweiOBSCredential() {
+        Map<String, String> properties = new HashMap<>();
+
+        // Test underscore format
+        properties.put(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY, "AKIAIOSFODNN7EXAMPLE");
+        properties.put(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY));
+        Assertions.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY));
+
+        // Test dot format
+        properties.clear();
+        properties.put(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT, "AKIAIOSFODNN7EXAMPLE");
+        properties.put(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT));
+        Assertions.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT));
+    }
+
+    @Test
+    public void testMaskTencentCOSCredential() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "test_cos_access_key");
+        properties.put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "test_cos_secret_key");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY));
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY));
+    }
+
+    @Test
+    public void testMaskIcebergJdbcCatalogPassword() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD, "12345678");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("12******78", properties.get(
+                IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                        IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD));
+    }
+
+    @Test
+>>>>>>> 24c10f8c66 ([BugFix] Mask tencent.cos and iceberg.jdbc.password in SHOW CREATE CATALOG (#74696))
     public void testAzurePathParseWithABFS() {
         String uri = "abfs://bottle@smith.dfs.core.windows.net/path/1/2";
         AzureStoragePath path = CredentialUtil.parseAzureStoragePath(uri);
