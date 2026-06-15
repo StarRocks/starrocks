@@ -541,4 +541,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatsIO Platform)
+target_link_libraries(Exec PRIVATE FormatCore Platform)

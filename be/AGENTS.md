@@ -174,13 +174,13 @@ Core runtime building blocks without full Runtime/Exec/Storage coupling.
 - Core tests: `runtime_core_test`
 - Remediation: Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime.
 
-### FormatsIO (`formatsio`)
-Format-oriented output stream primitives above RuntimeCore, FSCore, and Types.
-- Targets: `FormatsIO`
+### FormatCore (`formatcore`)
+Format-oriented core primitives above RuntimeCore, FSCore, and Types.
+- Targets: `FormatCore`
 - Allowed internal include prefixes: `formats/io/`, `runtime/`, `fs/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `RuntimeCore`, `FSCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `formats_io_test`
-- Remediation: Keep FormatsIO limited to reusable format output stream primitives; move connector orchestration and higher execution policy upward.
+- Core tests: `format_core_test`
+- Remediation: Keep FormatCore limited to reusable format primitives; move connector orchestration and higher execution policy upward.
 
 ### RuntimeEnv (`runtimeenv`)
 Process-scoped runtime environment resources below full Runtime and above RuntimeCore.

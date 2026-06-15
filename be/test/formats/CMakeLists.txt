@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(FORMATS_IO_TEST_FILES
+set(FORMAT_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     io/async_flush_output_stream_test.cpp
     io/formatted_output_stream_file_test.cpp
 )
 
-set(FORMATS_IO_TEST_LINK_LIBS
-    FormatsIO
+set(FORMAT_CORE_TEST_LINK_LIBS
+    FormatCore
     RuntimeCore
     FSCore
     Types
@@ -36,8 +36,8 @@ set(FORMATS_IO_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_formats_io_test_objs OBJECT ${FORMATS_IO_TEST_FILES})
-target_link_libraries(starrocks_formats_io_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_formats_io_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(formats_io_test $<TARGET_OBJECTS:starrocks_formats_io_test_objs>)
-target_link_libraries(formats_io_test ${FORMATS_IO_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_format_core_test_objs OBJECT ${FORMAT_CORE_TEST_FILES})
+target_link_libraries(starrocks_format_core_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_format_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(format_core_test $<TARGET_OBJECTS:starrocks_format_core_test_objs>)
+target_link_libraries(format_core_test ${FORMAT_CORE_TEST_LINK_LIBS} gtest_main)
