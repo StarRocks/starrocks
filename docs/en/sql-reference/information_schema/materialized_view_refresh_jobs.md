@@ -20,7 +20,7 @@ The following fields are provided in `materialized_view_refresh_jobs`:
 | TASK_ID                            | ID of the refresh task.                                      |
 | WAREHOUSE                          | Warehouse used by the refresh job.                           |
 | RESOURCE_GROUP                     | Resource group used by the refresh job. This is the materialized view's configured `resource_group` property; returns `default_mv_wg` when not configured. |
-| CREATOR                            | User who created the materialized view (the task owner).     |
+| CREATOR                            | User that created the materialized view (its create-user; the run identity is in RUN_AS_USER).     |
 | SUBMIT_USER                        | User who submitted the refresh job. For a manual refresh this is the user who issued it; for scheduled or base-table-change refreshes it is submitted by the system. |
 | RUN_AS_USER                        | User identity the refresh runs as.                           |
 | SUBMIT_TIME                        | Time when the job was submitted (the first task run's creation time). |
