@@ -27,7 +27,6 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -53,6 +52,7 @@ import org.apache.thrift.TException;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -194,7 +194,8 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 long startBasis = rjs.getMvRefreshProcessTime() > 0
                         ? rjs.getMvRefreshProcessTime() : rjs.getMvRefreshStartTime();
                 long wallMs = rjs.getMvRefreshEndTime() - startBasis;
-                info.setDuration_time(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(wallMs / 1000D));
+                // Locale.ROOT so the BE's std::stod always receives a '.' decimal regardless of FE JVM locale.
+                info.setDuration_time(String.format(Locale.ROOT, "%.3f", wallMs / 1000D));
             }
 
             // IMV columns stay NULL (not "{}") when the job consumed no source ranges / pinned no snapshots.
