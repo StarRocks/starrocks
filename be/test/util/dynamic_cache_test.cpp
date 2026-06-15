@@ -125,7 +125,7 @@ TEST(DynamicCacheTest, mem_tracker_exclude_root) {
     cache.release(e);
     cache.clear();
     EXPECT_EQ(0, child.consumption()); // release_without_root returns child to zero
-    EXPECT_EQ(0, root.consumption()); // root was never touched
+    EXPECT_EQ(0, root.consumption());  // root was never touched
 }
 
 // End-to-end reproduction of the process double-count, at the MemTracker level.
@@ -165,7 +165,7 @@ TEST(DynamicCacheTest, mem_tracker_no_double_count_on_process) {
 
         process.consume(kHookBytes); // count #1 (allocator hook, modeled)
         auto* e = cache.get_or_create(1);
-        cache.update_object_size(e, kLogicalBytes); // count #2 now labels vi only
+        cache.update_object_size(e, kLogicalBytes);   // count #2 now labels vi only
         EXPECT_EQ(kHookBytes, process.consumption()); // process: single count
         EXPECT_EQ(kLogicalBytes, vi.consumption());   // vi: labels the logical size
 

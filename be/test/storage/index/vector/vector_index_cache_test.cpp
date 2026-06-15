@@ -532,8 +532,7 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
     tenann::SetGlobalIndexCache(saved);
 
     ASSERT_NE(nullptr, fs.captured) << "loader never opened the index file via fs";
-    EXPECT_EQ(process, fs.captured) << "index load charged to '" << fs.captured->label()
-                                    << "', expected 'process'";
+    EXPECT_EQ(process, fs.captured) << "index load charged to '" << fs.captured->label() << "', expected 'process'";
     EXPECT_NE(vi, fs.captured);
     EXPECT_NE(&fake_query, fs.captured);
 }
