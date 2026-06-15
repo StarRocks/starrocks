@@ -19,6 +19,7 @@
 #include <memory>
 #include <numeric>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "base/utility/defer_op.h"
@@ -317,7 +318,21 @@ public:
             return;
         }
 
-        auto buffer_array = helper.batch_create_bytebuf(serialized_bytes.data(), offsets.data(), start, start + size);
+        auto buffer_array = offsets.visit_storage([&](const auto& offsets_buf) -> jobject {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            if constexpr (std::is_same_v<OffsetValue, uint32_t>) {
+                return helper.batch_create_bytebuf(serialized_bytes.data(), offsets_buf.data(), start, start + size);
+            } else {
+                // Sticky-large storage whose values are already bounded by the INT_MAX check
+                // above: materialize uint32_t offsets for the JNI ABI.
+                Buffer<uint32_t> u32_offsets;
+                u32_offsets.resize(offsets_buf.size());
+                for (size_t i = 0; i < offsets_buf.size(); ++i) {
+                    u32_offsets[i] = static_cast<uint32_t>(offsets_buf[i]);
+                }
+                return helper.batch_create_bytebuf(serialized_bytes.data(), u32_offsets.data(), start, start + size);
+            }
+        });
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         // batch call merge

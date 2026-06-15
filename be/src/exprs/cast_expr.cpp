@@ -1443,7 +1443,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
         for (int i = 0; i < size; ++i) {                                                                    \
             auto f = fmt::format_int(r1[i]);                                                                \
             bytes.insert(bytes.end(), (uint8_t*)f.data(), (uint8_t*)f.data() + f.size());                   \
-            offset[i + 1] = bytes.size();                                                                   \
+            offset.set(i + 1, bytes.size());                                                               \
         }                                                                                                   \
         return result;                                                                                      \
     }
@@ -1475,13 +1475,13 @@ DEFINE_INT_CAST_TO_STRING(TYPE_BIGINT, TYPE_VARCHAR);
             for (int i = 0; i < size; ++i) {                                                                \
                 r1[i].to_string(dst + off, MAX_LEN);                                                        \
                 off += MAX_LEN;                                                                             \
-                offset[i + 1] = static_cast<uint32_t>(off);                                                 \
+                offset.set(i + 1, off);                                                 \
             }                                                                                               \
         } else {                                                                                            \
             for (int i = 0; i < size; ++i) {                                                                \
                 int len = r1[i].to_string(dst + off, MAX_LEN);                                              \
                 if (LIKELY(len > 0)) off += len;                                                            \
-                offset[i + 1] = static_cast<uint32_t>(off);                                                 \
+                offset.set(i + 1, off);                                                 \
             }                                                                                               \
         }                                                                                                   \
         bytes.resize(off);                                                                                  \

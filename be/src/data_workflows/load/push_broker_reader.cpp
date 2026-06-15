@@ -155,7 +155,7 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
                                                  size_t num_rows) {
     const Column* data_column = ColumnHelper::get_data_column(column.get());
     const auto* binary = down_cast<const BinaryColumn*>(data_column);
-    const auto offsets = binary->get_offset();
+    const auto& offsets = binary->get_offset();
     uint32_t len = slot_desc->type().len;
 
     // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
@@ -165,16 +165,20 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     new_offset.resize(num_rows + 1);
     new_bytes.assign(num_rows * len, 0); // padding 0
 
-    uint32_t from = 0;
+    size_t from = 0;
     auto bytes = binary->get_immutable_bytes();
-    for (size_t i = 0; i < num_rows; ++i) {
-        uint32_t copy_data_len = std::min(len, offsets[i + 1] - offsets[i]);
-        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offsets[i], copy_data_len);
-        from += len; // no copy data will be 0
-    }
+    offsets.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offset_data = offsets_buf.data();
+        for (size_t i = 0; i < num_rows; ++i) {
+            size_t copy_data_len = std::min<size_t>(len, offset_data[i + 1] - offset_data[i]);
+            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[i], copy_data_len);
+            from += len; // no copy data will be 0
+        }
+    });
 
+    new_offset.set(0, 0);
     for (size_t i = 1; i <= num_rows; ++i) {
-        new_offset[i] = len * i;
+        new_offset.set(i, static_cast<uint64_t>(len) * i);
     }
 
     if (slot_desc->is_nullable()) {

@@ -14,6 +14,7 @@
 
 #include "udf/java/java_native_method.h"
 
+#include <limits>
 #include <new>
 #include <type_traits>
 
@@ -44,7 +45,16 @@ public:
     }
 
     Status do_visit(const BinaryColumn& column) {
-        _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_offset().data());
+        const auto& column_offsets = column.get_offset();
+        const size_t java_max_buffer_size = std::numeric_limits<int>::max();
+        if (column_offsets.is_large() || column_offsets.back() > java_max_buffer_size ||
+            column.get_immutable_bytes().size() > java_max_buffer_size ||
+            column_offsets.size() > java_max_buffer_size / sizeof(uint32_t)) {
+            return Status::NotSupported("Java UDF does not support BinaryColumn with large offsets or bytes");
+        }
+        column_offsets.visit_storage([&](const auto& offsets) {
+            _jarr[_idx++] = reinterpret_cast<int64_t>(offsets.data());
+        });
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_immutable_bytes().data());
         return Status::OK();
     }
