@@ -69,6 +69,11 @@ set(COMPUTE_ENV_QUERY_CACHE_FILES
     query_cache/lane_arbiter.cpp
 )
 
+set(COMPUTE_ENV_QUERY_FILES
+    query/connector_scan_mem_share_arbitrator.cpp
+    query/global_late_materialization_context.cpp
+)
+
 set(COMPUTE_ENV_GLOBAL_DICT_FILES
     global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
@@ -91,6 +96,7 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_WORKGROUP_FILES}
     ${COMPUTE_ENV_SPILL_FILES}
     ${COMPUTE_ENV_QUERY_CACHE_FILES}
+    ${COMPUTE_ENV_QUERY_FILES}
     ${COMPUTE_ENV_GLOBAL_DICT_FILES}
 )
 

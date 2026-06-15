@@ -34,21 +34,6 @@
 namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
-ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit,
-                                                                                 int connector_scan_node_number)
-        : query_mem_limit(query_mem_limit),
-          scan_mem_limit(query_mem_limit),
-          total_chunk_source_mem_bytes(connector_scan_node_number *
-                                       connector::DataSourceProvider::DEFAULT_DATA_SOURCE_MEM_BYTES) {}
-
-int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
-    int64_t diff = new_value - old_value;
-    int64_t total = total_chunk_source_mem_bytes.fetch_add(diff) + diff;
-    if (new_value == 0) return 0;
-    if (total <= 0) return scan_mem_limit;
-    return scan_mem_limit * (new_value * 1.0 / std::max(total, new_value));
-}
-
 class ConnectorScanOperatorIOTasksMemLimiter {
 private:
     mutable std::mutex lock;

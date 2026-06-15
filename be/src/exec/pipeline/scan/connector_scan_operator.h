@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "compute_env/query/connector_scan_mem_share_arbitrator.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "connector/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -29,22 +30,6 @@ class ScanNode;
 namespace pipeline {
 
 struct ConnectorScanOperatorIOTasksMemLimiter;
-
-struct ConnectorScanOperatorMemShareArbitrator {
-    static constexpr double kChunkBufferMemRatio = 0.5;
-    int64_t query_mem_limit = 0;
-    int64_t scan_mem_limit = 0;
-    std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
-
-    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit, int connector_scan_node_number);
-
-    int64_t set_scan_mem_ratio(double mem_ratio) {
-        scan_mem_limit = std::max<int64_t>(1, query_mem_limit * mem_ratio);
-        return scan_mem_limit;
-    }
-
-    int64_t update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value);
-};
 
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:

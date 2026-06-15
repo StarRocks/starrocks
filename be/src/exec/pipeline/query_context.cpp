@@ -21,13 +21,13 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "compute_env/compute_env.h"
+#include "compute_env/query/connector_scan_mem_share_arbitrator.h"
+#include "compute_env/query/global_late_materialization_context.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/pipeline/scan/glm_manager.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
@@ -155,7 +155,8 @@ void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
                                     std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
-                                    RuntimeState* runtime_state, int connector_scan_node_number) {
+                                    RuntimeState* runtime_state, int connector_scan_node_number,
+                                    int64_t connector_scan_default_data_source_mem_bytes) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(query_id()));
         auto* mem_tracker_counter =
@@ -188,8 +189,8 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (big_query_mem_limit > 0) {
             _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
         }
-        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
-                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
+        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(
+                _static_query_mem_limit, connector_scan_node_number, connector_scan_default_data_source_mem_bytes));
         if (runtime_state != nullptr && runtime_state->enable_global_late_materialization()) {
             _global_late_materialization_ctx_mgr = _object_pool.add(new GlobalLateMaterilizationContextMgr());
         }

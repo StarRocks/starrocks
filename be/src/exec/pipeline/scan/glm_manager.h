@@ -15,9 +15,14 @@
 #pragma once
 
 #include <memory>
+#include <optional>
+#include <shared_mutex>
+#include <tuple>
 #include <unordered_map>
+#include <vector>
 
 #include "base/phmap/phmap.h"
+#include "compute_env/query/global_late_materialization_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/primitive/storage_ids.h"
@@ -30,14 +35,6 @@ using RowsetSharedPtr = std::shared_ptr<Rowset>;
 } // namespace starrocks
 
 namespace starrocks {
-
-// GlobalLateMaterilizationContext is used to describe the context information required
-// for global late materialization.
-// Each data source needs to have its own implementation.
-class GlobalLateMaterilizationContext {
-public:
-    virtual ~GlobalLateMaterilizationContext() = default;
-};
 
 class IcebergGlobalLateMaterilizationContext : public GlobalLateMaterilizationContext {
 public:
@@ -109,18 +106,4 @@ private:
     std::optional<TLakeScanNode> _thrift_lake_scan_node;
 };
 
-// manage all global late materialization contexts for different data sources
-class GlobalLateMaterilizationContextMgr {
-public:
-    GlobalLateMaterilizationContext* get_ctx(int64_t scan_node_id) const;
-    GlobalLateMaterilizationContext* get_or_create_ctx(
-            int64_t scan_node_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
-
-    using MutexType = std::shared_mutex;
-    // scan_node_id -> GlobalLateMaterilizationContext*
-    using ContextMap = phmap::parallel_flat_hash_map<int64_t, GlobalLateMaterilizationContext*, phmap::Hash<int64_t>,
-                                                     phmap::EqualTo<int64_t>, phmap::Allocator<int64_t>, 4, MutexType>;
-
-    ContextMap _ctx_map;
-};
 } // namespace starrocks
