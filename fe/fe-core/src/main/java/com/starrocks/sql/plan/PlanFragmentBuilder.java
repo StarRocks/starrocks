@@ -46,6 +46,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -2031,7 +2032,11 @@ public class PlanFragmentBuilder {
                                 scanNode.setLabel(constantOperator.getVarchar());
                                 break;
                             case "JOB_ID":
-                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)) {
+                                // task_runs and materialized_view_refresh_jobs key JOB_ID by a string (UUID), so
+                                // skip the numeric push-down and let the predicate be a normal scan filter.
+                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)
+                                        && !scanNode.getTableName().equalsIgnoreCase(
+                                                MaterializedViewRefreshJobsSystemTable.NAME)) {
                                     scanNode.setJobId(constantOperator.getBigint());
                                 }
                                 break;

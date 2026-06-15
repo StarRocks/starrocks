@@ -59,6 +59,11 @@ function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.
 -- result:
 None
 -- !result
+-- The string JOB_ID must filter correctly, i.e. plan without being pushed down as a numeric job id.
+function: assert_query_contains("SELECT count(*) FROM information_schema.materialized_view_refresh_jobs WHERE JOB_ID = '00000000-0000-0000-0000-000000000000'", "0")
+-- result:
+None
+-- !result
 -- Cross-check the shared columns against information_schema.materialized_views for the same MV.
 function: assert_query_contains("SELECT (j.MATERIALIZED_VIEW_ID = m.MATERIALIZED_VIEW_ID AND j.TASK_ID = m.TASK_ID AND j.SUBMIT_TIME = m.LAST_REFRESH_START_TIME AND j.FINISH_TIME = m.LAST_REFRESH_FINISHED_TIME) FROM information_schema.materialized_view_refresh_jobs j JOIN information_schema.materialized_views m ON j.TABLE_SCHEMA = m.TABLE_SCHEMA AND j.TABLE_NAME = m.TABLE_NAME AND j.JOB_ID = m.LAST_REFRESH_JOB_ID WHERE j.TABLE_SCHEMA='db_${uuid0}' AND j.TABLE_NAME='mv1'", "1")
 -- result:
