@@ -199,6 +199,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.routine_load_task_executor = _routine_load_task_executor;
     _runtime_services.small_file_mgr = _small_file_mgr;
     _runtime_services.runtime_filter_worker = _runtime_filter_worker;
+    _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_worker;
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
     _runtime_services.profile_report_worker = profile_report_worker();
     _runtime_services.query_context_mgr = _query_context_mgr;

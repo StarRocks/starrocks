@@ -32,7 +32,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -91,8 +91,8 @@ QueryContext::~QueryContext() noexcept {
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
     if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
-        if (_is_runtime_filter_coordinator) {
-            services->runtime_filter_worker->close_query(query_id());
+        if (_is_runtime_filter_coordinator && services->runtime_filter_query_lifecycle != nullptr) {
+            services->runtime_filter_query_lifecycle->close_query(query_id());
         }
         services->runtime_filter_cache->remove(query_id());
     }

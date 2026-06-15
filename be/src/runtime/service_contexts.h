@@ -38,6 +38,7 @@ class ResultBufferMgr;
 class ResultQueueMgr;
 class RoutineLoadTaskExecutor;
 class RuntimeFilterCache;
+class RuntimeFilterQueryLifecycle;
 class RuntimeFilterWorker;
 class SmallFileMgr;
 class StreamContextMgr;
@@ -138,6 +139,7 @@ struct RuntimeServices {
     RoutineLoadTaskExecutor* routine_load_task_executor = nullptr;
     SmallFileMgr* small_file_mgr = nullptr;
     RuntimeFilterWorker* runtime_filter_worker = nullptr;
+    RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* runtime_filter_cache = nullptr;
     ProfileReportWorker* profile_report_worker = nullptr;
     pipeline::QueryContextManager* query_context_mgr = nullptr;
