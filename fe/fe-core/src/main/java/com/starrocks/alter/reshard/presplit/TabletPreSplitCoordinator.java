@@ -148,6 +148,7 @@ public final class TabletPreSplitCoordinator {
         boolean configEnabled = switch (loadKind) {
             case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
             case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
+            case INSERT_FROM_TABLE -> Config.enable_tablet_pre_split_for_insert_from_table;
         };
         if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
