@@ -431,6 +431,8 @@ struct TMaterializedViewStatus {
     35: optional string refresh_policy
     36: optional string resource_group
     37: optional string query_rewrite_status_reason
+    38: optional string last_freshness_confirmed_at
+    39: optional string base_table_refresh_version_times
 }
 
 struct TListPipesParams {
@@ -558,6 +560,8 @@ struct TTaskRunInfo {
 
     16: optional string job_id
     17: optional i64 process_time
+
+    18: optional string task_source
 }
 
 struct TGetTaskRunInfoResult {
@@ -1748,6 +1752,7 @@ struct TQueryStatisticsInfo {
     15: optional string resourceGroupName
     16: optional string execProgress
     17: optional string execState
+    18: optional string queryType
 }
 
 struct TGetQueryStatisticsResponse {

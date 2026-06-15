@@ -20,19 +20,20 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_scan_io_fwd.h"
-#include "compute_env/compute_env.h"
+#include "compute_env/query/connector_scan_mem_share_arbitrator.h"
+#include "compute_env/query/global_late_materialization_context.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/pipeline/scan/glm_manager.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 
@@ -51,7 +52,14 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+    _query_runtime_state.set_object_pool(&_object_pool);
     _lifetime_sw.start();
+}
+
+QueryContextPtr QueryContext::create() {
+    auto query_ctx = std::make_shared<QueryContext>();
+    query_ctx->_fragment_mgr = std::make_unique<FragmentContextManager>(query_ctx);
+    return query_ctx;
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -83,8 +91,8 @@ QueryContext::~QueryContext() noexcept {
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
     if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
-        if (_is_runtime_filter_coordinator) {
-            services->runtime_filter_worker->close_query(query_id());
+        if (_is_runtime_filter_coordinator && services->runtime_filter_query_lifecycle != nullptr) {
+            services->runtime_filter_query_lifecycle->close_query(query_id());
         }
         services->runtime_filter_cache->remove(query_id());
     }
@@ -101,6 +109,19 @@ bool QueryContext::decrement_num_active_fragments() {
     return old == 1;
 }
 
+void QueryContext::count_down_fragment() {
+    if (!decrement_num_active_fragments()) {
+        return;
+    }
+
+    if (auto* lifecycle = _query_lifecycle.load(); lifecycle != nullptr) {
+        // Keep manager-owned query contexts alive if removal erases the last shared_ptr.
+        [[maybe_unused]] auto self = weak_from_this().lock();
+        auto id = query_id();
+        lifecycle->on_query_releasable(id);
+    }
+}
+
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }
@@ -109,8 +130,7 @@ void QueryContext::attach_to_runtime_state(RuntimeState* state) {
     DCHECK(state != nullptr);
     auto lifetime = weak_from_this();
     DCHECK(!lifetime.expired());
-    state->set_query_ctx(this);
-    state->set_query_runtime_state(&query_runtime_state());
+    state->set_query_ctx(this, &query_runtime_state(), object_pool());
     state->set_query_ctx_lifetime(std::move(lifetime));
 }
 
@@ -126,13 +146,17 @@ void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
     Status* old_status = nullptr;
     if (_cancelled_status.compare_exchange_strong(old_status, &_s_status)) {
         _s_status = status;
+        if (!status.ok()) {
+            release_workgroup_token_once();
+        }
     }
     _fragment_mgr->cancel(status);
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
                                     std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
-                                    RuntimeState* runtime_state, int connector_scan_node_number) {
+                                    RuntimeState* runtime_state, int connector_scan_node_number,
+                                    int64_t connector_scan_default_data_source_mem_bytes) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(query_id()));
         auto* mem_tracker_counter =
@@ -165,11 +189,15 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (big_query_mem_limit > 0) {
             _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
         }
-        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
-                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
+        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(
+                _static_query_mem_limit, connector_scan_node_number, connector_scan_default_data_source_mem_bytes));
         if (runtime_state != nullptr && runtime_state->enable_global_late_materialization()) {
             _global_late_materialization_ctx_mgr = _object_pool.add(new GlobalLateMaterilizationContextMgr());
         }
+        _query_runtime_state.set_static_query_mem_limit(_static_query_mem_limit);
+        _query_runtime_state.set_connector_scan_operator_mem_share_arbitrator(
+                _connector_scan_operator_mem_share_arbitrator);
+        _query_runtime_state.set_global_late_materialization_ctx_mgr(_global_late_materialization_ctx_mgr);
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -183,6 +211,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             _connector_scan_mem_tracker = std::make_shared<MemTracker>(
                     MemTrackerType::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
                     _profile->name() + "/connector_scan", connector_scan_parent);
+            _query_runtime_state.set_connector_scan_mem_tracker(_connector_scan_mem_tracker.get());
         }
     });
 }
@@ -191,14 +220,11 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
         auto* services = runtime_services(_query_execution_services);
-        auto* compute_env = ExecEnv::GetInstance()->compute_env();
         auto* g_spill_manager = services != nullptr ? services->global_spill_manager : nullptr;
-        if (g_spill_manager == nullptr && compute_env != nullptr) {
-            g_spill_manager = compute_env->global_spill_manager();
-        }
         auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : nullptr;
-        if (spill_dir_mgr == nullptr && compute_env != nullptr) {
-            spill_dir_mgr = compute_env->spill_dir_mgr();
+        if (g_spill_manager == nullptr || spill_dir_mgr == nullptr) {
+            st = Status::InternalError("Query spill services are not initialized");
+            return;
         }
         _spill_manager = std::make_unique<spill::QuerySpillManager>(query_id(), g_spill_manager, spill_dir_mgr);
         _query_runtime_state.set_query_spill_manager(_spill_manager.get());
@@ -211,7 +237,7 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group
     Status st = Status::OK();
     if (wg != nullptr) {
         std::call_once(_init_query_once, [this, &st, wg, enable_group_level_query_queue]() {
-            this->init_query_begin_time();
+            _query_runtime_state.init_query_begin_time();
             auto maybe_token = wg->acquire_running_query_token(enable_group_level_query_queue);
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
@@ -228,7 +254,7 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group
 void QueryContext::release_workgroup_token_once() {
     auto* old = _wg_running_query_token_atomic_ptr.load();
     if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
-        // The release_workgroup_token_once function is called by FragmentContext::cancel
+        // The release_workgroup_token_once function is called by cancel_fragment_context
         // to detach the QueryContext from the workgroup.
         // When the workgroup undergoes a configuration change, the old version of the workgroup is released,
         // and a new version is created. The old workgroup will only be physically destroyed once no

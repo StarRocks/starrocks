@@ -206,6 +206,19 @@ public abstract class MVRefreshProcessor {
     public abstract void generateNextTaskRunIfNeeded();
 
     /**
+     * Whether this refresh will spawn another batch task run after the current one.
+     */
+    public abstract boolean hasNextBatchRun();
+
+    public void confirmFreshness() {
+        // Freshness is confirmed by the batch's final run only; intermediate runs leave it untouched.
+        if (hasNextBatchRun()) {
+            return;
+        }
+        new MVVersionManager(mv, mvContext).confirmFreshness();
+    }
+
+    /**
      * Update the version meta after the mv refresh is successful.
      * @param execPlan the exec plan used for the mv refresh
      * @param mvRefreshedPartitions the refreshed partitions of the mv
@@ -841,7 +854,7 @@ public abstract class MVRefreshProcessor {
         MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
         try {
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
-                    refBaseTableIds, refTableAndPartitionNames, tvrDeltaToPromote);
+                    refBaseTableIds, refTableAndPartitionNames, tvrDeltaToPromote, !hasNextBatchRun());
         } catch (Exception e) {
             logger.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;

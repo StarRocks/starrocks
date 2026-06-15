@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
@@ -38,7 +39,6 @@
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter_builder.h"
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
@@ -65,8 +65,8 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
-    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
-    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
+    HdfsScannerContext* _create_ctx(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
+    void build_hive_column_names(HdfsScannerContext* ctx, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
@@ -100,7 +100,7 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     _runtime_state->init_instance_mem_tracker();
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
-    _runtime_state->set_fragment_ctx(fragment_context);
+    _runtime_state->set_fragment_ctx(fragment_context, &fragment_context->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
 }
 
@@ -118,16 +118,16 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
     return scan_range;
 }
 
-HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
-                                                  TupleDescriptor* tuple_desc) {
-    auto* param = _pool.add(new HdfsScannerParams());
+HdfsScannerContext* HdfsScannerTest::_create_ctx(const std::string& file, THdfsScanRange* range,
+                                                 TupleDescriptor* tuple_desc) {
+    auto* ctx = _pool.add(new HdfsScannerContext());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-    param->fs = FileSystem::Default();
-    param->path = file;
-    param->file_size = range->file_length;
-    param->scan_range = range;
-    param->tuple_desc = tuple_desc;
-    param->runtime_filter_collector = _pool.add(new RuntimeFilterProbeCollector());
+    ctx->fs = FileSystem::Default();
+    ctx->file_path = file;
+    ctx->file_size = range->file_length;
+    ctx->scan_range = range;
+    ctx->tuple_desc = tuple_desc;
+    ctx->runtime_filter_collector = _pool.add(new RuntimeFilterProbeCollector());
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
     std::vector<SlotDescriptor*> mat_slots;
@@ -144,17 +144,16 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
         }
     }
 
-    param->partition_index_in_chunk = partition_index_in_chunk;
-    param->materialize_index_in_chunk = materialize_index_in_chunk;
-    param->materialize_slots = mat_slots;
-    param->partition_slots = part_slots;
-    param->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
-    return param;
+    ctx->partition_index_in_chunk = partition_index_in_chunk;
+    ctx->materialize_index_in_chunk = materialize_index_in_chunk;
+    ctx->materialize_slots = mat_slots;
+    ctx->partition_slots = part_slots;
+    ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    return ctx;
 }
 
-void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
+void HdfsScannerTest::build_hive_column_names(HdfsScannerContext* ctx, const TupleDescriptor* tuple_desc,
                                               bool diff_case_sensitive) {
-    std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
         std::string col_name(slot->col_name());
         if (diff_case_sensitive && std::isupper(col_name[0])) {
@@ -162,9 +161,8 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
         } else if (diff_case_sensitive && std::islower(col_name[0])) {
             std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::toupper);
         }
-        hive_column_names->emplace_back(col_name);
+        ctx->hive_column_names.emplace_back(col_name);
     }
-    params->hive_column_names = hive_column_names;
 }
 
 TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
@@ -208,9 +206,9 @@ TEST_F(HdfsScannerTest, TestParquetInit) {
 
     auto* range = _create_scan_range(default_parquet_file, 4, 1024);
     auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
-    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     ASSERT_TRUE(status.ok());
 }
 
@@ -219,9 +217,9 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
 
     auto* range = _create_scan_range(default_parquet_file, 4, 1024);
     auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
-    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     ASSERT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -233,9 +231,9 @@ TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
 
     auto* range = _create_scan_range(default_parquet_file, 4, 1024);
     auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
-    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     ASSERT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -249,9 +247,9 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
 
     auto* range = _create_scan_range(default_parquet_file, 4, 1024);
     auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
-    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     ASSERT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -277,9 +275,9 @@ TEST_F(HdfsScannerTest, TestAvroGetNextWithDirectReader) {
 
     auto* range = _create_scan_range(avro_multiblock_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(avro_multiblock_descs);
-    auto* param = _create_param(avro_multiblock_file, range, tuple_desc);
+    auto* ctx = _create_ctx(avro_multiblock_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     ASSERT_TRUE(status.ok()) << status.to_string();
 
     status = scanner->open(_runtime_state);
@@ -294,7 +292,7 @@ TEST_F(HdfsScannerTest, TestAvroGetNextWithDirectReader) {
     ASSERT_EQ(100, scanner->raw_rows_read());
     ASSERT_EQ(100, scanner->num_rows_read());
 
-    HdfsScanProfile profile;
+    HdfsScannerProfile profile;
     profile.runtime_profile = _runtime_profile;
     scanner->do_update_counter(&profile);
     ASSERT_NE(nullptr, _runtime_profile->get_counter("DirectPathUsed"));
@@ -313,7 +311,7 @@ TEST_F(HdfsScannerTest, TestAvroGetNextWithDirectReader) {
 
 TEST_F(HdfsScannerTest, TestAvroUpdateCounterWithoutOpen) {
     HdfsAvroScanner scanner;
-    HdfsScanProfile profile;
+    HdfsScannerProfile profile;
     profile.runtime_profile = _runtime_profile;
 
     scanner.do_update_counter(&profile);
@@ -476,20 +474,19 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     return ctx;
 }
 
-static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params, const std::vector<int64_t>& values) {
+static void extend_partition_values(ObjectPool* pool, HdfsScannerContext* ctx, std::vector<ExprContext*>* part_ctxs,
+                                    const std::vector<int64_t>& values) {
     std::vector<int> positions;
-    std::vector<ExprContext*> part_values;
     for (int i = 0; i < values.size(); i++) {
         int64_t v = values[i];
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, v);
         nodes.emplace_back(lit_node);
-        ExprContext* ctx = create_expr_context(pool, nodes);
-        part_values.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(pool, nodes);
+        part_ctxs->push_back(expr_ctx);
         positions.push_back(i);
     }
-    params->_partition_index_in_hdfs_partition_columns = positions;
-    params->partition_values = part_values;
+    ctx->_partition_index_in_hdfs_partition_columns = positions;
 }
 
 #define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
@@ -567,15 +564,17 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
-    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
-    extend_partition_values(&_pool, param, values);
+    std::vector<ExprContext*> part_ctxs;
+    extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    ctx->partition_expr_ctxs = std::move(part_ctxs);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -590,15 +589,17 @@ TEST_F(HdfsScannerTest, TestOrcSkipFile) {
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
-    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
-    extend_partition_values(&_pool, param, values);
+    std::vector<ExprContext*> part_ctxs;
+    extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    ctx->partition_expr_ctxs = std::move(part_ctxs);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     scanner->_should_skip_file = true;
@@ -640,21 +641,23 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
 
         auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
-        auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+        auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
 
         // partition values for [PART_x, PART_y]
         std::vector<int64_t> values = {10, 20};
-        extend_partition_values(&_pool, param, values);
+        std::vector<ExprContext*> part_ctxs;
+        extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-        ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
 
         std::unique_ptr<BadOrcFileStream> file_stream(new BadOrcFileStream());
         file_stream->ret_errno = ec.ret_errno;
         file_stream->ret_message = ec.ret_message;
         scanner->_input_stream = std::move(file_stream);
 
-        Status status = scanner->init(_runtime_state, *param);
+        ctx->partition_expr_ctxs = std::move(part_ctxs);
+        Status status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
 
         status = scanner->open(_runtime_state);
@@ -664,9 +667,9 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
     }
 }
 
-static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerParams* params,
+static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerContext* ctx,
                                                 const std::vector<int>& values) {
-    const TupleDescriptor* min_max_tuple_desc = params->min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = ctx->min_max_tuple_desc;
 
     // id >= values[0] && id <= values[1] && part_y >= values[2] && part_y <= values[3]
     // id min/max = 2629/5212
@@ -676,8 +679,8 @@ static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerPar
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::BIGINT, values[0]);
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::BIGINT,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(pool, nodes);
-        params->min_max_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
     {
@@ -685,8 +688,8 @@ static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerPar
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::BIGINT, values[1]);
         push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[0], TPrimitiveType::BIGINT,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(pool, nodes);
-        params->min_max_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
     // PART_Y is always 20
@@ -696,8 +699,8 @@ static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerPar
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, values[2]);
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[1], TPrimitiveType::INT,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(pool, nodes);
-        params->min_max_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
     {
@@ -705,8 +708,8 @@ static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerPar
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, values[3]);
         push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[1], TPrimitiveType::INT,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(pool, nodes);
-        params->min_max_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 }
 
@@ -715,13 +718,14 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
-    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
-    extend_partition_values(&_pool, param, values);
+    std::vector<ExprContext*> part_ctxs;
+    extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
 
     // TupleDescriptor* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -751,14 +755,15 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
         min_max_tuple_desc = row_desc->tuple_descriptors()[0];
     }
 
-    param->min_max_tuple_desc = min_max_tuple_desc;
+    ctx->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
-    extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    extend_mtypes_orc_min_max_conjuncts(&_pool, ctx, thres);
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    ctx->partition_expr_ctxs = std::move(part_ctxs);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -773,23 +778,25 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
-    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
-    extend_partition_values(&_pool, param, values);
+    std::vector<ExprContext*> part_ctxs;
+    extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
-    param->min_max_tuple_desc = min_max_tuple_desc;
+    ctx->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
-    extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    extend_mtypes_orc_min_max_conjuncts(&_pool, ctx, thres);
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    ctx->partition_expr_ctxs = std::move(part_ctxs);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -804,23 +811,25 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
-    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
-    extend_partition_values(&_pool, param, values);
+    std::vector<ExprContext*> part_ctxs;
+    extend_partition_values(&_pool, ctx, &part_ctxs, values);
 
-    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
-    param->min_max_tuple_desc = min_max_tuple_desc;
+    ctx->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
-    extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    extend_mtypes_orc_min_max_conjuncts(&_pool, ctx, thres);
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    ctx->partition_expr_ctxs = std::move(part_ctxs);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -871,7 +880,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
 
     auto* range = _create_scan_range(string_key_value_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(string_key_value_orc_desc);
-    auto* param = _create_param(string_key_value_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(string_key_value_orc_file, range, tuple_desc);
 
     // all in stripe1
     // and there are 1000 occurrences.
@@ -882,17 +891,17 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "gggggggggg");
         push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[0], TPrimitiveType::VARCHAR, lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        std::cout << "equal expr = " << ctx->root()->debug_string() << std::endl;
-        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        std::cout << "equal expr = " << expr_ctx->root()->debug_string() << std::endl;
+        ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
         ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     // so stripe will not be filtered out by search argument
@@ -961,24 +970,24 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
 
     auto* range = _create_scan_range(two_diff_encode_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(two_diff_encode_orc_desc);
-    auto* param = _create_param(two_diff_encode_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(two_diff_encode_orc_file, range, tuple_desc);
 
     // key = "a", y = 'a' rows is 101
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "a");
         push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[1], TPrimitiveType::VARCHAR, lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        std::cout << "equal expr = " << ctx->root()->debug_string() << std::endl;
-        param->conjunct_ctxs_by_slot[1].push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        std::cout << "equal expr = " << expr_ctx->root()->debug_string() << std::endl;
+        ctx->conjuncts.by_slot[1].push_back(expr_ctx);
     }
 
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
         ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     // so stripe will not be filtered out by search argument
@@ -1056,10 +1065,10 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
 
     auto* range = _create_scan_range(datetime_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(datetime_orc_descs);
-    auto* param = _create_param(datetime_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(datetime_orc_file, range, tuple_desc);
 
-    param->min_max_tuple_desc = tuple_desc;
-    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+    ctx->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = ctx->min_max_tuple_desc;
 
     // expect c0 >= '2021-05-25 08:59:22'
     // which means only stripe3 matches, and all rows in stripe3 matches.
@@ -1068,14 +1077,14 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         TExprNode lit_node = create_datetime_literal_node(TPrimitiveType::DATETIME, "2021-05-25 08:59:22");
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::DATETIME,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     scanner->disable_use_orc_sargs();
@@ -1156,7 +1165,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
 
     auto* range = _create_scan_range(padding_char_varchar_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(padding_char_varchar_desc);
-    auto* param = _create_param(padding_char_varchar_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(padding_char_varchar_orc_file, range, tuple_desc);
 
     // c0 <= "hello"
     // and we expect we can strip of ' ' in dictionary data.
@@ -1165,17 +1174,17 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "hello");
         push_binary_pred_texpr_node(nodes, TExprOpcode::LE, tuple_desc->slots()[0], TPrimitiveType::VARCHAR, lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        std::cout << "less&eq expr = " << ctx->root()->debug_string() << std::endl;
-        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        std::cout << "less&eq expr = " << expr_ctx->root()->debug_string() << std::endl;
+        ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
         ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     // so stripe will not be filtered out by search argument
@@ -1279,25 +1288,25 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
         std::cout << "Query in timezone = " << _runtime_state->timezone() << std::endl;
         auto* range = _create_scan_range(c.file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(timezone_datetime_slot_descs);
-        auto* param = _create_param(c.file, range, tuple_desc);
+        auto* ctx = _create_ctx(c.file, range, tuple_desc);
 
-        param->min_max_tuple_desc = tuple_desc;
-        const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+        ctx->min_max_tuple_desc = tuple_desc;
+        const TupleDescriptor* min_max_tuple_desc = ctx->min_max_tuple_desc;
 
         {
             std::vector<TExprNode> nodes;
             TExprNode lit_node = create_datetime_literal_node(TPrimitiveType::DATETIME, c.literal);
             push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, min_max_tuple_desc->slots()[0],
                                         TPrimitiveType::DATETIME, lit_node);
-            ExprContext* ctx = create_expr_context(&_pool, nodes);
-            param->min_max_conjunct_ctxs.push_back(ctx);
+            ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+            ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
         }
 
-        ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
-        Status status = scanner->init(_runtime_state, *param);
+        Status status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
 
         scanner->disable_use_orc_sargs();
@@ -1330,25 +1339,25 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
     // _create_runtime_state(c.query_timezone);
     auto* range = _create_scan_range(orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(slot_descs);
-    auto* param = _create_param(orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(orc_file, range, tuple_desc);
 
-    param->min_max_tuple_desc = tuple_desc;
-    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+    ctx->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = ctx->min_max_tuple_desc;
 
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 100);
         push_binary_pred_texpr_node(nodes, TExprOpcode::GT, min_max_tuple_desc->slots()[0], TPrimitiveType::INT,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
     auto scanner = std::make_shared<HdfsOrcScanner>();
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     scanner->disable_use_orc_sargs();
@@ -1443,9 +1452,9 @@ TEST_F(HdfsScannerTest, TestOrcZeroSizeStream) {
 
     auto* range = _create_scan_range(input_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(slot_descs);
-    auto* param = _create_param(input_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(input_orc_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     ASSERT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -1477,7 +1486,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
 
     auto* range = _create_scan_range(input_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(slot_descs);
-    auto* param = _create_param(input_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(input_orc_file, range, tuple_desc);
 
     // c0 >= 3
     // so return 2 rows.
@@ -1485,17 +1494,17 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 3);
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, tuple_desc->slots()[0], TPrimitiveType::INT, lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        std::cout << "greater&eq expr = " << ctx->root()->debug_string() << std::endl;
-        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        std::cout << "greater&eq expr = " << expr_ctx->root()->debug_string() << std::endl;
+        ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
         ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -1544,7 +1553,7 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
 
     auto* range = _create_scan_range(input_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(slot_descs);
-    auto* param = _create_param(input_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(input_orc_file, range, tuple_desc);
 
     // c0 == 3
     // so return 2 rows.
@@ -1552,16 +1561,16 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 3);
         push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[0], TPrimitiveType::INT, lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
         ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -1599,7 +1608,7 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
 
     auto* range = _create_scan_range(input_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(slot_descs);
-    auto* param = _create_param(input_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(input_orc_file, range, tuple_desc);
 
     {
         std::vector<TExprNode> nodes;
@@ -1612,16 +1621,16 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
         t_slot_ref.tuple_id = 0;
         lit_node.__set_slot_ref(t_slot_ref);
         nodes.emplace_back(lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.by_slot[0].push_back(expr_ctx);
     }
 
-    for (auto& it : param->conjunct_ctxs_by_slot) {
+    for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
         ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -1650,7 +1659,7 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
 
     auto* range = _create_scan_range(input_orc_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(slot_descs);
-    auto* param = _create_param(input_orc_file, range, tuple_desc);
+    auto* ctx = _create_ctx(input_orc_file, range, tuple_desc);
 
     {
         std::vector<TExprNode> nodes;
@@ -1709,15 +1718,15 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
             nodes.emplace_back(right_literal);
         }
 
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        std::cout << ctx->root()->debug_string() << std::endl;
-        param->scanner_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        std::cout << expr_ctx->root()->debug_string() << std::endl;
+        ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
 
-    ASSERT_OK(ExprExecutor::prepare(param->scanner_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->scanner_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.scanner_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.scanner_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -1771,9 +1780,9 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
 
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     ASSERT_TRUE(status.ok()) << status.message();
 
     status = scanner->open(_runtime_state);
@@ -1794,7 +1803,7 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
 
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
     Status status;
 
@@ -1833,9 +1842,9 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ASSERT_OK(rf_probe_desc.init(0, &probe_expr_ctx));
         rf_probe_desc.set_runtime_filter(f);
         rf_collector.add_descriptor(&rf_probe_desc);
-        param->runtime_filter_collector = &rf_collector;
+        ctx->runtime_filter_collector = &rf_collector;
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -1890,7 +1899,7 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     ObjectPool* pool = &_pool;
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
     // select vin,is_cloud from table where is_cloud >= '0';
     auto* min_max_tuple_desc = _create_tuple_desc(min_max_descs);
@@ -1899,15 +1908,15 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "0");
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
     }
 
-    param->min_max_tuple_desc = min_max_tuple_desc;
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ctx->min_max_tuple_desc = min_max_tuple_desc;
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -1943,11 +1952,11 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
     {
         auto* range = _create_scan_range(uncompressed_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(uncompressed_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(uncompressed_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -1959,11 +1968,11 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
     {
         auto* range = _create_scan_range(compressed_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(compressed_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(compressed_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -1976,11 +1985,11 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         // compressed file with offset != 0
         auto* range = _create_scan_range(compressed_file, 1, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(compressed_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(compressed_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -1993,11 +2002,11 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto* range = _create_scan_range(compressed_file, 0, 0);
         range->text_file_desc.__set_skip_header_line_count(50);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(compressed_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(compressed_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2010,11 +2019,11 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto* range = _create_scan_range(compressed_file, 0, 0);
         range->text_file_desc.__set_skip_header_line_count(200);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(compressed_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(compressed_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2027,11 +2036,11 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         // Forcr to parse csv as uncompressed data.
         range->text_file_desc.__set_compression_type(TCompressionType::NO_COMPRESSION);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(compressed_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(compressed_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2058,11 +2067,11 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         auto* range = _create_scan_range(end_with_r, 0, 0);
         range->text_file_desc.__isset.line_delim = false;
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(end_with_r, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(end_with_r, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2076,11 +2085,11 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         auto* range = _create_scan_range(end_with_n, 0, 0);
         range->text_file_desc.__isset.line_delim = false;
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(end_with_n, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(end_with_n, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2109,11 +2118,11 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2130,11 +2139,11 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         auto read_range = [&](int start, int end) {
             auto* range0 = _create_scan_range(small_file, start, end);
             auto* tuple_desc = _create_tuple_desc(csv_descs);
-            auto* param = _create_param(small_file, range0, tuple_desc);
-            build_hive_column_names(param, tuple_desc);
+            auto* ctx = _create_ctx(small_file, range0, tuple_desc);
+            build_hive_column_names(ctx, tuple_desc);
             auto scanner = std::make_shared<HdfsTextScanner>();
 
-            status = scanner->init(_runtime_state, *param);
+            status = scanner->init(_runtime_state, ctx);
             ASSERT_TRUE(status.ok()) << status.message();
 
             status = scanner->open(_runtime_state);
@@ -2162,11 +2171,11 @@ TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc, true);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2189,16 +2198,16 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
 #if defined(WITH_STARCACHE)
         auto cache_options = TestCacheUtils::create_simple_options(config::datacache_block_size, 50 * MB);
         auto block_cache = TestCacheUtils::create_cache(cache_options);
         DataCache::GetInstance()->set_block_cache(block_cache);
 #endif
-        build_hive_column_names(param, tuple_desc, true);
+        build_hive_column_names(ctx, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2218,11 +2227,11 @@ TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
     {
         auto* range = _create_scan_range(windows_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(windows_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(windows_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2250,11 +2259,11 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
     {
         auto* range = _create_scan_range(bom_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(bom_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(bom_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2276,11 +2285,11 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         auto* range = _create_scan_range(bom_file, 0, 0);
         range->text_file_desc.__set_skip_header_line_count(2);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(bom_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(bom_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2301,11 +2310,11 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         auto* range = _create_scan_range(bom_file, 20, 0);
         range->text_file_desc.__set_skip_header_line_count(1);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(bom_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(bom_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2335,11 +2344,11 @@ TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc, true);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
 
         status = scanner->open(_runtime_state);
@@ -2371,12 +2380,12 @@ TEST_F(HdfsScannerTest, TestCSVDifferentOrderColumn) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
         std::vector<std::string> hive_column_names{"name2", "age", "name1", "newly"};
-        param->hive_column_names = &hive_column_names;
+        ctx->hive_column_names = std::move(hive_column_names);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
 
         status = scanner->open(_runtime_state);
@@ -2420,12 +2429,12 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.collection_delim = "|";
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
         std::vector<std::string> hive_column_names{"id", "struct", "map"};
-        param->hive_column_names = &hive_column_names;
+        ctx->hive_column_names = std::move(hive_column_names);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
 
         status = scanner->open(_runtime_state);
@@ -2461,12 +2470,12 @@ TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {
         range->text_file_desc.__set_field_delim(DEFAULT_FIELD_DELIM);
         range->text_file_desc.__set_collection_delim(DEFAULT_COLLECTION_DELIM);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
         std::vector<std::string> hive_column_names{"id", "array", "sex"};
-        param->hive_column_names = &hive_column_names;
+        ctx->hive_column_names = std::move(hive_column_names);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
 
         status = scanner->open(_runtime_state);
@@ -2492,40 +2501,40 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
 
     auto* tuple_desc = _create_tuple_desc(csv_descs);
     auto* common_range = _create_scan_range(small_file, 0, 0);
-    auto* param = _create_param(small_file, common_range, tuple_desc);
+    auto* ctx = _create_ctx(small_file, common_range, tuple_desc);
     std::vector<std::string> hive_column_names{"id"};
-    param->hive_column_names = &hive_column_names;
+    ctx->hive_column_names = std::move(hive_column_names);
 
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.field_delim = "";
-        param->scan_range = range;
+        ctx->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
-        auto status = scanner->init(_runtime_state, *param);
+        auto status = scanner->init(_runtime_state, ctx);
         EXPECT_FALSE(status.ok());
     }
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.collection_delim = "";
-        param->scan_range = range;
+        ctx->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
-        auto status = scanner->init(_runtime_state, *param);
+        auto status = scanner->init(_runtime_state, ctx);
         EXPECT_FALSE(status.ok());
     }
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.mapkey_delim = "";
-        param->scan_range = range;
+        ctx->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
-        auto status = scanner->init(_runtime_state, *param);
+        auto status = scanner->init(_runtime_state, ctx);
         EXPECT_FALSE(status.ok());
     }
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.line_delim = "";
-        param->scan_range = range;
+        ctx->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
-        auto status = scanner->init(_runtime_state, *param);
+        auto status = scanner->init(_runtime_state, ctx);
         EXPECT_FALSE(status.ok());
     }
 }
@@ -2565,9 +2574,9 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
 
     status = scanner->open(_runtime_state);
@@ -2593,11 +2602,11 @@ TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range, tuple_desc);
-        build_hive_column_names(param, tuple_desc);
+        auto* ctx = _create_ctx(small_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->init(_runtime_state, *param);
+        status = scanner->init(_runtime_state, ctx);
         ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
@@ -2635,10 +2644,10 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
-    param->min_max_tuple_desc = tuple_desc;
-    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+    ctx->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = ctx->min_max_tuple_desc;
 
     // expect a = '05'
     {
@@ -2646,24 +2655,24 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "05");
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
-        param->scanner_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "05");
         push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
-        param->scanner_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
 
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -2728,9 +2737,9 @@ TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -2801,10 +2810,10 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
-    param->min_max_tuple_desc = tuple_desc;
-    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+    ctx->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = ctx->min_max_tuple_desc;
 
     // expect id = 'ysq01'
     {
@@ -2812,24 +2821,24 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
-        param->scanner_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
         push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
-        param->scanner_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
     }
 
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -2847,36 +2856,36 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
-    param->min_max_tuple_desc = tuple_desc;
-    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+    ctx->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = ctx->min_max_tuple_desc;
 
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 82);
         push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::INT,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
-        param->scanner_conjunct_ctxs.push_back(ctx);
-        param->all_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.all_ctxs.push_back(expr_ctx);
     }
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 82);
         push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[0], TPrimitiveType::INT,
                                     lit_node);
-        ExprContext* ctx = create_expr_context(&_pool, nodes);
-        param->min_max_conjunct_ctxs.push_back(ctx);
-        param->scanner_conjunct_ctxs.push_back(ctx);
-        param->all_conjunct_ctxs.push_back(ctx);
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ctx->conjuncts.min_max_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.scanner_ctxs.push_back(expr_ctx);
+        ctx->conjuncts.all_ctxs.push_back(expr_ctx);
     }
 
-    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(ctx->conjuncts.min_max_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(ctx->conjuncts.min_max_ctxs, _runtime_state));
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -2986,7 +2995,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
 
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
     // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
     std::map<std::string, std::string> params;
@@ -3009,7 +3018,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
     JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -3097,11 +3106,11 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
                                     {""}};
 
         auto* tuple_desc = _create_tuple_desc(parquet_descs);
-        auto* param = _create_param(parquet_file, range, tuple_desc);
+        auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
         JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
 
-        Status status = scanner->init(_runtime_state, *param);
+        Status status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
@@ -3123,13 +3132,13 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         SlotDesc parquet_descs[] = {{"e", E}, {""}};
 
         auto* tuple_desc = _create_tuple_desc(parquet_descs);
-        auto* param = _create_param(parquet_file, range, tuple_desc);
+        auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
         params["required_fields"] = "e";
         params["nested_fields"] = "e.b,e.a";
         JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
 
-        Status status = scanner->init(_runtime_state, *param);
+        Status status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
@@ -3151,13 +3160,13 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         SlotDesc parquet_descs[] = {{"e", E}, {""}};
 
         auto* tuple_desc = _create_tuple_desc(parquet_descs);
-        auto* param = _create_param(parquet_file, range, tuple_desc);
+        auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
         params["required_fields"] = "e";
         params["nested_fields"] = "e.B,e.a";
         JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
 
-        Status status = scanner->init(_runtime_state, *param);
+        Status status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
@@ -3177,13 +3186,13 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         SlotDesc parquet_descs[] = {{"e", E}, {""}};
 
         auto* tuple_desc = _create_tuple_desc(parquet_descs);
-        auto* param = _create_param(parquet_file, range, tuple_desc);
+        auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
         params["required_fields"] = "e";
         params["nested_fields"] = "e.a";
         JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
 
-        Status status = scanner->init(_runtime_state, *param);
+        Status status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
@@ -3204,13 +3213,13 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         SlotDesc parquet_descs[] = {{"d", D}, {""}};
 
         auto* tuple_desc = _create_tuple_desc(parquet_descs);
-        auto* param = _create_param(parquet_file, range, tuple_desc);
+        auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
         params["required_fields"] = "d";
         params["nested_fields"] = "d.$0";
         JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
 
-        Status status = scanner->init(_runtime_state, *param);
+        Status status = scanner->init(_runtime_state, ctx);
         EXPECT_TRUE(status.ok());
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok());
@@ -3283,10 +3292,10 @@ TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
     _debug_rows_per_call = 10;
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -3307,7 +3316,7 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
     TIcebergSchema schema = TIcebergSchema{};
 
@@ -3317,10 +3326,10 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    param->lake_schema = &schema;
+    ctx->table_specific.iceberg_schema = &schema;
 
     _debug_rows_per_call = 10;
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -3341,9 +3350,9 @@ TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
     auto* range = _create_scan_range(parquet_file, 0, 0);
     auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
+    auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
 
-    Status status = scanner->init(_runtime_state, *param);
+    Status status = scanner->init(_runtime_state, ctx);
     EXPECT_TRUE(status.ok());
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());

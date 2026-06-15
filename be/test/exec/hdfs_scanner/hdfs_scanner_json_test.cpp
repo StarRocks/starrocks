@@ -37,8 +37,8 @@ public:
 protected:
     std::shared_ptr<FileSystem> _fs;
     OpenFileOptions _opts;
-    HdfsScanStats _app_stats;
-    HdfsScanStats _fs_stats;
+    HdfsScannerStats _app_stats;
+    HdfsScannerStats _fs_stats;
     RuntimeState _runtime_state;
     ObjectPool _pool;
 
@@ -57,7 +57,7 @@ void HdfsScannerJsonReaderTest::TearDown() {}
 void HdfsScannerJsonReaderTest::create_random_access_file(const std::string& path) {
     ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(path));
     _opts.fs = _fs.get();
-    _opts.path = path;
+    _opts.file_path = path;
     _opts.file_size = _fs->get_file_size(path).value();
     ASSIGN_OR_ABORT(_file,
                     HdfsScanner::create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, _opts));

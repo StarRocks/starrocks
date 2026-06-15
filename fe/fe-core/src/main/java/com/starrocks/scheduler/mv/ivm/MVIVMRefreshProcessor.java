@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv.ivm;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.BaseTableInfo;
@@ -50,7 +51,9 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -133,6 +136,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             } else {
                 logger.info("No base table has changed, skip the refresh for materialized view: {}",
                         mv.getName());
+                // No base-table change means the MV is confirmed fresh as of this run's start.
+                confirmFreshness();
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
         }
@@ -154,7 +159,48 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         try (Timer ignored = Tracers.watchScope("MVRefreshPrepareRefreshPlan")) {
             insertStmt = prepareRefreshPlan();
         }
+        recordImvSourceRangesOnTaskRun();
         return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
+    }
+
+    /**
+     * Record the staged TVR version range and snapshot commit times per base table on the task
+     * run's extra message, surfaced via information_schema.task_runs.EXTRA_MESSAGE.
+     * Must stay after prepareRefreshPlan(): recording earlier leaves stale ranges on the task
+     * run when the hybrid processor falls back to PCT on an IVM planning failure.
+     */
+    private void recordImvSourceRangesOnTaskRun() {
+        updateTaskRunStatus(status -> {
+            Map<String, Map<String, String>> versionRanges = Maps.newHashMap();
+            Map<String, Map<String, String>> timestampRanges = Maps.newHashMap();
+            for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+                TvrVersionRange delta = ((TvrTableSnapshotInfo) snapshotInfo).getTvrSnapshot();
+                if (delta == null) {
+                    continue;
+                }
+                BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
+                String tableFullName = baseTableInfo.getReadableString();
+                // TvrVersion.toString() renders the MIN/MAX sentinels as "MIN"/"MAX"
+                versionRanges.put(tableFullName, ImmutableMap.of(
+                        "start", delta.from().toString(),
+                        "end", delta.to().toString()));
+                timestampRanges.put(tableFullName,
+                        resolveCommitTimeRange(baseTableInfo.getDbName(), snapshotInfo.getBaseTable(), delta));
+            }
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            extraMessage.setImvSourceVersionRange(versionRanges);
+            extraMessage.setImvSourceTimestampRange(timestampRanges);
+        });
+    }
+
+    private static Map<String, String> resolveCommitTimeRange(String dbName, Table table, TvrVersionRange delta) {
+        Map<String, String> commitTimes = Maps.newLinkedHashMap();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        delta.start().flatMap(version -> metadataMgr.getVersionCommitTimeMillis(dbName, table, version))
+                .ifPresent(time -> commitTimes.put("start", String.valueOf(time)));
+        delta.end().flatMap(version -> metadataMgr.getVersionCommitTimeMillis(dbName, table, version))
+                .ifPresent(time -> commitTimes.put("end", String.valueOf(time)));
+        return commitTimes;
     }
 
     @Override
@@ -443,6 +489,14 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (mvContext.getStatus() != null) {
             newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
         }
+        // Seed the batch's first-run start on the leader's spawn; later runs already carry it via the property copy above.
+        // A partial-request leader seeds 0 so no run in its chain confirms whole-MV freshness.
+        if (!newProperties.containsKey(TaskRun.MV_FRESHNESS_BASELINE_TIME) && mvContext.getStatus() != null) {
+            long processStartTime = mvContext.getStatus().getProcessStartTime();
+            newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
+                    mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            ? String.valueOf(processStartTime) : "0");
+        }
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
@@ -453,6 +507,9 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         int priority = executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
                 executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        if (mvContext.getStatus() != null) {
+            option.setSubmitUser(mvContext.getStatus().getSubmitUser());
+        }
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, newProperties);
@@ -467,6 +524,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         } else {
             taskManager.executeTask(taskName, option);
         }
+    }
+
+    @Override
+    public boolean hasNextBatchRun() {
+        return hasNextTaskRun;
     }
 
     private InsertStmt prepareRefreshPlan() throws AnalysisException, LockTimeoutException {

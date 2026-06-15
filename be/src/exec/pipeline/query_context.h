@@ -15,7 +15,6 @@
 #pragma once
 
 #include <atomic>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -23,10 +22,13 @@
 
 #include "base/time/time.h"
 #include "base/uid_util.h"
+#include "compute_env/query/connector_scan_mem_share_arbitrator.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/query_runtime_state.h"
+#include "exec/pipeline/primitives/fragment_lifecycle.h"
+#include "exec/pipeline/primitives/query_lifecycle.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/descriptors_fwd.h"
@@ -42,11 +44,13 @@ class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
 
-struct ConnectorScanOperatorMemShareArbitrator;
-
 // The context for all fragment of one query in one BE
-class QueryContext : public QueryContextLifetime, public std::enable_shared_from_this<QueryContext> {
+class QueryContext : public QueryContextLifetime,
+                     public FragmentLifecycle,
+                     public std::enable_shared_from_this<QueryContext> {
 public:
+    static QueryContextPtr create();
+
     QueryContext();
     ~QueryContext() noexcept;
     void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
@@ -59,6 +63,7 @@ public:
     const QueryRuntimeState& query_runtime_state() const { return _query_runtime_state; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
+    void set_query_lifecycle(QueryLifecycle* lifecycle) { _query_lifecycle.store(lifecycle); }
 
     void increment_num_fragments() {
         _num_fragments.fetch_add(1);
@@ -71,9 +76,10 @@ public:
     }
 
     // Decrements the query-local active fragment counter.
-    // Returns true only when the caller just finished the last active fragment; the caller owns any manager-level
-    // lifecycle transition such as removal from QueryContextManager or moving the context to second-chance storage.
+    // Returns true only when the caller just finished the last active fragment.
     bool decrement_num_active_fragments();
+    void count_down_fragment();
+    void on_fragment_finished() override { count_down_fragment(); }
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
@@ -90,48 +96,6 @@ public:
     }
     void set_enable_pipeline_level_shuffle(bool flag) { _enable_pipeline_level_shuffle = flag; }
     bool enable_pipeline_level_shuffle() { return _enable_pipeline_level_shuffle; }
-    void set_enable_profile() { _enable_profile = true; }
-    bool get_enable_profile_flag() { return _enable_profile; }
-    bool enable_profile() {
-        if (_enable_profile) {
-            return true;
-        }
-        if (_big_query_profile_threshold_ns <= 0) {
-            return false;
-        }
-        return MonotonicNanos() - _query_begin_time > _big_query_profile_threshold_ns;
-    }
-    void set_big_query_profile_threshold(int64_t big_query_profile_threshold,
-                                         TTimeUnit::type big_query_profile_threshold_unit) {
-        int64_t factor = 1;
-        switch (big_query_profile_threshold_unit) {
-        case TTimeUnit::NANOSECOND:
-            factor = 1;
-            break;
-        case TTimeUnit::MICROSECOND:
-            factor = 1'000L;
-            break;
-        case TTimeUnit::MILLISECOND:
-            factor = 1'000'000L;
-            break;
-        case TTimeUnit::SECOND:
-            factor = 1'000'000'000L;
-            break;
-        case TTimeUnit::MINUTE:
-            factor = 60 * 1'000'000'000L;
-            break;
-        default:
-            DCHECK(false);
-        }
-        _big_query_profile_threshold_ns = factor * big_query_profile_threshold;
-    }
-    int64_t get_big_query_profile_threshold_ns() const { return _big_query_profile_threshold_ns; }
-    void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
-        _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
-    }
-    int64_t get_runtime_profile_report_interval_ns() { return _runtime_profile_report_interval_ns; }
-    void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
-    const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
 
     FragmentContextManager* fragment_mgr();
     void attach_to_runtime_state(RuntimeState* state);
@@ -155,7 +119,9 @@ public:
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
-                          RuntimeState* state = nullptr, int connector_scan_node_number = 1);
+                          RuntimeState* state = nullptr, int connector_scan_node_number = 1,
+                          int64_t connector_scan_default_data_source_mem_bytes =
+                                  ConnectorScanOperatorMemShareArbitrator::kDefaultDataSourceMemBytes);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
@@ -183,11 +149,6 @@ public:
     int64_t get_read_local_cnt() { return _total_read_local_cnt; }
     int64_t get_read_remote_cnt() { return _total_read_remote_cnt; }
     int64_t get_transmitted_bytes() { return _total_transmitted_bytes; }
-
-    // Query start time, used to check how long the query has been running
-    // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
-    int64_t query_begin_time() const { return _query_begin_time; }
-    void init_query_begin_time() { _query_begin_time = MonotonicNanos(); }
 
     void set_scan_limit(int64_t scan_limit) { _scan_limit = scan_limit; }
     int64_t get_scan_limit() const { return _scan_limit; }
@@ -224,6 +185,7 @@ public:
 
 private:
     const QueryExecutionServices* _query_execution_services = nullptr;
+    std::atomic<QueryLifecycle*> _query_lifecycle = nullptr;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
@@ -234,10 +196,6 @@ private:
     std::once_flag _init_mem_tracker_once;
     bool _enable_pipeline_level_shuffle = true;
     std::shared_ptr<RuntimeProfile> _profile;
-    bool _enable_profile = false;
-    int64_t _big_query_profile_threshold_ns = 0;
-    int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
-    TPipelineProfileLevel::type _profile_level;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::atomic_bool _is_prepared = false;
@@ -247,7 +205,6 @@ private:
     Status _s_status;
 
     std::once_flag _init_query_once;
-    int64_t _query_begin_time = 0;
     std::once_flag _init_spill_manager_once;
     std::atomic<int64_t> _total_spill_bytes = 0;
     std::atomic<int64_t> _total_read_local_cnt = 0;
@@ -260,7 +217,7 @@ private:
 
     int64_t _scan_limit = 0;
     // _wg_mem_tracker is used to grab mem_tracker in workgroup to prevent it from
-    // being released prematurely in FragmentContext::cancel, otherwise accessing
+    // being released prematurely by cancel_fragment_context, otherwise accessing
     // workgroup's mem_tracker in QueryContext's dtor shall cause segmentation fault.
     std::shared_ptr<MemTracker> _wg_mem_tracker = nullptr;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;

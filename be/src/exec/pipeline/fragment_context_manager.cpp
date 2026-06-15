@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 #include "common/logging.h"
 #include "compute_env/profile_report_worker.h"
@@ -39,19 +40,8 @@ const RuntimeServices& runtime_services(const RuntimeState* state) {
 
 } // namespace
 
-FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
-    std::lock_guard<std::mutex> lock(_lock);
-    auto it = _fragment_contexts.find(fragment_id);
-    if (it != _fragment_contexts.end()) {
-        return it->second.get();
-    } else {
-        auto&& ctx = std::make_unique<FragmentContext>();
-        auto* raw_ctx = ctx.get();
-        _fragment_contexts.emplace(fragment_id, std::move(ctx));
-        raw_ctx->_set_default_workgroup();
-        return raw_ctx;
-    }
-}
+FragmentContextManager::FragmentContextManager(FragmentLifecycleWeakPtr fragment_lifecycle)
+        : _fragment_lifecycle(std::move(fragment_lifecycle)) {}
 
 Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {
     std::lock_guard<std::mutex> lock(_lock);
@@ -71,6 +61,9 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         RETURN_IF_ERROR(runtime_services(fragment_ctx->runtime_state())
                                 .profile_report_worker->register_pipeline_load(fragment_ctx->query_id(), fragment_id));
+    }
+    if (!_fragment_lifecycle.expired()) {
+        fragment_ctx->set_fragment_lifecycle(_fragment_lifecycle);
     }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
     return Status::OK();
@@ -107,6 +100,7 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
 
 void FragmentContextManager::cancel(const Status& status) {
     std::lock_guard<std::mutex> lock(_lock);
+    // Query-level cleanup is owned by the caller; this manager only fans out to fragments.
     for (auto& _fragment_context : _fragment_contexts) {
         _fragment_context.second->cancel(status);
     }

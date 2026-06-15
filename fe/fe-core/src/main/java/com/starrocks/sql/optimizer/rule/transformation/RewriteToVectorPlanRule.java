@@ -105,6 +105,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                             info.vectorQuery, dim));
         }
 
+        // Refine only matters for a quantized index (its index distance is lossy); for a non-quantized
+        // index the distance is already exact, so refine would be wasted work and is skipped.
+        boolean doRefine = context.getSessionVariable().isEnableVectorIndexRefine() && isQuantizedIndex(info.index);
+
         ScalarOperator predicate = scanOp.getPredicate();
         if (predicate != null) {
             Optional<Double> value = extractVectorRange(predicate, info);
@@ -112,21 +116,27 @@ public class RewriteToVectorPlanRule extends TransformationRule {
             if (value.isEmpty()) {
                 return List.of();
             }
-            // All the predicates are parsed to vector range, so remove predicates from scan operator.
-            predicate = null;
             opts.setPredicateRange(value.get());
+            // Trust path: drop the predicate -- the bound is enforced by the ANN range_search on the
+            // index distance, which the trust path accepts as-is (lossy for a quantized index). Refine
+            // path: keep it as a Filter re-applied on the recomputed exact distance above the scan -- a
+            // precision recheck that drops false positives the lossy range_search/over-fetch let through,
+            // and that also bounds segments whose .vi is still missing (scanned in full, recomputed above).
+            if (!doRefine) {
+                predicate = null;
+            }
         }
 
         opts.setEnableUseANN(true);
-        String indexType = info.index.getProperties().get(VectorIndexParams.CommonIndexParamKey.INDEX_TYPE.name().toLowerCase());
-        opts.setUseIVFPQ(VectorIndexParams.VectorIndexType.IVFPQ.name().equalsIgnoreCase(indexType));
+        opts.setRefineDistance(doRefine);
         opts.setLimitK(topNOp.getLimit());
         opts.setResultOrder(info.isAscending);
         opts.setDistanceColumnName("__vector_" + info.outColumnRef.getName());
         opts.setQueryVector(info.vectorQuery);
 
-        if (opts.isUseIVFPQ()) {
-            // Skip rewrite because IVFPQ is inaccurate and requires a brute force search after the ANN index search
+        if (doRefine) {
+            // Refine path: keep the distance function so the TopN above the scan recomputes the exact
+            // distance on the full-precision vectors and re-ranks; the index only generates candidates.
             LogicalOlapScanOperator newScanOp = LogicalOlapScanOperator.builder()
                     .withOperator(scanOp)
                     .setPredicate(predicate)
@@ -135,6 +145,22 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         }
 
         return List.of(rewriteOptByDistanceColumn(topNOp, scanOp, context, predicate, info, opts));
+    }
+
+    // A vector index is quantized when it stores compressed codes whose distances are approximate:
+    // IVFPQ (always), or HNSW with a non-flat quantizer (sq4/sq8/pq).
+    private boolean isQuantizedIndex(Index index) {
+        String indexType =
+                index.getProperties().get(VectorIndexParams.CommonIndexParamKey.INDEX_TYPE.name().toLowerCase());
+        if (VectorIndexParams.VectorIndexType.IVFPQ.name().equalsIgnoreCase(indexType)) {
+            return true;
+        }
+        if (VectorIndexParams.VectorIndexType.HNSW.name().equalsIgnoreCase(indexType)) {
+            String quantizer =
+                    index.getProperties().get(VectorIndexParams.IndexParamsKey.QUANTIZER.name().toLowerCase());
+            return quantizer != null && !VectorIndexParams.QuantizerType.FLAT.name().equalsIgnoreCase(quantizer);
+        }
+        return false;
     }
 
     private OptExpression rewriteOptByDistanceColumn(LogicalTopNOperator topNOp,

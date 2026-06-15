@@ -27,6 +27,7 @@
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline.h"
@@ -177,7 +178,7 @@ public:
         _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
         _runtime_state->_obj_pool = std::make_shared<ObjectPool>();
         _dummy_query_ctx->attach_to_runtime_state(_runtime_state.get());
-        _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get());
+        _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get(), &_dummy_fragment_ctx->fragment_runtime_state());
         _runtime_state->set_fragment_dict_state(_dummy_fragment_ctx->dict_state());
         _runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");
         _dummy_fragment_ctx->set_runtime_state(std::move(_runtime_state));
@@ -196,12 +197,14 @@ struct SimpleTestContext {
             : pipeline(0, std::move(factories), exec_group) {
         auto operators = pipeline.create_operators(1, 0);
         auto* query_runtime_state = query_ctx == nullptr ? nullptr : &query_ctx->query_runtime_state();
-        driver = std::make_unique<PipelineDriver>(operators, query_ctx, query_runtime_state, fragment_ctx, &pipeline,
-                                                  &pipeline, 1);
-        driver->assign_observer();
+        auto* fragment_runtime_state = fragment_ctx == nullptr ? nullptr : &fragment_ctx->fragment_runtime_state();
+        driver = std::make_unique<PipelineDriver>(operators, query_runtime_state, fragment_runtime_state,
+                                                  pipeline.pipeline_event(), &pipeline, nullptr, 1);
         driver_queue = std::make_unique<QuerySharedDriverQueue>(metrics.get_driver_queue_metrics());
         fragment_ctx->init_event_scheduler();
         fragment_ctx->event_scheduler()->attach_queue(driver_queue.get());
+        driver->set_observer(fragment_ctx->event_scheduler()->create_driver_observer(driver.get()));
+        driver->assign_observer();
     }
 
     Pipeline pipeline;
@@ -271,7 +274,7 @@ TEST_F(PipelineObserverTest, test_cancel) {
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
-    _dummy_fragment_ctx->cancel(Status::InternalError("error"));
+    cancel_fragment_context(_dummy_fragment_ctx.get(), Status::InternalError("error"));
     driver->set_in_blocked(true);
     driver->observer()->all_trigger();
     for (size_t i = 0; i < driver->_operator_stages.size(); ++i) {
@@ -292,6 +295,27 @@ TEST_F(PipelineObserverTest, test_add_blocked_driver) {
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
     _dummy_fragment_ctx->event_scheduler()->add_blocked_driver(driver.get());
+}
+
+TEST_F(PipelineObserverTest, observer_uses_injected_scheduler_without_runtime_fragment_context) {
+    OpFactories factories;
+    factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
+    factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
+
+    SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
+    ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
+    _runtime_state->set_fragment_ctx(nullptr, nullptr);
+
+    const auto& driver = tx.driver;
+    driver->set_in_blocked(true);
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+
+    driver->observer()->source_trigger();
+    ASSERT_OK(tx.driver_queue->take(false));
+
+    _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get(), &_dummy_fragment_ctx->fragment_runtime_state());
 }
 
 TEST_F(PipelineObserverTest, race_scheduler_observer) {

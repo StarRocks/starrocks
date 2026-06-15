@@ -33,6 +33,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_filter_serde.h"
 namespace starrocks {
 struct TypeDescriptor;
@@ -219,7 +220,7 @@ struct RuntimeFilterWorkerMetrics {
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> runtime_filter_bytes{};
 };
 
-class RuntimeFilterWorker {
+class RuntimeFilterWorker : public RuntimeFilterQueryLifecycle {
 public:
     RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services);
     ~RuntimeFilterWorker();
@@ -227,7 +228,7 @@ public:
     // open query for creating runtime filter merger.
     void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
                     bool is_pipeline);
-    void close_query(const TUniqueId& query_id);
+    void close_query(const TUniqueId& query_id) override;
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params);
     void execute();
     void send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,

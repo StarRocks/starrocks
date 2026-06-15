@@ -1616,6 +1616,14 @@ public class Config extends ConfigBase {
     public static int max_allowed_in_element_num_of_delete = 10000;
 
     /**
+     * When true, DELETE on a non-Primary-Key OLAP table (Duplicate / Aggregate / Unique Key)
+     * returns an OK-packet info message reminding the user that DELETE writes delete markers
+     * (merge-on-read) and recommending ALTER TABLE ... TRUNCATE PARTITION for bulk removal.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_non_primary_key_delete_warning = true;
+
+    /**
      * control materialized view
      */
     @ConfField(mutable = true)
@@ -3311,8 +3319,8 @@ public class Config extends ConfigBase {
     public static String azure_adls2_oauth2_client_id = "";
     @ConfField
     public static String azure_adls2_oauth2_client_secret = "";
-    @ConfField
-    public static String azure_adls2_oauth2_oauth2_client_endpoint = "";
+    @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
+    public static String azure_adls2_oauth2_client_endpoint = "";
 
     // gcp gs
     @ConfField

@@ -18,13 +18,11 @@
 
 #include "common/logging.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -41,13 +39,13 @@ void ExecutionGroup::clear_all_drivers(Pipelines& pipelines) {
     }
 }
 
-void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
+void ExecutionGroup::count_down_pipeline() {
     // Cache the member before performing the atomic increment.
     // This ensures we won't dereference `this` after another thread may
     // have deleted the object.
     size_t num_pipelines = _num_pipelines;
     if (++_num_finished_pipelines == num_pipelines) {
-        state->fragment_ctx()->count_down_execution_group();
+        _execution_group_lifecycle->on_execution_group_finished();
     }
 }
 
@@ -86,40 +84,51 @@ size_t ExecutionGroup::total_active_driver_size() {
     return total;
 }
 
-void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
+void ExecutionGroup::prepare_active_drivers_parallel(const std::shared_ptr<RuntimeState>& state,
+                                                     PriorityThreadPool* pipeline_prepare_pool,
                                                      std::shared_ptr<DriverPrepareSyncContext> sync_ctx) {
-    auto* query_execution_services = state->query_execution_services();
-    auto pipeline_prepare_pool = query_execution_services->execution->pipeline_prepare_pool;
+    DCHECK(state != nullptr);
+    DCHECK(pipeline_prepare_pool != nullptr);
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
-        // since prepare is async, we must hold the runtime state ptr
-        auto runtime_state_holder = driver->fragment_ctx()->runtime_state_ptr();
-        bool submitted = pipeline_prepare_pool->try_offer(
-                [sync_ctx, &driver, runtime_state_holder = std::move(runtime_state_holder)]() {
-                    auto runtime_state = runtime_state_holder.get();
-                    // make sure mem tracker is instance level
-                    auto mem_tracker = runtime_state->instance_mem_tracker();
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
-                    // do the thread-safe prepare operation
-                    Status status = driver->prepare_local_state(runtime_state);
+        // Capture the runtime state by value to keep it alive across the async prepare, but capture
+        // `driver` by reference -- the worker must NOT own the driver. The reference binds to the
+        // stable element in `pipeline->drivers()`, which the wait barrier below keeps alive until
+        // every task finishes; the worker only touches it inside prepare_local_state().
+        //
+        // Do NOT capture the driver by value (shared_ptr). The waiter wakes as soon as pending_tasks
+        // hits 0 and, on prepare error, tears down the fragment -- destroying each Pipeline and its
+        // operator factories. Some operators (e.g. OlapScanOperator) hold a context whose buffer is
+        // owned by an operator factory (OlapScanContext -> OlapScanContextFactory::_chunk_buffer). If
+        // the worker owned the driver, it could become the last owner and run ~PipelineDriver on the
+        // prepare thread AFTER those factories were freed, closing a dangling buffer (use-after-free).
+        // Keeping the worker non-owning ensures the driver is destroyed only by ~Pipeline, in the safe
+        // _drivers-before-_op_factories order, on the fragment thread.
+        bool submitted = pipeline_prepare_pool->try_offer([sync_ctx, &driver, runtime_state_holder = state]() {
+            auto runtime_state = runtime_state_holder.get();
+            // make sure mem tracker is instance level
+            auto mem_tracker = runtime_state->instance_mem_tracker();
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            // do the thread-safe prepare operation
+            Status status = driver->prepare_local_state(runtime_state);
 
-                    if (!status.ok()) {
-                        Status* expected = nullptr;
-                        Status* new_error = new Status(status);
-                        if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
-                            // Another thread already set the error, clean up our allocation
-                            delete new_error;
-                        }
-                    }
+            if (!status.ok()) {
+                Status* expected = nullptr;
+                Status* new_error = new Status(status);
+                if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
+                    // Another thread already set the error, clean up our allocation
+                    delete new_error;
+                }
+            }
 
-                    if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
-                        std::lock_guard<std::mutex> lock(sync_ctx->mutex);
-                        sync_ctx->cv.notify_one();
-                    }
-                });
+            if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
+                std::lock_guard<std::mutex> lock(sync_ctx->mutex);
+                sync_ctx->cv.notify_one();
+            }
+        });
 
         if (!submitted) {
-            Status status = driver->prepare_local_state(state);
+            Status status = driver->prepare_local_state(state.get());
             if (!status.ok()) {
                 Status* expected = nullptr;
                 Status* new_error = new Status(status);

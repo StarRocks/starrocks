@@ -79,6 +79,8 @@ public class ShowMaterializedViewStatus {
     private long taskId;
     private String taskName;
     private long lastRefreshTime;
+    private long lastFreshnessConfirmedAt;
+    private String baseTableRefreshVersionTimes = "{}";
     private String warehouse;
     private String refreshMode;
     private String refreshTrigger;
@@ -368,7 +370,9 @@ public class ShowMaterializedViewStatus {
         }
         if (refreshScheme != null) {
             status.setLastRefreshTime(refreshScheme.getLastRefreshTime());
+            status.setLastFreshnessConfirmedAt(refreshScheme.getLastFreshnessConfirmedAt());
         }
+        status.setBaseTableRefreshVersionTimes(mv.getBaseTableRefreshVersionTimesJson());
         boolean syncRefresh = refreshScheme != null
                 && refreshScheme.getType() == MaterializedViewRefreshType.SYNC;
         status.setWarehouse(syncRefresh || !RunMode.isSharedDataMode() ? "" : mv.getWarehouseName());
@@ -518,6 +522,22 @@ public class ShowMaterializedViewStatus {
 
     public void setLastRefreshTime(long lastRefreshTime) {
         this.lastRefreshTime = lastRefreshTime;
+    }
+
+    public long getLastFreshnessConfirmedAt() {
+        return lastFreshnessConfirmedAt;
+    }
+
+    public void setLastFreshnessConfirmedAt(long lastFreshnessConfirmedAt) {
+        this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
+    }
+
+    public String getBaseTableRefreshVersionTimes() {
+        return baseTableRefreshVersionTimes;
+    }
+
+    public void setBaseTableRefreshVersionTimes(String baseTableRefreshVersionTimes) {
+        this.baseTableRefreshVersionTimes = baseTableRefreshVersionTimes;
     }
 
     public String getWarehouse() {
@@ -753,6 +773,10 @@ public class ShowMaterializedViewStatus {
         status.setRefresh_policy(Strings.nullToEmpty(this.refreshPolicy));
         status.setResource_group(Strings.nullToEmpty(this.resourceGroup));
         status.setQuery_rewrite_status_reason(Strings.nullToEmpty(this.queryRewriteStatusReason));
+        if (lastFreshnessConfirmedAt > 0) {
+            status.setLast_freshness_confirmed_at(TimeUtils.longToTimeString(lastFreshnessConfirmedAt));
+        }
+        status.setBase_table_refresh_version_times(Strings.nullToEmpty(baseTableRefreshVersionTimes));
 
         return status;
     }
@@ -834,6 +858,8 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, Strings.nullToEmpty(refreshPolicy));
         addField(resultRow, Strings.nullToEmpty(resourceGroup));
         addField(resultRow, Strings.nullToEmpty(queryRewriteStatusReason));
+        addField(resultRow, lastFreshnessConfirmedAt > 0 ? TimeUtils.longToTimeString(lastFreshnessConfirmedAt) : "");
+        addField(resultRow, Strings.nullToEmpty(baseTableRefreshVersionTimes));
 
         return resultRow;
     }

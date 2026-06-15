@@ -14,13 +14,13 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.BrokerFileGroup;
-import com.starrocks.planner.LoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.common.MetaUtils;
@@ -199,8 +199,7 @@ public final class BrokerLoadPreSplitHook {
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
             ComputeResource computeResource, BooleanSupplier shouldAbort) {
-        int activeComputeNodeCount = Math.max(1,
-                LoadScanNode.getAvailableComputeNodes(computeResource).size());
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
         long fileTotalBytes = sumFileBytes(fileStatuses);
         BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
                 brokerDesc, fileGroups, fileStatuses, computeResource);
@@ -274,8 +273,7 @@ public final class BrokerLoadPreSplitHook {
             ComputeResource computeResource, BooleanSupplier shouldAbort) {
         BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
                 brokerDesc, fileGroups, fileStatuses, computeResource);
-        int activeComputeNodeCount = Math.max(1,
-                LoadScanNode.getAvailableComputeNodes(computeResource).size());
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
         long fileTotalBytes = sumFileBytes(fileStatuses);
 
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(

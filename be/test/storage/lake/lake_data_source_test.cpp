@@ -266,7 +266,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     fe.hostname = "127.0.0.1";
     fe.port = 9020;
     fragment_ctx.set_fe_addr(fe);
-    runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
     runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
 
     // Build a minimal descriptor table with required column names.
@@ -414,7 +414,7 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
 
     TVectorSearchOptions vec_opts;
     vec_opts.__set_enable_use_ann(true);
-    vec_opts.__set_use_ivfpq(false);
+    vec_opts.__set_refine_distance(false);
     vec_opts.__set_vector_distance_column_name("vec_distance");
     // Use a slot id that does NOT match any tuple slot, so init_scanner_columns
     // exercises the else branch for every slot (regular column lookup) without
@@ -440,7 +440,7 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     fe.hostname = "127.0.0.1";
     fe.port = 9020;
     fragment_ctx.set_fe_addr(fe);
-    runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
     runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
 
     // 3) Desc table with two INT slots matching the schema we mock below.

@@ -26,6 +26,7 @@
 #include "fmt/core.h"
 #include "gutil/strings/split.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
@@ -44,14 +45,16 @@ Status run_manual_compaction(uint64_t tablet_id, const std::string& compaction_t
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", tablet_id)));
 
-    auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
+    auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
+                                                    "Compaction-" + std::to_string(tablet->tablet_id()),
+                                                    GlobalEnv::GetInstance()->compaction_mem_tracker());
     if (tablet->updates() != nullptr) {
         StorageMetrics::instance()->update_compaction_request_total.increment(1);
         StorageMetrics::instance()->running_update_compaction_task_num.increment(1);
         DeferOp op([&] { StorageMetrics::instance()->running_update_compaction_task_num.increment(-1); });
         Status res;
         if (rowset_ids_string.empty()) {
-            res = tablet->updates()->compaction(mem_tracker);
+            res = tablet->updates()->compaction(mem_tracker.get());
         } else {
             std::vector<std::string> id_str_list = strings::Split(rowset_ids_string, ",", strings::SkipEmpty());
             std::vector<uint32_t> rowset_ids;
@@ -71,7 +74,7 @@ Status run_manual_compaction(uint64_t tablet_id, const std::string& compaction_t
             if (rowset_ids.empty()) {
                 return Status::InvalidArgument(fmt::format("empty argument. rowset_ids:{}", rowset_ids_string));
             }
-            res = tablet->updates()->compaction(mem_tracker, rowset_ids);
+            res = tablet->updates()->compaction(mem_tracker.get(), rowset_ids);
         }
         if (!res.ok()) {
             StorageMetrics::instance()->update_compaction_request_failed.increment(1);
@@ -104,7 +107,7 @@ Status run_manual_compaction(uint64_t tablet_id, const std::string& compaction_t
                 }
             }
         } else {
-            CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
+            CumulativeCompaction cumulative_compaction(mem_tracker.get(), tablet);
 
             Status res = cumulative_compaction.compact();
             if (!res.ok()) {
@@ -139,7 +142,7 @@ Status run_manual_compaction(uint64_t tablet_id, const std::string& compaction_t
                         fmt::format("Failed to base compaction tablet={} no need to do", tablet->full_name()));
             }
         } else {
-            BaseCompaction base_compaction(mem_tracker, tablet);
+            BaseCompaction base_compaction(mem_tracker.get(), tablet);
 
             Status res = base_compaction.compact();
             if (!res.ok()) {

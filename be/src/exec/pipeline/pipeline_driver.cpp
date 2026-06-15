@@ -28,23 +28,23 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/spill/common.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/primitives/driver_observer.h"
+#include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/event.h"
-#include "exec/pipeline/primitives/fragment_runtime_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
-#include "exec/pipeline/primitives/query_runtime_state.h"
-#include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/split_morsel_ticket_checker.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
-#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -63,18 +63,17 @@ size_t spill_expected_reserved_bytes(const QueryRuntimeState* query_runtime_stat
 
 } // namespace
 
-PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx,
-                               QueryRuntimeState* query_runtime_state, FragmentContext* fragment_ctx,
-                               Pipeline* pipeline, DriverObserver* driver_observer, int32_t driver_id)
-        : _observer(this),
-          _operator_mem_resource_managers(operators.size()),
+PipelineDriver::PipelineDriver(const Operators& operators, QueryRuntimeState* query_runtime_state,
+                               FragmentRuntimeState* fragment_runtime_state, Event* pipeline_event,
+                               DriverObserver* driver_observer, PipelineTimerContextPtr pipeline_timer_context,
+                               int32_t driver_id)
+        : _operator_mem_resource_managers(operators.size()),
           _operators(operators),
-          _query_ctx(query_ctx),
           _query_runtime_state(query_runtime_state),
-          _fragment_runtime_state(fragment_ctx == nullptr ? nullptr : &fragment_ctx->fragment_runtime_state()),
-          _fragment_ctx(fragment_ctx),
-          _pipeline(pipeline),
+          _fragment_runtime_state(fragment_runtime_state),
+          _pipeline_event(pipeline_event),
           _driver_observer(driver_observer),
+          _pipeline_timer_context(std::move(pipeline_timer_context)),
           _source_node_id(operators[0]->get_plan_node_id()),
           _driver_id(driver_id) {
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
@@ -86,19 +85,18 @@ PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_c
 }
 
 PipelineDriver::PipelineDriver(const PipelineDriver& driver)
-        : PipelineDriver(driver._operators, driver._query_ctx, driver._query_runtime_state, driver._fragment_ctx,
-                         driver._pipeline, driver._driver_observer, driver._driver_id) {}
+        : PipelineDriver(driver._operators, driver._query_runtime_state, driver._fragment_runtime_state,
+                         driver._pipeline_event, driver._driver_observer, driver._pipeline_timer_context,
+                         driver._driver_id) {}
 
 PipelineDriver::PipelineDriver()
-        : _observer(this),
-          _operator_mem_resource_managers(),
+        : _operator_mem_resource_managers(),
           _operators(),
-          _query_ctx(nullptr),
           _query_runtime_state(nullptr),
           _fragment_runtime_state(nullptr),
-          _fragment_ctx(nullptr),
-          _pipeline(nullptr),
+          _pipeline_event(nullptr),
           _driver_observer(nullptr),
+          _pipeline_timer_context(nullptr),
           _source_node_id(0),
           _driver_id(0) {}
 
@@ -164,6 +162,13 @@ void PipelineDriver::prepare_profile() {
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    if (_pipeline_event == nullptr) {
+        return Status::InternalError("PipelineDriver requires a pipeline event");
+    }
+    if (runtime_state->enable_event_scheduler() && observer() == nullptr) {
+        return Status::InternalError("PipelineDriver requires an observer when event scheduler is enabled");
+    }
+
     DeferOp defer([&]() {
         if (this->_state != DriverState::READY) {
             LOG(WARNING) << get_raw_string_name() << " prepare failed";
@@ -178,19 +183,19 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     DCHECK(_state == DriverState::NOT_READY);
 
     auto* source_op = source_operator();
-    const auto use_cache = _fragment_ctx->enable_cache();
+    DCHECK(_fragment_runtime_state != nullptr);
+    const auto use_cache = _fragment_runtime_state->enable_cache();
 
-    // attach ticket_checker to both ScanOperator and SplitMorselQueue
+    // attach ticket_checker to both scan source operator and SplitMorselQueue
+    auto* driver_scan_op = dynamic_cast<DriverScanOperator*>(source_op);
     auto* ticketed_morsel_queue = dynamic_cast<TicketedMorselQueue*>(_morsel_queue);
-    auto should_attach_ticket_checker =
-            (dynamic_cast<ScanOperator*>(source_op) != nullptr) && _morsel_queue != nullptr &&
-            ticketed_morsel_queue != nullptr && ticketed_morsel_queue->could_attch_ticket_checker() &&
-            (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
+    auto should_attach_ticket_checker = driver_scan_op != nullptr && _morsel_queue != nullptr &&
+                                        ticketed_morsel_queue != nullptr &&
+                                        ticketed_morsel_queue->should_attach_ticket_checker(use_cache);
 
     if (should_attach_ticket_checker) {
-        auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
         auto ticket_checker = std::make_shared<SplitMorselTicketChecker>();
-        scan_op->set_ticket_checker(ticket_checker);
+        driver_scan_op->set_ticket_checker(ticket_checker);
         ticketed_morsel_queue->set_ticket_checker(ticket_checker);
     }
 
@@ -225,7 +230,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 #ifdef FIU_ENABLE
                     FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
 #endif
-                    desc->add_observer(_runtime_state, [observer = &_observer]() { observer->source_trigger(); });
+                    auto* observer = this->observer();
+                    DCHECK(observer != nullptr || !runtime_state->enable_event_scheduler());
+                    desc->add_observer(_runtime_state, [observer]() { observer->source_trigger(); });
                 }
             }
 
@@ -233,7 +240,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         }
     }
     if (!_global_rf_descriptors.empty() && runtime_state->enable_event_scheduler()) {
-        _fragment_ctx->add_timer_observer(observer(), _global_rf_wait_timeout_ns);
+        if (_pipeline_timer_context == nullptr) {
+            return Status::InternalError("Pipeline timer context is not initialized");
+        }
+        _pipeline_timer_context->add_rf_timeout_observer(runtime_state, observer(), _global_rf_wait_timeout_ns);
     }
 
     if (!all_local_rf_set.empty()) {
@@ -241,9 +251,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     size_t subscribe_filter_sequence = source_op->get_driver_sequence();
     _local_rf_holders =
-            fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
+            _fragment_runtime_state->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
     for (auto rf_holder : _local_rf_holders) {
-        rf_holder->add_observer(_runtime_state, &_observer);
+        rf_holder->add_observer(_runtime_state, observer());
     }
     if (use_cache) {
         ssize_t cache_op_idx = -1;
@@ -265,9 +275,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                     multilane_op != nullptr) {
                     multilane_op->set_lane_arbiter(lane_arbiter);
                     multilane_operators.push_back(multilane_op);
-                } else if (auto* scan_op = dynamic_cast<ScanOperator*>(op.get()); scan_op != nullptr) {
+                } else if (auto* scan_op = dynamic_cast<DriverScanOperator*>(op.get()); scan_op != nullptr) {
                     scan_op->set_cache_context(cache_context);
-                    cache_context->set_scan_operator(scan_op);
+                    cache_context->set_scan_operator(op.get());
                 }
             }
             cache_context->set_multilane_operators(std::move(multilane_operators));
@@ -294,7 +304,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
 
     // Driver has no dependencies always sets _all_dependencies_ready to true;
-    _all_dependencies_ready = _dependencies.empty() && !_pipeline->pipeline_event()->need_wait_dependencies_finished();
+    _all_dependencies_ready = _dependencies.empty() && !_pipeline_event->need_wait_dependencies_finished();
     // Driver has no local rf to wait for completion always sets _all_local_rf_ready to true;
     _all_local_rf_ready = _local_rf_holders.empty();
     // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
@@ -343,14 +353,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     int64_t time_spent = 0;
     Status return_status = Status::OK();
     DeferOp defer([&]() {
-        if (ScanOperator* scan = source_scan_operator()) {
-            scan->end_driver_process(this);
+        if (auto* scan = source_driver_scan_operator()) {
+            scan->end_driver_process(_state);
         }
 
         _update_statistics(runtime_state, total_chunks_moved, total_rows_moved, time_spent);
     });
 
-    if (ScanOperator* scan = source_scan_operator()) {
+    if (auto* scan = source_driver_scan_operator()) {
         scan->begin_driver_process();
     }
 
@@ -365,7 +375,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         int64_t process_time_ns = 0;
 
         DeferOp defer2([&]() {
-            if (ScanOperator* scan = source_scan_operator()) {
+            if (auto* scan = source_driver_scan_operator()) {
                 scan->end_pull_chunk(process_time_ns);
             }
         });
@@ -594,27 +604,10 @@ bool PipelineDriver::dependencies_block() {
     if (_all_dependencies_ready) {
         return false;
     }
-    auto pipline_event = _pipeline->pipeline_event();
     _all_dependencies_ready =
             std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); }) &&
-            (!pipline_event->need_wait_dependencies_finished() || pipline_event->dependencies_finished());
+            (!_pipeline_event->need_wait_dependencies_finished() || _pipeline_event->dependencies_finished());
     return !_all_dependencies_ready;
-}
-
-bool PipelineDriver::need_report_exec_state() {
-    if (is_finished()) {
-        return false;
-    }
-
-    return _fragment_ctx->need_report_exec_state();
-}
-
-void PipelineDriver::report_exec_state_if_necessary() {
-    if (is_finished()) {
-        return;
-    }
-
-    _fragment_ctx->report_exec_state_if_necessary();
 }
 
 void PipelineDriver::runtime_report_action() {
@@ -622,13 +615,15 @@ void PipelineDriver::runtime_report_action() {
         return;
     }
 
+    DCHECK(_runtime_state != nullptr);
+
     _update_driver_level_timer();
 
     for (auto& op : _operators) {
         COUNTER_SET(op->_total_timer, COUNTER_VALUE(op->_pull_timer) + COUNTER_VALUE(op->_push_timer) +
                                               COUNTER_VALUE(op->_finishing_timer) + COUNTER_VALUE(op->_finished_timer) +
                                               COUNTER_VALUE(op->_close_timer));
-        op->update_metrics(_fragment_ctx->runtime_state());
+        op->update_metrics(_runtime_state);
     }
 }
 
@@ -850,7 +845,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     _update_driver_level_timer();
 
     if (_global_rf_timer != nullptr) {
-        _global_rf_timer->unschedule_and_join(_fragment_ctx->pipeline_timer());
+        if (_pipeline_timer_context != nullptr) {
+            _pipeline_timer_context->unschedule_and_join(_global_rf_timer.get());
+        }
     }
 
     if (_driver_observer != nullptr) {
@@ -891,11 +888,15 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
+    if (_pipeline_timer_context == nullptr) {
+        LOG(WARNING) << "Pipeline timer context is not initialized";
+        return;
+    }
     auto timer = std::make_shared<RFScanWaitTimeout>(true);
-    timer->add_observer(_runtime_state, &_observer);
+    timer->add_observer(_runtime_state, observer());
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
-    WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
+    WARN_IF_ERROR(_pipeline_timer_context->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
 std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
@@ -947,14 +948,15 @@ void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
-    if (_fragment_ctx->is_canceled()) {
+    if (runtime_state->is_cancelled()) {
         cancel_operators(runtime_state);
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
         if (is_still_pending_finish()) {
             set_driver_state(DriverState::PENDING_FINISH);
         } else {
-            set_driver_state(_fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED);
+            set_driver_state(_fragment_runtime_state->final_status().ok() ? DriverState::FINISH
+                                                                          : DriverState::CANCELED);
         }
 
         return true;
@@ -1018,7 +1020,7 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
 Status PipelineDriver::_mark_operator_closed(size_t operator_idx, OperatorPtr& op, RuntimeState* state) {
     auto msg = strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
                                    op->get_name());
-    if (_fragment_ctx->is_canceled()) {
+    if (state->is_cancelled()) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, state), msg + " is failed to cancel");
     } else {
         WARN_IF_ERROR(_mark_operator_finished(op, state), msg + " is failed to finish");
@@ -1070,7 +1072,7 @@ void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks
 }
 
 void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
-    if (ScanOperator* scan = source_scan_operator()) {
+    if (auto* scan = source_driver_scan_operator()) {
         int64_t scan_rows = scan->get_last_scan_rows_num();
         int64_t scan_bytes = scan->get_last_scan_bytes();
         int64_t table_id = scan->get_scan_table_id();
@@ -1088,9 +1090,14 @@ void PipelineDriver::increment_schedule_times() {
     driver_acct().increment_schedule_times();
 }
 
+void PipelineDriver::set_observer(std::unique_ptr<PipelineObserver> observer) {
+    _observer = std::move(observer);
+}
+
 void PipelineDriver::assign_observer() {
+    DCHECK(_observer != nullptr);
     for (const auto& op : _operators) {
-        op->set_observer(&_observer);
+        op->set_observer(_observer.get());
     }
 }
 

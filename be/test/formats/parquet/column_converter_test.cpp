@@ -30,7 +30,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScanStats g_hdfs_scan_stats{};
+static HdfsScannerStats g_hdfs_stats{};
 
 class ColumnConverterTest : public testing::Test {
 public:
@@ -46,9 +46,10 @@ protected:
     HdfsScannerContext* _create_scan_context() {
         auto* ctx = _pool.add(new HdfsScannerContext());
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+
         ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
         ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &g_hdfs_scan_stats;
+        ctx->stats = &g_hdfs_stats;
         return ctx;
     }
 
@@ -128,6 +129,7 @@ protected:
 
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
+    HdfsScannerContext _scanner_ctx;
 };
 
 TEST_F(ColumnConverterTest, TestByteArrayTest) {

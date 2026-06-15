@@ -60,6 +60,8 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"REFRESH_POLICY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"RESOURCE_GROUP", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"QUERY_REWRITE_STATUS_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_FRESHNESS_CONFIRMED_AT", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"BASE_TABLE_REFRESH_VERSION_TIMES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -506,6 +508,33 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // QUERY_REWRITE_STATUS_REASON
             if (info.__isset.query_rewrite_status_reason) {
                 const std::string* str = &info.query_rewrite_status_reason;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 35: {
+            // LAST_FRESHNESS_CONFIRMED_AT
+            if (info.__isset.last_freshness_confirmed_at) {
+                auto* nullable_column = down_cast<NullableColumn*>(column);
+                DateTimeValue t;
+                if (!t.from_date_str(info.last_freshness_confirmed_at.data(),
+                                     info.last_freshness_confirmed_at.size())) {
+                    nullable_column->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
+                }
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 36: {
+            // BASE_TABLE_REFRESH_VERSION_TIMES
+            if (info.__isset.base_table_refresh_version_times) {
+                const std::string* str = &info.base_table_refresh_version_times;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {

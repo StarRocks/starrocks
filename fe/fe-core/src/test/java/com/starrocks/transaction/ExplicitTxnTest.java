@@ -41,6 +41,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.txn.BeginStmt;
@@ -68,7 +69,9 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyShort;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class ExplicitTxnTest {
     @BeforeAll
@@ -301,6 +304,79 @@ public class ExplicitTxnTest {
         LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
         LoadJob loadJob = loadMgr.getLoadJobs(label).get(0);
         Assertions.assertEquals(JobState.CANCELLED, loadJob.getState());
+    }
+
+    @Test
+    public void testPartialUpdateOnModifiedTableRejected() throws IOException, DdlException {
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() throws StarRocksException, RpcException, InterruptedException {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<String, String>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "0");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "0");
+                counters.put(LoadJob.LOADED_BYTES, "0");
+                return counters;
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        context.setExecutionId(new TUniqueId(10, 11));
+        context.setLastQueryId(new UUID(12L, 13L));
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+
+        // Statement 1: a normal write marks tbl1 as modified in this explicit transaction.
+        String sql = "insert into db1.tbl1 values(1,2,3)";
+        DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(stmt, context);
+        TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), stmt, stmt.getOrigStmt(), context);
+        Assertions.assertFalse(context.getState().isError());
+
+        // Statement 2: a partial-update INSERT targeting the already-modified tbl1 must be rejected
+        // with ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE (5308).
+        InsertStmt partialUpdate = mock(InsertStmt.class);
+        when(partialUpdate.usePartialUpdate()).thenReturn(true);
+        when(partialUpdate.getTargetTable()).thenReturn(olapTable);
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> ExplicitTxnStatementValidator.validate(partialUpdate, context));
+        Assertions.assertTrue(e.getMessage().contains("Partial update cannot be applied to table"),
+                "unexpected message: " + e.getMessage());
+
+        // A partial update targeting a different, not-yet-modified table is allowed.
+        OlapTable otherTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db2", "tbl1");
+        InsertStmt partialUpdateOther = mock(InsertStmt.class);
+        when(partialUpdateOther.usePartialUpdate()).thenReturn(true);
+        when(partialUpdateOther.getTargetTable()).thenReturn(otherTable);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(partialUpdateOther, context));
     }
 
     @Test

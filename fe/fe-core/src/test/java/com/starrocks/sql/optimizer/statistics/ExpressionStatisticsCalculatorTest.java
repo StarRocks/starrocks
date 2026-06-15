@@ -446,6 +446,18 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 100, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        // test xx_hash32 function
+        callOperator = new CallOperator(FunctionSet.XX_HASH32, IntegerType.INT, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Integer.MAX_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), Integer.MIN_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 100, 0.001);
+        // test xx_hash64 function
+        callOperator = new CallOperator(FunctionSet.XX_HASH64, IntegerType.BIGINT, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Long.MAX_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), Long.MIN_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 100, 0.001);
         // test xx_hash3_64 function
         callOperator = new CallOperator(FunctionSet.XX_HASH3_64, IntegerType.BIGINT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -456,6 +468,23 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), LargeIntLiteral.LARGE_INT_MAX.doubleValue(), 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), LargeIntLiteral.LARGE_INT_MIN.doubleValue(), 0.001);
+    }
+
+    @Test
+    public void testHash32DistinctValuesCap() {
+        double uint32Cardinality = 4294967296.0;
+        double rowCount = uint32Cardinality + 1024;
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, VarcharType.VARCHAR, "name", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(columnRefOperator, new ColumnStatistic(0, 100, 0, 0, rowCount))
+                .build();
+
+        CallOperator callOperator = new CallOperator(FunctionSet.XX_HASH32, IntegerType.INT,
+                Lists.newArrayList(columnRefOperator));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(uint32Cardinality, columnStatistic.getDistinctValuesCount(), 0.001);
+
     }
 
     @Test

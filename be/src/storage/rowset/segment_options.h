@@ -21,7 +21,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "runtime/global_dict/types.h"
+#include "column/global_dict/types.h"
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"

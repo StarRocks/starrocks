@@ -49,6 +49,9 @@ public:
         _ticket_checker = ticket_checker;
     }
     bool could_attch_ticket_checker() const override { return true; }
+    bool should_attach_ticket_checker([[maybe_unused]] bool cache_enabled) const override {
+        return could_attch_ticket_checker();
+    }
 
     size_t num_original_morsels() const override { return _morsel_queue->num_original_morsels(); }
     size_t max_degree_of_parallelism() const override { return _morsel_queue->max_degree_of_parallelism(); }

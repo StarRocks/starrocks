@@ -53,7 +53,9 @@ add_executable(compute_env_test
         compute_env_test.cpp
         compute_env_test_main.cpp
         data_stream_mgr_test.cpp
+        fragment_dict_state_test.cpp
         profile_report_worker_test.cpp
+        query/query_scan_helpers_test.cpp
         query_cache_test.cpp
         result_queue_mgr_test.cpp
         ${COMPUTE_ENV_WORKGROUP_TEST_FILES}

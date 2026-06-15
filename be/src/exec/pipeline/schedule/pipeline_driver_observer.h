@@ -30,7 +30,8 @@ namespace starrocks::pipeline {
 // We need to handle this in the event scheduler.
 class PipelineDriverObserver final : public PipelineObserver {
 public:
-    explicit PipelineDriverObserver(DriverRawPtr driver) : _driver(driver) {}
+    PipelineDriverObserver(DriverRawPtr driver, EventScheduler* event_scheduler)
+            : _driver(driver), _event_scheduler(event_scheduler) {}
 
     DISALLOW_COPY_AND_MOVE(PipelineDriverObserver);
 
@@ -77,6 +78,7 @@ private:
 private:
     DECLARE_RACE_DETECTOR(detect_do_update)
     DriverRawPtr _driver = nullptr;
+    EventScheduler* _event_scheduler = nullptr;
     std::atomic_int32_t _pending_event_cnt{};
     std::atomic_int32_t _events{};
 };

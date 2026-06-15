@@ -21,6 +21,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_PRIMITIVE_FILES
+    data_sink.cpp
     exec_node.cpp
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
@@ -33,10 +34,10 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/primitives/event.cpp
     pipeline/primitives/pipeline_metrics.cpp
     pipeline/primitives/pipeline_observer.cpp
-    pipeline/primitives/query_runtime_state.cpp
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
+    pipeline/scan/morsel_queue_factory_base.cpp
     pipeline/scan/scan_morsel.cpp
     pipeline/scan/split_morsel_ticket_checker.cpp
 )
@@ -56,16 +57,6 @@ target_link_libraries(ExecPrimitive PUBLIC
     Gutil
     StarRocksGen
 )
-
-set(EXEC_SINK_CORE_FILES
-    data_sink.cpp
-)
-
-ADD_BE_LIB(ExecSinkCore
-    ${EXEC_SINK_CORE_FILES}
-)
-
-target_link_libraries(ExecSinkCore PUBLIC Common Base Gutil StarRocksGen)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
@@ -158,9 +149,6 @@ endif()
 # module boundaries yet; keep them named by intended ownership so later
 # cycle-cut leaves can promote them into real targets incrementally.
 set(PIPELINE_GRAPH_SRCS
-    pipeline/pipeline.cpp
-    pipeline/group_execution/execution_group.cpp
-    pipeline/group_execution/execution_group_builder.cpp
 )
 
 set(PIPELINE_RUNTIME_SRCS
@@ -169,16 +157,10 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
-    pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
-    pipeline/fragment_context.cpp
-    pipeline/fragment_context_manager.cpp
-    pipeline/query_context.cpp
-    pipeline/query_context_manager.cpp
+    pipeline/fragment_context_cancel.cpp
     pipeline/schedule/timeout_tasks.cpp
-    pipeline/schedule/event_scheduler.cpp
-    pipeline/schedule/pipeline_driver_observer.cpp
     pipeline/runtime_filter_types.cpp
 )
 
@@ -186,6 +168,7 @@ set(PIPELINE_ADAPTERS_SRCS
     pipeline/exec_node_pipeline_adapter.cpp
     pipeline/fragment_executor.cpp
     pipeline/pipeline_builder.cpp
+    pipeline/pipeline_driver_instantiator.cpp
 )
 
 set(PIPELINE_OPERATORS_BATCH_SRCS
@@ -514,6 +497,40 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
     set_property(TARGET pipeline_extensions_exec_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
 ENDIF()
 
+ADD_BE_LIB(ExecRuntime
+    runtime/query_runtime_state.cpp
+    pipeline/group_execution/execution_group.cpp
+    pipeline/group_execution/execution_group_builder.cpp
+    pipeline/pipeline.cpp
+    pipeline/pipeline_driver.cpp
+    pipeline/fragment_context.cpp
+    pipeline/fragment_context_manager.cpp
+    pipeline/query_context.cpp
+    pipeline/query_context_manager.cpp
+    pipeline/schedule/event_scheduler.cpp
+    pipeline/schedule/pipeline_driver_observer.cpp
+)
+
+target_link_libraries(ExecRuntime PUBLIC
+    ComputeEnv
+    ExecPrimitive
+    StoragePrimitive
+    ExprCore
+    Serde
+    RuntimeEnv
+    RuntimeCore
+    Platform
+    FSCore
+    IO
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
     ${EXEC_DATA_SINK_FILES}
@@ -522,5 +539,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)

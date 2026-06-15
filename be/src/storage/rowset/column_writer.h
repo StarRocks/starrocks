@@ -36,12 +36,12 @@
 
 #include <memory> // for unique_ptr
 
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"      // for Status
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/primitive/flat_json_config.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"

@@ -84,6 +84,20 @@ public class VectorIndexTest extends PlanTestBase {
                 + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
                 + "PROPERTIES ('replication_num'='1');");
 
+        // HNSW with a non-flat quantizer (sq8) -- a quantized index, so its index distance is lossy
+        // and the refine path applies just like IVFPQ.
+        starRocksAssert.withTable("CREATE TABLE test.test_hnsw_sq8 ("
+                + " c0 INT,"
+                + " c1 array<float> NOT NULL,"
+                + " c2 array<float>,"
+                + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'l2_distance', "
+                + "'is_vector_normed' = 'false', 'M' = '16', 'efconstruction' = '40', "
+                + "'index_type' = 'hnsw', 'quantizer' = 'sq8', 'dim'='5') "
+                + ") "
+                + "DUPLICATE KEY(c0) "
+                + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1');");
+
         starRocksAssert.withTable("CREATE TABLE test.test_no_vector_index ("
                 + " c0 INT,"
                 + " c1 array<float>,"
@@ -127,7 +141,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
@@ -141,7 +155,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
 
         // Constant vector with cast.
@@ -151,7 +165,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
 
         sql = "select c1 from test_cosine " +
@@ -160,7 +174,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
 
         sql = "select c1 from test_cosine " +
@@ -169,7 +183,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
         } finally {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
@@ -238,7 +252,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -246,7 +260,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_cosine " +
@@ -254,7 +268,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -262,7 +276,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         // Cast
@@ -271,7 +285,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -279,7 +293,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -287,7 +301,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         // AND
@@ -297,7 +311,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 1000.0");
 
         sql = "select c1 from test_l2 " +
@@ -305,7 +319,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
     }
 
@@ -429,7 +443,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "          Refine: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
@@ -454,14 +468,14 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity(c1, [1.1,2.2,3.3,4.4,5.5]) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
 
         sql = "select c1 from test_l2 " +
                 "order by approx_l2_distance(c1, [1.1,2.2,3.3,4.4,5.5]) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
 
         // Predicate argument order doesn't matter.
@@ -470,7 +484,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -478,7 +492,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
     }
 
@@ -509,12 +523,12 @@ public class VectorIndexTest extends PlanTestBase {
         assertContains(plan, "  1:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <24:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          Refine: OFF, Distance Column: <24:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
         assertContains(plan, "  7:OlapScanNode\n" +
                 "     table: test_l2, rollup: test_l2\n" +
                 "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <23:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          Refine: OFF, Distance Column: <23:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
         assertContains(plan, "  13:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
@@ -536,28 +550,102 @@ public class VectorIndexTest extends PlanTestBase {
 
     @Test
     public void testIvfpq() throws Exception {
+        // Default (enable_vector_index_refine = false): a quantized index trusts the lossy index
+        // distance, so the rule rewrites the order-by to the BE-produced distance slot (trust plan),
+        // exactly like a non-quantized HNSW.
         String sql = "select c1, approx_l2_distance([1.1,2.2,3.3,4.4], c1) as score"
                 + " from test_ivfpq order by score limit 10";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  2:TOP-N\n" +
-                "  |  order by: [4, FLOAT, true] ASC\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (<slot 4> 4: approx_l2_distance), remote = false\n" +
-                "  |  offset: 0\n" +
-                "  |  limit: 10\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-                "  |  4 <-> approx_l2_distance[([1.1,2.2,3.3,4.4], [2: c1, ARRAY<FLOAT>, false]); " +
-                "args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_ivfpq, rollup: test_ivfpq\n" +
-                "     VECTORINDEX: ON\n" +
-                "          IVFPQ: ON, Distance Column: <0:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, Query Vector: [1.1, 2.2, 3.3, 4.4], Predicate Range: -1.0");
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan, "Refine: OFF");
+    }
+
+    @Test
+    public void testIvfpqRefineOn() throws Exception {
+        // enable_vector_index_refine = true: a quantized index refines -- the rule keeps the
+        // approx_*_distance function so the TopN recomputes the exact distance and re-ranks; the
+        // distance is not lifted into a BE-produced slot (Distance Column slot stays 0).
+        connectContext.getSessionVariable().setEnableVectorIndexRefine(true);
+        try {
+            String sql = "select c1, approx_l2_distance([1.1,2.2,3.3,4.4], c1) as score"
+                    + " from test_ivfpq order by score limit 10";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     table: test_ivfpq, rollup: test_ivfpq\n" +
+                    "     VECTORINDEX: ON\n" +
+                    "          Refine: ON, Distance Column: <0:__vector_approx_l2_distance>, LimitK: 10, " +
+                    "Order: ASC, Query Vector: [1.1, 2.2, 3.3, 4.4], Predicate Range: -1.0");
+        } finally {
+            connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
+        }
+    }
+
+    @Test
+    public void testIvfpqRefineOnKeepsRangePredicateForRecheck() throws Exception {
+        // enable_vector_index_refine = true + a distance range bound: the bound is folded into the ANN
+        // (Predicate Range) for the lossy range_search prefilter AND kept as a scan predicate, so it is
+        // re-applied on the recomputed exact distance above the scan -- a precision recheck that drops
+        // false positives the lossy prefilter (and segments whose .vi is still missing) would leak.
+        // The trust path (refine off) instead folds the bound entirely into Predicate Range and drops it.
+        connectContext.getSessionVariable().setEnableVectorIndexRefine(true);
+        try {
+            String sql = "select c1, approx_l2_distance([1.1,2.2,3.3,4.4], c1) as score"
+                    + " from test_ivfpq where approx_l2_distance([1.1,2.2,3.3,4.4], c1) <= 100"
+                    + " order by score limit 10";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "VECTORINDEX: ON");
+            assertContains(plan, "Refine: ON");
+            assertContains(plan, "Predicate Range: 100.0");
+            // The distance bound survives as a recheck predicate on the recomputed exact distance.
+            assertContains(plan, "approx_l2_distance");
+            assertContains(plan, "<= 100");
+        } finally {
+            connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
+        }
+    }
+
+    @Test
+    public void testHnswQuantizerRefineOffTrustsLossyDistance() throws Exception {
+        // HNSW + sq8 is a quantized index, but with refine off (default) it trusts the lossy index
+        // distance like any trust-path query: the order-by is lifted to the BE-produced distance slot.
+        String sql = "select c1, approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) as score"
+                + " from test_hnsw_sq8 order by score limit 10";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan, "Refine: OFF");
+    }
+
+    @Test
+    public void testHnswQuantizerRefineOn() throws Exception {
+        // HNSW + sq8 with refine on takes the same refine path as IVFPQ: keep the function, recompute
+        // the exact distance above the scan (the refine path is keyed on quantization, not index family).
+        connectContext.getSessionVariable().setEnableVectorIndexRefine(true);
+        try {
+            String sql = "select c1, approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) as score"
+                    + " from test_hnsw_sq8 order by score limit 10";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "VECTORINDEX: ON");
+            assertContains(plan, "Refine: ON");
+            assertContains(plan, "Distance Column: <0:__vector_approx_l2_distance>");
+        } finally {
+            connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
+        }
+    }
+
+    @Test
+    public void testHnswFlatRefineSessionOnStaysOff() throws Exception {
+        // A non-quantized HNSW (flat) returns exact distances, so enable_vector_index_refine has no
+        // effect: it stays on the trust plan even with the session variable on.
+        connectContext.getSessionVariable().setEnableVectorIndexRefine(true);
+        try {
+            String sql = "select c1 from test.test_l2"
+                    + " order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "VECTORINDEX: ON");
+            assertContains(plan, "Refine: OFF");
+        } finally {
+            connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
+        }
     }
 
     @Test
@@ -629,14 +717,19 @@ public class VectorIndexTest extends PlanTestBase {
 
     @Test
     public void testPreparedStatementCastStringArrayIvfpq() throws Exception {
-        // IVFPQ keeps its existing eager path: the rewrite rule recognizes the cast,
-        // builds the query vector, but does not swap the order-by expression (refine
-        // pass is in the TopN). VECTORINDEX must still be ON with IVFPQ: ON.
-        String sql = "select c1, approx_l2_distance(CAST('[1.1,2.2,3.3,4.4]' AS ARRAY<FLOAT>), c1) as score "
-                + "from test.test_ivfpq order by score limit 10";
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "VECTORINDEX: ON");
-        assertContains(plan, "IVFPQ: ON");
+        // With refine on, a quantized index (IVFPQ) keeps the function plan: the rewrite rule
+        // recognizes the cast, builds the query vector, but does not swap the order-by expression
+        // (the exact distance is recomputed in the TopN). VECTORINDEX must be ON with Refine: ON.
+        connectContext.getSessionVariable().setEnableVectorIndexRefine(true);
+        try {
+            String sql = "select c1, approx_l2_distance(CAST('[1.1,2.2,3.3,4.4]' AS ARRAY<FLOAT>), c1) as score "
+                    + "from test.test_ivfpq order by score limit 10";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "VECTORINDEX: ON");
+            assertContains(plan, "Refine: ON");
+        } finally {
+            connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
+        }
     }
 
     @Test
@@ -732,11 +825,11 @@ public class VectorIndexTest extends PlanTestBase {
     }
 
     // Late-materialization behavior for vector queries:
-    //   * HNSW: BE produces the distance via id2distance_map, the rewrite swaps the order-by
-    //     to reference that virtual distance column, so the embedding column can be deferred
-    //     (FetchNode after final TopN) or pruned entirely.
-    //   * IVFPQ: the rule skips the order-by rewrite — TopN evaluates approx_*_distance(v, [...])
-    //     row by row, so v must remain eager at the scan output.
+    //   * Trust path (refine off): BE produces the distance via id2distance_map, the rewrite swaps
+    //     the order-by to reference that virtual distance column, so the embedding column can be
+    //     deferred (FetchNode after final TopN) or pruned entirely.
+    //   * Refine path (refine on): the rule keeps the order-by function -- TopN evaluates
+    //     approx_*_distance(v, [...]) row by row, so v must remain eager at the scan output.
     @Test
     public void testLazyMaterializationForHnswSelectDistanceOnly() throws Exception {
         // Quadrant 1: HNSW + SELECT does not reference embedding c1.
@@ -751,7 +844,7 @@ public class VectorIndexTest extends PlanTestBase {
                     + "from test.test_cosine order by score desc limit 10";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "VECTORINDEX: ON");
-            assertContains(plan, "IVFPQ: OFF");
+            assertContains(plan, "Refine: OFF");
             // The FETCH operator's lookup descriptor for table test_cosine should reference
             // c0 but not c1.
             assertContains(plan, "<slot 1> => c0");
@@ -773,7 +866,7 @@ public class VectorIndexTest extends PlanTestBase {
                     + "from test.test_cosine order by score desc limit 10";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "VECTORINDEX: ON");
-            assertContains(plan, "IVFPQ: OFF");
+            assertContains(plan, "Refine: OFF");
             // c1 must appear as a FETCH lookup target — not in the scan-side projection.
             assertContains(plan, "FETCH");
             assertContains(plan, "=> c1");
@@ -783,21 +876,23 @@ public class VectorIndexTest extends PlanTestBase {
     }
 
     @Test
-    public void testLazyMaterializationForIvfpqKeepsEmbeddingEager() throws Exception {
-        // IVFPQ: the rule skipped the order-by rewrite, the TopN evaluates
-        // approx_*_distance(v, [...]) row by row. The embedding c1 must remain eager at scan
-        // output. No FETCH should appear in the plan (everything stays eager).
+    public void testLazyMaterializationForRefineKeepsEmbeddingEager() throws Exception {
+        // Refine path (enable_vector_index_refine = true on a quantized index): the rule keeps the
+        // order-by function, the TopN evaluates approx_*_distance(v, [...]) row by row. The embedding
+        // c1 must remain eager at scan output. No FETCH should appear in the plan (everything eager).
         boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        connectContext.getSessionVariable().setEnableVectorIndexRefine(true);
         try {
             String sql = "select c0, approx_l2_distance([1.1,2.2,3.3,4.4], c1) as score "
                     + "from test.test_ivfpq order by score limit 10";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "VECTORINDEX: ON");
-            assertContains(plan, "IVFPQ: ON");
+            assertContains(plan, "Refine: ON");
             assertNotContains(plan, "FETCH");
         } finally {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
+            connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
         }
     }
 

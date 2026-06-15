@@ -14,8 +14,11 @@
 
 #include "exec/file_scanner/file_scanner.h"
 
+#include <algorithm>
+#include <cctype>
 #include <memory>
 
+#include "base/compression/compression_utils.h"
 #include "base/compression/stream_decompressor.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -265,8 +268,15 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
                                            const TBrokerScanRangeParams& params,
                                            std::shared_ptr<SequentialFile>* file) {
     CompressionTypePB compression = CompressionTypePB::DEFAULT_COMPRESSION;
-    if (range_desc.format_type == TFileFormatType::FORMAT_JSON) {
+    // JSON stream load (FILE_STREAM) decompresses internally via CompressedStreamLoadPipeReader
+    // in JsonReader::_read_file_stream(). Wrapping the pipe in a CompressedInputStream here would
+    // both double-decompress and break the down_cast<StreamLoadPipeInputStream*> in
+    // _read_file_stream() (the stream becomes a CompressedInputStream), causing a crash.
+    if (range_desc.file_type == TFileType::FILE_STREAM && range_desc.format_type == TFileFormatType::FORMAT_JSON) {
         compression = CompressionTypePB::NO_COMPRESSION;
+    } else if (range_desc.__isset.compression_type) {
+        // Prefer explicit compression type if provided by FE
+        compression = CompressionUtils::to_compression_pb(range_desc.compression_type);
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
         compression = CompressionTypePB::NO_COMPRESSION;
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_GZ) {
@@ -279,6 +289,26 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         compression = CompressionTypePB::DEFLATE;
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_ZSTD) {
         compression = CompressionTypePB::ZSTD;
+    } else if (range_desc.format_type == TFileFormatType::FORMAT_JSON) {
+        // Try to infer compression from file suffix for JSON if not explicitly set
+        // Extract extension after last '.' in the filename part
+        std::string path = range_desc.path;
+        // get filename after last '/'
+        size_t slash = path.find_last_of('/');
+        std::string filename = (slash == std::string::npos) ? path : path.substr(slash + 1);
+        size_t dot = filename.find_last_of('.');
+        if (dot != std::string::npos && dot + 1 < filename.size()) {
+            std::string ext = filename.substr(dot + 1);
+            // normalize to lower case
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+            compression = CompressionUtils::to_compression_pb(ext);
+            if (compression == CompressionTypePB::UNKNOWN_COMPRESSION) {
+                // Treat unknown as no compression
+                compression = CompressionTypePB::NO_COMPRESSION;
+            }
+        } else {
+            compression = CompressionTypePB::NO_COMPRESSION;
+        }
     } else if (range_desc.format_type == TFileFormatType::FORMAT_AVRO) {
         compression = CompressionTypePB::NO_COMPRESSION;
     } else {
@@ -319,7 +349,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         }
     }
     }
-    if (compression == CompressionTypePB::NO_COMPRESSION) {
+    if (compression == CompressionTypePB::NO_COMPRESSION || compression == CompressionTypePB::DEFAULT_COMPRESSION) {
         *file = src_file;
         return Status::OK();
     }

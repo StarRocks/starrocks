@@ -228,6 +228,7 @@ dependencies {
     }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")
+    implementation("org.apache.orc:orc-core")
     implementation("org.apache.parquet:parquet-avro")
     implementation("org.apache.parquet:parquet-column")
     implementation("org.apache.parquet:parquet-common")

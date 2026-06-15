@@ -188,6 +188,12 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
      */
     private static final long MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS = 3000;
 
+    // Max time deleteFromMeta holds the table write lock before yielding it (release + re-acquire),
+    // so a long delete walk does not block other operations on the same table. Non-final so tests
+    // can force the periodic relock path.
+    @VisibleForTesting
+    protected static long maxDbWLockHoldingTimeMs = 1000L;
+
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
     private static final Set<ReportType> RESOURCE_REPORT_TYPES =
             EnumSet.of(ReportType.RESOURCE_GROUP_REPORT, ReportType.RESOURCE_USAGE_REPORT);
@@ -493,7 +499,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         // (db id, table id) -> tablet id
         ListMultimap<Pair<Long, Long>, Long> tabletSyncMap = ArrayListMultimap.create();
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
+        // (dbId, tableId) -> tabletIds, so deletion can lock a single table at a time.
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
         // tablet ids which schema hash is valid
         Set<Long> foundTabletsWithValidSchema = new HashSet<Long>();
         // storage medium -> tablet id
@@ -575,7 +582,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
     public static void tabletReport(long backendId, Map<Long, TTablet> backendTablets,
                                     final HashMap<Long, TStorageMedium> storageMediumMap,
                                     ListMultimap<Pair<Long, Long>, Long> tabletSyncMap,
-                                    ListMultimap<Long, Long> tabletDeleteFromMeta,
+                                    Table<Long, Long, List<Long>> tabletDeleteFromMeta,
                                     Set<Long> foundTabletsWithValidSchema,
                                     ListMultimap<TStorageMedium, Long> tabletMigrationMap,
                                     Map<Long, Map<Long, Map<Long, TPartitionVersionInfo>>> transactionsToPublish,
@@ -774,7 +781,12 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                 // 2. (meta - be)
                 // may need delete from meta
                 LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
-                tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletId);
+                List<Long> tabletIds = tabletDeleteFromMeta.get(tabletMeta.getDbId(), tabletMeta.getTableId());
+                if (tabletIds == null) {
+                    tabletIds = Lists.newArrayList();
+                    tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletMeta.getTableId(), tabletIds);
+                }
+                tabletIds.add(tabletId);
             }
         } // end for replicaMetaWithBackend
 
@@ -782,7 +794,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         LOG.info("finished to do tablet diff with backend[{}]. sync: {}. metaDel: {}. foundValid: {}. "
                         + " migration: {}. found invalid transactions {}. found republish transactions {} "
                         + " cost: {} ms", backendId, tabletSyncMap.size(),
-                tabletDeleteFromMeta.size(), foundTabletsWithValidSchema.size(),
+                tabletDeleteFromMeta.values().stream().mapToInt(List::size).sum(), foundTabletsWithValidSchema.size(),
                 tabletMigrationMap.size(), transactionsToClear.size(), transactionsToPublish.size(), (end - start));
     }
 
@@ -1205,7 +1217,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         } // end for dbs
     }
 
-    protected static void deleteFromMeta(ListMultimap<Long, Long> tabletDeleteFromMeta, long backendId,
+    protected static void deleteFromMeta(Table<Long, Long, List<Long>> tabletDeleteFromMeta, long backendId,
                                        long backendReportVersion) {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -1215,35 +1227,51 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                 .getClusterInfo().getBackend(backendId).getDisks().values()) {
             hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
         }
-        final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<LocalTablet> deleteTablets = new ArrayList<>();
         List<ReplicaPersistInfo> replicaPersistInfoList = new ArrayList<>();
-        DB_TRAVERSE:
-        for (Long dbId : tabletDeleteFromMeta.keySet()) {
+        // tabletDeleteFromMeta is grouped by (dbId, tableId), so each batch of doomed tablets is
+        // table-local. Scope the WRITE to that single table with an intensive lock instead of a
+        // full DB WRITE that would block every other table on this frequent BE-report path. The
+        // genuinely destructive delete happens in a later batch-delete callback outside this lock,
+        // guarded by LocalTablet's own tablet write lock.
+        TABLE_TRAVERSE:
+        for (Table.Cell<Long, Long, List<Long>> cell : tabletDeleteFromMeta.cellSet()) {
+            long dbId = cell.getRowKey();
+            long tableId = cell.getColumnKey();
             Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
+            List<Long> tabletIds = cell.getValue();
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            boolean locked = true;
             long lockStartTime = System.currentTimeMillis();
             try {
                 int deleteCounter = 0;
-                List<Long> tabletIds = tabletDeleteFromMeta.get(dbId);
+                // Snapshot tablet metadata only after acquiring the table lock. A concurrent
+                // truncate/drop cannot run while we hold the lock, so the loop never acts on
+                // tablets that were removed from TabletInvertedIndex while we waited for the lock.
+                // Refreshed after every periodic relock for the same reason.
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {
-                    // Because we need to write bdb with db write lock hold,
+                    // Because we need to write bdb with the table write lock hold,
                     // to avoid block other threads too long, we periodically release and
-                    // acquire the db write lock (every MAX_DB_WLOCK_HOLDING_TIME_MS milliseconds).
+                    // acquire the table write lock (every maxDbWLockHoldingTimeMs milliseconds).
                     long currentTime = System.currentTimeMillis();
-                    if (currentTime - lockStartTime > MAX_DB_WLOCK_HOLDING_TIME_MS) {
-                        locker.unLockDatabase(db.getId(), LockType.WRITE);
+                    if (currentTime - lockStartTime > maxDbWLockHoldingTimeMs) {
+                        locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+                        locked = false;
                         db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
                         if (db == null) {
-                            continue DB_TRAVERSE;
+                            continue TABLE_TRAVERSE;
                         }
-                        locker.lockDatabase(db.getId(), LockType.WRITE);
+                        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+                        locked = true;
                         lockStartTime = currentTime;
+                        // Re-read metadata under the freshly re-acquired lock so we never act on
+                        // tablets that were truncated/dropped while the lock was released.
+                        tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                     }
 
                     TabletMeta tabletMeta = tabletMetaList.get(i);
@@ -1251,7 +1279,6 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         continue;
                     }
                     long tabletId = tabletIds.get(i);
-                    long tableId = tabletMeta.getTableId();
                     long partitionId = tabletMeta.getPhysicalPartitionId();
 
                     LOG.debug("delete tablet {} in partition {} of table {} in db {} from meta. backend[{}]",
@@ -1435,11 +1462,13 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                 currentBackendReportVersion);
                     }
                 } // end for tabletMetas
-                LOG.info("delete {} replica(s) from globalStateMgr in db[{}]", deleteCounter, dbId);
+                LOG.info("delete {} replica(s) from globalStateMgr in db[{}] table[{}]", deleteCounter, dbId, tableId);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                if (locked) {
+                    locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+                }
             }
-        } // end for dbs
+        } // end for (db, table) cells
 
         if (!deleteTablets.isEmpty()) {
             // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
@@ -2061,31 +2090,42 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                     continue;
                 }
 
-                // already has one update scheam task, ignore to prevent send too many task
-                if (indexMeta.hasUpdateSchemaTask(backendId)) {
+                // Atomically reserve the slot for this backend to prevent sending too many tasks.
+                // The check-then-reserve is a single atomic operation, so two senders running
+                // concurrently under the shared READ lock cannot both observe "no task" and both
+                // enqueue a duplicate task. If a task is already in flight, skip this backend.
+                if (!indexMeta.addUpdateSchemaBackendIfAbsent(backendId)) {
                     continue;
                 }
 
-                List<TColumn> columnsDesc = Lists.newArrayList();
-                List<Integer> columnSortKeyUids = Lists.newArrayList();
+                try {
+                    List<TColumn> columnsDesc = Lists.newArrayList();
+                    List<Integer> columnSortKeyUids = Lists.newArrayList();
 
-                for (Column column : indexMeta.getSchema()) {
-                    TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(column.getColumnId().getId());
-                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
-                    columnsDesc.add(tColumn);
-                }
-                if (indexMeta.getSortKeyUniqueIds() != null) {
-                    columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
-                }
-                TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
-                        indexMeta.getShortKeyColumnCount());
+                    for (Column column : indexMeta.getSchema()) {
+                        TColumn tColumn = column.toThrift();
+                        tColumn.setColumn_name(column.getColumnId().getId());
+                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
+                        columnsDesc.add(tColumn);
+                    }
+                    if (indexMeta.getSortKeyUniqueIds() != null) {
+                        columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+                    }
+                    TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
+                            indexMeta.getShortKeyColumnCount());
 
-                UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
-                        indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
-                        columnParam);
-                updateSchemaBatchTask.addTask(task);
-                indexMeta.addUpdateSchemaBackend(backendId);
+                    UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
+                            indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                            columnParam);
+                    updateSchemaBatchTask.addTask(task);
+                } catch (RuntimeException e) {
+                    // Reservation happened before the task was built/enqueued, so release it on
+                    // failure. Otherwise this backend would stay marked forever (the finish RPC
+                    // only clears it after a task actually completes) and no future UPDATE_SCHEMA
+                    // task would ever be sent for it.
+                    indexMeta.removeUpdateSchemaBackend(backendId);
+                    throw e;
+                }
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }

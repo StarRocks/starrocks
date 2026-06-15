@@ -2,7 +2,7 @@
 
 # information about the cluster snapshot to be downloaded and restored
 #cluster_snapshot:
-#    cluster_snapshot_path: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta
+#    cluster_snapshot_path: s3://defaultbucket/test/<UUID>/meta/image/automated_cluster_snapshot_<snapshot_timestamp>
 #    storage_volume_name: my_s3_volume #defined in storage_volumes
 
 # do not include leader fe
@@ -44,3 +44,12 @@
 #        value: simple
 #      - key: username
 #        value: starrocks
+#  - name: my_adls2_volume
+#    type: ADLS2
+#    location: adls2://defaultbucket/shared_data
+#    comment: my primary ADLS volume
+#    properties:
+#      - key: azure.adls2.endpoint
+#        value: https://starrocksadls.dfs.core.windows.net
+#      - key: azure.adls2.shared_key
+#        value: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

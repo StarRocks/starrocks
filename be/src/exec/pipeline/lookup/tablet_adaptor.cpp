@@ -20,12 +20,12 @@
 #include "base/status.h"
 #include "base/status_fmt.hpp"
 #include "base/statusor.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/column_access_path_resolver.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/extends_column_utils.h"
@@ -275,7 +275,7 @@ Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
         schema_key_pb.set_table_id(t_schema_key.table_id);
         ASSIGN_OR_RETURN(_tablet_schema, tablet_mgr->table_schema_service()->get_schema_for_scan(
                                                  schema_key_pb, _tablet_id, state->query_id(),
-                                                 state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+                                                 state->fragment_runtime_state()->fe_addr(), _tablet.metadata()));
     } else {
         _tablet_schema = _tablet.get_schema();
     }

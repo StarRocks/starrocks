@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gutil/macros.h"
 
@@ -27,6 +29,8 @@ public:
     void add_blocked_driver(const DriverRawPtr driver);
 
     void try_schedule(const DriverRawPtr driver);
+
+    std::unique_ptr<PipelineObserver> create_driver_observer(DriverRawPtr driver);
 
     void attach_queue(DriverQueue* queue) {
         if (_driver_queue == nullptr) {

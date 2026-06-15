@@ -66,6 +66,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/lookup_request.h"
@@ -468,7 +469,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     // prepare_global_state is success when reach here, so we must count down once
     auto query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id);
     if (query_context != nullptr) {
-        _exec_env->query_context_mgr()->count_down_fragments(query_context.get());
+        query_context->count_down_fragment();
     }
 
     status.to_protobuf(response->mutable_status());
@@ -740,7 +741,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                         "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
                         print_id(tid));
             } else {
-                fragment_ctx->cancel(Status::Cancelled(reason_string), true);
+                pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(reason_string), true);
             }
         }
     } else {
