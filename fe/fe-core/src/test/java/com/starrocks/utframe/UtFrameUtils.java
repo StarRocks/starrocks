@@ -810,6 +810,17 @@ public class UtFrameUtils {
             } catch (Exception e) {
                 continue;
             }
+            // Only handle old-style resource-mapping iceberg external tables: CREATE EXTERNAL TABLE ...
+            // ENGINE=ICEBERG ("resource"=...). Other external tables (e.g. ENGINE=HIVE) and native tables
+            // must go through the normal replay create path -- otherwise we would hijack unrelated tables,
+            // drop their CREATE statements from createTableStmtMap, and break other dumps.
+            if (!stmt.isExternal()
+                    || stmt.getEngineName() == null
+                    || !stmt.getEngineName().equalsIgnoreCase("iceberg")
+                    || stmt.getProperties() == null
+                    || !stmt.getProperties().containsKey("resource")) {
+                continue;
+            }
             List<com.starrocks.catalog.Column> columns = new java.util.ArrayList<>();
             for (com.starrocks.sql.ast.ColumnDef cd : stmt.getColumnDefs()) {
                 columns.add(new com.starrocks.catalog.Column(
