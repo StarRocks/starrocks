@@ -226,7 +226,7 @@ public class TypeDeserializer {
             case VARBINARY:
                 return TypeFactory.createVarbinary(ptype.len);
             case DECIMALV2:
-                return TypeFactory.createDecimalV2Type(ptype.precision, ptype.precision);
+                return TypeFactory.createDecimalV2Type(ptype.precision, ptype.scale);
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
