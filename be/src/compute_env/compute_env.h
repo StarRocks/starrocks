@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "common/status.h"
@@ -24,6 +25,7 @@
 
 namespace starrocks {
 
+class BaseLoadPathMgr;
 class DataStreamMgr;
 class MetricRegistry;
 class ProfileReportWorker;
@@ -68,6 +70,7 @@ public:
 
     Status init(const ComputeEnvOptions& options);
     Status init_workgroup(const ComputeEnvWorkGroupOptions& options);
+    Status init_load_path(std::vector<std::string> store_paths, bool use_dummy_load_path_mgr);
     Status init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics);
     Status init_query_cache(size_t capacity);
     Status init_profile_report_worker(ProfileReportWorkerOptions options);
@@ -77,6 +80,7 @@ public:
     Status start_result_mgr();
     void stop_result_mgr();
     void destroy_profile_report_worker();
+    void destroy_load_path();
     void destroy();
 
     pipeline::DriverLimiter* driver_limiter() const { return _driver_limiter.get(); }
@@ -89,6 +93,7 @@ public:
     spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr.get(); }
     ProfileReportWorker* profile_report_worker() const { return _profile_report_worker.get(); }
+    BaseLoadPathMgr* load_path_mgr() const { return _load_path_mgr.get(); }
 
 private:
     std::unique_ptr<pipeline::DriverLimiter> _driver_limiter;
@@ -101,6 +106,7 @@ private:
     std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
     std::unique_ptr<query_cache::CacheManager> _cache_mgr;
     std::unique_ptr<ProfileReportWorker> _profile_report_worker;
+    std::unique_ptr<BaseLoadPathMgr> _load_path_mgr;
 };
 
 } // namespace starrocks

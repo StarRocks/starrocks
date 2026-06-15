@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 
 namespace starrocks {
@@ -54,6 +55,20 @@ TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     EXPECT_EQ(env.stream_mgr(), nullptr);
     EXPECT_EQ(env.result_mgr(), nullptr);
     EXPECT_EQ(env.result_queue_mgr(), nullptr);
+}
+
+TEST(ComputeEnvTest, LoadPathLifecycle) {
+    ComputeEnv env;
+    EXPECT_EQ(env.load_path_mgr(), nullptr);
+
+    ASSERT_OK(env.init_load_path({}, true));
+    ASSERT_NE(env.load_path_mgr(), nullptr);
+
+    std::string prefix;
+    EXPECT_FALSE(env.load_path_mgr()->allocate_dir("db", "label", &prefix).ok());
+
+    env.destroy_load_path();
+    EXPECT_EQ(env.load_path_mgr(), nullptr);
 }
 
 } // namespace starrocks

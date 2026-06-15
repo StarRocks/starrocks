@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dummy_load_path_mgr.h"
+#include "compute_env/load_path/dummy_load_path_mgr.h"
 
 namespace starrocks {
 

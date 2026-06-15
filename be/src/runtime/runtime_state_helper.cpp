@@ -29,12 +29,12 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "fs/fs_util.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/query_statistics.h"
 #include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_filter_worker.h"

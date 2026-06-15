@@ -29,13 +29,13 @@
 #include "column/column.h"
 #include "common/logging.h"
 #include "common/system/master_info.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

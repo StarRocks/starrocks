@@ -22,6 +22,8 @@
 #include "common/logging.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/load_path/dummy_load_path_mgr.h"
+#include "compute_env/load_path/load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "compute_env/profile_report_worker.h"
@@ -90,6 +92,21 @@ Status ComputeEnv::init_workgroup(const ComputeEnvWorkGroupOptions& options) {
                                                                      options.max_executor_threads);
 
     _workgroup_manager = std::move(workgroup_manager);
+    return Status::OK();
+}
+
+Status ComputeEnv::init_load_path(std::vector<std::string> store_paths, bool use_dummy_load_path_mgr) {
+    if (_load_path_mgr != nullptr) {
+        return Status::InternalError("LoadPathMgr has been initialized");
+    }
+    std::unique_ptr<BaseLoadPathMgr> load_path_mgr;
+    if (use_dummy_load_path_mgr) {
+        load_path_mgr = std::make_unique<DummyLoadPathMgr>();
+    } else {
+        load_path_mgr = std::make_unique<LoadPathMgr>(std::move(store_paths));
+    }
+    RETURN_IF_ERROR(load_path_mgr->init());
+    _load_path_mgr = std::move(load_path_mgr);
     return Status::OK();
 }
 
@@ -168,8 +185,13 @@ void ComputeEnv::destroy_profile_report_worker() {
     _profile_report_worker.reset();
 }
 
+void ComputeEnv::destroy_load_path() {
+    _load_path_mgr.reset();
+}
+
 void ComputeEnv::destroy() {
     destroy_profile_report_worker();
+    destroy_load_path();
     _global_spill_manager.reset();
     _spill_dir_mgr.reset();
     if (_workgroup_manager != nullptr) {

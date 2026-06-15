@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "runtime/base_load_path_mgr.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 
 namespace starrocks {
 
