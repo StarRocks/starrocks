@@ -581,6 +581,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为 Broker Load 启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
 - 引入版本: v4.1.0
 
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入（INSERT-from-OLAP-table）启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 引入版本: v4.1.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - 默认值: 300
