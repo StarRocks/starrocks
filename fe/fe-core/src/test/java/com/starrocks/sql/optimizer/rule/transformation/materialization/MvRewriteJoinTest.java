@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
