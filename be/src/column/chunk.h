@@ -379,9 +379,8 @@ inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
             if (!known_slots.empty()) known_slots += ",";
             known_slots += std::to_string(id);
         }
-        throw std::runtime_error(
-                fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id, known_slots,
-                            _columns.size()));
+        throw std::runtime_error(fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id,
+                                             known_slots, _columns.size()));
     }
     size_t idx = _slot_id_to_index.at(slot_id);
     return _columns.at(idx);
@@ -395,9 +394,8 @@ inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
             if (!known_slots.empty()) known_slots += ",";
             known_slots += std::to_string(id);
         }
-        throw std::runtime_error(
-                fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id, known_slots,
-                            _columns.size()));
+        throw std::runtime_error(fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id,
+                                             known_slots, _columns.size()));
     }
     size_t idx = _slot_id_to_index.at(slot_id);
     return _columns[idx];

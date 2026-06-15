@@ -245,8 +245,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         //     referencing those slots can be evaluated correctly.
         if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
             if (active_chunk->num_rows() > 0) {
-                RETURN_IF_ERROR(_param.scanner_ctx->append_auxiliary_columns_to_chunk(
-                        &active_chunk, active_chunk->num_rows()));
+                RETURN_IF_ERROR(
+                        _param.scanner_ctx->append_auxiliary_columns_to_chunk(&active_chunk, active_chunk->num_rows()));
             }
             for (int col_idx : _column_materializer->dict_column_indices()) {
                 SlotId slot_id = _param.read_cols[col_idx].slot_id();
@@ -308,8 +308,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // chunk BEFORE lazy column backfill and emit.  This guarantees all slots
         // exist when fill_dst_column is called in step 7.
         if (active_chunk->num_rows() > 0) {
-            RETURN_IF_ERROR(
-                    _param.scanner_ctx->append_auxiliary_columns_to_chunk(chunk, active_chunk->num_rows()));
+            RETURN_IF_ERROR(_param.scanner_ctx->append_auxiliary_columns_to_chunk(chunk, active_chunk->num_rows()));
         }
 
         // 5. Backfill lazy physical columns.  Pass chunk_filter so that any lazy
