@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
@@ -26,6 +27,7 @@ import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -229,34 +231,6 @@ public class BoundaryPlannerTest {
                 "expected arity error, got: " + exception.getMessage());
     }
 
-    /**
-     * Test-only Variant subclass with a settable decimal Type. Production code
-     * has no DecimalVariant today — Variant.of(Type, String) rejects decimal
-     * primitive types — so we have to hand-roll one to exercise the planner's
-     * decimal precision/scale validator. When DecimalVariant lands, this can
-     * be replaced with the production class.
-     */
-    private static final class TestDecimalVariant extends Variant {
-        TestDecimalVariant(ScalarType type) {
-            super(type);
-        }
-
-        @Override
-        public String getStringValue() {
-            return "";
-        }
-
-        @Override
-        public long getLongValue() {
-            return 0L;
-        }
-
-        @Override
-        protected int compareToImpl(Variant other) {
-            return 0;
-        }
-    }
-
     @Test
     public void testDecimalScaleMismatchRejected() {
         // Schema column is DECIMAL(10, 4); tuple value is DECIMAL(10, 2).
@@ -264,7 +238,7 @@ public class BoundaryPlannerTest {
         ScalarType variantType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
         Column schemaColumn = new Column("d", schemaType);
 
-        Tuple malformed = new Tuple(List.of(new TestDecimalVariant(variantType)));
+        Tuple malformed = new Tuple(List.of(new DecimalVariant(variantType, "1.23")));
         List<Tuple> tuples = List.of(malformed);
 
         StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
@@ -282,14 +256,33 @@ public class BoundaryPlannerTest {
         Column schemaColumn = new Column("d", decimalType);
 
         List<Tuple> tuples = List.of(
-                new Tuple(List.of(new TestDecimalVariant(decimalType))),
-                new Tuple(List.of(new TestDecimalVariant(decimalType))));
+                new Tuple(List.of(new DecimalVariant(decimalType, "1.2345"))),
+                new Tuple(List.of(new DecimalVariant(decimalType, "1.2345"))));
         BoundaryPlannerResult result = BoundaryPlanner.planRowQuantileBoundaries(
                 sampleSetOf(tuples), 2, List.of(schemaColumn));
 
-        // All sampled tuples are equal under the stub compareToImpl → the only candidate cut
-        // equals the minimum → filtered out → NO_SPLIT.
+        // All sampled tuples are equal → the only candidate cut equals the minimum → filtered
+        // out → NO_SPLIT.
         Assertions.assertTrue(result.isNoSplit());
+    }
+
+    @Test
+    public void testDecimalQuantilePlacement() throws Exception {
+        // Nine ascending decimal samples, K=3 -> cuts at sorted positions 3 and 6.
+        ScalarType decimalType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Column column = new Column("d", decimalType);
+        List<Tuple> tuples = new ArrayList<>();
+        for (int i = 0; i < 9; i++) {
+            tuples.add(new Tuple(List.of(new DecimalVariant(decimalType, BigDecimal.valueOf(i)))));
+        }
+
+        BoundaryPlannerResult result = BoundaryPlanner.planRowQuantileBoundaries(
+                sampleSetOf(tuples), 3, List.of(column));
+
+        Assertions.assertFalse(result.isNoSplit());
+        Assertions.assertEquals(2, result.getBoundaries().size());
+        Assertions.assertEquals("3", result.getBoundaries().get(0).getValues().get(0).getStringValue());
+        Assertions.assertEquals("6", result.getBoundaries().get(1).getValues().get(0).getStringValue());
     }
 
     @Test
