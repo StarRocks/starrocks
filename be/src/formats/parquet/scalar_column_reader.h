@@ -259,11 +259,7 @@ private:
     bool _can_lazy_convert = false;
     // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;
-<<<<<<< HEAD
     // tmp columns used during lazy-decode / lazy-convert paths; at most one is non-null
-=======
-    // dict code
->>>>>>> main
     ColumnPtr _tmp_code_column = nullptr;
     ColumnPtr _tmp_intermediate_column = nullptr;
 };
