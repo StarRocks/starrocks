@@ -14,41 +14,32 @@
 
 package com.starrocks.catalog.system.sys;
 
-<<<<<<< HEAD
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-=======
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
->>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
-<<<<<<< HEAD
 import mockit.Expectations;
-import mockit.Mocked;
-=======
 import mockit.Mock;
 import mockit.MockUp;
->>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
+import mockit.Mocked;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 
-<<<<<<< HEAD
 import java.lang.Thread.State;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-=======
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
->>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SysFeLocksTest {
@@ -66,7 +57,6 @@ public class SysFeLocksTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testResolveLockItem(@Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr)
             throws InterruptedException {
         Config.lock_manager_enabled = false;
@@ -158,8 +148,7 @@ public class SysFeLocksTest {
         Config.lock_manager_enabled = true;
     }
 
-}
-=======
+    @Test
     public void testListLocksAccessDeniedSurfacesMessage() {
         TFeLocksReq req = new TFeLocksReq();
         TAuthInfo auth = new TAuthInfo();
@@ -183,4 +172,3 @@ public class SysFeLocksTest {
     }
 
 }
->>>>>>> 589a357079 ([BugFix] Surface AccessDenied reason for sys.fe_memory_usage / sys.fe_locks (#73567))
