@@ -1333,11 +1333,16 @@ public class AnalyzerUtils {
         return transformTableColumnType(srcType, true);
     }
 
+    public static Type transformTableColumnType(Type srcType, boolean convertDouble) {
+        return transformTableColumnType(srcType, convertDouble, Config.transform_type_prefer_string_for_varchar);
+    }
+
     // For char and varchar types, use the inferred length if the length can be inferred,
-    // otherwise (include null type) use the longest varchar value.
+    // otherwise (include null type) use the longest varchar value. When preferStringForVarchar
+    // is true, every fixed-length varchar/char is widened to the OLAP max varchar length instead.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
-    public static Type transformTableColumnType(Type srcType, boolean convertDouble) {
+    public static Type transformTableColumnType(Type srcType, boolean convertDouble, boolean preferStringForVarchar) {
         Type newType = srcType;
         if (srcType.isScalarType()) {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
@@ -1346,8 +1351,8 @@ public class AnalyzerUtils {
                 int len = TypeFactory.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
-                    if (Config.transform_type_prefer_string_for_varchar) {
-                        // always use max varchar length for varchar type if transform_type_prefer_string_for_varchar is set.
+                    if (preferStringForVarchar) {
+                        // always use max varchar length for char/varchar types if preferStringForVarchar is set.
                         len = TypeFactory.getOlapMaxVarcharLength();
                     } else {
                         if (scalarType.getLength() > 0) {
@@ -1372,14 +1377,18 @@ public class AnalyzerUtils {
                 newType = TypeFactory.createType(srcType.getPrimitiveType());
             }
         } else if (srcType.isArrayType()) {
-            newType = new ArrayType(transformTableColumnType(((ArrayType) srcType).getItemType(), convertDouble));
+            newType = new ArrayType(transformTableColumnType(((ArrayType) srcType).getItemType(),
+                    convertDouble, preferStringForVarchar));
         } else if (srcType.isMapType()) {
-            newType = new MapType(transformTableColumnType(((MapType) srcType).getKeyType(), convertDouble),
-                    transformTableColumnType(((MapType) srcType).getValueType(), convertDouble));
+            newType = new MapType(transformTableColumnType(((MapType) srcType).getKeyType(),
+                    convertDouble, preferStringForVarchar),
+                    transformTableColumnType(((MapType) srcType).getValueType(),
+                            convertDouble, preferStringForVarchar));
         } else if (srcType.isStructType()) {
             StructType structType = (StructType) srcType;
             List<StructField> mappingFields = structType.getFields().stream()
-                    .map(x -> new StructField(x.getName(), transformTableColumnType(x.getType(), convertDouble),
+                    .map(x -> new StructField(x.getName(),
+                            transformTableColumnType(x.getType(), convertDouble, preferStringForVarchar),
                             x.getComment()))
                     .collect(Collectors.toList());
             newType = new StructType(mappingFields, structType.isNamed());

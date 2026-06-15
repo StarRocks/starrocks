@@ -1384,5 +1384,5 @@ sidebar_label: "存算分离、数据湖和其他"
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在物化视图创建和 CTAS 操作中，是否更倾向于为固定长度的 varchar 列使用 string 类型。
+- 描述: 在物化视图创建中，是否更倾向于为固定长度的 char/varchar 列使用 string 类型。
 - 引入版本: v4.0.0
