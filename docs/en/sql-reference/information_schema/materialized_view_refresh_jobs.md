@@ -38,5 +38,5 @@ The following fields are provided in `materialized_view_refresh_jobs`:
 | ERROR_MESSAGE                      | Error message of the failed run. `NULL` if no run failed.    |
 
 :::note
-This view has no persistent storage. Its rows are derived from `task_runs` at query time, so record retention follows the `task_runs` history settings.
+This view has no persistent storage. Its rows are derived from `task_runs` at query time, so record retention follows the `task_runs` history settings. Because each job is aggregated from its `task_runs` rows at query time, a job is only fully represented while all of its task runs are still within the `task_runs` history window; older jobs are not shown, and a job straddling the retention boundary may be partially aggregated (for example, its `SUBMIT_TIME` or `IMV_SOURCE_*` range may reflect only the retained runs).
 :::
