@@ -93,10 +93,6 @@ public class PrepareCollectMetaTaskTest {
         // in com.starrocks.sql.optimizer, not accessible from .task subpackage
         new MockUp<OptimizerContext>() {
             @Mock
-            public void $init(ConnectContext cc) {
-            }
-
-            @Mock
             public SessionVariable getSessionVariable() {
                 return ctx.getSessionVariable();
             }
