@@ -35,7 +35,6 @@ import org.apache.orc.StripeStatistics;
 import org.apache.orc.TypeDescription;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -268,10 +267,10 @@ public final class OrcStripeStatisticsReader {
             // to data tier instead of escaping read() (which only catches IOException).
             // Render via toPlainString() (not toString()) so large-exponent values never
             // surface in scientific notation, which the BE datum_from_string would reject.
-            BigDecimal minValue = decimalStatistics.getMinimum().bigDecimalValue();
-            BigDecimal maxValue = decimalStatistics.getMaximum().bigDecimalValue();
-            minVariant = Variant.of(location.starRocksColumn.getType(), minValue.toPlainString());
-            maxVariant = Variant.of(location.starRocksColumn.getType(), maxValue.toPlainString());
+            minVariant = Variant.of(location.starRocksColumn.getType(),
+                    decimalStatistics.getMinimum().bigDecimalValue().toPlainString());
+            maxVariant = Variant.of(location.starRocksColumn.getType(),
+                    decimalStatistics.getMaximum().bigDecimalValue().toPlainString());
         } catch (RuntimeException conversionFailure) {
             throw new MetaTierUnavailableException(String.format(
                     "ORC decimal stats value not representable for sort-key column \"%s\": %s",
