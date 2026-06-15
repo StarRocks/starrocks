@@ -29,6 +29,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exprs/agg/count.h"
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
@@ -79,7 +80,8 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
 
     if (_tnode.analytic_node.partition_exprs.empty()) {
         // analytic's dop must be 1 if with no partition clause
-        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink);
+        ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state(), id(), ops_with_sink);
     } else if (_use_hash_based_partition) {
         bool has_outer_join_child =
                 _tnode.analytic_node.__isset.has_outer_join_child && _tnode.analytic_node.has_outer_join_child;
@@ -89,8 +91,8 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
                 has_outer_join_child, _tnode.analytic_node.partition_exprs);
 
         // prepend local shuffle to PartitionSortSinkOperator
-        ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops_with_sink,
-                                                                          _partition_exprs);
+        ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                context, runtime_state(), id(), ops_with_sink, _partition_exprs);
         upstream_source_op = context->source_operator(ops_with_sink);
 
         ops_with_sink.emplace_back(std::make_shared<HashPartitionSinkOperatorFactory>(context->next_operator_id(), id(),
@@ -104,8 +106,8 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
         ops_with_sink.push_back(std::move(hash_partition_source_op));
     } else if (is_skewed) {
         // The former sort will use passthrough exchange, so we need to add ordered partition local exchange here.
-        ops_with_sink = context->maybe_interpolate_local_ordered_partition_exchange(runtime_state(), id(),
-                                                                                    ops_with_sink, _partition_exprs);
+        ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_ordered_partition_exchange(
+                context, runtime_state(), id(), ops_with_sink, _partition_exprs);
     }
 
     upstream_source_op = context->source_operator(ops_with_sink);

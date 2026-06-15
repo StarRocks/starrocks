@@ -46,6 +46,7 @@
 #include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
@@ -767,7 +768,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
     ASSIGN_OR_RETURN(auto exec_ops, plan->decompose_to_pipeline(&context));
-    exec_ops = context.maybe_interpolate_grouped_exchange(plan->id(), exec_ops);
+    exec_ops = ::starrocks::pipeline::builder::maybe_interpolate_grouped_exchange(&context, plan->id(), exec_ops);
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {

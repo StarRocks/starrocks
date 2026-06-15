@@ -19,6 +19,7 @@
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -54,8 +55,9 @@ StatusOr<pipeline::OpFactories> AssertNumRowsNode::decompose_to_pipeline(pipelin
     using namespace pipeline;
 
     ASSIGN_OR_RETURN(auto operator_before_assert_num_rows_source, _children[0]->decompose_to_pipeline(context));
-    operator_before_assert_num_rows_source = context->maybe_interpolate_local_passthrough_exchange(
-            runtime_state(), id(), operator_before_assert_num_rows_source);
+    operator_before_assert_num_rows_source =
+            ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                    context, runtime_state(), id(), operator_before_assert_num_rows_source);
 
     auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
             context->next_operator_id(), id(), _desired_num_rows, _subquery_string, _assertion);

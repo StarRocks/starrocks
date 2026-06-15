@@ -20,6 +20,7 @@
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

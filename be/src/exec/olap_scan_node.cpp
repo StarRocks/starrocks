@@ -37,6 +37,7 @@
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
@@ -983,7 +984,7 @@ StatusOr<pipeline::OpFactories> OlapScanNode::decompose_to_pipeline(pipeline::Pi
     pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto ops = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
-    return context->maybe_interpolate_debug_ops(runtime_state(), _id, ops);
+    return ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, ops);
 }
 
 } // namespace starrocks

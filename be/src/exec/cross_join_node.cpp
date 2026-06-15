@@ -31,6 +31,7 @@
 #include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -182,8 +183,8 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     // Initialize OperatorFactory's fields involving runtime filters.
     pipeline::init_runtime_filter_for_operator(*this, left_factory.get(), context, rc_rf_probe_collector);
     if (!context->is_colocate_group()) {
-        left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
-                                                                                  context->degree_of_parallelism());
+        left_ops = ::starrocks::pipeline::builder::maybe_interpolate_local_adpative_passthrough_exchange(
+                context, runtime_state(), id(), left_ops, context->degree_of_parallelism());
     }
     left_ops.emplace_back(std::move(left_factory));
 
@@ -192,8 +193,8 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     }
 
     if (_interpolate_passthrough && !context->is_colocate_group()) {
-        left_ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), left_ops,
-                                                                         context->degree_of_parallelism(), true);
+        left_ops = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state(), id(), left_ops, context->degree_of_parallelism(), true);
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
