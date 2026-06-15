@@ -962,7 +962,7 @@ void HiveDataSource::close(RuntimeState* state) {
     // ExprContexts whose root() Expr* lives in HiveDataSource::_pool
     // (ExprContext::clone() shares _root, it does NOT deep-copy the tree).
     // Release predicates here while _pool is still alive.
-    _scanner_ctx->predicates = {};
+    _scanner_ctx.predicates = {};
     ExprExecutor::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
     ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
     ExprExecutor::close(_scanner_ctx.partition_expr_ctxs, state);
