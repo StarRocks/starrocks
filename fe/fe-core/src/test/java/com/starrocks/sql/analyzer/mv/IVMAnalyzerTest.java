@@ -722,7 +722,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_taskdef_nonagg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_nonagg` ("),
                     "must use explicit column list form, got: " + sql);
@@ -734,10 +734,9 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
-     * Aggregate incremental MV (QUERY_COMPUTED): refresh SQL uses positional form since
-     * the schema has no AUTO_INCREMENT columns. New MVs no longer persist the rewritten
-     * ivmDefineSql, so the no-arg task definition falls back to the original user query;
-     * the __ROW_ID__-producing rewrite is re-derived at refresh time, not frozen here.
+     * Aggregate incremental MV (QUERY_COMPUTED): the INSERT uses positional form because the
+     * schema has no AUTO_INCREMENT columns (contrast the non-agg case, which needs an explicit
+     * column list to omit the storage-filled __ROW_ID__).
      */
     @Test
     public void testGetIVMTaskDefinitionForQueryComputedUsesPositionalForm() throws Exception {
@@ -747,14 +746,12 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_taskdef_agg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_agg` "),
                     "aggregate MV uses positional INSERT, got: " + sql);
             assertFalse(sql.startsWith("INSERT INTO `mv_taskdef_agg` ("),
                     "no explicit column list expected (no AUTO_INCREMENT columns), got: " + sql);
-            assertFalse(sql.contains(IvmOpUtils.COLUMN_ROW_ID),
-                    "no-arg task definition falls back to the original query (no frozen __ROW_ID__), got: " + sql);
         });
     }
 
@@ -797,7 +794,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_reordered_nonagg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_reordered_nonagg` ("),
                     "must use explicit column list form, got: " + sql);
