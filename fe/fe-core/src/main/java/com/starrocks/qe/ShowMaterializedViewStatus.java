@@ -606,7 +606,9 @@ public class ShowMaterializedViewStatus {
         }
 
         List<TaskRunStatus> sorted = new ArrayList<>(batch);
-        sorted.sort(Comparator.comparing(TaskRunStatus::getProcessStartTime));
+        // Order by createTime, not processStartTime: a pending/legacy follow-up run has processStartTime 0
+        // and would otherwise sort before the real first run, skewing the first/last picks (SUBMIT_TIME, state).
+        sorted.sort(Comparator.comparingLong(TaskRunStatus::getCreateTime));
 
         TaskRunStatus firstTaskRunStatus = sorted.get(0);
         TaskRunStatus lastTaskRunStatus = sorted.get(sorted.size() - 1);

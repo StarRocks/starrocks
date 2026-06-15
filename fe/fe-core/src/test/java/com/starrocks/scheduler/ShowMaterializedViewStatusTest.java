@@ -108,6 +108,20 @@ public class ShowMaterializedViewStatusTest {
     }
 
     @Test
+    public void fromTaskRunsOrdersByCreateTimeWhenSubRunPending() {
+        // A finished first run plus a still-pending follow-up whose processStartTime is 0. Ordering by
+        // processStartTime would put the pending run first and report its createTime as SUBMIT_TIME.
+        TaskRunStatus firstRun = mvTaskRun("job-p", "run-1", 1000L, 1000L, 1500L, Constants.TaskRunState.SUCCESS);
+        TaskRunStatus pendingRun = mvTaskRun("job-p", "run-2", 2000L, 0L, 0L, Constants.TaskRunState.RUNNING);
+
+        ShowMaterializedViewStatus.RefreshJobStatus status =
+                ShowMaterializedViewStatus.fromTaskRuns(Arrays.asList(pendingRun, firstRun));
+
+        Assertions.assertEquals(1000L, status.getMvRefreshStartTime()); // first run's createTime, not the follow-up's
+        Assertions.assertFalse(status.isRefreshFinished()); // last run by createTime is still RUNNING
+    }
+
+    @Test
     public void fromTaskRunsReturnsEmptyStatusForEmptyOrNull() {
         ShowMaterializedViewStatus.RefreshJobStatus empty =
                 ShowMaterializedViewStatus.fromTaskRuns(Collections.emptyList());
