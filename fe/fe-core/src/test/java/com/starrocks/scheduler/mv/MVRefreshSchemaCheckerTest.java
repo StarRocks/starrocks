@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.sql.analyzer.mv.IvmSchemaCompat;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DecimalType;
@@ -33,7 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 /**
- * Covers {@link MVRefreshSchemaChecker#isColumnCompatible} for cases the SR SQL test framework
+ * Covers {@link IvmSchemaCompat#isColumnCompatible} for cases the SR SQL test framework
  * cannot reach: iceberg STRUCT/ARRAY/MAP field-level ALTER from Spark/Trino. SR SQL itself
  * rejects {@code ALTER ... ADD FIELD / DROP FIELD} clauses on non-OLAP tables, but the iceberg
  * table can still be modified out of band.
@@ -41,7 +42,7 @@ import java.util.Arrays;
 public class MVRefreshSchemaCheckerTest {
 
     private static boolean isCompatible(Column existed, Type derivedType) {
-        return MVRefreshSchemaChecker.isColumnCompatible(existed, derivedType);
+        return IvmSchemaCompat.isColumnCompatible(existed, derivedType);
     }
 
     private static StructType struct(StructField... fields) {
