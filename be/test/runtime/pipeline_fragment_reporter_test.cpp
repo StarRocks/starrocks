@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 
 namespace starrocks {
 

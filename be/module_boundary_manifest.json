@@ -515,8 +515,8 @@
       "forbidden_include_prefixes": ["exec/pipeline/", "compute_env/workgroup/", "storage/", "service/", "http/", "connector/", "cache/", "util/"],
       "forbidden_includes": [
         "exec/pipeline/fragment_context.h",
-        "exec/pipeline/pipeline.h",
-        "exec/pipeline/pipeline_driver.h",
+        "exec/runtime/pipeline.h",
+        "exec/runtime/pipeline_driver.h",
         "exec/pipeline/pipeline_driver_executor.h",
         "exec/pipeline/query_context.h",
         "exec/pipeline/scan/morsel.h",
@@ -530,39 +530,21 @@
     {
       "id": "execruntime",
       "doc_label": "ExecRuntime",
-      "summary": "Execution runtime driver lifecycle and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.",
+      "summary": "Operator-tree execution framework for query and fragment contexts, driver lifecycle, execution groups, and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.",
       "owned_targets": ["ExecRuntime"],
+      "owned_roots": ["be/src/exec/runtime"],
       "additional_owned_globs": [
-        "be/src/exec/runtime/fragment_runtime_state.h",
-        "be/src/exec/runtime/query_runtime_state.h",
-        "be/src/exec/pipeline/adaptive/adaptive_dop_param.h",
-        "be/src/exec/pipeline/group_execution/execution_group_fwd.h",
-        "be/src/exec/pipeline/query_context.h",
-        "be/src/exec/pipeline/query_context_manager.h",
-        "be/src/exec/pipeline/schedule/common.h",
-        "be/src/exec/pipeline/schedule/utils.h"
+        "be/src/exec/pipeline/fragment_context.h",
+        "be/src/exec/pipeline/query_context.h"
       ],
       "allowed_include_prefixes": [
         "compute_env/",
         "exec/runtime/",
-        "exec/pipeline/fragment_context.h",
-        "exec/pipeline/fragment_context_manager.h",
-        "exec/pipeline/group_execution/execution_group.h",
-        "exec/pipeline/group_execution/execution_group_builder.h",
-        "exec/pipeline/group_execution/execution_group_fwd.h",
-        "exec/pipeline/adaptive/adaptive_dop_param.h",
-        "exec/pipeline/pipeline_driver.h",
         "exec/pipeline/pipeline_fwd.h",
-        "exec/pipeline/query_context.h",
-        "exec/pipeline/query_context_manager.h",
         "exec/pipeline/operator.h",
         "exec/pipeline/operator_with_dependency.h",
         "exec/pipeline/source_operator.h",
         "exec/pipeline/primitives/",
-        "exec/pipeline/schedule/common.h",
-        "exec/pipeline/schedule/event_scheduler.h",
-        "exec/pipeline/schedule/pipeline_driver_observer.h",
-        "exec/pipeline/schedule/utils.h",
         "exec/pipeline/runtime_filter_hub.h",
         "exec/pipeline/runtime_filter_core_types.h",
         "exec/pipeline/scan/morsel_queue.h",
@@ -595,7 +577,7 @@
       "allowed_target_deps": ["ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_runtime_test"],
       "allowed_test_link_deps": ["ExecRuntime", "ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExecRuntime limited to driver lifecycle and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward."
+      "remediation": "Keep ExecRuntime limited to the operator-tree execution framework and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward."
     },
     {
       "id": "connectorprimitive",

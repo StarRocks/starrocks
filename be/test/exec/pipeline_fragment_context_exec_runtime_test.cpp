@@ -22,11 +22,11 @@
 #include "base/testutil/assert.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/runtime/fragment_context.h"
+#include "exec/runtime/fragment_context_manager.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 

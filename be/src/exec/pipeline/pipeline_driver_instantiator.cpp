@@ -22,12 +22,12 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/schedule/event_scheduler.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

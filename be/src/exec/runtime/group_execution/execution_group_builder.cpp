@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
 
 #include "common/logging.h"
-#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group.h"
 #include "gen_cpp/Planner_types.h"
 
 namespace starrocks::pipeline {
