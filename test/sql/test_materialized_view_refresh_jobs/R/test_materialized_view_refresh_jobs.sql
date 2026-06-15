@@ -45,7 +45,7 @@ function: assert_query_contains("SELECT TABLE_SCHEMA FROM information_schema.mat
 -- result:
 None
 -- !result
-function: assert_query_contains("SELECT IMV_SOURCE_VERSION_RANGE, IMV_SOURCE_TIMESTAMP_RANGE, IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "{}")
+function: assert_query_contains("SELECT (IMV_SOURCE_VERSION_RANGE='{}' AND IMV_SOURCE_TIMESTAMP_RANGE='{}' AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP='{}') FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv1'", "1")
 -- result:
 None
 -- !result
@@ -60,7 +60,7 @@ function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.
 None
 -- !result
 -- Cross-check the shared columns against information_schema.materialized_views for the same MV.
-function: assert_query_contains("SELECT (j.MATERIALIZED_VIEW_ID = m.MATERIALIZED_VIEW_ID AND j.TASK_ID = m.TASK_ID AND j.TABLE_NAME = m.TABLE_NAME AND j.SUBMIT_TIME = m.LAST_REFRESH_START_TIME AND j.FINISH_TIME = m.LAST_REFRESH_FINISHED_TIME AND j.JOB_ID = m.LAST_REFRESH_JOB_ID) FROM information_schema.materialized_view_refresh_jobs j JOIN information_schema.materialized_views m ON j.TABLE_SCHEMA = m.TABLE_SCHEMA AND j.TABLE_NAME = m.TABLE_NAME WHERE j.TABLE_SCHEMA='db_${uuid0}' AND j.TABLE_NAME='mv1'", "1")
+function: assert_query_contains("SELECT (j.MATERIALIZED_VIEW_ID = m.MATERIALIZED_VIEW_ID AND j.TASK_ID = m.TASK_ID AND j.SUBMIT_TIME = m.LAST_REFRESH_START_TIME AND j.FINISH_TIME = m.LAST_REFRESH_FINISHED_TIME) FROM information_schema.materialized_view_refresh_jobs j JOIN information_schema.materialized_views m ON j.TABLE_SCHEMA = m.TABLE_SCHEMA AND j.TABLE_NAME = m.TABLE_NAME AND j.JOB_ID = m.LAST_REFRESH_JOB_ID WHERE j.TABLE_SCHEMA='db_${uuid0}' AND j.TABLE_NAME='mv1'", "1")
 -- result:
 None
 -- !result
