@@ -18,6 +18,7 @@
 #include "connector/connector_registry.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -116,17 +117,17 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
             context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
     size_t sink_dop = context->data_sink_dop();
     if (t_hive_sink.partition_column_names.size() == 0 || t_hive_sink.is_static_partition_sink) {
-        auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
-                pipeline::LocalExchanger::PassThroughType::SCALE);
+        auto ops = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+                sink_dop, pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
         context->add_pipeline(ops);
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
                                                        runtime_state));
-        auto ops = context->interpolate_local_key_partition_exchange(
-                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+        auto ops = ::starrocks::pipeline::builder::interpolate_local_key_partition_exchange(
+                context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);
         ops.emplace_back(std::move(op));
         context->add_pipeline(ops);
