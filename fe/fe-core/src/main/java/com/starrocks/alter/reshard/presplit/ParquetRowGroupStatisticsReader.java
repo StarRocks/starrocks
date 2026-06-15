@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.PrimitiveType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -30,11 +31,16 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.StringLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -47,15 +53,23 @@ import java.util.Objects;
  * {@link BoundaryPlanner#validateTupleAgainstSchema} — the caller (a
  * {@link RowGroupStatisticsProvider}) just aggregates results across files.
  *
- * <p>Supported type window (intentionally conservative for P1):
+ * <p>Supported type window:
  * <ul>
  *   <li>Unannotated Parquet INT32/INT64 → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
  *   <li>Unannotated Parquet BOOLEAN → StarRocks BOOLEAN</li>
- *   <li>Parquet BINARY with UTF8 (string) logical annotation → StarRocks CHAR/VARCHAR
+ *   <li>Parquet INT32 with DATE annotation → StarRocks DATE</li>
+ *   <li>Parquet INT64 with TIMESTAMP annotation, {@code isAdjustedToUTC=false}
+ *       (MILLIS/MICROS/NANOS) → StarRocks DATETIME. UTC-adjusted timestamps are
+ *       deferred (the load applies a session-tz offset this reader cannot reproduce).</li>
+ *   <li>Parquet BINARY with UTF8 (string) annotation → StarRocks CHAR/VARCHAR
  *       (always marked truncated → forces data-tier fallback for string sort keys)</li>
  * </ul>
- * Anything else (DATE, DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, FLOAT, DOUBLE,
- * INT96, FIXED_LEN_BYTE_ARRAY, raw BINARY for VARBINARY) makes the reader throw
+ * <p>DATE/DATETIME values are additionally gated to {@code [1970-01-01, 9999-12-31]}; values
+ * outside that window (year &le; 0 mis-renders through the {@code yyyy} formatters, pre-1970
+ * has unverified FE/BE timestamp-division parity, pre-1582 has calendar-parity questions)
+ * fall back to data tier.
+ * Anything else (DECIMAL, UINT_*, UTC-adjusted/INT96 timestamps, JSON, BSON, UUID,
+ * FLOAT, DOUBLE, FIXED_LEN_BYTE_ARRAY, raw BINARY for VARBINARY) makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
  * load failure. Pure I/O failures surface as {@link StarRocksException}.
  */
@@ -119,17 +133,19 @@ public final class ParquetRowGroupStatisticsReader {
         LogicalTypeAnnotation logicalAnnotation = fieldType.getLogicalTypeAnnotation();
         rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, sortKeyColumn);
         return new SortKeyLocation(
-                ColumnPath.get(schema.getFieldName(fieldIndex)), parquetTypeName, sortKeyColumn);
+                ColumnPath.get(schema.getFieldName(fieldIndex)),
+                parquetTypeName, logicalAnnotation, sortKeyColumn);
     }
 
     /**
      * Reject Parquet/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating row groups. Anything outside the window means
-     * "fall back to data tier", not "fail the load". Logical annotations
-     * (DATE, DECIMAL, UINT_*, TIMESTAMP, JSON, BSON, UUID, ...) change the
-     * value's meaning and ordering and are deferred to a future commit; the
-     * supported window here is the unannotated subset plus the UTF8 string
-     * annotation for character columns.
+     * "fall back to data tier", not "fail the load". The supported window here is
+     * the unannotated integer/boolean subset, the UTF8 string annotation for
+     * character columns, and INT32 with the DATE annotation → StarRocks DATE.
+     * Other logical annotations (DECIMAL, UINT_*, UTC-adjusted TIMESTAMP, JSON, BSON,
+     * UUID, ...) change the value's meaning and ordering and are deferred (fall back to
+     * data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
@@ -137,11 +153,22 @@ public final class ParquetRowGroupStatisticsReader {
             Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
-            case INT32, INT64 -> logicalAnnotation == null
-                    && (starRocksPrimitive == PrimitiveType.TINYINT
-                        || starRocksPrimitive == PrimitiveType.SMALLINT
-                        || starRocksPrimitive == PrimitiveType.INT
-                        || starRocksPrimitive == PrimitiveType.BIGINT);
+            // isIntegerType() is exactly {TINYINT, SMALLINT, INT, BIGINT} — the unannotated
+            // integer window; LARGEINT is intentionally excluded.
+            case INT32 -> logicalAnnotation == null
+                    ? starRocksPrimitive.isIntegerType()
+                    // INT32+DATE is days-since-epoch; only a StarRocks DATE sort key
+                    // gives those day counts their intended calendar meaning.
+                    : logicalAnnotation instanceof DateLogicalTypeAnnotation
+                            && starRocksPrimitive == PrimitiveType.DATE;
+            case INT64 -> logicalAnnotation == null
+                    ? starRocksPrimitive.isIntegerType()
+                    // Only local (non-UTC-adjusted) timestamps: the load stores those ticks
+                    // verbatim as the DATETIME wall clock, so the FE-rendered boundary matches.
+                    // UTC-adjusted timestamps get a session-tz offset at load time → data tier.
+                    : logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation
+                            && !timestampAnnotation.isAdjustedToUTC()
+                            && starRocksPrimitive == PrimitiveType.DATETIME;
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> logicalAnnotation instanceof StringLogicalTypeAnnotation
                     && (starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR);
@@ -178,7 +205,10 @@ public final class ParquetRowGroupStatisticsReader {
             // (e.g. unsupported type) or RuntimeException (e.g. BoolVariant on a
             // malformed literal) when a stat value cannot be represented. Translate
             // to a meta-tier fallback signal so the pipeline retries with data tier rather
-            // than aborting the load.
+            // than aborting the load. NOTE: toVariant's date/datetime path also throws the
+            // checked MetaTierUnavailableException (out-of-window rejection); that is not a
+            // RuntimeException and intentionally propagates past this catch with its own
+            // message — do not widen this to catch (Exception).
             throw new MetaTierUnavailableException(String.format(
                     "Parquet stats value not representable for sort-key column \"%s\": %s",
                     location.starRocksColumn.getName(), conversionFailure.getMessage()));
@@ -198,11 +228,61 @@ public final class ParquetRowGroupStatisticsReader {
                 truncated);
     }
 
-    private static Variant toVariant(Object parquetValue, SortKeyLocation location) {
+    private static Variant toVariant(Object parquetValue, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        if (location.logicalAnnotation instanceof DateLogicalTypeAnnotation) {
+            // INT32 days since 1970-01-01 → canonical "yyyy-MM-dd".
+            LocalDate date = LocalDate.ofEpochDay(((Number) parquetValue).longValue());
+            MetaTierTemporalWindow.rejectDateOutsideWindow(date);
+            return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER));
+        }
+        if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
+            long ticks = ((Number) parquetValue).longValue();
+            LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
+            // A negative (pre-1970) tick lands on a date before the window's lower bound and is
+            // rejected here, which also keeps the floorDiv/floorMod conversion above in the range
+            // where it is provably identical to BE's signed division.
+            MetaTierTemporalWindow.rejectDateOutsideWindow(dateTime.toLocalDate());
+            return Variant.of(location.starRocksColumn.getType(), renderDateTime(dateTime));
+        }
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
         return Variant.of(location.starRocksColumn.getType(), rendered);
+    }
+
+    private static LocalDateTime epochTicksToUtcDateTime(long ticks, LogicalTypeAnnotation.TimeUnit unit) {
+        long ticksPerSecond;
+        long nanosPerTick;
+        switch (unit) {
+            case MILLIS -> {
+                ticksPerSecond = 1_000L;
+                nanosPerTick = 1_000_000L;
+            }
+            case MICROS -> {
+                ticksPerSecond = 1_000_000L;
+                nanosPerTick = 1_000L;
+            }
+            case NANOS -> {
+                ticksPerSecond = 1_000_000_000L;
+                nanosPerTick = 1L;
+            }
+            default -> throw new IllegalArgumentException("unsupported Parquet timestamp unit " + unit);
+        }
+        // floorDiv/floorMod keep pre-1970 (negative) ticks correct.
+        long epochSecond = Math.floorDiv(ticks, ticksPerSecond);
+        long nanoOfSecond = Math.floorMod(ticks, ticksPerSecond) * nanosPerTick;
+        return LocalDateTime.ofEpochSecond(epochSecond, (int) nanoOfSecond, ZoneOffset.UTC);
+    }
+
+    private static String renderDateTime(LocalDateTime dateTime) {
+        // Mirrors DateVariant.getStringValue: second precision unless there is a
+        // sub-second part, then 6-digit microseconds. parseStrictDateTime round-trips both.
+        if (dateTime.getNano() == 0) {
+            return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
+        }
+        return dateTime.format(DateUtils.DATE_TIME_FORMATTER)
+                + "." + String.format("%06d", dateTime.getNano() / 1000);
     }
 
     private static ColumnChunkMetaData findColumnChunk(BlockMetaData block, ColumnPath path) {
@@ -214,6 +294,8 @@ public final class ParquetRowGroupStatisticsReader {
         return null;
     }
 
-    private record SortKeyLocation(ColumnPath path, PrimitiveTypeName parquetTypeName, Column starRocksColumn) {
+    private record SortKeyLocation(
+            ColumnPath path, PrimitiveTypeName parquetTypeName,
+            LogicalTypeAnnotation logicalAnnotation, Column starRocksColumn) {
     }
 }
