@@ -57,6 +57,7 @@
 #include "http/action/jit_cache_action.h"
 #endif
 #include "common/metrics/process_metrics_registry.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -81,7 +82,6 @@
 #include "http/utils.h"
 #include "http/web_page_handler.h"
 #include "platform/store_path.h"
-#include "runtime/base_load_path_mgr.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"

@@ -70,16 +70,13 @@
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
-#include "runtime/base_load_path_mgr.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/diagnose_daemon.h"
-#include "runtime/dummy_load_path_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/load_channel_mgr.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/pipeline_fragment_reporter.h"
@@ -189,7 +186,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.result_mgr = result_mgr();
     _runtime_services.result_queue_mgr = result_queue_mgr();
     _runtime_services.fragment_mgr = _fragment_mgr;
-    _runtime_services.load_path_mgr = _load_path_mgr;
+    _runtime_services.load_path_mgr = load_path_mgr();
     _runtime_services.load_channel_mgr = _load_channel_mgr;
     _runtime_services.load_stream_mgr = _load_stream_mgr;
     _runtime_services.stream_context_mgr = _stream_context_mgr;
@@ -274,12 +271,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
     RETURN_IF_ERROR(_compute_env->init_workgroup(workgroup_options));
 
-    if (store_paths.empty() && as_cn) {
-        _load_path_mgr = new DummyLoadPathMgr();
-    } else {
-        _load_path_mgr = new LoadPathMgr(this);
-    }
-
     _broker_mgr = new BrokerMgr(process_metrics);
 
     _load_stream_mgr = new LoadStreamMgr(process_metrics);
@@ -331,7 +322,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_compute_env->start_result_mgr());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    Status status = _load_path_mgr->init();
+    std::vector<std::string> load_store_paths;
+    load_store_paths.reserve(store_paths.size());
+    for (const auto& store_path : store_paths) {
+        load_store_paths.emplace_back(store_path.path);
+    }
+    Status status = _compute_env->init_load_path(std::move(load_store_paths), store_paths.empty() && as_cn);
     if (!status.ok()) {
         LOG(ERROR) << "load path mgr init failed." << status.message();
         exit(-1);
@@ -451,6 +447,10 @@ ResultQueueMgr* ExecEnv::result_queue_mgr() {
 
 query_cache::CacheManagerRawPtr ExecEnv::cache_mgr() const {
     return _compute_env == nullptr ? nullptr : _compute_env->cache_mgr();
+}
+
+BaseLoadPathMgr* ExecEnv::load_path_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->load_path_mgr();
 }
 
 ProfileReportWorker* ExecEnv::profile_report_worker() {
@@ -683,7 +683,9 @@ void ExecEnv::destroy() {
         _rejected_record_sync_daemon->stop();
     }
     SAFE_DELETE(_rejected_record_sync_daemon);
-    SAFE_DELETE(_load_path_mgr);
+    if (_compute_env != nullptr) {
+        _compute_env->destroy_load_path();
+    }
     SAFE_DELETE(_query_context_mgr);
     // Query/workgroup teardown can release FragmentContext state that still uses
     // ComputeEnv-owned timers, pass-through stream buffers, and workgroup resources.

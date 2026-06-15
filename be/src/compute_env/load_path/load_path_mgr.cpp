@@ -32,44 +32,52 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/load_path_mgr.h"
+#include "compute_env/load_path/load_path_mgr.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <chrono>
+#include <sstream>
 #include <string>
+#include <utility>
 
 #include "common/config_ingest_fwd.h"
 #include "common/thread/thread.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/join.h"
-#include "runtime/base_load_path_mgr.h"
-#include "runtime/exec_env.h"
-#include "storage/olap_define.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks {
 
 static const uint32_t MAX_SHARD_NUM = 1024;
 static const std::string SHARD_PREFIX = "__shard_";
+static const std::string MINI_PREFIX = "/mini_download";
+static const std::string ERROR_LOG_PREFIX = "/error_log";
+static const std::string REJECTED_RECORD_PREFIX = "/rejected_record";
 
-LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env) {}
+LoadPathMgr::LoadPathMgr(std::vector<std::string> store_paths) : _store_paths(std::move(store_paths)) {}
 LoadPathMgr::~LoadPathMgr() {
-    _stop.set_value(true);
-    pthread_join(_cleaner_id, nullptr);
+    if (_cleaner_started) {
+        _stop.set_value(true);
+        pthread_join(_cleaner_id, nullptr);
+    }
 }
 Status LoadPathMgr::init() {
+    if (_store_paths.empty()) {
+        return Status::InternalError("No load path configed.");
+    }
     _path_vec.clear();
-    for (auto& path : _exec_env->store_paths()) {
-        _path_vec.push_back(path.path + MINI_PREFIX);
+    for (auto& path : _store_paths) {
+        _path_vec.push_back(path + MINI_PREFIX);
     }
     LOG(INFO) << "Load path configured to [" << JoinStrings(_path_vec, ",") << "]";
 
     // error log is saved in first root path
-    _error_log_dir = _exec_env->store_paths()[0].path + ERROR_LOG_PREFIX;
+    _error_log_dir = _store_paths[0] + ERROR_LOG_PREFIX;
 
     // check and make dir
     RETURN_IF_ERROR(fs::create_directories(_error_log_dir));
@@ -79,6 +87,7 @@ Status LoadPathMgr::init() {
     if (pthread_create(&_cleaner_id, nullptr, LoadPathMgr::cleaner, this)) {
         return Status::InternalError("Fail to create thread 'load_path_mgr'");
     }
+    _cleaner_started = true;
     Thread::set_thread_name(_cleaner_id, "load_path_mgr");
     return Status::OK();
 }
@@ -169,7 +178,7 @@ std::string LoadPathMgr::get_load_rejected_record_absolute_path(const std::strin
                                                                 const TUniqueId& fragment_instance_id) {
     std::string path;
     if (rejected_record_dir.empty()) {
-        path = _exec_env->store_paths()[0].path + REJECTED_RECORD_PREFIX;
+        path = _store_paths[0] + REJECTED_RECORD_PREFIX;
     } else {
         path = rejected_record_dir;
     }

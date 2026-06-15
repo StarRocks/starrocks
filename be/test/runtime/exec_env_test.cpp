@@ -40,6 +40,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ASSERT_OK(platform_env->init(metrics));
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().load_path_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
@@ -54,6 +55,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
     ASSERT_OK(env.compute_env()->init_workgroup(workgroup_options));
     ASSERT_OK(env.compute_env()->init_spill({config::storage_root_path}, metrics));
+    ASSERT_OK(env.compute_env()->init_load_path({}, true));
     ProfileReportWorkerOptions profile_report_worker_options;
     profile_report_worker_options.start_worker_thread = false;
     profile_report_worker_options.report_non_pipeline_fragments = [](const std::vector<TUniqueId>&) {
@@ -97,6 +99,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().stream_mgr, env.compute_env()->stream_mgr());
     EXPECT_EQ(env.runtime_services().result_mgr, env.compute_env()->result_mgr());
     EXPECT_EQ(env.runtime_services().result_queue_mgr, env.compute_env()->result_queue_mgr());
+    EXPECT_EQ(env.load_path_mgr(), env.compute_env()->load_path_mgr());
+    EXPECT_EQ(env.runtime_services().load_path_mgr, env.compute_env()->load_path_mgr());
     EXPECT_EQ(env.runtime_services().profile_report_worker, env.compute_env()->profile_report_worker());
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
