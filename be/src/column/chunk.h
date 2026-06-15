@@ -374,7 +374,14 @@ inline ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) {
 inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
     DCHECK(is_slot_exist(slot_id)) << slot_id;
     if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
-        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+        std::string known_slots;
+        for (const auto& [id, idx] : _slot_id_to_index) {
+            if (!known_slots.empty()) known_slots += ",";
+            known_slots += std::to_string(id);
+        }
+        throw std::runtime_error(
+                fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id, known_slots,
+                            _columns.size()));
     }
     size_t idx = _slot_id_to_index.at(slot_id);
     return _columns.at(idx);
@@ -383,7 +390,14 @@ inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
 inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
     DCHECK(is_slot_exist(slot_id)) << slot_id;
     if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
-        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+        std::string known_slots;
+        for (const auto& [id, idx] : _slot_id_to_index) {
+            if (!known_slots.empty()) known_slots += ",";
+            known_slots += std::to_string(id);
+        }
+        throw std::runtime_error(
+                fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id, known_slots,
+                            _columns.size()));
     }
     size_t idx = _slot_id_to_index.at(slot_id);
     return _columns[idx];
