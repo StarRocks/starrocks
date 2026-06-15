@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.bookmark.Bookmark;
@@ -33,6 +34,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -357,6 +360,151 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
         }
+    }
+
+    @Test
+    public void testChangesPartitionPruningRangeListExpr() throws Exception {
+        // Range partition: a predicate on the partition column drops whole partitions from the delta.
+        String rangePlan = changesPrunePlan(
+                "CREATE TABLE ${name} (k bigint NOT NULL, dt date NOT NULL, v bigint) "
+                        + "DUPLICATE KEY(k, dt) PARTITION BY RANGE(dt) ("
+                        + "PARTITION p1 VALUES LESS THAN ('2026-02-01'), "
+                        + "PARTITION p2 VALUES LESS THAN ('2026-03-01'), "
+                        + "PARTITION p3 VALUES LESS THAN ('2026-04-01')) "
+                        + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1');",
+                "k, dt, v", "dt >= '2026-02-01'");
+        assertTrue(rangePlan.contains("partitions=2/3"),
+                "RANGE partition prune should keep 2 of 3 delta partitions:\n" + rangePlan);
+
+        // List partition: an IN predicate on the partition column drops whole partitions from the delta.
+        String listPlan = changesPrunePlan(
+                "CREATE TABLE ${name} (k int NOT NULL, city varchar(16) NOT NULL, v int) "
+                        + "DUPLICATE KEY(k, city) PARTITION BY LIST(city) ("
+                        + "PARTITION p_bj VALUES IN ('bj'), "
+                        + "PARTITION p_sh VALUES IN ('sh'), "
+                        + "PARTITION p_gz VALUES IN ('gz')) "
+                        + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1');",
+                "k, city, v", "city IN ('bj', 'sh')");
+        assertTrue(listPlan.contains("partitions=2/3"),
+                "LIST partition prune should keep 2 of 3 delta partitions:\n" + listPlan);
+
+        // Expression (date_trunc) partition: drives OptOlapPartitionPruner.doFurtherPartitionPrune.
+        String exprPlan = changesPrunePlan(
+                "CREATE TABLE ${name} (k bigint NOT NULL, dt datetime NOT NULL, v bigint) "
+                        + "DUPLICATE KEY(k, dt) PARTITION BY date_trunc('day', dt) ("
+                        + "START ('2026-01-01') END ('2026-01-04') EVERY (INTERVAL 1 DAY)) "
+                        + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1');",
+                "k, dt, v", "dt >= '2026-01-02 00:00:00'");
+        // The delta holds the 3 day partitions plus the automatic shadow partition (4 total); the
+        // predicate keeps the 2026-01-02/03 days and prunes 2026-01-01 and the shadow.
+        assertTrue(exprPlan.contains("partitions=2/4"),
+                "expression partition prune should keep 2 of 4 delta partitions:\n" + exprPlan);
+    }
+
+    @Test
+    public void testChangesTabletPruningHashRandom() throws Exception {
+        // Hash distribution: an equality on the bucket key prunes to a single tablet.
+        String hashPlan = changesPrunePlan(
+                "CREATE TABLE ${name} (k int, v int) DUPLICATE KEY(k) "
+                        + "DISTRIBUTED BY HASH(k) BUCKETS 8 PROPERTIES ('replication_num'='1');",
+                "k, v", "k = 7");
+        assertTrue(hashPlan.contains("partitions=1/1"),
+                "single-partition table keeps its one partition:\n" + hashPlan);
+        assertTrue(hashPlan.contains("tabletRatio=1/8"),
+                "HASH bucket-key equality should prune to one tablet:\n" + hashPlan);
+
+        // Random distribution cannot map a value to a bucket; every tablet stays.
+        String randomPlan = changesPrunePlan(
+                "CREATE TABLE ${name} (k int, v int) DUPLICATE KEY(k) "
+                        + "DISTRIBUTED BY RANDOM BUCKETS 4 PROPERTIES ('replication_num'='1');",
+                "k, v", "k = 7");
+        assertTrue(randomPlan.contains("tabletRatio=4/4"),
+                "RANDOM distribution cannot prune tablets:\n" + randomPlan);
+    }
+
+    @Test
+    public void testChangesPruningParityWithOlapScan() throws Exception {
+        // HASH: the CHANGES scan must prune to the same tabletRatio as an equivalent OLAP scan.
+        assertChangesOlapTabletParity(
+                "CREATE TABLE ${name} (k int, v int) DUPLICATE KEY(k) "
+                        + "DISTRIBUTED BY HASH(k) BUCKETS 8 PROPERTIES ('replication_num'='1');",
+                "k = 7");
+
+        // RANGE distribution: exercises RangeDistributionPruner through the same shared core the
+        // OLAP scan uses. A freshly created range table has a single (-inf,+inf) tablet, so both
+        // scans select it; this checks the CHANGES path routes RANGE distribution identically.
+        boolean prev = Config.enable_range_distribution;
+        Config.enable_range_distribution = true;
+        try {
+            assertChangesOlapTabletParity(
+                    "CREATE TABLE ${name} (k int, v int) ORDER BY (k) "
+                            + "PROPERTIES ('replication_num'='1');",
+                    "k >= 3");
+        } finally {
+            Config.enable_range_distribution = prev;
+        }
+    }
+
+    /**
+     * Builds a CHANGES window over a freshly created table whose every partition is DATA_CHANGED
+     * between base and head, then returns the fragment plan for {@code SELECT cols ... WHERE pred}.
+     */
+    private String changesPrunePlan(String createDdl, String selectCols, String wherePred) throws Exception {
+        String name = "ch_pr_" + COUNTER.getAndIncrement();
+        long tableId = createTable(createDdl.replace("${name}", name));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("pr_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("pr_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+        try {
+            String sql = String.format("SELECT %s FROM %s [_CHANGES_%d_%d_] WHERE %s",
+                    selectCols, name, base.getBookmarkId(), head.getBookmarkId(), wherePred);
+            return UtFrameUtils.getFragmentPlan(connectContext, sql);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /** Asserts the CHANGES scan and an equivalent OLAP scan prune to the same tabletRatio. */
+    private void assertChangesOlapTabletParity(String createDdl, String wherePred) throws Exception {
+        String name = "ch_par_" + COUNTER.getAndIncrement();
+        long tableId = createTable(createDdl.replace("${name}", name));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("par_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("par_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+        try {
+            String changesPlan = UtFrameUtils.getFragmentPlan(connectContext, String.format(
+                    "SELECT k, v FROM %s [_CHANGES_%d_%d_] WHERE %s",
+                    name, base.getBookmarkId(), head.getBookmarkId(), wherePred));
+            String olapPlan = UtFrameUtils.getFragmentPlan(connectContext,
+                    String.format("SELECT k, v FROM %s WHERE %s", name, wherePred));
+            assertEquals(tabletRatioOf(olapPlan), tabletRatioOf(changesPlan),
+                    "CHANGES scan should prune to the same tabletRatio as OLAP scan\nCHANGES:\n"
+                            + changesPlan + "\nOLAP:\n" + olapPlan);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    private static String tabletRatioOf(String plan) {
+        Matcher m = Pattern.compile("tabletRatio=(\\d+/\\d+)").matcher(plan);
+        assertTrue(m.find(), "plan should contain a tabletRatio:\n" + plan);
+        return m.group(1);
     }
 
     private static void bumpVisibleVersion(OlapTable t, long newVersion) {

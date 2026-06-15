@@ -43,8 +43,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Plans the per-tablet CHANGES scan for a bookmark-scoped delta. The analyzer
@@ -63,16 +65,25 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     private final Bookmark head;
     // Serialized onto TChangesScanNode.meta_descriptors.
     private final List<ChangesMetaDescriptor> changesMetaDescriptors;
+    // Logical partition ids surviving partition pruning; null means scan every delta partition.
+    private final Set<Long> selectedLogicalPartitionIds;
+    // Tablet ids surviving tablet pruning; null means scan every tablet in the selected partitions.
+    private final Set<Long> selectedTabletIds;
     private final List<TScanRangeLocations> result = new ArrayList<>();
 
     public ChangesScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable table,
                            BookmarkChange delta, Bookmark base, Bookmark head,
-                           List<ChangesMetaDescriptor> changesMetaDescriptors) {
+                           List<ChangesMetaDescriptor> changesMetaDescriptors,
+                           List<Long> selectedLogicalPartitionId, List<Long> selectedTabletId) {
         super(id, desc, "ChangesScanNode", table, table.getBaseIndexMetaId());
         this.delta = delta;
         this.base = base;
         this.head = head;
         this.changesMetaDescriptors = changesMetaDescriptors;
+        this.selectedLogicalPartitionIds = selectedLogicalPartitionId == null
+                ? null : new HashSet<>(selectedLogicalPartitionId);
+        this.selectedTabletIds = selectedTabletId == null
+                ? null : new HashSet<>(selectedTabletId);
     }
 
     /**
@@ -99,6 +110,9 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         long tableId = olapTable.getId();
         for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
                 delta.getChanges().entrySet()) {
+            if (selectedLogicalPartitionIds != null && !selectedLogicalPartitionIds.contains(entry.getKey())) {
+                continue;
+            }
             for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
                 Pair<Long, Long> versions = versionPair(change);
                 long baseVersion = versions.first;
@@ -116,6 +130,9 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 List<Tablet> tablets = index.getTablets();
 
                 for (Tablet tablet : tablets) {
+                    if (selectedTabletIds != null && !selectedTabletIds.contains(tablet.getId())) {
+                        continue;
+                    }
                     TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
                     TChangesScanRange changesScanRange = new TChangesScanRange();
@@ -183,7 +200,10 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         }
 
         int totalPartitions = delta.getChanges().size();
-        output.append(prefix).append(String.format("partitions=%s/%s\n", totalPartitions, totalPartitions));
+        int selectedPartitions = selectedLogicalPartitionIds == null ? totalPartitions
+                : (int) delta.getChanges().keySet().stream()
+                        .filter(selectedLogicalPartitionIds::contains).count();
+        output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitions, totalPartitions));
 
         int totalTablets = 0;
         for (List<BookmarkChange.PhysicalPartitionChange> changes : delta.getChanges().values()) {

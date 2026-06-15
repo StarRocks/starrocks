@@ -31,6 +31,7 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangeDistributionPruner;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import org.apache.logging.log4j.LogManager;
@@ -47,6 +48,21 @@ public class OptDistributionPruner {
                                             List<Long> selectedPartitionIds) {
         return computeSelectedTabletIds(olapScanOperator, selectedPartitionIds,
                 olapScanOperator.getSelectedIndexMetaId());
+    }
+
+    /**
+     * Prunes the tablets of a cloud-native CHANGES scan by its distribution-column predicates,
+     * returning a new scan operator with the surviving tablet ids. Reads the partitions already
+     * selected on the operator and prunes within the base index of each.
+     */
+    public static LogicalChangesScanOperator pruneChangesScanTablets(LogicalChangesScanOperator scan) {
+        OlapTable table = (OlapTable) scan.getTable();
+        List<Long> selectedTabletIds = computeSelectedTabletIds(
+                scan, scan.getSelectedLogicalPartitionId(), table.getBaseIndexMetaId());
+        return new LogicalChangesScanOperator.Builder()
+                .withOperator(scan)
+                .setSelectedTabletId(selectedTabletIds)
+                .build();
     }
 
     /**

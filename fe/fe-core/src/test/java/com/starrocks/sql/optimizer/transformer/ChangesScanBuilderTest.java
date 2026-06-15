@@ -27,13 +27,16 @@ import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.lake.bookmark.PhysicalPartitionMeta;
+import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -47,6 +50,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -249,6 +253,161 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testEqualsAndHashCode() throws Exception {
+        String tableName = "dup_eq_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        // Four ascending bookmarks so base and head can be varied independently.
+        // create() only mints a distinct bookmark once visibleVersion advances.
+        BookmarkHolder h0 = BookmarkHolder.forEmptyInfo("eq_0");
+        Bookmark b0 = bm.create(dbId, tableId, h0);
+        bumpVisibleVersion(table, 3L);
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("eq_1");
+        Bookmark b1 = bm.create(dbId, tableId, h1);
+        bumpVisibleVersion(table, 5L);
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("eq_2");
+        Bookmark b2 = bm.create(dbId, tableId, h2);
+        bumpVisibleVersion(table, 7L);
+        BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("eq_3");
+        Bookmark b3 = bm.create(dbId, tableId, h3);
+
+        try {
+            BookmarkRange range = new BookmarkRange(b1.getBookmarkId(), b2.getBookmarkId());
+            LogicalChangesScanOperator op = ChangesScanBuilder.buildScanOperator(
+                    table, range, new HashMap<>(), new HashMap<>(), List.of());
+            LogicalChangesScanOperator same = ChangesScanBuilder.buildScanOperator(
+                    table, range, new HashMap<>(), new HashMap<>(), List.of());
+
+            // Reflexive, and two unpruned scans over the same (table, base, head)
+            // are equal with matching hashCode — the equality the Cascades memo
+            // relies on to dedup the pruned scan against the unpruned one.
+            assertEquals(op, op);
+            assertEquals(op, same);
+            assertEquals(op.hashCode(), same.hashCode());
+
+            // A different runtime type (null here) trips the super.equals guard.
+            assertNotEquals(op, null);
+
+            // A different bookmark window is a different scan. The scoped table
+            // reuses the live table id, so the base/head bookmark ids are the
+            // only thing distinguishing these from op at the operator level.
+            LogicalChangesScanOperator baseDiff = ChangesScanBuilder.buildScanOperator(
+                    table, new BookmarkRange(b0.getBookmarkId(), b2.getBookmarkId()),
+                    new HashMap<>(), new HashMap<>(), List.of());
+            LogicalChangesScanOperator headDiff = ChangesScanBuilder.buildScanOperator(
+                    table, new BookmarkRange(b1.getBookmarkId(), b3.getBookmarkId()),
+                    new HashMap<>(), new HashMap<>(), List.of());
+            assertNotEquals(op, baseDiff);
+            assertNotEquals(op, headDiff);
+
+            // Different CHANGES metadata columns (__CHANGE_TYPE__, __ROW_VERSION__)
+            // are part of the scan's output identity.
+            LogicalChangesScanOperator metaDiff = ChangesScanBuilder.buildScanOperator(
+                    table, range, new HashMap<>(), new HashMap<>(),
+                    ChangesMetaDescriptor.resolve(table.getBaseSchema()));
+            assertNotEquals(op, metaDiff);
+
+            // The selected ids are what make a pruned scan a distinct memo
+            // alternative from the unpruned op.
+            LogicalChangesScanOperator partitionPruned = new LogicalChangesScanOperator.Builder()
+                    .withOperator(op).setSelectedLogicalPartitionId(List.of(1L, 2L)).build();
+            LogicalChangesScanOperator tabletPruned = new LogicalChangesScanOperator.Builder()
+                    .withOperator(op).setSelectedTabletId(List.of(10L)).build();
+            assertNotEquals(op, partitionPruned);
+            assertNotEquals(op, tabletPruned);
+
+            // delta is intentionally excluded from equals: it is a pure function
+            // of (table, base, head), so it cannot be varied alone to assert on.
+        } finally {
+            bm.releaseReference(dbId, tableId, b0.getBookmarkId(), h0.getHolderId());
+            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1.getHolderId());
+            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2.getHolderId());
+            bm.releaseReference(dbId, tableId, b3.getBookmarkId(), h3.getHolderId());
+        }
+    }
+
+    @Test
+    public void testPhysicalEqualsAndHashCode() throws Exception {
+        String tableName = "dup_peq_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        // Four ascending bookmarks so base and head can be varied independently.
+        BookmarkHolder h0 = BookmarkHolder.forEmptyInfo("peq_0");
+        Bookmark b0 = bm.create(dbId, tableId, h0);
+        bumpVisibleVersion(table, 3L);
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("peq_1");
+        Bookmark b1 = bm.create(dbId, tableId, h1);
+        bumpVisibleVersion(table, 5L);
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("peq_2");
+        Bookmark b2 = bm.create(dbId, tableId, h2);
+        bumpVisibleVersion(table, 7L);
+        BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("peq_3");
+        Bookmark b3 = bm.create(dbId, tableId, h3);
+
+        try {
+            // The physical operator has no Builder; construct directly, varying one
+            // field at a time. delta is excluded from equals (a pure function of
+            // base/head), so it is passed as null throughout.
+            PhysicalChangesScanOperator op = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b1, b2, null, List.of(), null, null);
+            PhysicalChangesScanOperator same = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b1, b2, null, List.of(), null, null);
+
+            // Reflexive, and two unpruned scans over the same (table, base, head) are
+            // equal with matching hashCode — the equality the Cascades memo relies on
+            // to dedup the pruned scan against the unpruned one.
+            assertEquals(op, op);
+            assertEquals(op, same);
+            assertEquals(op.hashCode(), same.hashCode());
+
+            // A different runtime type (null here) trips the super.equals guard.
+            assertNotEquals(op, null);
+
+            // A different bookmark window is a different scan.
+            PhysicalChangesScanOperator baseDiff = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b0, b2, null, List.of(), null, null);
+            PhysicalChangesScanOperator headDiff = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b1, b3, null, List.of(), null, null);
+            assertNotEquals(op, baseDiff);
+            assertNotEquals(op, headDiff);
+
+            // Different CHANGES metadata columns are part of the scan's output identity.
+            PhysicalChangesScanOperator metaDiff = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b1, b2, null, ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null);
+            assertNotEquals(op, metaDiff);
+
+            // The selected ids are what make a pruned physical scan a distinct memo
+            // alternative from the unpruned op — exactly the dedup bug this guards against.
+            PhysicalChangesScanOperator partitionPruned = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b1, b2, null, List.of(), List.of(1L, 2L), null);
+            PhysicalChangesScanOperator tabletPruned = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b1, b2, null, List.of(), null, List.of(10L));
+            assertNotEquals(op, partitionPruned);
+            assertNotEquals(op, tabletPruned);
+        } finally {
+            bm.releaseReference(dbId, tableId, b0.getBookmarkId(), h0.getHolderId());
+            bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1.getHolderId());
+            bm.releaseReference(dbId, tableId, b2.getBookmarkId(), h2.getHolderId());
+            bm.releaseReference(dbId, tableId, b3.getBookmarkId(), h3.getHolderId());
         }
     }
 

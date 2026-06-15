@@ -43,7 +43,9 @@ public class ChangesScanImplementationRule extends ImplementationRule {
                 logical.getBase(),
                 logical.getHead(),
                 logical.getDelta(),
-                logical.getChangesMetaDescriptors());
+                logical.getChangesMetaDescriptors(),
+                logical.getSelectedLogicalPartitionId(),
+                logical.getSelectedTabletId());
         return Lists.newArrayList(OptExpression.create(physical));
     }
 }

@@ -49,6 +49,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -170,6 +171,21 @@ public class OptOlapPartitionPruner {
                 // use the new pruned partition predicates
                 .setPrunedPartitionPredicates(newOlapScanOperator.getPrunedPartitionPredicates());
         return builder.build();
+    }
+
+    /**
+     * Prunes the logical partitions of a cloud-native CHANGES scan by its partition-column predicates,
+     * returning a new scan operator with the surviving partition ids. Uses the same id computation as
+     * the OLAP scan, but unlike the OLAP path it does not enforce scan_olap_partition_num_limit and
+     * does not strip always-true predicates — the CHANGES scan keeps its predicates and delta unchanged.
+     */
+    public static LogicalChangesScanOperator pruneChangesScanPartitions(LogicalChangesScanOperator scan) {
+        // CHANGES scan rejects PARTITION hints, so there is never an explicit partition-name list.
+        List<Long> selectedPartitionIds = computeSelectedPartitionIds(scan, null);
+        return new LogicalChangesScanOperator.Builder()
+                .withOperator(scan)
+                .setSelectedLogicalPartitionId(selectedPartitionIds)
+                .build();
     }
 
     private static void checkScanPartitionLimit(int selectedPartitionNum) throws StarRocksPlannerException {

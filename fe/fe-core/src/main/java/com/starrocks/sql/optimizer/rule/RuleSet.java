@@ -73,6 +73,8 @@ import com.starrocks.sql.optimizer.rule.ivm.IvmVersionOlapScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionProjectRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
+import com.starrocks.sql.optimizer.rule.transformation.ChangesDistributionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.ChangesPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.CombinationRule;
@@ -258,6 +260,8 @@ public class RuleSet {
     public static final Rule PARTITION_PRUNE_RULES = new CombinationRule(RuleType.GP_PARTITION_PRUNE, ImmutableList.of(
             new PartitionPruneRule(),
             new DistributionPruneRule(),
+            new ChangesPartitionPruneRule(),
+            new ChangesDistributionPruneRule(),
             new ExternalScanPartitionPruneRule(),
             new LimitPruneTabletsRule()
     ));

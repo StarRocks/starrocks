@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.lake.bookmark.Bookmark;
@@ -27,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class LogicalChangesScanOperator extends LogicalScanOperator {
 
@@ -35,6 +37,10 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
     private BookmarkChange delta;
     // CHANGES metadata descriptors for this relation.
     private List<ChangesMetaDescriptor> changesMetaDescriptors = List.of();
+    // Selected logical partition ids after partition pruning; null means all delta partitions.
+    private List<Long> selectedLogicalPartitionId;
+    // Selected tablet ids after tablet pruning; null means all tablets in the selected partitions.
+    private List<Long> selectedTabletId;
 
     public LogicalChangesScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -72,6 +78,36 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
         return changesMetaDescriptors;
     }
 
+    public List<Long> getSelectedLogicalPartitionId() {
+        return selectedLogicalPartitionId;
+    }
+
+    public List<Long> getSelectedTabletId() {
+        return selectedTabletId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalChangesScanOperator that = (LogicalChangesScanOperator) o;
+        return base.getBookmarkId() == that.base.getBookmarkId()
+                && head.getBookmarkId() == that.head.getBookmarkId()
+                && Objects.equals(changesMetaDescriptors, that.changesMetaDescriptors)
+                && Objects.equals(selectedLogicalPartitionId, that.selectedLogicalPartitionId)
+                && Objects.equals(selectedTabletId, that.selectedTabletId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(),
+                changesMetaDescriptors, selectedLogicalPartitionId, selectedTabletId);
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalChangesScan(this, context);
@@ -97,6 +133,20 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
             builder.head = operator.head;
             builder.delta = operator.delta;
             builder.changesMetaDescriptors = operator.changesMetaDescriptors;
+            builder.selectedLogicalPartitionId = operator.selectedLogicalPartitionId;
+            builder.selectedTabletId = operator.selectedTabletId;
+            return this;
+        }
+
+        public Builder setSelectedLogicalPartitionId(List<Long> selectedLogicalPartitionId) {
+            builder.selectedLogicalPartitionId = selectedLogicalPartitionId == null
+                    ? null : ImmutableList.copyOf(selectedLogicalPartitionId);
+            return this;
+        }
+
+        public Builder setSelectedTabletId(List<Long> selectedTabletId) {
+            builder.selectedTabletId = selectedTabletId == null
+                    ? null : ImmutableList.copyOf(selectedTabletId);
             return this;
         }
     }
