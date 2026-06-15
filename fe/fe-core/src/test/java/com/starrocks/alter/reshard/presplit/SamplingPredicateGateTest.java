@@ -75,7 +75,7 @@ public class SamplingPredicateGateTest {
         Assertions.assertTrue(safe(whereOf("a > 10 AND b = 'x'")));
     }
 
-    // --- non-deterministic functions (allNonDeterministicFunctions) ---
+    // --- non-deterministic functions: still rejected (covered by the broad FunctionCallExpr rule) ---
 
     @Test
     public void randRejected() {
@@ -84,7 +84,7 @@ public class SamplingPredicateGateTest {
 
     @Test
     public void nowRejected() {
-        // now() must be caught by allNonDeterministicFunctions (covers time functions)
+        // now() is a FunctionCallExpr; rejected regardless of determinism.
         Assertions.assertFalse(safe(whereOf("dt > now()")));
     }
 
@@ -98,7 +98,24 @@ public class SamplingPredicateGateTest {
         Assertions.assertFalse(safe(whereOf("a = uuid()")));
     }
 
-    // --- information functions (INFORMATION_FUNCTIONS) ---
+    // --- deterministic but session-sensitive functions: also rejected ---
+
+    @Test
+    public void deterministicFunctionRejected() {
+        // abs() is fully deterministic, but the broad rule rejects every
+        // FunctionCallExpr: any function can be session-timezone-sensitive
+        // (e.g. from_unixtime, convert_tz), so no per-function exception is made.
+        Assertions.assertFalse(safe(whereOf("abs(a) > 10")));
+    }
+
+    @Test
+    public void fromUnixTimeRejected() {
+        // from_unixtime uses the session time zone; the ROOT sampling context
+        // may have a different time zone, producing a different row set.
+        Assertions.assertFalse(safe(whereOf("from_unixtime(ts) > '2024-01-01'")));
+    }
+
+    // --- information functions (InformationFunction subtype, not FunctionCallExpr) ---
 
     @Test
     public void currentUserRejected() {

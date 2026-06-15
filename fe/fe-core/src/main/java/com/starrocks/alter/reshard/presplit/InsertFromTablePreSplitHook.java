@@ -19,6 +19,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -357,6 +358,15 @@ public final class InsertFromTablePreSplitHook {
         if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
             return null;
         }
+        // Skip when the INSERT specifies a target partition list (e.g.
+        // INSERT INTO t PARTITION(p1) SELECT ...) or uses static key-partition
+        // syntax. In either case the load is restricted to specific target
+        // partitions, but the multi-partition pre-split flow samples the entire
+        // source and can pre-create or split partitions outside the target set,
+        // diverging from what the load actually writes.
+        if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
+            return null;
+        }
         return insertStmt;
     }
 
@@ -475,6 +485,13 @@ public final class InsertFromTablePreSplitHook {
         }
         OlapTable olapTable = resolveOlapTarget(normalizedTableRef, database, context);
         if (olapTable == null) {
+            return null;
+        }
+        // Materialized views extend OlapTable, but user INSERT into an MV is
+        // rejected by the analyzer later (InsertAnalyzer line 839). The hook
+        // must not submit a reshard job before that check fires, because the
+        // MV's partition layout does not correspond to a normal user load.
+        if (olapTable instanceof MaterializedView) {
             return null;
         }
         SkipReason tableLevelSkip = PreSplitTargets.findEligibleTable(database, olapTable);

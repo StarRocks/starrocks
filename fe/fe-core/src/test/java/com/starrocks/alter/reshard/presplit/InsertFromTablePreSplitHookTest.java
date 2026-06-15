@@ -19,6 +19,7 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
@@ -165,6 +166,29 @@ public class InsertFromTablePreSplitHookTest {
     public void testPreSetStmtTxnIdShortCircuits() throws Exception {
         InsertStmt stmt = simpleTableInsertStmt();
         when(stmt.getTxnId()).thenReturn(99L);
+
+        assertHookDoesNotDelegate(() ->
+                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+    }
+
+    @Test
+    public void testTargetPartitionSpecShortCircuits() throws Exception {
+        // INSERT INTO t PARTITION(p1) SELECT * FROM src restricts the load to
+        // specific target partitions. Pre-split must not sample the whole source
+        // and pre-create partitions outside that set.
+        InsertStmt stmt = simpleTableInsertStmt();
+        when(stmt.isSpecifyPartitionNames()).thenReturn(true);
+
+        assertHookDoesNotDelegate(() ->
+                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+    }
+
+    @Test
+    public void testStaticKeyPartitionInsertShortCircuits() throws Exception {
+        // INSERT INTO t PARTITION(k=1) SELECT ... is static key-partition syntax;
+        // same concern: the load targets a fixed partition set.
+        InsertStmt stmt = simpleTableInsertStmt();
+        when(stmt.isStaticKeyPartitionInsert()).thenReturn(true);
 
         assertHookDoesNotDelegate(() ->
                 InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
@@ -362,6 +386,25 @@ public class InsertFromTablePreSplitHookTest {
     public void testNonDeterministicWhereCurrentUserShortCircuits() throws Exception {
         // current_user() parses as an InformationFunction node, not FunctionCallExpr.
         assertNonDeterministicWhereSkips(new InformationFunction("CURRENT_USER"));
+    }
+
+    // ---------- resolveEligibleTable: MV target ----------
+
+    @Test
+    public void testMaterializedViewTargetShortCircuits() throws Exception {
+        // MaterializedView extends OlapTable, so resolveOlapTarget would accept it.
+        // The hook must reject it before submitting any reshard job: user INSERT into
+        // an MV is rejected by InsertAnalyzer, but the hook runs before the analyzer.
+        try (SourceFixture fixture = sourceFixture()) {
+            // Override the target resolution to return a MaterializedView instead of OlapTable.
+            MaterializedView mv = mock(MaterializedView.class);
+            when(mv.getName()).thenReturn("mv_target");
+            fixture.metaUtils.when(() -> MetaUtils.getSessionAwareTable(
+                            any(), Mockito.argThat(db -> db != fixture.sourceDb), any()))
+                    .thenReturn(mv);
+
+            fixture.assertNoSubmit();
+        }
     }
 
     // ---------- Source authorization + policy gate ----------
