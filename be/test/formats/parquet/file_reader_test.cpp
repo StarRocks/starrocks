@@ -22,7 +22,6 @@
 #include <set>
 
 #include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
@@ -2830,59 +2829,6 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
         }
     }
     EXPECT_EQ(100, total_row_nums);
-}
-
-TEST_F(FileReaderTest, TestDisableNestedDictCodeOptimization) {
-    const auto old_config = config::parquet_nested_dict_code_optimization_enable;
-    config::parquet_nested_dict_code_optimization_enable = false;
-    DeferOp defer([&]() { config::parquet_nested_dict_code_optimization_enable = old_config; });
-
-    const std::string struct_in_struct_file_path =
-            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
-    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
-
-    TypeDescriptor type_struct =
-            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
-    TypeDescriptor type_struct_in_struct =
-            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
-
-    std::vector<std::string> subfield_path({"c_struct", "c0"});
-    _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
-                                                    &ctx->conjunct_ctxs_by_slot[3]);
-    auto file_reader = _create_file_reader(struct_in_struct_file_path);
-
-    Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
-    ASSERT_TRUE(file_reader->_row_group_readers[0]->_column_materializer->_dict_column_indices.empty());
-    ASSERT_TRUE(file_reader->_row_group_readers[0]->_column_materializer->_dict_column_sub_field_paths.empty());
-}
-
-TEST_F(FileReaderTest, TestDisableNestedDictCodeOptimizationKeepsComplexColumnLazy) {
-    const auto old_nested_config = config::parquet_nested_dict_code_optimization_enable;
-    const auto old_late_materialization_config = config::parquet_late_materialization_enable;
-    config::parquet_nested_dict_code_optimization_enable = false;
-    config::parquet_late_materialization_enable = true;
-    DeferOp defer([&]() {
-        config::parquet_nested_dict_code_optimization_enable = old_nested_config;
-        config::parquet_late_materialization_enable = old_late_materialization_config;
-    });
-
-    const std::string struct_in_struct_file_path =
-            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
-    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
-
-    TypeDescriptor type_struct =
-            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
-    TypeDescriptor type_struct_in_struct =
-            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
-
-    // Put a predicate on another slot so that the struct columns stay lazy.
-    _create_int_conjunct_ctxs(TExprOpcode::EQ, 0, 55, &ctx->conjunct_ctxs_by_slot[0]);
-    auto file_reader = _create_file_reader(struct_in_struct_file_path);
-
-    ASSERT_OK(file_reader->init(ctx));
-    const auto& lazy_column_indices = file_reader->_row_group_readers[0]->_column_materializer->_lazy_column_indices;
-    ASSERT_TRUE(std::find(lazy_column_indices.begin(), lazy_column_indices.end(), 3) != lazy_column_indices.end());
 }
 
 TEST_F(FileReaderTest, TestStructSubfieldZonemap) {

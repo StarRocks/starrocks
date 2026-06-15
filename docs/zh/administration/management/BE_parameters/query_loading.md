@@ -392,15 +392,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否使用延迟物化优化 Parquet 读性能。
 - 引入版本：-
 
-### parquet_nested_dict_code_optimization_enable
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否对嵌套 Parquet 字段（例如 STRUCT、ARRAY、MAP 列中的字符串子字段）启用基于字典编码的优化（字典过滤和延迟字典解码）。`true` 表示启用这些优化，`false` 表示禁用这些优化，同时仍保留顶层字典过滤和延迟物化。
-- 引入版本：-
-
 ### parquet_page_index_enable
 
 - 默认值：true

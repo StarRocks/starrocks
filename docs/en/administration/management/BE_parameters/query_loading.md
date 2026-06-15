@@ -404,15 +404,6 @@ This topic introduces the following types of BE configurations:
 - Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
 - Introduced in: -
 
-### parquet_nested_dict_code_optimization_enable
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: A boolean value to control whether to enable dictionary-code based optimizations (dictionary filter and lazy dictionary decode) for nested Parquet string subfields, such as the string subfields within a STRUCT, ARRAY, or MAP column. `true` indicates enabling these optimizations, and `false` indicates disabling them while still keeping the top-level dictionary filter and late materialization.
-- Introduced in: -
-
 ### parquet_page_index_enable
 
 - Default: true

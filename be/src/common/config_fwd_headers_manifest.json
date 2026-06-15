@@ -527,7 +527,6 @@
         "parquet_reader_enable_adpative_bloom_filter",
         "parquet_fast_timezone_conversion",
         "parquet_cache_aware_dict_decoder_enable",
-        "parquet_nested_dict_code_optimization_enable",
         "parquet_coalesce_read_enable",
         "parquet_late_materialization_enable",
         "enable_adjustment_page_cache_skip",

@@ -319,11 +319,7 @@ void ColumnMaterializer::classify_columns(const std::unordered_set<SlotId>& defe
             add_active_column(read_col_idx);
         } else if (config::parquet_late_materialization_enable && deferred_source_slots.count(slot_id) == 0) {
             add_lazy_column(read_col_idx);
-            const auto* parquet_field = (*_column_readers)[slot_id]->get_column_parquet_field();
-            if (config::parquet_nested_dict_code_optimization_enable || parquet_field == nullptr ||
-                !parquet_field->is_complex_type()) {
-                (*_column_readers)[slot_id]->set_can_lazy_decode(true);
-            }
+            (*_column_readers)[slot_id]->set_can_lazy_decode(true);
         } else {
             add_active_column(read_col_idx);
         }
@@ -358,9 +354,6 @@ bool ColumnMaterializer::_try_use_dict_filter(int col_idx, const GroupReaderPara
     }
     if (subfields.size() != 0) {
         sub_field_path = subfields[0];
-    }
-    if (!config::parquet_nested_dict_code_optimization_enable && !sub_field_path.empty()) {
-        return false;
     }
     return (*_column_readers)[column.slot_id()]->try_to_use_dict_filter(ctx, column.decode_needed, column.slot_id(),
                                                                         sub_field_path, 0);
