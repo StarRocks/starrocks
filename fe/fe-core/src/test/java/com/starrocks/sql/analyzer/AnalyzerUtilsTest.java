@@ -142,12 +142,12 @@ public class AnalyzerUtilsTest {
 
     @Test
     public void testTransformTwoArgOverloadFollowsConfigFlag() {
-        ScalarType narrow = TypeFactory.createVarcharType(64);
+        ScalarType narrow = ScalarType.createVarcharType(64);
         boolean saved = Config.transform_type_prefer_string_for_varchar;
         try {
             Config.transform_type_prefer_string_for_varchar = true;
             ScalarType widened = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);
-            Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), widened.getLength());
+            Assertions.assertEquals(ScalarType.getOlapMaxVarcharLength(), widened.getLength());
 
             Config.transform_type_prefer_string_for_varchar = false;
             ScalarType preserved = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);
