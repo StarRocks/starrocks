@@ -2885,8 +2885,7 @@ TEST_F(FileReaderTest, TestStructSubfieldDictCodeNoLeakOnSkippedFill) {
         // c0 is NullableColumn(BinaryColumn); unwrap to check the data column type.
         Column* c0_data = ColumnHelper::get_data_column(c0_r.value()->as_mutable_raw_ptr());
         ASSERT_TRUE(c0_data->is_binary())
-                << "Bug: c_struct.c0 in _read_chunk leaked as dict-code column: "
-                << c0_r.value()->get_name();
+                << "Bug: c_struct.c0 in _read_chunk leaked as dict-code column: " << c0_r.value()->get_name();
     };
 
     size_t total_row_nums = 0;
