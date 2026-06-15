@@ -343,6 +343,26 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         Assertions.assertEquals("3.500", result.getJobs().get(0).getDuration_time());
     }
 
+    @Test
+    public void testNullExtraMessageDoesNotBlankTable(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked TaskManager taskManager) throws TException {
+        // A run rehydrated from archived history can have a null extra message; it must not NPE and abort the
+        // whole query (regression for unguarded getMvTaskRunExtraMessage() in fromTaskRuns / isRefreshFinished).
+        TaskRunStatus run = newRun("job-noextra", "run-noextra", "SUCCESS", Constants.TaskRunState.SUCCESS, 1000L);
+        run.setFinishTime(2000L);
+        run.setMvTaskRunExtraMessage(null);
+
+        mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(run));
+        mockAuthorizerPass();
+
+        TListMaterializedViewRefreshJobsResult result =
+                MaterializedViewRefreshJobsSystemTable.query(new TGetTasksParams(), new ConnectContext());
+
+        Assertions.assertEquals(1, result.getJobs().size());
+        Assertions.assertEquals("job-noextra", result.getJobs().get(0).getJob_id());
+    }
+
     private void mockTaskRunStatus(GlobalStateMgr globalStateMgr, TaskManager taskManager, List<TaskRunStatus> runs) {
         new Expectations() {
             {

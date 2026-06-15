@@ -591,6 +591,13 @@ public class ShowMaterializedViewStatus {
                 .collect(Collectors.toList());
     }
 
+    // A run rehydrated from archived history may carry a null extra message (older FE versions, or a JSON
+    // "null"); fall back to an empty one so one legacy run cannot NPE the whole roll-up.
+    private static MVTaskRunExtraMessage extraOf(TaskRunStatus run) {
+        MVTaskRunExtraMessage extra = run.getMvTaskRunExtraMessage();
+        return extra != null ? extra : new MVTaskRunExtraMessage();
+    }
+
     public RefreshJobStatus getRefreshJobStatus() {
         return fromTaskRuns(this.lastJobTaskRunStatus);
     }
@@ -654,29 +661,29 @@ public class ShowMaterializedViewStatus {
         status.setRefreshState(lastTaskRunStatus.getLastRefreshState());
 
         // is force
-        MVTaskRunExtraMessage mvTaskRunExtraMessage = lastTaskRunStatus.getMvTaskRunExtraMessage();
+        MVTaskRunExtraMessage mvTaskRunExtraMessage = extraOf(lastTaskRunStatus);
         status.setForce(mvTaskRunExtraMessage.isForceRefresh());
 
         // getPartitionStart
         List<String> refreshedPartitionStarts = applyTaskRunStatusWith(sorted, x ->
-                x.getMvTaskRunExtraMessage().getPartitionStart());
+                extraOf(x).getPartitionStart());
         status.setRefreshedPartitionStarts(refreshedPartitionStarts);
 
         // getPartitionEnd
         List<String> refreshedPartitionEnds = applyTaskRunStatusWith(sorted, x ->
-                x.getMvTaskRunExtraMessage().getPartitionEnd());
+                extraOf(x).getPartitionEnd());
         status.setRefreshedPartitionEnds(refreshedPartitionEnds);
 
         // getBasePartitionsToRefreshMapString
         List<Map<String, Set<String>>> refreshedBasePartitionsToRefreshMaps = sorted.stream()
-                .map(x -> x.getMvTaskRunExtraMessage().getBasePartitionsToRefreshMap())
+                .map(x -> extraOf(x).getBasePartitionsToRefreshMap())
                 .map(x -> Optional.ofNullable(x).orElse(Maps.newHashMap()))
                 .collect(Collectors.toList());
         status.setRefreshedBasePartitionsToRefreshMaps(refreshedBasePartitionsToRefreshMaps);
 
         // getMvPartitionsToRefreshString
         List<Set<String>> refreshedMvPartitionsToRefreshs = sorted.stream()
-                .map(x -> x.getMvTaskRunExtraMessage().getMvPartitionsToRefresh())
+                .map(x -> extraOf(x).getMvPartitionsToRefresh())
                 .map(x -> Optional.ofNullable(x).orElse(Sets.newHashSet()))
                 .collect(Collectors.toList());
         status.setRefreshedMvPartitionsToRefreshs(refreshedMvPartitionsToRefreshs);
