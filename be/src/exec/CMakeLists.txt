@@ -499,16 +499,16 @@ ENDIF()
 
 ADD_BE_LIB(ExecRuntime
     runtime/query_runtime_state.cpp
-    pipeline/group_execution/execution_group.cpp
-    pipeline/group_execution/execution_group_builder.cpp
-    pipeline/pipeline.cpp
-    pipeline/pipeline_driver.cpp
-    pipeline/fragment_context.cpp
-    pipeline/fragment_context_manager.cpp
-    pipeline/query_context.cpp
-    pipeline/query_context_manager.cpp
-    pipeline/schedule/event_scheduler.cpp
-    pipeline/schedule/pipeline_driver_observer.cpp
+    runtime/group_execution/execution_group.cpp
+    runtime/group_execution/execution_group_builder.cpp
+    runtime/pipeline.cpp
+    runtime/pipeline_driver.cpp
+    runtime/fragment_context.cpp
+    runtime/fragment_context_manager.cpp
+    runtime/query_context.cpp
+    runtime/query_context_manager.cpp
+    runtime/schedule/event_scheduler.cpp
+    runtime/schedule/pipeline_driver_observer.cpp
 )
 
 target_link_libraries(ExecRuntime PUBLIC

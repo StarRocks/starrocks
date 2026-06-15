@@ -62,7 +62,7 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/fragment_context_manager.h"
+#include "exec/runtime/fragment_context_manager.h"
 
 #include <memory>
 #include <mutex>
@@ -21,7 +21,7 @@
 
 #include "common/logging.h"
 #include "compute_env/profile_report_worker.h"
-#include "exec/pipeline/fragment_context.h"
+#include "exec/runtime/fragment_context.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 

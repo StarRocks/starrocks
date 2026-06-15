@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/runtime/schedule/event_scheduler.h"
 
 #include "base/time/time.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/driver_state.h"
-#include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/schedule/pipeline_driver_observer.h"
-#include "exec/pipeline/schedule/utils.h"
 #include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "exec/runtime/query_runtime_state.h"
+#include "exec/runtime/schedule/common.h"
+#include "exec/runtime/schedule/pipeline_driver_observer.h"
+#include "exec/runtime/schedule/utils.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

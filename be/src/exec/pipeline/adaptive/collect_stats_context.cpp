@@ -18,9 +18,9 @@
 
 #include "column/chunk.h"
 #include "common/statusor.h"
-#include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/adaptive/utils.h"
 #include "exec/pipeline/primitives/event.h"
+#include "exec/runtime/adaptive/adaptive_dop_param.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

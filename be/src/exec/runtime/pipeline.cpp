@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/pipeline.h"
+#include "exec/runtime/pipeline.h"
 
 #include "exec/pipeline/operator.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/event.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

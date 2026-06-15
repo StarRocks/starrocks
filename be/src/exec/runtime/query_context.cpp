@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/query_context.h"
+#include "exec/runtime/query_context.h"
 
 #include <memory>
 #include <utility>
@@ -24,9 +24,9 @@
 #include "compute_env/query/global_late_materialization_context.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/runtime/fragment_context.h"
+#include "exec/runtime/fragment_context_manager.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
 #include "runtime/query_statistics.h"

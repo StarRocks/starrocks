@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 
 #include <chrono>
 #include <memory>
@@ -21,7 +21,7 @@
 
 #include "base/hash/hash.h"
 #include "common/thread/thread.h"
-#include "exec/pipeline/query_context.h"
+#include "exec/runtime/query_context.h"
 
 namespace starrocks::pipeline {
 

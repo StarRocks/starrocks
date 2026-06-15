@@ -45,20 +45,20 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/scan_morsel.h"
-#include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/query_context_manager.h"
+#include "exec/runtime/schedule/common.h"
 #include "exec/scan_node.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
@@ -766,7 +766,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
-    ASSIGN_OR_RETURN(auto exec_ops, builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan));
+    ASSIGN_OR_RETURN(auto exec_ops, plan->decompose_to_pipeline(&context));
+    exec_ops = context.maybe_interpolate_grouped_exchange(plan->id(), exec_ops);
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {

@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group.h"
 
 #include <cstddef>
 
 #include "common/logging.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
