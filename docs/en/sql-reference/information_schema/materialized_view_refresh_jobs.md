@@ -22,7 +22,7 @@ The following fields are provided in `materialized_view_refresh_jobs`:
 | RESOURCE_GROUP                     | Resource group used by the refresh job. This is the materialized view's configured `resource_group` property; returns `default_mv_wg` when not configured. |
 | CREATOR                            | User that created the materialized view (its create-user; the run identity is in RUN_AS_USER).     |
 | SUBMIT_USER                        | User who submitted the refresh job. For a manual refresh this is the user who issued it; for scheduled or base-table-change refreshes it is submitted by the system. |
-| RUN_AS_USER                        | User identity the refresh runs as.                           |
+| RUN_AS_USER                        | User identity the refresh runs as. With creator-based authorization (the default, `mv_use_creator_based_authorization=true`) this is the materialized view's creator; with root-based authorization it is `'root'@'%'`. |
 | SUBMIT_TIME                        | Time when the job was submitted (the first task run's creation time). |
 | REFRESH_STATE                      | State of the job, rolled up from the last task run. Valid values: `PENDING`, `RUNNING`, `FAILED`, `SUCCESS`, and `SKIPPED`. |
 | FINISH_TIME                        | Time when the job finished. `NULL` if the job has not finished. |

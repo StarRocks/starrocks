@@ -23,8 +23,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
@@ -173,7 +175,11 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
             }
             info.setCreator(anyRun.getUser());
             info.setSubmit_user(anyRun.getSubmitUser());
-            if (anyRun.getUserIdentity() != null) {
+            // RUN_AS_USER is the identity the refresh actually executes as (see TaskRun.switchUser): root-based
+            // authorization runs every MV refresh as root; creator-based runs as the MV's stored owner identity.
+            if (!Config.mv_use_creator_based_authorization) {
+                info.setRun_as_user(UserIdentity.ROOT.toString());
+            } else if (anyRun.getUserIdentity() != null) {
                 info.setRun_as_user(anyRun.getUserIdentity().toString());
             }
             if (rjs.getMvRefreshStartTime() > 0) {

@@ -21,7 +21,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
@@ -264,6 +266,31 @@ public class MaterializedViewRefreshJobsSystemTableTest {
                 MaterializedViewRefreshJobsSystemTable.query(new TGetTasksParams(), new ConnectContext());
 
         Assertions.assertTrue(result.getJobs().isEmpty());
+    }
+
+    @Test
+    public void testRunAsUserIsRootUnderRootBasedAuthorization(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked TaskManager taskManager) throws TException {
+        // Root-based authorization runs every MV refresh as root (TaskRun.switchUser), so RUN_AS_USER reports
+        // root even though the run still stores the creator identity.
+        boolean original = Config.mv_use_creator_based_authorization;
+        Config.mv_use_creator_based_authorization = false;
+        try {
+            TaskRunStatus run = newRun("job-rootauth", "run-rootauth", "SUCCESS", Constants.TaskRunState.SUCCESS, 1000L);
+            run.setUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("alice", "%"));
+
+            mockTaskRunStatus(globalStateMgr, taskManager, Lists.newArrayList(run));
+            mockAuthorizerPass();
+
+            TListMaterializedViewRefreshJobsResult result =
+                    MaterializedViewRefreshJobsSystemTable.query(new TGetTasksParams(), new ConnectContext());
+
+            Assertions.assertEquals(1, result.getJobs().size());
+            Assertions.assertEquals(UserIdentity.ROOT.toString(), result.getJobs().get(0).getRun_as_user());
+        } finally {
+            Config.mv_use_creator_based_authorization = original;
+        }
     }
 
     @Test
