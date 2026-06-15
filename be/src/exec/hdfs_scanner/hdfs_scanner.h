@@ -466,6 +466,11 @@ struct HdfsScannerContext {
     MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // Append all auxiliary columns (not-existed, partition, extended) at once.
+    // Safe when any category is empty — each sub-function is a no-op in that case.
+    Status append_auxiliary_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
                                           const Columns& values);
 

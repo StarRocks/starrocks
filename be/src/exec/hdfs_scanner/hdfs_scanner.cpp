@@ -263,8 +263,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             file_record_count = _scanner_ctx->scan_range->record_count;
         }
         _scanner_ctx->append_or_update_count_column_to_chunk(chunk, file_record_count);
-        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
-        _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
+        RETURN_IF_ERROR(_scanner_ctx->append_auxiliary_columns_to_chunk(chunk, 1));
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += 1;
         return Status::OK();
@@ -276,8 +275,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         const size_t row_count = 3;
         (*chunk)->set_num_rows(row_count);
         _scanner_ctx->append_or_update_min_max_column_to_chunk(chunk, row_count);
-        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
-        _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, row_count);
+        RETURN_IF_ERROR(_scanner_ctx->append_auxiliary_columns_to_chunk(chunk, row_count));
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += row_count;
         return Status::OK();
@@ -877,6 +875,13 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
         RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get()));
     }
     return !(chunk->has_rows());
+}
+
+Status HdfsScannerContext::append_auxiliary_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(chunk, row_count));
+    append_or_update_partition_column_to_chunk(chunk, row_count);
+    append_or_update_extended_column_to_chunk(chunk, row_count);
+    return Status::OK();
 }
 
 void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {

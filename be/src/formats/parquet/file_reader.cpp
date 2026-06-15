@@ -361,9 +361,8 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         }
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));
-                _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
-                _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, row_count);
+                // partition / not-existed / extended columns are now appended
+                // inside GroupReader::get_next() before emit_physical_columns.
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -414,13 +413,10 @@ Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
         if (_scanner_ctx->options.use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
             _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
-            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
-            _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
+            _scanner_ctx->append_auxiliary_columns_to_chunk(chunk, 1);
         } else {
             read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-            RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size));
-            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
-            _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, read_size);
+            RETURN_IF_ERROR(_scanner_ctx->append_auxiliary_columns_to_chunk(chunk, read_size));
         }
         _scan_row_count += read_size;
         return Status::OK();

@@ -240,19 +240,14 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         }
 
         // 2b. Evaluate compound (multi-slot) conjuncts with lazy_ctx
-        //     still attached. scanner_ctxs holds the original OR expression
-        //     after Phase 3b guard extraction. ColumnRef triggers
-        //     materialize_slot() via MissingColumnProvider when the OR
-        //     evaluator reaches a branch that references a lazy payload
-        //     column. Only reached columns are physically read; unreached
-        //     branches' columns stay unread and are skipped in
-        //     read_lazy_columns() (is_output_column() == false → skip).
-        //
-        //     Before evaluating compound conjuncts, flush any dict-code
-        //     columns that ScalarColumnReaders swapped in during step 2.
-        //     Dict-filter columns hold Int32 dict codes in struct subfields
-        //     until fill_dst_column; compound conjuncts need decoded values.
+        //     still attached.  Append partition / not-existed / extended
+        //     columns to active_chunk first so that compound conjuncts
+        //     referencing those slots can be evaluated correctly.
         if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+            if (active_chunk->num_rows() > 0) {
+                RETURN_IF_ERROR(_param.scanner_ctx->append_auxiliary_columns_to_chunk(
+                        &active_chunk, active_chunk->num_rows()));
+            }
             for (int col_idx : _column_materializer->dict_column_indices()) {
                 SlotId slot_id = _param.read_cols[col_idx].slot_id();
                 auto& col = active_chunk->get_column_by_slot_id(slot_id);
@@ -307,6 +302,14 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             DCHECK(post_filter_range.span_size() > 0);
             post_filter = {chunk_filter.begin() + post_filter_range.begin() - r.begin(),
                            chunk_filter.begin() + post_filter_range.end() - r.begin()};
+        }
+
+        // Append partition, not-existed, and extended columns to the output
+        // chunk BEFORE lazy column backfill and emit.  This guarantees all slots
+        // exist when fill_dst_column is called in step 7.
+        if (active_chunk->num_rows() > 0) {
+            RETURN_IF_ERROR(
+                    _param.scanner_ctx->append_auxiliary_columns_to_chunk(chunk, active_chunk->num_rows()));
         }
 
         // 5. Backfill lazy physical columns.  Pass chunk_filter so that any lazy
