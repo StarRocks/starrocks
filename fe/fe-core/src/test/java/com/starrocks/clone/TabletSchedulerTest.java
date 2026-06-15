@@ -43,6 +43,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.YieldableLock;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.VariableMgr;
@@ -82,6 +83,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
+=======
+import java.util.PriorityQueue;
+import java.util.Queue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+>>>>>>> a0c6099632 ([BugFix] Fix lock mismatch in blockingAddTabletCtxToScheduler (#74596))
 
 import static com.starrocks.sql.ast.KeysType.DUP_KEYS;
 
@@ -300,13 +308,9 @@ public class TabletSchedulerTest {
 
         new Thread(() -> {
             for (int i = 0; i < 10; i++) {
-                Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-                try {
-                    locker.lockDatabase(goodDB.getId(), LockType.READ);
-                    tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
-                } finally {
-                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
+                try (YieldableLock lock = YieldableLock.lockDatabase(goodDB.getId(), LockType.READ)) {
+                    tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtxList.get(i), false, lock);
                 }
             }
         }, "testAddCtx").start();
@@ -314,6 +318,72 @@ public class TabletSchedulerTest {
         Thread.sleep(2000);
         tabletScheduler.removeOneFromPendingQ();
         Thread.sleep(1000);
+        Assertions.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
+
+        Config.tablet_sched_max_scheduling_tablets = oldVal;
+    }
+
+    @Test
+    public void testPendingAddTabletCtxWithIntensiveTableLock() throws InterruptedException {
+        int oldVal = Config.tablet_sched_max_scheduling_tablets;
+        Config.tablet_sched_max_scheduling_tablets = 8;
+
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
+        Database db = new Database(20, "db20");
+        Table table = new Table(40, "tbl40", Table.TableType.OLAP, new ArrayList<>());
+        Partition partition = new Partition(60, 66, "p60", new MaterializedIndex(), null);
+
+        List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            TabletSchedCtx ctx = new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    db.getId(),
+                    table.getId(),
+                    partition.getId(),
+                    1,
+                    i,
+                    System.currentTimeMillis(),
+                    systemInfoService);
+            ctx.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+            tabletSchedCtxList.add(ctx);
+        }
+
+        // Mimic TabletChecker.checkOneTable(): add tablet ctxs while holding an intensive
+        // table READ lock scope (INTENTION_SHARED on the db + READ on the table). The blocking
+        // add must yield exactly this scope while waiting; releasing any other lock shape would
+        // die with IllegalMonitorStateException once the queue is full.
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        Thread addThread = new Thread(() -> {
+            try {
+                for (int i = 0; i < 10; i++) {
+                    try (YieldableLock lock = YieldableLock.lockTableWithIntensiveDbLock(
+                            db.getId(), table.getId(), LockType.READ)) {
+                        tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtxList.get(i), false, lock);
+                    }
+                }
+            } catch (Throwable t) {
+                error.set(t);
+            }
+        }, "testAddCtxWithTableLock");
+        addThread.start();
+
+        Thread.sleep(2000);
+        // The adding thread is now blocked on the last tablet ctx and must have released both
+        // of its locks during the wait: a db WRITE lock (conflicts with INTENTION_SHARED) and
+        // an intensive table WRITE lock (conflicts with table READ) must be acquirable.
+        Locker probeLocker = new Locker();
+        Assertions.assertTrue(
+                probeLocker.tryLockDatabase(db.getId(), LockType.WRITE, 2000, TimeUnit.MILLISECONDS));
+        probeLocker.unLockDatabase(db.getId(), LockType.WRITE);
+        Assertions.assertTrue(probeLocker.tryLockTableWithIntensiveDbLock(
+                db.getId(), table.getId(), LockType.WRITE, 2000, TimeUnit.MILLISECONDS));
+        probeLocker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+
+        // Free one slot so the blocked add can complete and the thread can exit.
+        tabletScheduler.removeOneFromPendingQ();
+        addThread.join(10000);
+        Assertions.assertFalse(addThread.isAlive());
+        Assertions.assertNull(error.get(), "blocking add must not throw: " + error.get());
         Assertions.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
 
         Config.tablet_sched_max_scheduling_tablets = oldVal;
