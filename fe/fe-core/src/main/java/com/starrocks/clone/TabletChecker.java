@@ -61,11 +61,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.lock.YieldableLock;
-import com.starrocks.qe.ConnectContext;
->>>>>>> a0c6099632 ([BugFix] Fix lock mismatch in blockingAddTabletCtxToScheduler (#74596))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;

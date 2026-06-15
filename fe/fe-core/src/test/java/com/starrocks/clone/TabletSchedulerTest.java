@@ -83,13 +83,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-<<<<<<< HEAD
-=======
-import java.util.PriorityQueue;
-import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
->>>>>>> a0c6099632 ([BugFix] Fix lock mismatch in blockingAddTabletCtxToScheduler (#74596))
 
 import static com.starrocks.catalog.KeysType.DUP_KEYS;
 
