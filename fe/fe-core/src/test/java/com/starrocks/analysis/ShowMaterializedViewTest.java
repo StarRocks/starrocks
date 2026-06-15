@@ -135,7 +135,9 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.refresh_policy AS refresh_policy, " +
                         "information_schema.materialized_views.resource_group AS resource_group, " +
                         "information_schema.materialized_views.query_rewrite_status_reason AS query_rewrite_status_reason, " +
-                        "information_schema.materialized_views.last_freshness_confirmed_at AS last_freshness_confirmed_at" +
+                        "information_schema.materialized_views.last_freshness_confirmed_at AS last_freshness_confirmed_at, " +
+                        "information_schema.materialized_views.base_table_refresh_version_times " +
+                        "AS base_table_refresh_version_times" +
                         " FROM " +
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
