@@ -71,6 +71,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.YieldableLock;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -322,29 +323,29 @@ public class TabletScheduler extends FrontendDaemon {
         return AddResult.ADDED;
     }
 
-    public Pair<Boolean, Long> blockingAddTabletCtxToScheduler(Database db, TabletSchedCtx tabletSchedCtx,
-                                                               boolean forceAdd) {
-        Locker locker = new Locker();
+    /**
+     * Add the tablet ctx to the scheduler, blocking the caller while the scheduler is full.
+     * The given lock scope is the metadata locks the caller holds while iterating tablets:
+     * it is yielded during each wait, so that metadata operations on the db/table are not
+     * blocked behind a full scheduler. As after every {@link YieldableLock} yield, the
+     * caller must re-validate metadata read before this call.
+     */
+    public Pair<Boolean, Long> blockingAddTabletCtxToScheduler(TabletSchedCtx tabletSchedCtx, boolean forceAdd,
+                                                               YieldableLock heldLock) {
         // p.first: added or not, p.second: total sleep time in ms
         Pair<Boolean, Long> result = new Pair<>(false, 0L);
         try {
-            do {
-                AddResult res = addTablet(tabletSchedCtx, forceAdd /* force or not */);
-                if (res == AddResult.LIMIT_EXCEED) {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
-                    // It's ok to sleep a relative long time here so that the scheduler will spare more
-                    // slots after the sleep and the following adding won't block.
-                    Thread.sleep(BLOCKING_ADD_SLEEP_DURATION_MS);
-                    result.second += BLOCKING_ADD_SLEEP_DURATION_MS;
-                    locker.lockDatabase(db.getId(), LockType.READ);
-                } else {
-                    result.first = (res == AddResult.ADDED);
-                    break;
-                }
-            } while (true);
+            AddResult res;
+            while ((res = addTablet(tabletSchedCtx, forceAdd /* force or not */)) == AddResult.LIMIT_EXCEED) {
+                // It's ok to sleep a relative long time here so that the scheduler will spare more
+                // slots after the sleep and the following adding won't block.
+                heldLock.sleepUnlocked(BLOCKING_ADD_SLEEP_DURATION_MS);
+                result.second += BLOCKING_ADD_SLEEP_DURATION_MS;
+            }
+            result.first = (res == AddResult.ADDED);
         } catch (InterruptedException e) {
+            // heldLock has already been re-acquired by sleepUnlocked().
             LOG.warn("Failed to execute blockingAddTabletCtxToScheduler", e);
-            locker.lockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
