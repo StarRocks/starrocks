@@ -34,8 +34,8 @@ import java.util.Set;
 /**
  * Derive guard predicates from OR expressions where every branch contains
  * a comparison on a common pivot column.  The guard is a single-slot predicate
- * that enters conjunct_ctxs_by_slot in the BE, making the pivot column ACTIVE
- * while branch-local columns remain LAZY.
+ * that enters conjunct_ctxs_by_slot in the BE, enabling early evaluation and
+ * expression short-circuit on the pivot column before the full OR is evaluated.
  * <p>
  * This is a one-pass transformation (like ScalarRangePredicateExtractor),
  * NOT a ScalarOperatorRewriteRule.  It is called directly from
@@ -299,6 +299,12 @@ public class DeriveGuardPredicateRule {
      * </ul>
      */
     private static boolean isGuardCandidatePredicate(ScalarOperator op) {
+        // Nondeterministic predicates (e.g. rand(), uuid()) must not be
+        // duplicated — the guard and original expression would evaluate
+        // different values, potentially filtering rows incorrectly.
+        if (Utils.hasNonDeterministicFunc(op)) {
+            return false;
+        }
         if (op instanceof BinaryPredicateOperator) {
             return isGuardCandidateBinaryPredicate((BinaryPredicateOperator) op);
         }

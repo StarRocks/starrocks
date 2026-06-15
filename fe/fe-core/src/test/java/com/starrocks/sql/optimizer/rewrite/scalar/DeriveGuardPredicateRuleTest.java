@@ -17,13 +17,17 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
+
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -212,5 +216,85 @@ public class DeriveGuardPredicateRuleTest {
                 (CompoundPredicateOperator) orExpr);
         // No guard expected: EQ on VARCHAR is skipped
         assertEquals(orExpr, derived);
+    }
+
+    @Test
+    public void testApplySkipsBelowColumnThreshold() {
+        // 2 columns: shipdate + returnflag → apply() should skip (threshold = 3)
+        ColumnRefOperator shipdate = colInt(1, "l_shipdate");
+        ColumnRefOperator returnflag = colVarchar(2, "l_returnflag");
+
+        ScalarOperator orExpr = or(
+                and(ge(shipdate, ConstantOperator.createInt(1)),
+                    le(shipdate, ConstantOperator.createInt(1)),
+                    eq(returnflag, ConstantOperator.createVarchar("R"))),
+                and(ge(shipdate, ConstantOperator.createInt(15)),
+                    le(shipdate, ConstantOperator.createInt(15)),
+                    eq(returnflag, ConstantOperator.createVarchar("A")))
+        );
+
+        // apply() should skip because 2 columns < MIN_DISTINCT_COLUMNS_FOR_GUARD (3)
+        ScalarOperator result = DeriveGuardPredicateRule.apply(orExpr);
+        assertEquals(orExpr, result);
+    }
+
+    @Test
+    public void testApplyRewritesWhenThresholdMet() {
+        // 3 columns: shipdate + discount + returnflag → apply() should generate guard
+        ColumnRefOperator shipdate = colInt(1, "l_shipdate");
+        ColumnRefOperator discount = colInt(2, "l_discount");
+        ColumnRefOperator returnflag = colVarchar(3, "l_returnflag");
+
+        ScalarOperator orExpr = or(
+                and(ge(shipdate, ConstantOperator.createInt(1)),
+                    le(shipdate, ConstantOperator.createInt(10)),
+                    eq(discount, ConstantOperator.createInt(5)),
+                    eq(returnflag, ConstantOperator.createVarchar("R"))),
+                and(ge(shipdate, ConstantOperator.createInt(20)),
+                    le(shipdate, ConstantOperator.createInt(30)),
+                    eq(discount, ConstantOperator.createInt(6)),
+                    eq(returnflag, ConstantOperator.createVarchar("A")))
+        );
+
+        ScalarOperator result = DeriveGuardPredicateRule.apply(orExpr);
+
+        // Should have wrapped: AND(guard_shipdate, original_OR)
+        // No guard for discount (EQ-only) or returnflag (VARCHAR)
+        ScalarOperator guardShipdate = or(
+                and(ge(shipdate, ConstantOperator.createInt(1)), le(shipdate, ConstantOperator.createInt(10))),
+                and(ge(shipdate, ConstantOperator.createInt(20)), le(shipdate, ConstantOperator.createInt(30)))
+        );
+        ScalarOperator expected = and(guardShipdate, orExpr);
+        assertEquals(expected, result);
+    }
+
+    @Test
+    public void testNonDeterministicPredicateNotUsedAsGuard() {
+        // (v1 > rand() AND v2 = 1 AND v3 = 'X') OR (v1 > rand() AND v2 = 2 AND v3 = 'Y')
+        // v1 > rand() should NOT become a guard because rand() is nondeterministic.
+        // If it were duplicated, guard and original OR could evaluate different
+        // random values and incorrectly filter rows.
+        ColumnRefOperator v1 = colInt(1, "v1");
+        ColumnRefOperator v2 = colInt(2, "v2");
+        ColumnRefOperator v3 = colVarchar(3, "v3");
+
+        ScalarOperator rand1 = new CallOperator("rand", FloatType.DOUBLE, Collections.emptyList());
+        ScalarOperator rand2 = new CallOperator("rand", FloatType.DOUBLE, Collections.emptyList());
+
+        ScalarOperator orExpr = or(
+                and(ge(v1, rand1),
+                    eq(v2, ConstantOperator.createInt(1)),
+                    eq(v3, ConstantOperator.createVarchar("X"))),
+                and(ge(v1, rand2),
+                    eq(v2, ConstantOperator.createInt(2)),
+                    eq(v3, ConstantOperator.createVarchar("Y")))
+        );
+
+        ScalarOperator result = DeriveGuardPredicateRule.tryDeriveGuard(
+                (CompoundPredicateOperator) orExpr);
+
+        // No guard expected: v1 > rand() is nondeterministic, so v1 is not a guard
+        // candidate. v2 is EQ-only (skipped). v3 is VARCHAR EQ (skipped).
+        assertEquals(orExpr, result);
     }
 }
