@@ -146,11 +146,50 @@ class TestNormalizeSQL:
         assert result == ""
 
     def test_include_comment_string_normalization(self):
-        sql = """
-        SELECT '--not a comment' AS marker -- real comment
-        FROM users
-        """
-        expected = "select '--not a comment' as marker from users"
+        cases = [
+            (
+                """
+                SELECT '--not a comment' AS marker -- real comment
+                FROM users
+                """,
+                "select '--not a comment' as marker from users",
+            ),
+            (
+                '''
+                SELECT "--not a comment" AS marker -- real comment
+                FROM users
+                ''',
+                'select "--not a comment" as marker from users',
+            ),
+            (
+                """
+                SELECT 'don\\'t -- not a comment' AS marker -- real comment
+                FROM users
+                """,
+                "select 'don''t -- not a comment' as marker from users",
+            ),
+            (
+                '''
+                SELECT "say \\"--not a comment\\"" AS marker -- real comment
+                FROM users
+                ''',
+                'select "say \\"--not a comment\\"" as marker from users',
+            ),
+            (
+                """
+                SELECT 'path\\\\--not a comment' AS marker -- real comment
+                FROM users
+                """,
+                "select 'path\\\\--not a comment' as marker from users",
+            ),
+        ]
+        for sql, expected in cases:
+            result = TableAttributeNormalizer.normalize_sql(sql)
+            assert result == expected
+
+    def test_line_comment_at_end_of_sql_normalization(self):
+        sql = "SELECT `id` FROM `users` -- trailing comment"
+        expected = "select id from users"
         result = TableAttributeNormalizer.normalize_sql(sql)
         assert result == expected
 

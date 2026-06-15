@@ -15,6 +15,7 @@
 import re
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple, Union
 
+import sqlparse
 from sqlalchemy import schema as sa_schema
 from sqlalchemy.exc import StatementError
 
@@ -183,33 +184,7 @@ class TableAttributeNormalizer:
 
     @staticmethod
     def strip_line_comments(sql: str) -> str:
-        result = []
-        in_string = False
-        quote_char = None
-
-        i = 0
-        while i < len(sql):
-            ch = sql[i]
-
-            if in_string:
-                result.append(ch)
-                if ch == quote_char and (i == 0 or sql[i - 1] != "\\"):
-                    in_string = False
-            else:
-                if ch in ("'", '"'):
-                    in_string = True
-                    quote_char = ch
-                    result.append(ch)
-                elif ch == "-" and i + 1 < len(sql) and sql[i + 1] == "-":
-                    while i < len(sql) and sql[i] != "\n":
-                        i += 1
-                    result.append(" ")
-                else:
-                    result.append(ch)
-
-            i += 1
-
-        return "".join(result)
+        return sqlparse.format(sql, strip_comments=True)
 
     @staticmethod
     def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False) -> Optional[str]:
