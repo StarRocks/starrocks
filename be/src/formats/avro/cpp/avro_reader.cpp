@@ -28,7 +28,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "compute_env/load_path/load_path_state_helper.h"
-#include "exec/file_scanner/file_scanner.h"
+#include "compute_env/scanner_counter.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "formats/avro/cpp/direct_column_reader.h"
 #include "formats/avro/cpp/utils.h"
