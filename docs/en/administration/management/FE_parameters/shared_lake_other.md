@@ -1434,7 +1434,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
 
 ### `bookmark_table_lock_timeout_ms`
