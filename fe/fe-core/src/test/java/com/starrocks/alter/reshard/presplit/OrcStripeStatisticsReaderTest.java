@@ -17,10 +17,14 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.catalog.Column;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
@@ -29,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -341,6 +346,163 @@ class OrcStripeStatisticsReaderTest {
                 OrcStripeStatisticsReader.read(
                         PresplitTestSupport.statusOf(orcPath), new Configuration(),
                         new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void readsDecimalStatistics() throws Exception {
+        // ORC decimal(18,2): write 1.00, 2.00, ... 5.00. ORC orders decimal stats correctly.
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 5,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        // Assert on BigDecimal VALUE, not the exact string: ORC's decimal-stats round-trip may
+        // normalize trailing-zero scale ("1.00" vs "1"). Both are accepted downstream because the
+        // Variant carries the column's ScalarType precision/scale regardless of the rendered text.
+        Assertions.assertFalse(stats.isEmpty());
+        BigDecimal globalMin = null;
+        BigDecimal globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            BigDecimal minValue = new BigDecimal(stripe.getMinTuple().getValues().get(0).getStringValue());
+            BigDecimal maxValue = new BigDecimal(stripe.getMaxTuple().getValues().get(0).getStringValue());
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals(0, globalMin.compareTo(new BigDecimal("1.00")));
+        Assertions.assertEquals(0, globalMax.compareTo(new BigDecimal("5.00")));
+    }
+
+    @Test
+    void readsNegativeDecimalStatistics() throws Exception {
+        // ORC decimal(18,2) spanning negative→positive: -2.00, -1.00, 0.00, 1.00. ORC orders by value.
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 4,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex - 2) * 100L, 2))));
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        // Value-based comparison (ORC may render scale as "1" vs "1.00"); proves signed order.
+        BigDecimal globalMin = null;
+        BigDecimal globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            BigDecimal minValue = new BigDecimal(stripe.getMinTuple().getValues().get(0).getStringValue());
+            BigDecimal maxValue = new BigDecimal(stripe.getMaxTuple().getValues().get(0).getStringValue());
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals(0, globalMin.compareTo(new BigDecimal("-2.00")));
+        Assertions.assertEquals(0, globalMax.compareTo(new BigDecimal("1.00")));
+    }
+
+    @Test
+    void readsDecimal128Statistics() throws Exception {
+        // Accepted non-DECIMAL64 case: ORC decimal(20,2) → StarRocks DECIMAL128(20,2). The max
+        // value's unscaled form (20 digits) exceeds 64-bit range, so this genuinely exercises the
+        // 128-bit path through Type.isDecimalOfAnyVersion()/Variant.of/DecimalVariant.
+        BigDecimal[] values = {
+                new BigDecimal("1.00"),
+                new BigDecimal("2.00"),
+                new BigDecimal("999999999999999999.99"),
+        };
+        Path orcPath = writeOrc(
+                "struct<d:decimal(20,2)>",
+                /*rowCount=*/ values.length,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(values[rowIndex])));
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2)));
+
+        Assertions.assertFalse(stats.isEmpty());
+        BigDecimal globalMin = null;
+        BigDecimal globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            BigDecimal minValue = new BigDecimal(stripe.getMinTuple().getValues().get(0).getStringValue());
+            BigDecimal maxValue = new BigDecimal(stripe.getMaxTuple().getValues().get(0).getStringValue());
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals(0, globalMin.compareTo(new BigDecimal("1.00")));
+        Assertions.assertEquals(0, globalMax.compareTo(new BigDecimal("999999999999999999.99")));
+    }
+
+    @Test
+    void decimalScaleMismatchFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))));
+    }
+
+    @Test
+    void decimalPrecisionMismatchFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2))));
+    }
+
+    @Test
+    void decimalIntoNonDecimalSortKeyFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("d", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void allNullDecimalStripeReportsAbsentStatistics() throws Exception {
+        // All-null decimal column → DecimalColumnStatistics.getNumberOfValues() == 0 → absent min/max.
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    batch.cols[0].noNulls = false;
+                    batch.cols[0].isNull[batchRow] = true;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        Assertions.assertFalse(stats.isEmpty());
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertNull(stripe.getMinTuple());
+            Assertions.assertNull(stripe.getMaxTuple());
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(3L, totalRowCount);
     }
 
     private Path writeOrc(
