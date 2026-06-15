@@ -183,10 +183,6 @@ class TableAttributeNormalizer:
         return ''.join(result)
 
     @staticmethod
-    def strip_line_comments(sql: str) -> str:
-        return sqlparse.format(sql, strip_comments=True)
-
-    @staticmethod
     def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False) -> Optional[str]:
         """
         Normalize an SQL string for comparison.
@@ -209,7 +205,7 @@ class TableAttributeNormalizer:
         # e.g., 'O\'Brien' becomes 'O''Brien' for standard SQL
         sql = sql.replace("\\'", "''")
 
-        sql = TableAttributeNormalizer.strip_line_comments(sql)
+        sql = sqlparse.format(sql, strip_comments=True)
         if lowercase:
             sql = sql.lower().strip()
 
