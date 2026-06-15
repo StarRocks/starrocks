@@ -79,6 +79,11 @@ set(COMPUTE_ENV_GLOBAL_DICT_FILES
     global_dict/parser.cpp
 )
 
+set(COMPUTE_ENV_LOAD_PATH_FILES
+    load_path/load_path_mgr.cpp
+    load_path/dummy_load_path_mgr.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -98,6 +103,7 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_QUERY_CACHE_FILES}
     ${COMPUTE_ENV_QUERY_FILES}
     ${COMPUTE_ENV_GLOBAL_DICT_FILES}
+    ${COMPUTE_ENV_LOAD_PATH_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
