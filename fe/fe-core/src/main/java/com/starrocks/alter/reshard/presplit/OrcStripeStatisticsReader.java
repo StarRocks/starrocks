@@ -266,6 +266,8 @@ public final class OrcStripeStatisticsReader {
             // RuntimeExceptions are wrapped as a meta-tier fallback signal — mirroring
             // convertIntegerStripe/convertDateStripe — so an unrepresentable value falls back
             // to data tier instead of escaping read() (which only catches IOException).
+            // Render via toPlainString() (not toString()) so large-exponent values never
+            // surface in scientific notation, which the BE datum_from_string would reject.
             BigDecimal minValue = decimalStatistics.getMinimum().bigDecimalValue();
             BigDecimal maxValue = decimalStatistics.getMaximum().bigDecimalValue();
             minVariant = Variant.of(location.starRocksColumn.getType(), minValue.toPlainString());

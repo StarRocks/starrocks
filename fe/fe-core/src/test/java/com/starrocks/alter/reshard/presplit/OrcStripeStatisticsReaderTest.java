@@ -395,6 +395,7 @@ class OrcStripeStatisticsReaderTest {
         BigDecimal globalMin = null;
         BigDecimal globalMax = null;
         for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
             BigDecimal minValue = new BigDecimal(stripe.getMinTuple().getValues().get(0).getStringValue());
             BigDecimal maxValue = new BigDecimal(stripe.getMaxTuple().getValues().get(0).getStringValue());
             globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
