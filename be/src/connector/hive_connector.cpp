@@ -771,7 +771,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.column_access_paths.empty()) {
         bool failed = false;
-        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
+        auto path_resolver = make_column_access_path_resolver(state, &_pool);
         for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
             auto st = ColumnAccessPath::create(thrift_path, path_resolver);
             if (LIKELY(st.ok())) {
