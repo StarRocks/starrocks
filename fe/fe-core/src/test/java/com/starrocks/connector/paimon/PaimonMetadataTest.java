@@ -87,6 +87,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
@@ -125,6 +126,7 @@ import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.table.system.ManifestsTable;
 import org.apache.paimon.table.system.SnapshotsTable;
+import org.apache.paimon.tag.Tag;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
@@ -137,7 +139,9 @@ import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.JsonSerdeUtil;
+import org.apache.paimon.utils.Pair;
 import org.apache.paimon.utils.SerializationUtils;
+import org.apache.paimon.utils.TagManager;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -162,6 +166,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1916,5 +1921,57 @@ public class PaimonMetadataTest {
             }
         };
         org.junit.jupiter.api.Assertions.assertThrows(DdlException.class, () -> metadata.dropTable(connectContext, dropStmt));
+    }
+    
+    @Test
+    public void testGetRemoteFilesWithTag(@Mocked FileStoreTable paimonNativeTable,
+                                          @Mocked ReadBuilder readBuilder,
+                                          @Mocked InnerTableScan scan,
+                                          @Mocked TagManager tagManager,
+                                          @Mocked Tag tag) throws Catalog.TableNotExistException {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonNativeTable;
+                paimonNativeTable.tagManager();
+                result = tagManager;
+                tagManager.tagExists("20260610");
+                result = true;
+                tagManager.tagObjects();
+                result = Lists.newArrayList(Pair.of(tag, "20260610"));
+                tag.id();
+                result = 100L;
+                paimonNativeTable.newReadBuilder();
+                result = readBuilder;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
+                result = splits;
+                readBuilder.newScan();
+                result = scan;
+            }
+        };
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
+        // Parsing the tag version records the tag name in a ThreadLocal that getRemoteFiles reads.
+        long snapshotId = metadata.getSnapshotIdFromVersion(paimonTable.getNativeTable(),
+                new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createVarchar("tag:20260610")));
+        assertEquals(100L, snapshotId);
+
+        List<String> requiredNames = Lists.newArrayList("f2", "dt");
+        metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames)
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId))).build());
+
+        new Verifications() {
+            {
+                List<Map<String, String>> capturedOptions = new ArrayList<>();
+                paimonNativeTable.copy(withCapture(capturedOptions));
+                // A tag read must scan via scan.tag-name (reads the snapshot copy under tag/),
+                // never via scan.snapshot-id, which fails once the snapshot expires.
+                boolean usesTagName = capturedOptions.stream()
+                        .anyMatch(opts -> "20260610".equals(opts.get(CoreOptions.SCAN_TAG_NAME.key())));
+                assertTrue(usesTagName, "tag read must inject scan.tag-name");
+                boolean usesSnapshotId = capturedOptions.stream()
+                        .anyMatch(opts -> opts.containsKey(CoreOptions.SCAN_SNAPSHOT_ID.key()));
+                assertFalse(usesSnapshotId, "tag read must not inject scan.snapshot-id");
+            }
+        };
     }
 }
