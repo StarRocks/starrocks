@@ -147,6 +147,11 @@ public:
         return Status::OK();
     }
 
+    // If a lazy-decode read_range() swapped in a tmp column (dict codes or intermediate
+    // values), decode them back into the slot column in-place so that subsequent
+    // predicate evaluation sees properly typed values.
+    virtual Status materialize_lazy_decode(ColumnPtr& col) { return Status::OK(); }
+
     virtual void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                          ColumnIOTypeFlags types, bool active) = 0;
 

@@ -452,12 +452,13 @@ StatusOr<bool> RawColumnReader::_row_group_bloom_filter(const std::vector<const 
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
-    _need_lazy_decode =
+    _restore_saved_dst(dst);
+    bool need_lazy_decode =
             _dict_filter_ctx != nullptr || (_can_lazy_dict_decode && filter != nullptr &&
                                             SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO);
-    ColumnContentType content_type = !_need_lazy_decode ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
+    ColumnContentType content_type = !need_lazy_decode ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
     auto need_lazy_covert = _can_lazy_convert && _converter->need_convert;
-    if (_need_lazy_decode) {
+    if (need_lazy_decode) {
         return _read_range_impl<true, false>(range, filter, content_type, dst);
     } else if (need_lazy_covert) {
         return _read_range_impl<false, true>(range, filter, content_type, dst);
@@ -491,10 +492,10 @@ bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
 }
 
 Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
-    auto need_lazy_covert = _can_lazy_convert && _converter->need_convert;
-    if (_need_lazy_decode) {
+    // Dispatch on which temp column src actually is — the truth — not a recomputable flag.
+    if (_tmp_code_column != nullptr && src.get() == _tmp_code_column.get()) {
         return _fill_dst_column_impl<true, false>(dst, src);
-    } else if (need_lazy_covert) {
+    } else if (_tmp_intermediate_column != nullptr && src.get() == _tmp_intermediate_column.get()) {
         return _fill_dst_column_impl<false, true>(dst, src);
     } else {
         return _fill_dst_column_impl<false, false>(dst, src);
@@ -509,8 +510,7 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
             _tmp_code_column = ColumnHelper::create_column(
                     TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
         }
-        _ori_column = dst;
-        dst = _tmp_code_column;
+        _swap_in_tmp_column(dst, _tmp_code_column);
         dst->as_mutable_raw_ptr()->reserve(range.span_size());
         SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
         return _reader->read_range(range, filter, content_type, dst->as_mutable_raw_ptr());
@@ -536,8 +536,7 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
                 _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
                 return Status::OK();
             } else {
-                _ori_column = dst;
-                dst = _tmp_intermediate_column;
+                _swap_in_tmp_column(dst, _tmp_intermediate_column);
                 return Status::OK();
             }
         }
@@ -591,7 +590,7 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
                 RETURN_IF_ERROR(_dict_decode(dst, src));
             }
         }
-        src = _ori_column;
+        _finish_fill(src);
     } else {
         if constexpr (LAZY_CONVERT) {
             {
@@ -599,14 +598,20 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
                 RETURN_IF_ERROR(_converter->convert(src, dst->as_mutable_raw_ptr()));
             }
             src->as_mutable_raw_ptr()->reset_column();
-            src = _ori_column;
+            _finish_fill(src);
         } else {
-            // ── DEBUG ──
-            VLOG(1) << "[DEBUG] fill_dst_column_impl swap: dst=" << dst->get_name()
-                    << " src=" << src->get_name();
-            // ── END DEBUG ──
             dst->as_mutable_raw_ptr()->swap_column(*(src->as_mutable_raw_ptr()));
         }
+    }
+    return Status::OK();
+}
+
+Status ScalarColumnReader::materialize_lazy_decode(ColumnPtr& col) {
+    if (_saved_dst != nullptr && col.get() == _tmp_code_column.get()) {
+        auto saved = std::move(_saved_dst);
+        _saved_dst = nullptr;
+        RETURN_IF_ERROR(_dict_decode(saved, col));
+        col = std::move(saved);
     }
     return Status::OK();
 }
@@ -630,14 +635,14 @@ void ScalarColumnReader::collect_column_io_range(std::vector<SharedBufferedInput
 
 Status LowCardColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
+    _restore_saved_dst(dst);
     ColumnContentType content_type = ColumnContentType::DICT_CODE;
 
     if (_dict_code == nullptr) {
         _dict_code = ColumnHelper::create_column(
                 TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
     }
-    _ori_column = dst;
-    dst = _dict_code;
+    _swap_in_tmp_column(dst, _dict_code);
     dst->as_mutable_raw_ptr()->reserve(range.span_size());
 
     {
@@ -701,7 +706,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     }
 
     src->as_mutable_raw_ptr()->reset_column();
-    src = _ori_column;
+    _finish_fill(src);
 
     return Status::OK();
 }
@@ -766,13 +771,13 @@ void LowCardColumnReader::collect_column_io_range(std::vector<SharedBufferedInpu
 
 Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
+    _restore_saved_dst(dst);
     ColumnContentType content_type = ColumnContentType::VALUE;
 
     if (_tmp_column == nullptr) {
         _tmp_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     }
-    _ori_column = dst;
-    dst = _tmp_column;
+    _swap_in_tmp_column(dst, _tmp_column);
     dst->as_mutable_raw_ptr()->reserve(range.span_size());
 
     {
@@ -810,7 +815,7 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     }
 
     src->as_mutable_raw_ptr()->reset_column();
-    src = _ori_column;
+    _finish_fill(src);
 
     return Status::OK();
 }

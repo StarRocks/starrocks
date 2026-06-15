@@ -247,31 +247,17 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         //     column. Only reached columns are physically read; unreached
         //     branches' columns stay unread and are skipped in
         //     read_lazy_columns() (is_output_column() == false → skip).
-        // ── DEBUG ──
-        {
-            LOG(INFO) << "[DEBUG] Step 2b pre-eval: rows=" << active_chunk->num_rows()
-                      << " cols=" << active_chunk->num_columns()
-                      << " scanner_ctxs_count=" << _param.scanner_ctx->conjuncts.scanner_ctxs.size()
-                      << " conjunct_ctxs_by_slot_count="
-                      << _param.scanner_ctx->conjunct_ctxs_by_slot.size();
-            const auto& slot_map = active_chunk->get_slot_id_to_index_map();
-            for (const auto& [sid, idx] : slot_map) {
-                auto col = active_chunk->get_column_by_slot_id(sid);
-                LOG(INFO) << "[DEBUG]   slot_id=" << sid << " idx=" << idx
-                          << " col_size=" << (col ? col->size() : 0);
-            }
-            if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
-                LOG(INFO) << "[DEBUG] scanner_ctxs: "
-                          << Expr::debug_string(_param.scanner_ctx->conjuncts.scanner_ctxs);
-            }
-            // Also print conjunct_ctxs_by_slot keys
-            LOG(INFO) << "[DEBUG] conjunct_ctxs_by_slot slot_ids:";
-            for (const auto& [sid, ctxs] : _param.scanner_ctx->conjunct_ctxs_by_slot) {
-                LOG(INFO) << "[DEBUG]   slot_id=" << sid << " ctx_count=" << ctxs.size();
-            }
-        }
-        // ── END DEBUG ──
+        //
+        //     Before evaluating compound conjuncts, flush any dict-code
+        //     columns that ScalarColumnReaders swapped in during step 2.
+        //     Dict-filter columns hold Int32 dict codes in struct subfields
+        //     until fill_dst_column; compound conjuncts need decoded values.
         if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+            for (int col_idx : _column_materializer->dict_column_indices()) {
+                SlotId slot_id = _param.read_cols[col_idx].slot_id();
+                auto& col = active_chunk->get_column_by_slot_id(slot_id);
+                RETURN_IF_ERROR(get_column_reader(slot_id)->materialize_lazy_decode(col));
+            }
             ASSIGN_OR_RETURN(size_t compound_hit,
                              ChunkPredicateEvaluator::eval_conjuncts_into_filter(
                                      _param.scanner_ctx->conjuncts.scanner_ctxs, active_chunk.get(), &chunk_filter));

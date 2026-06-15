@@ -230,6 +230,22 @@ Status ListColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src_in) {
     return Status::OK();
 }
 
+Status ListColumnReader::materialize_lazy_decode(ColumnPtr& col) {
+    auto* col_mut = col->as_mutable_raw_ptr();
+    ArrayColumn* array_column = nullptr;
+    if (col->is_nullable()) {
+        NullableColumn* nullable_column = down_cast<NullableColumn*>(col_mut);
+        DCHECK(nullable_column->data_column_raw_ptr()->is_array());
+        array_column = down_cast<ArrayColumn*>(nullable_column->data_column_raw_ptr());
+    } else {
+        DCHECK(col->is_array());
+        array_column = down_cast<ArrayColumn*>(col_mut);
+    }
+    auto& elements = array_column->elements_column();
+    RETURN_IF_ERROR(_element_reader->materialize_lazy_decode(elements));
+    return Status::OK();
+}
+
 Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     NullableColumn* nullable_column = nullptr;
     MapColumn* map_column = nullptr;
@@ -317,24 +333,11 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     // Fill data for subfield column reader
     size_t real_read = 0;
     bool first_read = true;
-    // ── DEBUG ──
-    LOG(INFO) << "[DEBUG] StructColumnReader::read_range parquet_field=" << get_column_parquet_field()->name
-              << " num_fields=" << field_names.size()
-              << " dst_is_nullable=" << dst->is_nullable();
-    // ── END DEBUG ──
     for (size_t i = 0; i < field_names.size(); i++) {
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] != nullptr) {
                 ASSIGN_OR_RETURN(auto& child_column, struct_column->field_column(field_name));
-                // ── DEBUG ──
-                const Column* child_data_col = ColumnHelper::get_data_column(child_column.get());
-                LOG(INFO) << "[DEBUG]   subfield[" << i << "] name=" << field_name
-                          << " col_type=" << child_column->get_name()
-                          << " is_binary=" << child_column->is_binary()
-                          << " data_type=" << child_data_col->get_name()
-                          << " data_is_binary=" << child_data_col->is_binary();
-                // ── END DEBUG ──
                 RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                 real_read = child_column->size();
                 first_read = false;
@@ -443,6 +446,29 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
             }
         } else {
             return Status::InternalError(strings::Substitute("there is no match subfield reader for $0", field_name));
+        }
+    }
+    return Status::OK();
+}
+
+Status StructColumnReader::materialize_lazy_decode(ColumnPtr& col) {
+    auto* col_mut = col->as_mutable_raw_ptr();
+    StructColumn* struct_column = nullptr;
+    if (col->is_nullable()) {
+        NullableColumn* nullable_column = down_cast<NullableColumn*>(col_mut);
+        DCHECK(nullable_column->data_column_raw_ptr()->is_struct());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+    } else {
+        DCHECK(col->is_struct());
+        struct_column = down_cast<StructColumn*>(col_mut);
+    }
+    const auto& field_names = struct_column->field_names();
+    for (size_t i = 0; i < field_names.size(); i++) {
+        const auto& field_name = field_names[i];
+        auto it = _child_readers.find(field_name);
+        if (it != _child_readers.end() && it->second != nullptr) {
+            ASSIGN_OR_RETURN(auto& child_col, struct_column->field_column(field_name));
+            RETURN_IF_ERROR(it->second->materialize_lazy_decode(child_col));
         }
     }
     return Status::OK();

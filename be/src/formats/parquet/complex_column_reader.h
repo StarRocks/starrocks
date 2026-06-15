@@ -37,6 +37,8 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
+    Status materialize_lazy_decode(ColumnPtr& col) override;
+
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
     }
@@ -203,6 +205,8 @@ public:
                               const size_t& layer) override;
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    Status materialize_lazy_decode(ColumnPtr& col) override;
 
     void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
@@ -526,6 +530,8 @@ public:
     }
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override { return _reader->fill_dst_column(dst, src); }
+
+    Status materialize_lazy_decode(ColumnPtr& col) override { return _reader->materialize_lazy_decode(col); }
 
     void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {

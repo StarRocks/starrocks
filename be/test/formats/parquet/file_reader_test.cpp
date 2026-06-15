@@ -2809,6 +2809,80 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
     EXPECT_EQ(100, total_row_nums);
 }
 
+// Reproduce: when a chunk is fully filtered (hit_count==0), the ScalarColumnReader's
+// fill_dst_column() is skipped and the subfield slot is left pointing at the internal
+// Int32 dict-code column. The next chunk that does survive then reads/fills against
+// a wrong column type, causing a type-mismatch crash or corrupt output.
+// Using chunk_size=30 ensures the first chunk (rows 1-30, c0%100 in 1..30) has no
+// match for c_struct.c0='55', forcing the skipped-fill path before a matching chunk.
+TEST_F(FileReaderTest, TestStructSubfieldDictCodeNoLeakOnSkippedFill) {
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
+    TypeDescriptor type_struct_in_struct =
+            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
+
+    std::vector<std::string> subfield_path({"c_struct", "c0"});
+    _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
+                                                    &ctx->conjunct_ctxs_by_slot[3]);
+
+    // Small chunk size: first chunk (rows 1-30) has no match for c_struct.c0='55',
+    // so hit_count==0 and fill is skipped — this is what triggers the bug.
+    auto file_reader = _create_file_reader(struct_in_struct_file_path, 30);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // After a successful fill (get_next returns >0 rows), verify that the inner
+    // struct subfield c_struct.c0 in _read_chunk is still a binary column.
+    // Without the fix, gap B leaves _ori_column pointing at _tmp_code_column (Int32),
+    // so fill_dst_column "restores" c0 to Int32 instead of Binary — detectable here.
+    auto assert_read_chunk_c_struct_c0_is_binary = [&]() {
+        const auto& rg = file_reader->_row_group_readers[0];
+        const ChunkPtr& rc = rg->_column_materializer->read_chunk();
+        ASSERT_TRUE(rc != nullptr);
+        // Use as_mutable_raw_ptr() to navigate const ColumnPtr& without casts.
+        auto* outer_col = rc->get_column_by_slot_id(3)->as_mutable_raw_ptr();
+        auto* outer_nullable = down_cast<NullableColumn*>(outer_col);
+        auto* outer_struct = down_cast<StructColumn*>(outer_nullable->data_column_raw_ptr());
+        auto c_struct_r = outer_struct->field_column("c_struct");
+        ASSERT_TRUE(c_struct_r.ok());
+        auto* inner_nullable = down_cast<NullableColumn*>(c_struct_r.value()->as_mutable_raw_ptr());
+        auto* inner_struct = down_cast<StructColumn*>(inner_nullable->data_column_raw_ptr());
+        auto c0_r = inner_struct->field_column("c0");
+        ASSERT_TRUE(c0_r.ok());
+        // c0 is NullableColumn(BinaryColumn); unwrap to check the data column type.
+        Column* c0_data = ColumnHelper::get_data_column(c0_r.value()->as_mutable_raw_ptr());
+        ASSERT_TRUE(c0_data->is_binary())
+                << "Bug: c_struct.c0 in _read_chunk leaked as dict-code column: "
+                << c0_r.value()->get_name();
+    };
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file()) << status.message();
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() != 0) {
+            ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
+            // Verify internal state: c_struct.c0 must be binary, not a leaked Int32 dict-code column.
+            assert_read_chunk_c_struct_c0_is_binary();
+        }
+    }
+    EXPECT_EQ(100, total_row_nums);
+}
+
 TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
     const std::string struct_in_struct_file_path =
             "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";

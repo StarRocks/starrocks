@@ -347,22 +347,6 @@ Status ColumnMaterializer::emit_physical_columns(ChunkPtr& active_chunk, ChunkPt
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
         if (skip_slots && skip_slots->count(slot_id)) continue;
-        // ── DEBUG ──
-        {
-            auto& dst_col = (*dst)->get_column_by_slot_id(slot_id);
-            auto& src_col = active_chunk->get_column_by_slot_id(slot_id);
-            VLOG(1) << "[DEBUG] emit_physical_columns slot=" << slot_id
-                    << " dst=" << dst_col->get_name()
-                    << " src=" << src_col->get_name();
-            if (src_col->is_struct()) {
-                const auto* sc = down_cast<const StructColumn*>(ColumnHelper::get_data_column(src_col.get()));
-                for (size_t fi = 0; fi < sc->fields_size(); fi++) {
-                    VLOG(1) << "[DEBUG]   src_struct_field[" << fi << "] " << sc->field_names()[fi]
-                            << "=" << sc->fields()[fi]->get_name();
-                }
-            }
-        }
-        // ── END DEBUG ──
         RETURN_IF_ERROR(fill_dst_column(slot_id, (*dst)->get_column_by_slot_id(slot_id),
                                         active_chunk->get_column_by_slot_id(slot_id)));
     }
@@ -458,40 +442,8 @@ Status ColumnMaterializer::materialize_slot(SlotId slot_id, const Range<uint64_t
         SCOPED_RAW_TIMER(&_param.stats->parquet_lazy_read_ns);
         _param.stats->parquet_lazy_read_count++;
         _lazy_triggered_count++;
-        // ── DEBUG ──
-        {
-            auto& col_before = _read_chunk->get_column_by_slot_id(slot_id);
-            LOG(INFO) << "[DEBUG] materialize_slot slot=" << slot_id
-                      << " col_before_type=" << col_before->get_name()
-                      << " col_before_size=" << col_before->size();
-            if (col_before->is_struct()) {
-                const auto* sc = down_cast<const StructColumn*>(col_before.get());
-                for (size_t fi = 0; fi < sc->fields_size(); fi++) {
-                    LOG(INFO) << "[DEBUG]   struct_field[" << fi << "] name=" << sc->field_names()[fi]
-                              << " type=" << sc->fields()[fi]->get_name()
-                              << " size=" << sc->fields()[fi]->size();
-                }
-            }
-        }
-        // ── END DEBUG ──
         RETURN_IF_ERROR(
                 (*_column_readers)[slot_id]->read_range(range, filter, _read_chunk->get_column_by_slot_id(slot_id)));
-        // ── DEBUG ──
-        {
-            auto& col_after = _read_chunk->get_column_by_slot_id(slot_id);
-            LOG(INFO) << "[DEBUG] materialize_slot slot=" << slot_id << " AFTER read_range"
-                      << " col_type=" << col_after->get_name()
-                      << " col_size=" << col_after->size();
-            if (col_after->is_struct()) {
-                const auto* sc = down_cast<const StructColumn*>(col_after.get());
-                for (size_t fi = 0; fi < sc->fields_size(); fi++) {
-                    LOG(INFO) << "[DEBUG]   struct_field[" << fi << "] name=" << sc->field_names()[fi]
-                              << " type=" << sc->fields()[fi]->get_name()
-                              << " size=" << sc->fields()[fi]->size();
-                }
-            }
-        }
-        // ── END DEBUG ──
     }
     _slot_cache[slot_id] = {_read_chunk->get_column_by_slot_id(slot_id)};
     return Status::OK();
