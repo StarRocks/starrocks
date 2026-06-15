@@ -1287,7 +1287,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
             Assertions.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
             Assertions.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableProfile());
-            Assertions.assertEquals(Map.of("tbl1", "(k1 >= '2022-03-01') AND (k1 < '2022-04-01')"),
+            Assertions.assertEquals(Map.of("test.tbl1", "(k1 >= '2022-03-01') AND (k1 < '2022-04-01')"),
                     extraMessage.getPlanBuilderMessage());
 
             Config.enable_materialized_view_spill = true;
