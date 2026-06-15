@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -30,11 +31,6 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TypeDef;
->>>>>>> 95df8d2ece ([BugFix] Preserve declared VARCHAR length in CTAS (#73498))
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
