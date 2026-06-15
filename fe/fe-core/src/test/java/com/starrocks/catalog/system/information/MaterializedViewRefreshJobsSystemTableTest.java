@@ -95,6 +95,14 @@ public class MaterializedViewRefreshJobsSystemTableTest {
     }
 
     @Test
+    public void testRoutedToLeader() {
+        // Reads leader-owned TaskManager run state + MV metadata (like task_runs / materialized_views), so a
+        // follower FE must redirect the scan to the leader; otherwise pending/running refreshes or MV
+        // enrichment could be missing or stale.
+        Assertions.assertTrue(SystemTable.needQueryFromLeader(MaterializedViewRefreshJobsSystemTable.NAME));
+    }
+
+    @Test
     public void testQueryRollsUpBatchByStartTaskRunId(
             @Mocked GlobalStateMgr globalStateMgr,
             @Mocked TaskManager taskManager) throws TException {

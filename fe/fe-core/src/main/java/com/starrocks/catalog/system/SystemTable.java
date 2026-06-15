@@ -24,6 +24,7 @@ import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
 import com.starrocks.catalog.system.information.PipesSystemTable;
@@ -77,6 +78,7 @@ public class SystemTable extends Table {
                     .add(FeTabletSchedulesSystemTable.NAME)
                     .add(LoadTrackingLogsSystemTable.NAME)
                     .add(LoadsSystemTable.NAME)
+                    .add(MaterializedViewRefreshJobsSystemTable.NAME)
                     .add(MaterializedViewsSystemTable.NAME)
                     .add(PartitionsMetaSystemTable.NAME)
                     .add(PipesSystemTable.NAME)
