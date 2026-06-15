@@ -78,6 +78,7 @@ class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
+class LoadPathStateHelper;
 class RuntimeStateHelper;
 class RejectedRecordWriter;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
@@ -306,7 +307,7 @@ public:
     // JSON Lines for the sync daemon to ship to
     // `_statistics_.rejected_records`. Returns nullptr when the writer has
     // not been created; callers should go through
-    // `RuntimeStateHelper::rejected_record_writer(state)` which handles
+    // `LoadPathStateHelper::rejected_record_writer(state)` which handles
     // lazy construction under lock.
     RejectedRecordWriter* rejected_record_writer_or_null() const { return _rejected_record_writer.get(); }
 
@@ -651,6 +652,7 @@ public:
     void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
+    friend class LoadPathStateHelper;
     friend class RuntimeStateHelper;
 
     // Set per-query state.
@@ -675,13 +677,10 @@ private:
     // gone but the mutex keeps the historical name so call sites remain
     // stable across the deletion.
     std::mutex _rejected_record_lock;
-    // Writer. Lazily constructed by RuntimeStateHelper on first
+    // Writer. Lazily constructed by LoadPathStateHelper on first
     // append so enabled-but-never-triggered loads pay no allocation cost.
     // Held via shared_ptr so this header does not need RejectedRecordWriter's
-    // complete type for destruction. Letting unique_ptr destruct here would
-    // force runtime_state.cpp (RuntimeCore layer) to include the writer
-    // header, which lives in the higher Runtime layer and breaks the module
-    // boundary check.
+    // complete type for destruction.
     std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
