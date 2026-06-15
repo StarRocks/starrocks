@@ -160,8 +160,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context_cancel.cpp
-    pipeline/query_context.cpp
-    pipeline/query_context_manager.cpp
     pipeline/schedule/timeout_tasks.cpp
     pipeline/runtime_filter_types.cpp
 )
@@ -507,6 +505,8 @@ ADD_BE_LIB(ExecRuntime
     pipeline/pipeline_driver.cpp
     pipeline/fragment_context.cpp
     pipeline/fragment_context_manager.cpp
+    pipeline/query_context.cpp
+    pipeline/query_context_manager.cpp
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/pipeline_driver_observer.cpp
 )
