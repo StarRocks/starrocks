@@ -447,6 +447,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)));
 
         Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
         Assertions.assertEquals("1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
         Assertions.assertEquals("3.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
     }
@@ -483,6 +484,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
                 new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
 
+        Assertions.assertEquals(1, stats.size());
         Assertions.assertEquals("-2.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
         Assertions.assertEquals("1.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
     }

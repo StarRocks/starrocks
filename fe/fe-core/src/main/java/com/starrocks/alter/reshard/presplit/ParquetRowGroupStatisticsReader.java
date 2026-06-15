@@ -330,8 +330,8 @@ public final class ParquetRowGroupStatisticsReader {
     /**
      * True only when the StarRocks sort-key column is a DECIMAL whose precision and scale
      * exactly equal the Parquet decimal annotation's. The BE split validator requires an
-     * exact match too; anything else falls back to data tier rather than risk a boundary the
-     * BE would reject or round differently.
+     * exact match too; anything else falls back to data tier rather than risk a boundary from
+     * the wrong type domain.
      */
     private static boolean decimalMatchesExactly(
             DecimalLogicalTypeAnnotation annotation, Column sortKeyColumn) {
