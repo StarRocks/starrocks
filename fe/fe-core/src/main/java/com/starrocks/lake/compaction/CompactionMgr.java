@@ -107,6 +107,16 @@ public class CompactionMgr implements MemoryTrackable {
         return compactionScheduler.getRunningCompactions().size();
     }
 
+    // Total running tablet-level compaction tasks across all running jobs (one task == one tablet
+    // still being compacted), the same unit bounded by Config.lake_compaction_max_tasks. This is
+    // finer-grained than getRunningCompactionCount(), which counts jobs (one per partition).
+    public int getRunningCompactionTaskCount() {
+        if (compactionScheduler == null) {
+            return 0;
+        }
+        return compactionScheduler.getRunningTabletCompactionTaskCount();
+    }
+
     public void start() {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),

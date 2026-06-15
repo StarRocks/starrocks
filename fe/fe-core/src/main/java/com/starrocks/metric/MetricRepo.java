@@ -972,14 +972,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING);
-        // Alias of lake_compaction_running exposed under the *_tasks suffix to match other
-        // task-count gauges across the codebase.
+        // Distinct from lake_compaction_running (which counts jobs, one per partition): this
+        // counts the running tablet-level compaction tasks summed across all running jobs — the
+        // same unit bounded by Config.lake_compaction_max_tasks.
         GAUGE_LAKE_COMPACTION_RUNNING_TASKS = new LeaderAwareGaugeMetricLong(
                 "lake_compaction_running_tasks", MetricUnit.NOUNIT,
-                "number of lake compaction jobs currently tracked in the FE leader's runningCompactions map") {
+                "number of running lake compaction tablet-level tasks across all running jobs") {
             @Override
             public Long getValueLeader() {
-                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionCount();
+                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionTaskCount();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);

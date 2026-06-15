@@ -293,7 +293,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 ## `lake_compaction_running_tasks`
 
 - Unit: Count
-- Description: Number of lake compaction jobs currently tracked in the FE leader's `runningCompactions` map. Reports the same value as `lake_compaction_running`; exposed under this name on request. Carries an `is_leader` label; follower FEs export the metric with `is_leader="false"` and value 0, so dashboards should filter on `is_leader="true"`.
+- Description: Number of tablets currently being compacted across all running shared-data (lake) compaction jobs. This is the same unit the scheduler caps with the `lake_compaction_max_tasks` config, and is finer-grained than `lake_compaction_running`, which counts compaction jobs (one per partition) — a single job fans out into one tablet-level task per tablet. Carries an `is_leader` label; follower FEs export the metric with `is_leader="false"` and value 0, so dashboards should filter on `is_leader="true"`.
 
 ## `lake_compaction_score_at_trigger`
 

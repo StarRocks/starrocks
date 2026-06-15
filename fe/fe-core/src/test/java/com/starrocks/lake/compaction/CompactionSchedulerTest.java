@@ -1000,11 +1000,13 @@ public class CompactionSchedulerTest {
     }
 
     /**
-     * Verify the two running-count gauges both surface CompactionMgr.getRunningCompactionCount():
-     * - GAUGE_LAKE_COMPACTION_RUNNING (`lake_compaction_running`) added in #71201
-     * - GAUGE_LAKE_COMPACTION_RUNNING_TASKS (`lake_compaction_running_tasks`) added in this PR
-     *   under the exact metric name requested by the maintainer on PR #72941.
-     * Both gauges share the same getValueLeader implementation so a single setup exercises both.
+     * Verify the two running gauges report DISTINCT quantities through CompactionMgr:
+     * - GAUGE_LAKE_COMPACTION_RUNNING (`lake_compaction_running`, #71201) = job count
+     *   (one per partition) via getRunningCompactionCount().
+     * - GAUGE_LAKE_COMPACTION_RUNNING_TASKS (`lake_compaction_running_tasks`) = total running
+     *   tablet-level tasks via getRunningCompactionTaskCount() (sum of
+     *   CompactionJob.getNumTabletCompactionTasks() over running jobs).
+     * Seed 3 jobs, each carrying one not-done task of 2 tablets, so the gauges read 3 and 6.
      */
     @Test
     public void testRunningCompactionGaugesReadFromCompactionMgr() {
@@ -1013,7 +1015,10 @@ public class CompactionSchedulerTest {
                 globalStateMgr, "");
         compactionManager.setCompactionScheduler(scheduler);
 
-        // Pre-seed three running compactions so the gauges have something distinct from zero.
+        // Pre-seed three running compactions, each with one not-done task covering 2 tablets, so
+        // the job gauge reads 3 and the tablet-task gauge reads 6 (distinct values). CompactionTask
+        // is mocked because its test-only constructor leaves request == null, which would NPE
+        // inside getNumTabletCompactionTasks() -> tabletCount().
         new MockUp<CompactionScheduler>() {
             @Mock
             public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
@@ -1023,7 +1028,12 @@ public class CompactionSchedulerTest {
                 for (int i = 0; i < 3; i++) {
                     PartitionIdentifier id = new PartitionIdentifier(1, 2, 100 + i);
                     PhysicalPartition partition = new PhysicalPartition(100 + i, 100 + i, new MaterializedIndex());
-                    r.put(id, new CompactionJob(db, table, partition, 100 + i, false, null, "", null));
+                    CompactionJob job = new CompactionJob(db, table, partition, 100 + i, false, null, "", null);
+                    CompactionTask task = Mockito.mock(CompactionTask.class);
+                    Mockito.when(task.isDone()).thenReturn(false);
+                    Mockito.when(task.tabletCount()).thenReturn(2);
+                    job.setTasks(Lists.newArrayList(task));
+                    r.put(id, job);
                 }
                 return r;
             }
@@ -1038,6 +1048,6 @@ public class CompactionSchedulerTest {
         };
 
         Assertions.assertEquals(3L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING.getValueLeader());
-        Assertions.assertEquals(3L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING_TASKS.getValueLeader());
+        Assertions.assertEquals(6L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING_TASKS.getValueLeader());
     }
 }
