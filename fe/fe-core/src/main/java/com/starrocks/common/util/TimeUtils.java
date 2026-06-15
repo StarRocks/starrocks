@@ -213,6 +213,34 @@ public class TimeUtils {
     }
 
     /**
+     * Infer the unit of an epoch timestamp by magnitude when the source unit is not carried with the value.
+     * Connectors persist partition modified times in seconds, milliseconds, or microseconds; a present-day instant
+     * is ~1e9 in seconds, ~1e12 in millis, ~1e15 in micros, which the thresholds separate without overlap for any
+     * realistic (post-1973) timestamp. Callers convert to their target unit (toMillis for display, toMicros for
+     * exact comparison) so no precision is lost. Heuristic; only valid for recent wall-clock timestamps.
+     */
+    public static TimeUnit inferEpochUnit(long epochTime) {
+        if (epochTime < 100_000_000_000L) {
+            return TimeUnit.SECONDS;
+        }
+        if (epochTime < 100_000_000_000_000L) {
+            return TimeUnit.MILLISECONDS;
+        }
+        return TimeUnit.MICROSECONDS;
+    }
+
+    /**
+     * Normalize an epoch timestamp of unknown unit to milliseconds (see {@link #inferEpochUnit}). Non-positive
+     * sentinels are returned unchanged. Display-side heuristic only; do not use where exact precision matters.
+     */
+    public static long normalizeToEpochMillis(long epochTime) {
+        if (epochTime <= 0L) {
+            return epochTime;
+        }
+        return inferEpochUnit(epochTime).toMillis(epochTime);
+    }
+
+    /**
      * Formats a timestamp using the session timezone and appends the UTC offset suffix.
      * e.g. "2024-01-01 08:00:00 (+08:00)"
      */
