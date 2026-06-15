@@ -179,6 +179,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
     }
 
+    if (_tnode.analytic_node.analytic_functions.empty()) {
+        return Status::InternalError("analytic_functions is empty in analytic node");
+    }
     _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
     if (_is_merge_funcs) {
         for (size_t i = 1; i < _tnode.analytic_node.analytic_functions.size(); i++) {
