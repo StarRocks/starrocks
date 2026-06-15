@@ -167,7 +167,7 @@ set(PIPELINE_RUNTIME_SRCS
 set(PIPELINE_ADAPTERS_SRCS
     pipeline/exec_node_pipeline_adapter.cpp
     pipeline/fragment_executor.cpp
-    pipeline/pipeline_builder.cpp
+    pipeline/pipeline_builder_operators.cpp
     pipeline/pipeline_driver_instantiator.cpp
 )
 
@@ -502,6 +502,7 @@ ADD_BE_LIB(ExecRuntime
     runtime/group_execution/execution_group.cpp
     runtime/group_execution/execution_group_builder.cpp
     runtime/pipeline.cpp
+    runtime/pipeline_builder_context.cpp
     runtime/pipeline_driver.cpp
     runtime/fragment_context.cpp
     runtime/fragment_context_manager.cpp

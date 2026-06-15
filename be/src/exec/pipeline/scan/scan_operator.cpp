@@ -28,6 +28,7 @@
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
@@ -709,7 +710,8 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
         pipeline::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
-    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), scan_node->id(), ops);
+    ops = ::starrocks::pipeline::builder::maybe_interpolate_collect_stats(context, context->runtime_state(),
+                                                                          scan_node->id(), ops);
 
     return ops;
 }
