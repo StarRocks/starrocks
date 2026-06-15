@@ -61,6 +61,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.YieldableLock;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> a0c6099632 ([BugFix] Fix lock mismatch in blockingAddTabletCtxToScheduler (#74596))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
@@ -323,13 +328,9 @@ public class TabletChecker extends FrontendDaemon {
         LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         List<Long> aliveBeIdsInCluster;
 
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-        boolean locked = true;
-        long lockStartTime = 0L;
+        YieldableLock lock = YieldableLock.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        lockStat.lockAcquireCount++;
         try {
-            lockStat.lockAcquireCount++;
-            lockStartTime = System.currentTimeMillis();
             aliveBeIdsInCluster = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
 
             if (metastore.getTableIncludeRecycleBin(db, table.getId()) == null) {
@@ -383,7 +384,7 @@ public class TabletChecker extends FrontendDaemon {
 
                 TabletCheckerStat partitionTabletCheckerStat =
                         doCheckOnePartition(db, olapTbl, physicalPartition, replicaNum, aliveBeIdsInCluster,
-                                isPartitionUrgent);
+                                isPartitionUrgent, lock);
                 totStat.accumulateStat(partitionTabletCheckerStat);
 
                 if (totStat.isUrgentPartitionHealthy && isPartitionUrgent) {
@@ -394,19 +395,13 @@ public class TabletChecker extends FrontendDaemon {
                     removeFromUrgentTable(new RepairTabletInfo(db.getId(),
                             olapTbl.getId(), Lists.newArrayList(physicalPartition.getId())));
                 }
-                long lockElapsedTime = System.currentTimeMillis() - lockStartTime;
-                if (lockElapsedTime >= maxLockHoldTimeMs) {
-                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-                    locked = false;
+                if (lock.getCurrentHoldTimeMs() >= maxLockHoldTimeMs) {
+                    LOG.debug("lock time for one cycle reached the limit {}, release lock.", maxLockHoldTimeMs);
                     lockStat.proactiveReleaseCount++;
 
-                    LOG.debug("lock time for one cycle reached the limit {}, release lock.", maxLockHoldTimeMs);
-                    lockStat.lockHoldTotalTime += lockElapsedTime;
-
-                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-                    locked = true;
+                    // Step aside so that queued metadata operations can cut in.
+                    lock.refresh();
                     lockStat.lockAcquireCount++;
-                    lockStartTime = System.currentTimeMillis();
                     if (metastore.getTableIncludeRecycleBin(db, table.getId()) == null) {
                         // Get the table by tableId again, ensure it still exists under the lock.
                         return;
@@ -417,10 +412,10 @@ public class TabletChecker extends FrontendDaemon {
                 }
             }
         } finally {
-            if (locked) {
-                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-                lockStat.lockHoldTotalTime += System.currentTimeMillis() - lockStartTime;
-            }
+            lock.close();
+            // The scope tracks actually-held time, so yielded windows (proactive releases
+            // and blocking-add waits) and failed re-acquisitions are not counted.
+            lockStat.lockHoldTotalTime += lock.getHeldTimeMs();
         }
     }
 
@@ -446,7 +441,7 @@ public class TabletChecker extends FrontendDaemon {
 
     private TabletCheckerStat doCheckOnePartition(Database db, OlapTable olapTbl, PhysicalPartition physicalPartition,
                                                   int replicaNum, List<Long> aliveBeIdsInCluster,
-                                                  boolean isPartitionUrgent) {
+                                                  boolean isPartitionUrgent, YieldableLock heldLock) {
         TabletCheckerStat partitionTabletCheckerStat = new TabletCheckerStat();
         Multimap<String, String> locations = olapTbl.getLocation();
         boolean isLabelLocationTable = locations != null;
@@ -534,8 +529,8 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     Pair<Boolean, Long> result =
-                            tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletSchedCtx,
-                                    isPartitionUrgent);
+                            tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtx, isPartitionUrgent,
+                                    heldLock);
                     partitionTabletCheckerStat.waitTotalTime += result.second;
                     if (result.first) {
                         partitionTabletCheckerStat.addToSchedulerTabletNum++;
