@@ -20,6 +20,8 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.parquet.column.statistics.Statistics;
@@ -32,12 +34,14 @@ import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.StringLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -153,22 +157,38 @@ public final class ParquetRowGroupStatisticsReader {
             Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
-            // isIntegerType() is exactly {TINYINT, SMALLINT, INT, BIGINT} — the unannotated
-            // integer window; LARGEINT is intentionally excluded.
-            case INT32 -> logicalAnnotation == null
-                    ? starRocksPrimitive.isIntegerType()
+            case INT32 -> {
+                if (logicalAnnotation == null) {
+                    // isIntegerType() is exactly {TINYINT, SMALLINT, INT, BIGINT} — the
+                    // unannotated integer window; LARGEINT is intentionally excluded.
+                    yield starRocksPrimitive.isIntegerType();
+                }
+                if (logicalAnnotation instanceof DateLogicalTypeAnnotation) {
                     // INT32+DATE is days-since-epoch; only a StarRocks DATE sort key
                     // gives those day counts their intended calendar meaning.
-                    : logicalAnnotation instanceof DateLogicalTypeAnnotation
-                            && starRocksPrimitive == PrimitiveType.DATE;
-            case INT64 -> logicalAnnotation == null
-                    ? starRocksPrimitive.isIntegerType()
+                    yield starRocksPrimitive == PrimitiveType.DATE;
+                }
+                // INT32-backed DECIMAL: the signed-integer order of the unscaled stat equals the
+                // decimal order, so footer min/max are safe. Require an exact precision/scale match
+                // with the StarRocks column (the BE split validator requires the same).
+                yield logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
+                        && decimalMatchesExactly(decimalAnnotation, sortKeyColumn);
+            }
+            case INT64 -> {
+                if (logicalAnnotation == null) {
+                    yield starRocksPrimitive.isIntegerType();
+                }
+                if (logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
                     // Only local (non-UTC-adjusted) timestamps: the load stores those ticks
                     // verbatim as the DATETIME wall clock, so the FE-rendered boundary matches.
                     // UTC-adjusted timestamps get a session-tz offset at load time → data tier.
-                    : logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation
-                            && !timestampAnnotation.isAdjustedToUTC()
+                    yield !timestampAnnotation.isAdjustedToUTC()
                             && starRocksPrimitive == PrimitiveType.DATETIME;
+                }
+                // INT64-backed DECIMAL: same signed-order safety as INT32. Exact precision/scale.
+                yield logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
+                        && decimalMatchesExactly(decimalAnnotation, sortKeyColumn);
+            }
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> logicalAnnotation instanceof StringLogicalTypeAnnotation
                     && (starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR);
@@ -245,6 +265,14 @@ public final class ParquetRowGroupStatisticsReader {
             MetaTierTemporalWindow.rejectDateOutsideWindow(dateTime.toLocalDate());
             return Variant.of(location.starRocksColumn.getType(), renderDateTime(dateTime));
         }
+        if (location.logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation) {
+            // Only INT32/INT64-backed decimals reach here — the gate rejects FIXED_LEN/BINARY —
+            // so the stat is the signed unscaled integer. Reconstruct at the source scale; the
+            // exact precision/scale gate guarantees it equals the StarRocks column scale.
+            long unscaled = ((Number) parquetValue).longValue();
+            BigDecimal decoded = BigDecimal.valueOf(unscaled, decimalAnnotation.getScale());
+            return Variant.of(location.starRocksColumn.getType(), decoded.toPlainString());
+        }
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
@@ -292,6 +320,23 @@ public final class ParquetRowGroupStatisticsReader {
             }
         }
         return null;
+    }
+
+    /**
+     * True only when the StarRocks sort-key column is a DECIMAL whose precision and scale
+     * exactly equal the Parquet decimal annotation's. The BE split validator requires an
+     * exact match too; anything else falls back to data tier rather than risk a boundary the
+     * BE would reject or round differently.
+     */
+    private static boolean decimalMatchesExactly(
+            DecimalLogicalTypeAnnotation annotation, Column sortKeyColumn) {
+        Type starRocksType = sortKeyColumn.getType();
+        if (!starRocksType.isDecimalOfAnyVersion()) {
+            return false;
+        }
+        ScalarType scalarType = (ScalarType) starRocksType;
+        return annotation.getPrecision() == scalarType.getScalarPrecision()
+                && annotation.getScale() == scalarType.getScalarScale();
     }
 
     private record SortKeyLocation(

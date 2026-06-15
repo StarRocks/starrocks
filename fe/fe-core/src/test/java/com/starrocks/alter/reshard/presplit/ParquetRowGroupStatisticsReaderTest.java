@@ -18,9 +18,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
@@ -429,6 +432,42 @@ class ParquetRowGroupStatisticsReaderTest {
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
                         new Column("event_ts", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void readsDecimalStatisticsForInt32Decimal() throws Exception {
+        // INT32-backed DECIMAL(9,2): precision 9 fits int32. Unscaled (rowIndex+1)*100 → 1.00..3.00.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 d (DECIMAL(9,2)); }",
+                /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("d", (rowIndex + 1) * 100));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertEquals("1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("3.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsDecimalStatisticsForInt64Decimal() throws Exception {
+        // INT64-backed DECIMAL(18,2): unscaled (rowIndex+1)*100 → 1.00, 2.00, ... 5.00.
+        // Signed INT64 order == decimal order, so footer min/max are safe to use.
+        Path parquetPath = writeParquet(
+                "message schema { required int64 d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("d", (rowIndex + 1) * 100L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("5.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
     }
 
     private Path writeParquet(
