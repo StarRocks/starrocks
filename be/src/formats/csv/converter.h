@@ -25,6 +25,7 @@
 #include "base/container/raw_container.h"
 #include "base/string/slice.h"
 #include "common/status.h"
+#include "formats/csv/csv_defaults.h"
 #include "formats/io/formatted_output_stream.h"
 #include "types/date_value.h"
 #include "types/decimalv2_value.h"
@@ -71,12 +72,12 @@ public:
         ArrayFormatType array_format_type = ArrayFormatType::kDefault;
         // [Only used in Hive now!]
         // Control hive array's element delimiter.
-        char array_hive_collection_delimiter = '\002';
+        char array_hive_collection_delimiter = DEFAULT_COLLECTION_DELIM.front();
         // [Only used in Hive now!]
         // mapkey_delimiter is the separator between key and value in map.
         // For example, {"smith": age} mapkey_delimiter is ':', array_hive_mapkey_delimiter is
         // used to generate collection delimiter in Hive.
-        char array_hive_mapkey_delimiter = '\003';
+        char array_hive_mapkey_delimiter = DEFAULT_MAPKEY_DELIM.front();
         // [Only used in Hive now!]
         // Control array nested level, used to generate collection delimiter in Hive.
         size_t array_hive_nested_level = 1;

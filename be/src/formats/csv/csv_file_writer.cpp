@@ -19,10 +19,11 @@
 
 #include "base/compression/compression_utils.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
-#include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "formats/column_evaluator.h"
+#include "formats/csv/csv_defaults.h"
 #include "formats/csv/csv_escape.h"
 #include "formats/io/formatted_output_stream_file.h"
 #include "formats/io/formatted_output_stream_string.h"
@@ -64,10 +65,10 @@ Status CSVFileWriter::init() {
         _converter_options->is_hive = true;
         _converter_options->array_format_type = csv::ArrayFormatType::kHive;
         _converter_options->array_hive_collection_delimiter = _writer_options->collection_delim.empty()
-                                                                      ? DEFAULT_COLLECTION_DELIM.front()
+                                                                      ? csv::DEFAULT_COLLECTION_DELIM.front()
                                                                       : _writer_options->collection_delim.front();
         _converter_options->array_hive_mapkey_delimiter = _writer_options->mapkey_delim.empty()
-                                                                  ? DEFAULT_MAPKEY_DELIM.front()
+                                                                  ? csv::DEFAULT_MAPKEY_DELIM.front()
                                                                   : _writer_options->mapkey_delim.front();
     }
 

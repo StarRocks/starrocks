@@ -554,6 +554,7 @@ set(STARROCKS_LINK_LIBS
     Script
     orc
     ${WL_END_GROUP}
+    FormatCsv
     FormatCore
     ExecRuntime
     ComputeEnv

@@ -18,7 +18,6 @@
 #include "connector/connector_registry.h"
 #include "connector/file_chunk_sink.h"
 #include "exec/data_sink.h"
-#include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
