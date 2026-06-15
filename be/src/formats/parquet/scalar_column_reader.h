@@ -126,14 +126,28 @@ protected:
                                            CompoundNodeType pred_relation, const TypeDescriptor& col_type,
                                            const uint64_t rg_first_row, const uint64_t rg_num_rows) const;
 
-    // If `column` still refers to one of this reader's internal temporary columns, a previous
-    // fill_dst_column() was skipped (e.g. the whole range was filtered out and
-    // GroupReader::get_next() continued without filling). Restore the caller-visible column to the
-    // original destination column so that no temporary column can leak out of the reader.
-    Status _restore_tmp_column(ColumnPtr& column);
-    // Whether `column` is one of this reader's internal temporary columns. Overridden by readers
-    // that swap in a temporary column (dict-code / intermediate / low-rows string) during read.
-    virtual bool _is_tmp_column(const ColumnPtr& column) const { return false; }
+    // Caller-visible column parked while a temporary column occupies the slot.
+    // nullptr ⇒ no swap pending. Single source of truth for the swap lifecycle.
+    ColumnPtr _saved_dst = nullptr;
+
+    // Install `tmp` into the caller's slot, saving the original destination.
+    void _swap_in_tmp_column(ColumnPtr& slot, const ColumnPtr& tmp) {
+        _saved_dst = slot;
+        slot = tmp;
+    }
+    // Repair a slot left pointing at a tmp column by a skipped fill.
+    // Call at the top of read_range() — no-op when no swap is pending.
+    void _restore_saved_dst(ColumnPtr& slot) {
+        if (_saved_dst != nullptr) {
+            slot = _saved_dst;
+            _saved_dst = nullptr;
+        }
+    }
+    // Restore the slot at the end of a successful fill.
+    void _finish_fill(ColumnPtr& src) {
+        src = _saved_dst;
+        _saved_dst = nullptr;
+    }
 
     const ColumnReaderOptions& _opts;
 
@@ -195,6 +209,8 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
+    Status materialize_lazy_decode(ColumnPtr& col) override;
+
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
                                              const uint64_t rg_num_rows) const override {
@@ -243,7 +259,11 @@ private:
     bool _can_lazy_convert = false;
     // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;
+<<<<<<< HEAD
+    // tmp columns used during lazy-decode / lazy-convert paths; at most one is non-null
+=======
     // dict code
+>>>>>>> main
     ColumnPtr _tmp_code_column = nullptr;
     ColumnPtr _tmp_intermediate_column = nullptr;
 };

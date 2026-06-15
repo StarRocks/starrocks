@@ -63,22 +63,10 @@ StatusOr<ColumnPtr> LazyMaterializationContext::provide(SlotId slot_id) {
             s->parquet_lazy_slot_triggered++;
         }
     }
-    // ── DEBUG ──
     const auto* entry = _materializer.get_slot_cache(slot_id);
     if (entry != nullptr) {
-        LOG(INFO) << "[DEBUG] provide slot=" << slot_id
-                  << " col_type=" << entry->values->get_name()
-                  << " col_size=" << entry->values->size();
-        if (entry->values->is_struct()) {
-            const auto* sc = down_cast<const StructColumn*>(entry->values.get());
-            for (size_t fi = 0; fi < sc->fields_size(); fi++) {
-                LOG(INFO) << "[DEBUG]   provide struct_field[" << fi << "] name=" << sc->field_names()[fi]
-                          << " type=" << sc->fields()[fi]->get_name();
-            }
-        }
         return entry->values;
     }
-    // ── END DEBUG ──
     // Variant lazy hidden source slot: result is in active_chunk.
     if (_active_chunk->is_slot_exist(slot_id)) {
         return _active_chunk->get_column_by_slot_id(slot_id);

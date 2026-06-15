@@ -20,7 +20,6 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/file_reader.h"
 
 namespace starrocks {
@@ -269,17 +268,9 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    RETURN_IF_ERROR(_reader->get_next(chunk));
-    // Evaluate multi-slot predicates after FileReader has materialised all columns
-    // (including lazily-loaded ones from its internal predicate pipeline).
-    // This pass is the correctness guarantee; statistics-based skipping inside
-    // FileReader is approximate.  In the future, expression-driven lazy
-    // materialisation will replace this with interleaved column-load/evaluate.
-    if ((*chunk)->num_rows() > 0 && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
-        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, chunk->get()));
-    }
-    return Status::OK();
+    // Multi-slot conjuncts are now evaluated inside GroupReader (step 2b)
+    // with lazy-materialization support, making a post-hoc pass unnecessary.
+    return _reader->get_next(chunk);
 }
 
 void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
