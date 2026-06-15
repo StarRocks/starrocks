@@ -181,6 +181,37 @@ TEST(DataSampleTest, test_page_sample_fallback_index_in_bounds) {
     }
 }
 
+// Regression test for the block population accounting. The number of blocks must be rounded up: a table
+// smaller than one block still has one block, and a partial trailing block still counts. Floor division
+// previously undercounted the population (reporting 0 for a sub-block table, which is also less than the
+// always-1 sample_size) and disagreed with the ceil-based fallback in the same function.
+TEST(DataSampleTest, test_block_sample_population_size_rounds_up) {
+    int64_t random_seed = 123;
+    size_t rows_per_block = 1024;
+    double percentage = 50.0;
+
+    // Table smaller than a single block -> population is 1, not 0.
+    {
+        auto data_sample = DataSample::make_block_sample(percentage, random_seed, rows_per_block, 100);
+        OlapReaderStatistics stats;
+        auto sampled_ranges = data_sample->sample(&stats);
+        ASSERT_TRUE(sampled_ranges.ok());
+        EXPECT_EQ(stats.sample_population_size, 1);
+        EXPECT_GE(stats.sample_population_size, stats.sample_size);
+    }
+
+    // Partial trailing block (5 full blocks + 100 rows) -> population is 6, not 5.
+    {
+        size_t total_rows = 5 * rows_per_block + 100;
+        auto data_sample = DataSample::make_block_sample(percentage, random_seed, rows_per_block, total_rows);
+        OlapReaderStatistics stats;
+        auto sampled_ranges = data_sample->sample(&stats);
+        ASSERT_TRUE(sampled_ranges.ok());
+        EXPECT_EQ(stats.sample_population_size, 6);
+        EXPECT_GE(stats.sample_population_size, stats.sample_size);
+    }
+}
+
 class PageSampleTestSuite : public testing::Test {
 protected:
     void SetUp() override {

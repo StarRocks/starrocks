@@ -89,10 +89,8 @@ public final class TableSampleClause implements ParseNode {
 
     public void toThrift(TTableSampleOptions msg) {
         msg.setEnable_sampling(true);
-        // Keep the legacy integer field populated for backward compatibility with old BE that only reads it.
-        // Round to the nearest integer in (0, 100) so old BE still produces a sane (non-zero) sample.
-        msg.setProbability_percent(Math.max(1L, Math.min(99L, Math.round(randomProbabilityPercent))));
-        // New field carries the exact (possibly sub-1%) value; new BE prefers this.
+        // BE is always upgraded before FE, so a new FE only ever talks to a BE that already understands
+        // this field. The legacy integer probability_percent is intentionally left unset.
         msg.setProbability_percent_v2(randomProbabilityPercent);
         msg.setSample_method(sampleMethod.toThrift());
         msg.setRandom_seed(randomSeed);

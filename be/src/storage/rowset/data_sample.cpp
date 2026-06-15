@@ -44,7 +44,10 @@ StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) 
     std::bernoulli_distribution dist(_probability_percent / 100.0);
 
     size_t sampled_blocks = 0;
-    size_t total_blocks = _total_rows / _rows_per_block;
+    // Round up: a partial trailing block (or a table smaller than one block) still counts as one block,
+    // matching the loop below and the fallback. Floor division would undercount the population (0 for a
+    // sub-block table) and could even make sample_size exceed sample_population_size.
+    size_t total_blocks = (_total_rows + _rows_per_block - 1) / _rows_per_block;
     RowIdSparseRange sampled_ranges;
     for (size_t i = 0; i < _total_rows; i += _rows_per_block) {
         if (dist(mt)) {
@@ -56,11 +59,10 @@ StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) 
     if (sampled_blocks == 0 && _total_rows > 0) {
         // No block was hit by the Bernoulli pass (very likely for a small percent, e.g. sub-1%). Pick one
         // block uniformly so the sample is non-empty. The random value is a block *index* in
-        // [0, num_blocks - 1]; convert it to a row offset just like the main loop above. (The previous code
+        // [0, total_blocks - 1]; convert it to a row offset just like the main loop above. (The previous code
         // used the block index directly as a row id, which biased the fallback sample to the head of the
         // table, and used an inclusive upper bound that could point one block past the end.)
-        size_t num_blocks = (_total_rows + _rows_per_block - 1) / _rows_per_block;
-        std::uniform_int_distribution<size_t> uniform(0, num_blocks - 1);
+        std::uniform_int_distribution<size_t> uniform(0, total_blocks - 1);
         size_t start_row = uniform(mt) * _rows_per_block;
         sampled_blocks++;
         sampled_ranges.add(RowIdRange(start_row, std::min(start_row + _rows_per_block, _total_rows)));
