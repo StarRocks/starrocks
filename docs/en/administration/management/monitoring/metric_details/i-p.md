@@ -298,8 +298,8 @@ For more information on how to build a monitoring service for your StarRocks clu
 ## `lake_compaction_score_at_trigger`
 
 - Unit: Centiscore (raw score × 100)
-- Type: Histogram
-- Description: Distribution of partition compaction scores at the moment a lake compaction job is created and enters the running map. The score is the average of the partition's tablet-level scores (`Quantiles.getAvg()`) and is multiplied by 100 to preserve two decimal places of precision in a long-valued histogram; dashboards should divide the reported quantiles by 100 to recover the raw score. Sampled once per partition per trigger. Carries an `is_leader` label; follower FEs export an empty snapshot with `is_leader="false"`, so dashboards should filter on `is_leader="true"`.
+- Type: Gauge
+- Description: Centiscore of the most recent partition that triggered a lake compaction job. The value is the partition's *max* tablet-level score (`Quantiles.getMax()`), matching the criterion the scheduler uses to pick partitions for compaction; multiplied by 100 to preserve two decimal places of precision in a long-valued gauge — dashboards should divide by 100 to recover the raw score. Updated once per partition per trigger; the gauge holds the value of the most recent update. Carries an `is_leader` label; follower FEs export `is_leader="false"` and return 0, so dashboards should filter on `is_leader="true"`.
 
 ## `lake_compaction_success`
 

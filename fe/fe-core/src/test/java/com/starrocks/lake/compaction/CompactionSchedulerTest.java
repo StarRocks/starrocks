@@ -76,7 +76,7 @@ public class CompactionSchedulerTest {
     @BeforeAll
     public static void initMetrics() {
         // CompactionScheduler dereferences MetricRepo.COUNTER_LAKE_COMPACTION_* and
-        // HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER guarded by MetricRepo.hasInit. Initialise the repo
+        // GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER guarded by MetricRepo.hasInit. Initialise the repo
         // once so tests that drive runOneCycle()/scheduleNewCompaction() exercise the metric paths
         // instead of short-circuiting. MetricRepo.init() is idempotent (guarded by hasInit).
         savedEnableMetricCalculator = Config.enable_metric_calculator;
@@ -924,13 +924,15 @@ public class CompactionSchedulerTest {
 
     /**
      * Drive runOneCycle through scheduleNewCompaction and assert that
-     * HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER samples once per partition whose compaction job
-     * lands in runningCompactions. Uses the same pattern as testCompactionWarehouseLimit but
-     * threads a real Quantiles through to the CompactionJob so the score-before getter is
-     * non-null and the centiscore update path is exercised.
+     * GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER is updated when a compaction job lands in
+     * runningCompactions. The gauge holds the centiscore of the most recent trigger, so after
+     * two partitions are scheduled it equals one of {4200, 9900} — whichever ran last. Uses
+     * the same pattern as testCompactionWarehouseLimit but threads a real Quantiles through
+     * to the CompactionJob so the score-before getter is non-null and the centiscore update
+     * path is exercised.
      */
     @Test
-    public void testScoreHistogramSampledWhenJobStarts() {
+    public void testScoreGaugeUpdatedWhenJobStarts() {
         CompactionMgr compactionManager = new CompactionMgr();
 
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
@@ -987,12 +989,14 @@ public class CompactionSchedulerTest {
             }
         };
 
-        long histoBefore = MetricRepo.HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER.getCount();
         compactionScheduler.runOneCycle();
         Assertions.assertEquals(2, compactionScheduler.getRunningCompactions().size());
-        long histoAfter = MetricRepo.HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER.getCount();
-        Assertions.assertEquals(2, histoAfter - histoBefore,
-                "Score histogram should be sampled once per newly-running compaction job");
+        // The two partitions feed Quantiles(42d) and Quantiles(99d); max() of a one-element
+        // list is that element, so the centiscore must be 4200 or 9900 depending on which
+        // partition the scheduler scheduled last in this cycle.
+        long gaugeAfter = MetricRepo.GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER.getValueLeader();
+        Assertions.assertTrue(gaugeAfter == 4200L || gaugeAfter == 9900L,
+                "Gauge should hold the centiscore of the most recent trigger; actual=" + gaugeAfter);
     }
 
     /**

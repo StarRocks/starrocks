@@ -105,6 +105,7 @@ import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -403,7 +404,16 @@ public final class MetricRepo {
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
     public static Histogram HISTO_TABLET_RESHARD_JOB_DURATION;
-    public static LeaderAwareHistogramMetric HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER;
+    public static LeaderAwareGaugeMetricLong GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER;
+
+    // Centiscore (raw score * 100) of the most recent compaction trigger. Updated by
+    // CompactionScheduler when a new job lands in runningCompactions; exposed read-only via
+    // the gauge above.
+    private static final AtomicLong LATEST_COMPACTION_SCORE_AT_TRIGGER = new AtomicLong(0);
+
+    public static void recordCompactionScoreAtTrigger(long centiscore) {
+        LATEST_COMPACTION_SCORE_AT_TRIGGER.set(centiscore);
+    }
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -1094,14 +1104,20 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
-        // Centiscore (raw score * 100) of partitions at the moment a lake compaction job is created.
-        // Multiplied by 100 to preserve two decimal places of precision in a long-valued histogram;
-        // dashboards should divide by 100 to recover the original score. Use NOUNIT so the JSON
-        // metrics endpoint does not mis-report these samples as milliseconds (the default unit
-        // for the latency histograms that this base class was originally written for).
-        HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER =
-                new LeaderAwareHistogramMetric("lake_compaction_score_at_trigger", Metric.MetricUnit.NOUNIT);
-        METRIC_REGISTER.register("lake_compaction_score_at_trigger", HISTO_LAKE_COMPACTION_SCORE_AT_TRIGGER);
+        // Centiscore (raw score * 100) of the most recent partition that triggered a lake
+        // compaction. The trigger picks partitions by *max* tablet score, so we expose the max
+        // (not the average) — keeps the metric aligned with the scheduler's selection criterion.
+        // Multiplied by 100 to preserve two decimal places of precision in a long-valued gauge;
+        // dashboards should divide by 100 to recover the original score.
+        GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER = new LeaderAwareGaugeMetricLong(
+                "lake_compaction_score_at_trigger", MetricUnit.NOUNIT,
+                "centiscore (raw score * 100) of the most recent compaction trigger; max score across the partition's tablets") {
+            @Override
+            public Long getValueLeader() {
+                return LATEST_COMPACTION_SCORE_AT_TRIGGER.get();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER);
 
         // init system metrics
         initSystemMetrics();

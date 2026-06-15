@@ -298,8 +298,8 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 ## `lake_compaction_score_at_trigger`
 
 - 单位：Centiscore（原始分数 × 100）
-- 类型：Histogram
-- 描述：在存算分离（lake）压缩任务被创建并进入运行 Map 的时刻，分区压缩分数的分布。分数取分区下各 Tablet 分数的平均值（`Quantiles.getAvg()`），并乘以 100 以在 long 型 Histogram 中保留两位小数精度；面板需将上报的分位数除以 100 以恢复原始分数。每次触发每个分区采样一次。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出空快照，因此面板应通过 `is_leader="true"` 进行筛选。
+- 类型：Gauge
+- 描述：最近一次触发存算分离（lake）压缩任务的分区的 Centiscore。取值为该分区下各 Tablet 分数的 *最大值*（`Quantiles.getMax()`），与调度器选择压缩分区所用的判据一致；并乘以 100 以在 long 型 Gauge 中保留两位小数精度，面板需将值除以 100 以恢复原始分数。每次触发每个分区更新一次；Gauge 持有最近一次更新的值。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出并返回 0，因此面板应通过 `is_leader="true"` 进行筛选。
 
 ## `lake_compaction_success`
 
