@@ -1488,7 +1488,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // builds its plan from getTaskDefinition() and is unaffected.
         new MockUp<MaterializedView>() {
             @Mock
-            public String getIVMTaskDefinition() {
+            public String getIVMTaskDefinition(String selectSql) {
                 throw new SemanticException("injected IVM plan failure");
             }
         };
