@@ -1337,15 +1337,9 @@ public class AnalyzerUtils {
                 int len = ScalarType.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
-<<<<<<< HEAD
-                    if (Config.transform_type_prefer_string_for_varchar) {
-                        // always use max varchar length for varchar type if transform_type_prefer_string_for_varchar is set.
-                        len = ScalarType.getOlapMaxVarcharLength();
-=======
                     if (preferStringForVarchar) {
                         // always use max varchar length for char/varchar types if preferStringForVarchar is set.
-                        len = TypeFactory.getOlapMaxVarcharLength();
->>>>>>> 95df8d2ece ([BugFix] Preserve declared VARCHAR length in CTAS (#73498))
+                        len = ScalarType.getOlapMaxVarcharLength();
                     } else {
                         if (scalarType.getLength() > 0) {
                             // Catalog's varchar length may larger than olap's max varchar length
