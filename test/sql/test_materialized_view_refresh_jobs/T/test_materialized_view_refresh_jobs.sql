@@ -54,6 +54,13 @@ REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
 
 function: assert_query_contains("SELECT RESOURCE_GROUP FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_NAME='mv2'", "rg_${uuid0}")
 
+-- Predicate filtering across multiple columns: TABLE_SCHEMA is pushed to the FE as the db filter, the others
+-- are scan filters; all must return correct rows. Both mv1 and mv2 live in db_${uuid0} (PCT / MANUAL / SUCCESS).
+function: assert_query_contains("SELECT (count(*) >= 2) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = 'db_${uuid0}'", "1")
+function: assert_query_contains("SELECT count(*) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv2'", "1")
+function: assert_query_contains("SELECT (count(*) >= 2) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = 'db_${uuid0}' AND REFRESH_STATE = 'SUCCESS' AND REFRESH_MODE = 'PCT' AND REFRESH_TRIGGER = 'MANUAL'", "1")
+function: assert_query_contains("SELECT count(*) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = 'no_such_db_${uuid0}'", "0")
+
 -- Failure-column population (FAILED_TASK_RUN_ID / FAILED_QUERY_ID / ERROR_CODE / ERROR_MESSAGE)
 -- is covered deterministically by the FE unit test
 -- MaterializedViewRefreshJobsSystemTableTest.testFailedRunColumnsComeFromLatestFailure; a live

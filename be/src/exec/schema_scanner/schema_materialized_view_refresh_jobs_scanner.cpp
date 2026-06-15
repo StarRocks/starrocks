@@ -57,6 +57,13 @@ Status SchemaMaterializedViewRefreshJobsScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     TGetTasksParams params;
+    // Push TABLE_SCHEMA down as the FE `db` filter so a single-database query doesn't make the leader aggregate
+    // every MV's task-run history cluster-wide. Only TABLE_SCHEMA is job-invariant and thus safe to push; a
+    // per-run filter such as REFRESH_STATE would drop runs the job roll-up needs, so it stays a BE-side filter.
+    std::string db;
+    if (_parse_expr_predicate("TABLE_SCHEMA", db)) {
+        params.__set_db(db);
+    }
     if (nullptr != _param->current_user_ident) {
         params.__set_current_user_ident(*(_param->current_user_ident));
     }
