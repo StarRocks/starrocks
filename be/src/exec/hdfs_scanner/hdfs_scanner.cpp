@@ -359,12 +359,6 @@ void HdfsScanner::close() noexcept {
     update_counter();
     do_close(_runtime_state);
     _file.reset(nullptr);
-
-    // ColumnExprPredicate destructors call ExprContext::close() on cloned
-    // ExprContexts whose root() Expr* lives in HiveDataSource::_pool
-    // (ExprContext::clone() shares _root, it does NOT deep-copy the tree).
-    // Release predicates here while _pool is still alive.
-    _scanner_ctx->predicates = {};
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_file(
