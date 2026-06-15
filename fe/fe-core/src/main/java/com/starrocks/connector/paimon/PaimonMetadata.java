@@ -136,6 +136,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final ConnectorProperties properties;
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
     private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
+    // Carries the tag name from version parsing to getRemoteFiles, same pattern as `branch`.
+    private final ThreadLocal<String> scanTag = ThreadLocal.withInitial(() -> null);
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -480,6 +482,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                         throw new StarRocksConnectorException("%s does not include tag: %s",
                                 table.fullName(), refNameParts[1]);
                     }
+                    scanTag.set(refNameParts[1]);
                     snapshotId = tagManager.tagObjects().stream()
                             .filter(p -> p.getValue().equals(refNameParts[1]))
                             .map(p -> p.getKey().id())
@@ -620,7 +623,15 @@ public class PaimonMetadata implements ConnectorMetadata {
         snapshotId = tvrVersionRange.end().isPresent() ? tvrVersionRange.end().get() : -1L;
 
         Map<String, String> options = new HashMap<>();
-        options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        String currentTag = scanTag.get();
+        scanTag.remove();
+        boolean isDeltaScan = tvrVersionRange.start().isPresent() && tvrVersionRange.end().isPresent();
+        if (currentTag != null && !isDeltaScan) {
+            // Use scan.tag-name: tags survive snapshot expiration, scan.snapshot-id does not.
+            options.put(CoreOptions.SCAN_TAG_NAME.key(), currentTag);
+        } else {
+            options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        }
 
         org.apache.paimon.table.Table paimonNativeTable = getNativeTable(paimonTable.getNativeTable(),
                 tvrVersionRange).copy(options);
