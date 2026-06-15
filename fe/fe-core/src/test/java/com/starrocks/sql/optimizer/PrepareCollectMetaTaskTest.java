@@ -18,20 +18,18 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.task.PrepareCollectMetaTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -63,7 +61,7 @@ public class PrepareCollectMetaTaskTest {
     @Test
     public void testForkJoinMergeEndToEnd() throws Exception {
 
-        List<Column> columns = Lists.newArrayList(new Column("c1", IntegerType.INT));
+        List<Column> columns = Lists.newArrayList(new Column("c1", Type.INT));
         IcebergTable tbl1 = new IcebergTable(1L, "t1", "default_catalog", "default_catalog",
                 "db", "t1", "", columns, null, Maps.newHashMap());
         IcebergTable tbl2 = new IcebergTable(2L, "t2", "default_catalog", "default_catalog",
@@ -95,7 +93,8 @@ public class PrepareCollectMetaTaskTest {
         // in com.starrocks.sql.optimizer, not accessible from .task subpackage
         new MockUp<OptimizerContext>() {
             @Mock
-            public void $init(ConnectContext cc) {}
+            public void $init(ConnectContext cc) {
+            }
 
             @Mock
             public SessionVariable getSessionVariable() {
