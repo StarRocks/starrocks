@@ -31,6 +31,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.Relation;
@@ -222,7 +223,7 @@ public final class InsertFromTablePreSplitHook {
         if (target == null) {
             return;
         }
-        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(context.getCurrentComputeResource());
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(scanContext.computeResource());
         long estimatedBytes = Math.max(0L, sourceTable.getDataSize());
 
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
@@ -258,7 +259,7 @@ public final class InsertFromTablePreSplitHook {
             Database database, OlapTable table, OlapTable sourceTable,
             InsertFromTableScanContext scanContext,
             List<Column> sortKeyColumns, List<Column> partitionColumns, ConnectContext context) {
-        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(context.getCurrentComputeResource());
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(scanContext.computeResource());
         long estimatedBytes = Math.max(0L, sourceTable.getDataSize());
 
         SampleSet samples = runDataTierSampler(table, scanContext, sortKeyColumns, partitionColumns);
@@ -385,7 +386,11 @@ public final class InsertFromTablePreSplitHook {
             return null;
         }
         Relation from = selectRelation.getRelation();
-        if (!(from instanceof TableRelation sourceRelation)) {
+        // FILES(...) sources extend TableRelation but must be handled exclusively by
+        // InsertFromFilesPreSplitHook; reject them here to prevent the table hook from
+        // sampling an unrelated OlapTable whose name happens to collide with the
+        // synthetic FILES relation name.
+        if (!(from instanceof TableRelation sourceRelation) || from instanceof FileTableFunctionRelation) {
             return null;
         }
         if (!isPlainTableReference(sourceRelation)) {
