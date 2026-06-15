@@ -40,7 +40,8 @@ public class PluginZipTest {
     public void setUp() {
         try {
             FileUtils.deleteQuietly(PluginTestUtil.getTestFile(TARGET_DIR));
-            Files.createDirectories(PluginTestUtil.getTestPath(TARGET_DIR));
+            assertFalse(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
+            Files.createDirectory(PluginTestUtil.getTestPath(TARGET_DIR));
             assertTrue(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
 
         } catch (IOException e) {
