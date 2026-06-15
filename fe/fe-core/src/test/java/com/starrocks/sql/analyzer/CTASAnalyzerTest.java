@@ -18,6 +18,8 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -35,9 +37,6 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.StringType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -511,7 +510,7 @@ public class CTASAnalyzerTest {
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(stringSql, ctx);
             List<ColumnDef> stringColumnDefs = stringStmt.getCreateTableStmt().getColumnDefs();
             Assertions.assertEquals(1, stringColumnDefs.size());
-            assertVarcharLength(stringColumnDefs.get(0).getTypeDef(), StringType.DEFAULT_STRING_LENGTH);
+            assertVarcharLength(stringColumnDefs.get(0).getTypeDef(), ScalarType.DEFAULT_STRING_LENGTH);
         } finally {
             Config.transform_type_prefer_string_for_varchar = savedFlag;
         }
