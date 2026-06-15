@@ -20,6 +20,7 @@
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/service_contexts.h"
@@ -161,7 +162,7 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
         LOG(WARNING) << ss.str();
         // manually cancel fragment context, because sync_dictionary_cache is not
         // in pipeline driver executor thread
-        _fragment_ctx->cancel(Status::InternalError(ss.str()));
+        pipeline::cancel_fragment_context(_fragment_ctx, Status::InternalError(ss.str()));
     }
 }
 

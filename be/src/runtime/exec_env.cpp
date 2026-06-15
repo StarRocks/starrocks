@@ -62,7 +62,7 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
@@ -82,6 +82,7 @@
 #include "runtime/load_path_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/pipeline_fragment_reporter.h"
 #include "runtime/rejected_record_sync_daemon.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
@@ -198,6 +199,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.routine_load_task_executor = _routine_load_task_executor;
     _runtime_services.small_file_mgr = _small_file_mgr;
     _runtime_services.runtime_filter_worker = _runtime_filter_worker;
+    _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_worker;
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
     _runtime_services.profile_report_worker = profile_report_worker();
     _runtime_services.query_context_mgr = _query_context_mgr;
@@ -318,7 +320,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     profile_report_worker_options.report_pipeline_fragments =
             [this](const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
                 DCHECK(_query_context_mgr != nullptr);
-                return _query_context_mgr->report_fragments(pipeline_need_report_query_fragment_ids);
+                return report_pipeline_fragments(_query_context_mgr, pipeline_need_report_query_fragment_ids);
             };
     RETURN_IF_ERROR(_compute_env->init_profile_report_worker(std::move(profile_report_worker_options)));
     RuntimeMetrics::instance()->register_runtime_filter_event_queue_len_hook([] {

@@ -19,7 +19,6 @@
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/query_cache/cache_manager.h"
 #include "compute_env/query_cache/lane_arbiter.h"
-#include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
@@ -27,12 +26,9 @@
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/group_execution/group_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
@@ -42,6 +38,9 @@
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
+#include "exec/runtime/pipeline.h"
 #include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
@@ -646,13 +645,6 @@ void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {
         pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
         pipeline->pipeline_event()->add_dependency(_dependent_pipelines.back()->pipeline_event());
     }
-}
-
-StatusOr<OpFactories> PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentContext& fragment,
-                                                                       ExecNode* exec_node) {
-    ASSIGN_OR_RETURN(pipeline::OpFactories operators, exec_node->decompose_to_pipeline(&_context));
-    operators = _context.maybe_interpolate_grouped_exchange(exec_node->id(), operators);
-    return operators;
 }
 
 std::pair<ExecutionGroups, Pipelines> PipelineBuilder::build() {

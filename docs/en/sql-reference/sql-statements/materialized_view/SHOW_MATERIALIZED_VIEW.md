@@ -78,6 +78,7 @@ Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_r
 | resource_group             | Resource group used for the materialized view's refresh tasks (from the materialized view's `resource_group` property). Defaults to `default_mv_wg` when not set. |
 | query_rewrite_status_reason | The reason behind `query_rewrite_status`. Valid values: `OK`, `MV_INACTIVE`, `QUERY_REWRITE_DISABLED`, `UNSUPPORTED_DEFINITION`, and `UNKNOWN`. |
 | last_freshness_confirmed_at | Start time of the most recent successful refresh, recorded once the entire refresh (all of its task runs) completes; a refresh that found no base-table changes to apply also confirms freshness. The materialized view reflects base-table data as of this moment. Unlike `last_refresh_time` (the base-table data version), this is wall-clock time. Empty until the first successful refresh, and for synchronous materialized views. A partition-scoped (partial) REFRESH does not advance it. |
+| base_table_refresh_version_times | Per-base-table data version time, as a JSON object mapping each base table's `catalog.database.table` name to the latest data version time observed for it. This is the per-table detail behind `last_refresh_time` (their single maximum): external/data lake base tables report the partition source modified time, and OLAP (internal) base tables report the visible-version commit time. `{}` when no base table has a recorded time. |
 
 ## Examples
 

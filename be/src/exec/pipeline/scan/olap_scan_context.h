@@ -25,7 +25,6 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/rowset/rowset.h"
 

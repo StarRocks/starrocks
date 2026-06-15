@@ -76,4 +76,20 @@ public abstract class Tracer {
     public Optional<Timer> getSpecifiedTimer(String name) {
         return Optional.empty();
     }
+
+    /**
+     * Create a lightweight fork of this Tracer for parallel worker threads.
+     * The default implementation returns {@code this} (identity — used by the empty tracer).
+     * Real tracers override to return an independent copy.
+     */
+    public Tracer fork(boolean retainScope) {
+        return this;
+    }
+
+    /**
+     * Merge timer and variable data from a forked Tracer back into this one.
+     * The default implementation is a no-op (used by the empty tracer).
+     */
+    public void mergeFrom(Tracer other) {
+    }
 }

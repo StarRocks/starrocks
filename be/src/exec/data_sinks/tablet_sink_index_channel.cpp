@@ -30,6 +30,7 @@
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr_context.h"
@@ -39,7 +40,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
@@ -1282,10 +1282,10 @@ bool NodeChannel::_process_diagnose_profile(RuntimeState* state, PLoadDiagnoseRe
     } else {
         RuntimeProfile* load_channel_profile = state->load_channel_profile();
         load_channel_profile->update(thrift_profile);
-        // Query context is only available for pipeline engine
-        auto query_ctx = state->query_ctx();
-        if (query_ctx) {
-            query_ctx->set_enable_profile();
+        // Query runtime state is only available for pipeline engine
+        auto* query_runtime_state = state->query_runtime_state();
+        if (query_runtime_state != nullptr) {
+            query_runtime_state->set_enable_profile();
         }
         has_profile = true;
     }

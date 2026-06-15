@@ -155,6 +155,9 @@ protected:
 
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
+    // Original destination column saved when a temporary column is swapped in during read_range();
+    // restored by _restore_tmp_column()/fill_dst_column() once the temporary column is consumed.
+    ColumnPtr _ori_column = nullptr;
 };
 
 class ScalarColumnReader final : public RawColumnReader {
@@ -240,6 +243,12 @@ private:
 
     Status _dict_decode(ColumnPtr& dst, ColumnPtr& src);
 
+    bool _is_dict_code_column(const ColumnPtr& column) const;
+    bool _is_intermediate_column(const ColumnPtr& column) const;
+    bool _is_tmp_column(const ColumnPtr& column) const override {
+        return _is_dict_code_column(column) || _is_intermediate_column(column);
+    }
+
     std::unique_ptr<ColumnConverter> _converter;
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
@@ -305,6 +314,8 @@ public:
 
 private:
     Status _check_current_dict();
+    bool _is_dict_code_column(const ColumnPtr& column) const;
+    bool _is_tmp_column(const ColumnPtr& column) const override { return _is_dict_code_column(column); }
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
 
@@ -343,6 +354,8 @@ public:
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
+    bool _is_tmp_column(const ColumnPtr& column) const override;
+
     const GlobalDictMap* _dict = nullptr;
     const SlotId _slot_id;
 

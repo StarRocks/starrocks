@@ -33,9 +33,6 @@ set(RUNTIME_CORE_FILES
     query_statistics.cpp
     runtime_metrics.cpp
     stream_load/stream_load_metrics.cpp
-    global_dict/decoder.cpp
-    global_dict/miscs.cpp
-    global_dict/types.cpp
     type_pack.cpp
     load_fail_point.cpp
     memory/roaring_hook.cpp
@@ -88,6 +85,7 @@ set(RUNTIME_FILES
     exec_env.cpp
     jdbc_driver_manager.cpp
     plan_fragment_executor.cpp
+    pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
     rejected_record_writer.cpp
     rejected_record_sync_daemon.cpp
@@ -100,6 +98,7 @@ set(RUNTIME_FILES
     local_tablets_channel.cpp
     snapshot_loader.cpp
     message_body_sink.cpp
+    stream_load/stream_load_context_handle.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
@@ -118,8 +117,6 @@ set(RUNTIME_FILES
     tablets_channel.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
-    global_dict/fragment_dict_state.cpp
-    global_dict/parser.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     command_executor.cpp
@@ -131,5 +128,6 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive ExecSinkCore Platform)
+target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive Platform)
+target_link_libraries(Runtime PRIVATE ExecRuntime)
 target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

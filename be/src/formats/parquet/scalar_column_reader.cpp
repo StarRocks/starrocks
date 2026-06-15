@@ -17,13 +17,14 @@
 #include "base/simd/gather.h"
 #include "base/simd/simd.h"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "column/global_dict/dict_column.h"
+#include "common/compiler_util.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
 #include "formats/parquet/utils.h"
 #include "gutil/casts.h"
-#include "runtime/global_dict/dict_column.h"
 #include "statistics_helper.h"
 #include "types/type_descriptor.h"
 
@@ -448,6 +449,25 @@ StatusOr<bool> RawColumnReader::_row_group_bloom_filter(const std::vector<const 
     return filtered;
 }
 
+// If `column` still refers to one of the reader's temporary columns, a previous fill_dst_column()
+// was skipped (e.g. the whole range was filtered out and GroupReader::get_next() continued without
+// filling). Restore the caller-visible column to the original destination column so that no
+// temporary column can leak out of the reader. The set of temporary columns is reader-specific and
+// reported through the _is_tmp_column() override.
+Status RawColumnReader::_restore_tmp_column(ColumnPtr& column) {
+    if (!_is_tmp_column(column)) {
+        return Status::OK();
+    }
+    if (UNLIKELY(_ori_column == nullptr)) {
+        return Status::InternalError("Parquet reader found a temporary column without an original destination column");
+    }
+    column->as_mutable_raw_ptr()->reset_column();
+    _ori_column->as_mutable_raw_ptr()->reset_column();
+    column = _ori_column;
+    _ori_column = nullptr;
+    return Status::OK();
+}
+
 // ScalarColumnReader
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
@@ -500,6 +520,10 @@ Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     } else {
         return _fill_dst_column_impl<false, false>(dst, src);
     }
+    if (_is_intermediate_column(src)) {
+        return _fill_dst_column_impl<false, true>(dst, src);
+    }
+    return _fill_dst_column_impl<false, false>(dst, src);
 }
 
 template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
@@ -522,6 +546,7 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
             if (_tmp_intermediate_column == nullptr) {
                 _tmp_intermediate_column = _converter->create_src_column();
             }
+            _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
             _tmp_intermediate_column->as_mutable_raw_ptr()->reserve(range.span_size());
             {
                 SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
@@ -566,6 +591,10 @@ Status ScalarColumnReader::_dict_decode(ColumnPtr& dst, ColumnPtr& src) {
 template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
 Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src) {
     if constexpr (LAZY_DICT_DECODE) {
+        if (UNLIKELY(!_is_dict_code_column(src))) {
+            return Status::InternalError(
+                    "Parquet lazy dictionary decode source column is not a dictionary code column");
+        }
         if (_dict_filter_ctx != nullptr && !_dict_filter_ctx->is_decode_needed) {
             dst->as_mutable_raw_ptr()->append_default(src->size());
             src->as_mutable_raw_ptr()->reset_column();
@@ -593,6 +622,9 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
         _finish_fill(src);
     } else {
         if constexpr (LAZY_CONVERT) {
+            if (UNLIKELY(!_is_intermediate_column(src))) {
+                return Status::InternalError("Parquet lazy conversion source column is not an intermediate column");
+            }
             {
                 SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
                 RETURN_IF_ERROR(_converter->convert(src, dst->as_mutable_raw_ptr()));
@@ -672,6 +704,9 @@ bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decod
 }
 
 Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    if (UNLIKELY(!_is_dict_code_column(src))) {
+        return Status::InternalError("Parquet low-cardinality source column is not a dictionary code column");
+    }
     size_t num_rows = src->size();
     if (!_code_convert_map.has_value()) {
         RETURN_IF_ERROR(_check_current_dict());
@@ -709,6 +744,10 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     _finish_fill(src);
 
     return Status::OK();
+}
+
+bool LowCardColumnReader::_is_dict_code_column(const ColumnPtr& column) const {
+    return _dict_code != nullptr && column.get() == _dict_code.get();
 }
 
 Status LowCardColumnReader::_check_current_dict() {
@@ -787,6 +826,9 @@ Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filte
 }
 
 Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    if (UNLIKELY(!_is_tmp_column(src))) {
+        return Status::InternalError("Parquet low-rows source column is not a temporary string column");
+    }
     dst->as_mutable_raw_ptr()->resize(src->size());
 
     const ColumnPtr& readed_column = src;
@@ -818,6 +860,10 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     _finish_fill(src);
 
     return Status::OK();
+}
+
+bool LowRowsColumnReader::_is_tmp_column(const ColumnPtr& column) const {
+    return _tmp_column != nullptr && column.get() == _tmp_column.get();
 }
 
 void LowRowsColumnReader::collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges,

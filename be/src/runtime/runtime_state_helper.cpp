@@ -59,10 +59,7 @@ void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
 }
 
 ObjectPool* RuntimeStateHelper::global_obj_pool(const RuntimeState* state) {
-    if (state->_query_ctx == nullptr) {
-        return state->obj_pool();
-    }
-    return state->_query_ctx->object_pool();
+    return state->global_obj_pool();
 }
 
 Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {

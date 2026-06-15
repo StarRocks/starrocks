@@ -7,10 +7,8 @@ on:
     types:
       - opened
       - reopened
-
-concurrency:
-  group: AI-SR-SKILLS-${{ github.event.number }}
-  cancel-in-progress: true
+      - synchronize          # re-brief on every push so the comment tracks the live diff
+      - ready_for_review     # brief when a draft is marked ready
 
 permissions:
   pull-requests: write
@@ -113,26 +111,29 @@ jobs:
               || echo "WARN: add-reviewer $r failed (permissions, already a reviewer, or transient API error)"
           }
 
-          assign_team() {
+          # Route team request through a label instead of calling
+          # gh pr edit --add-reviewer directly. label-action.yml has a
+          # `global-review:` job that watches the GLOBAL-REVIEW label and
+          # POSTs the requested_reviewers API. Keeping this on the label
+          # path means manual label toggling and AI assignment funnel
+          # through one code path; approve-checker.yml's global-review
+          # gate also keys off the same label.
+          assign_global_team() {
             local t="$1"
             if [ -z "$t" ] || [ "$t" = "none" ]; then
               return
             fi
-            # gh expects team form `org/team-slug`. If the skill already emits
-            # a qualified form, use it as-is; otherwise scope to the current
-            # repo's org. This file is synced to both StarRocks/starrocks and
-            # CelerData/celerdata-enterprise, and each org has its own
-            # `global-reviewer` team -- StarRocks/global-reviewer vs
-            # CelerData/global-reviewer. Hardcoding one org would route the
-            # wrong team in the other repo, so derive org from $REPO
-            # (`<owner>/<repo>`) at runtime.
+            # Strip optional org prefix the skill may emit
             case "$t" in
-              */*) ;;
-              *)   t="${REPO%%/*}/${t}" ;;
+              */*) t="${t#*/}" ;;
             esac
-            echo "Assigning team: $t"
-            gh pr edit "$PR" -R "$REPO" --add-reviewer "$t" \
-              || echo "WARN: add-reviewer $t failed (permissions, already a reviewer, or transient API error)"
+            if [ "$t" != "global-reviewer" ]; then
+              echo "WARN: unsupported team slug from AI: $t (only global-reviewer is supported via GLOBAL-REVIEW label routing)"
+              return
+            fi
+            echo "Adding GLOBAL-REVIEW label (label-action.yml will request the team)"
+            gh pr edit "$PR" -R "$REPO" --add-label GLOBAL-REVIEW \
+              || echo "WARN: add-label GLOBAL-REVIEW failed (permissions or transient API error)"
           }
 
           assign_user "$owner"
@@ -142,7 +143,7 @@ jobs:
             affinity=""
           fi
           assign_user "$affinity"
-          assign_team "$global"
+          assign_global_team "$global"
 
       - name: Notify Slack
         env:
@@ -208,10 +209,111 @@ jobs:
             fi
           done <<< "$reviewers"
 
-          text="${mentions}You were assigned as reviewer for <${PR_URL}|#${PR} ${TITLE}>"
+          # Include `${REPO}` so the link text shows e.g. `StarRocks/starrocks#74725 ...`
+          # — this file is synced to both StarRocks/starrocks and
+          # CelerData/celerdata-enterprise, both notify the same Slack channel,
+          # so the repo prefix lets reviewers tell which repo the PR is in.
+          text="${mentions}You were assigned as reviewer for <${PR_URL}|${REPO}#${PR} ${TITLE}>"
 
           python3 lib/slack_notify.py \
             --mode channel \
             --token "$SLACK_BOT_TOKEN" \
             --channel "$CHANNEL_ID" \
             --text "$text"
+
+  # Module-risk briefing: a read-only, history-backed review focus for the PR's changed modules,
+  # mined from merged-bugfix pathology cards in code_kb, posted as a sticky PR comment. Sibling to
+  # assign-reviewer (same PR-open trigger / container / mergify+sync exclusion). Read-only: it never
+  # writes code_kb, so per-PR concurrency (cancel-in-progress) is fine — no origin-write race here.
+  # PREREQUISITES (container, one-time): the `github-pr-module-risk` plugin installed + the
+  # `context-base` MCP with `code_kb` USAGE (read). gh is absent in the container → the skill uses
+  # the GitHub REST API (GITHUB_TOKEN injected). --comment applies a strict confidence gate and emits
+  # either a sticky-marked briefing or the sentinel "MODULE-RISK: none" (then we post nothing).
+  #
+  # SECURITY (pull_request_target): this job injects secrets (GITHUB_TOKEN, CLAUDE_CODE_OAUTH_TOKEN)
+  # into `claude --dangerously-skip-permissions`, which reads attacker-influenceable PR body/diff and
+  # whose output is posted back to the PR. An untrusted author could prompt-inject the model to run
+  # bash / emit secrets (e.g. after the marker) and have them published. So it is GATED to TRUSTED
+  # authors only (author_association OWNER/MEMBER/COLLABORATOR = write access); external / first-time
+  # contributors never reach the model. (assign-reviewer tolerates all authors because its host step
+  # extracts only login-shaped tokens — a strict whitelist; module-risk's output is free-form, so it
+  # needs the author gate. The marker-bounded extraction below is defense-in-depth, not the control.)
+  # For an external PR a maintainer can still run /github-pr-module-risk:review manually.
+  module-risk:
+    runs-on: [self-hosted, normal]
+    # Dedup rapid pushes for THIS job only (a new event cancels the in-flight briefing run).
+    # Job-scoped — NOT workflow-wide — so a synchronize run never cancels the opened-only
+    # assign-reviewer job (which would otherwise miss reviewer assignment + Slack).
+    concurrency:
+      group: ai-sr-skills-module-risk-${{ github.event.number }}
+      cancel-in-progress: true
+    # Least privilege: only this job posts the sticky comment (Issues comments API), so issues:write
+    # lives here, not workflow-wide where it would also reach assign-reviewer's GITHUB_TOKEN.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    continue-on-error: true
+    if: >
+      (github.event.action == 'opened' || github.event.action == 'reopened' ||
+       github.event.action == 'synchronize' || github.event.action == 'ready_for_review') &&
+      !startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.head_ref, '-sync-pr-') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Module-risk briefing (AI, read-only)
+        run: |
+          # Namespaced plugin command (a bare /review would NOT resolve in headless -p — it would be
+          # treated as prompt text and silently no-op). tee captures stdout for the upsert step.
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/github-pr-module-risk:review ${PR_URL} --comment" 2>&1 | tee "${RUNNER_TEMP}/module_risk.txt" || true
+
+      - name: Upsert sticky comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          out="${RUNNER_TEMP}/module_risk.txt"
+          marker="<!-- module-risk-briefing -->"
+          [ -f "$out" ] || { echo "no skill output, skip"; exit 0; }
+          # The skill emits the briefing starting at the marker line, or "MODULE-RISK: none" (no
+          # marker) when nothing clears the confidence gate. Take from the marker to EOF as the body;
+          # empty (no marker / sentinel / error) => post nothing. sed from the marker also strips any
+          # claude preamble before it.
+          body="$(sed -n "/$marker/,\$p" "$out" 2>/dev/null || true)"
+          if [ -z "$body" ]; then
+            echo "no high-confidence, diff-aligned module risk — not commenting"
+            exit 0
+          fi
+          # Stamp the PR head SHA as line 2 (right after the marker, which sed guaranteed is line 1)
+          # so reviewers can detect a briefing that predates the latest push. awk avoids sed escaping
+          # pitfalls; the SHA is hex so it is injection-safe. Applies to both the real briefing and the
+          # incomplete-coverage caveat (both carry the marker as line 1).
+          sha_line="<!-- module-risk-head-sha: ${PR_HEAD_SHA} -->"
+          printf '%s\n' "$body" \
+            | awk -v s="$sha_line" 'NR==1{print; print s; next} {print}' \
+            > "${RUNNER_TEMP}/mr_body.md"
+          # Sticky: edit our existing marked comment if present, else create one. Idempotent across
+          # reopen / workflow rerun (the marker identifies our comment; gh is host-side, not in the
+          # container). PATCH body is JSON-built with jq so markdown is escaped correctly.
+          existing="$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+                        --jq ".[] | select(.body | contains(\"$marker\")) | .id" 2>/dev/null | head -1 || true)"
+          if [ -n "$existing" ]; then
+            jq -n --rawfile b "${RUNNER_TEMP}/mr_body.md" '{body:$b}' \
+              | gh api -X PATCH "repos/$REPO/issues/comments/$existing" --input - >/dev/null \
+              && echo "updated sticky comment $existing" \
+              || echo "WARN: patch comment $existing failed (permissions or transient API error)"
+          else
+            gh pr comment "$PR" -R "$REPO" --body-file "${RUNNER_TEMP}/mr_body.md" \
+              && echo "created sticky comment" \
+              || echo "WARN: create comment failed (permissions or transient API error)"
+          fi

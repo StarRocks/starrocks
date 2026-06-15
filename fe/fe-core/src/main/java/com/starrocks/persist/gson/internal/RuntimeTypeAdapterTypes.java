@@ -67,6 +67,7 @@ import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.BoolVariant;
 import com.starrocks.catalog.DateVariant;
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -453,6 +454,7 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(LargeIntVariant.class, "LargeIntVariant")
                         .registerSubtype(StringVariant.class, "StringVariant")
                         .registerSubtype(DateVariant.class, "DateVariant")
+                        .registerSubtype(DecimalVariant.class, "DecimalVariant")
                         // Canonical colocate boundaries serialized via SplittingTablet contain
                         // NullVariant suffixes; MinVariant / MaxVariant cover the unbounded
                         // sentinel cases observed in ColocateRange persistence.
