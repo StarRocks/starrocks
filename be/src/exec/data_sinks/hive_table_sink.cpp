@@ -22,6 +22,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "formats/csv/csv_defaults.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
@@ -88,10 +89,10 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
     }
     if (t_hive_sink.__isset.text_file_desc) {
         DCHECK(boost::iequals(t_hive_sink.file_format, formats::TEXTFILE));
-        sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = DEFAULT_FIELD_DELIM;
-        sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = DEFAULT_LINE_DELIM;
-        sink_ctx->options[formats::CSVWriterOptions::COLLECTION_DELIM] = DEFAULT_COLLECTION_DELIM;
-        sink_ctx->options[formats::CSVWriterOptions::MAPKEY_DELIM] = DEFAULT_MAPKEY_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = csv::DEFAULT_FIELD_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = csv::DEFAULT_LINE_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::COLLECTION_DELIM] = csv::DEFAULT_COLLECTION_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::MAPKEY_DELIM] = csv::DEFAULT_MAPKEY_DELIM;
         sink_ctx->options[formats::CSVWriterOptions::IS_HIVE] = "true";
 
         // use customized value if specified

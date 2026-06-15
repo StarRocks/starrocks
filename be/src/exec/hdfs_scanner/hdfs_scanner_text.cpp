@@ -20,6 +20,7 @@
 #include "base/compression/stream_decompressor.h"
 #include "base/string/utf8_check.h"
 #include "column/column_helper.h"
+#include "formats/csv/csv_defaults.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 
@@ -134,7 +135,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
 void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
     // For default row delemiter which is line break, we need to trim the windows line break
     // if the file was written in windows platfom.
-    if (_parse_options.row_delimiter == "\n") {
+    if (_parse_options.row_delimiter == csv::LINE_DELIM_LF) {
         while (record->size > 0 && record->data[record->size - 1] == '\r') {
             record->size--;
         }
@@ -152,16 +153,16 @@ char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, s
         // TODO(Smith)
         // We didn't support to treat '\r\n' as line.delim,
         // because our code does not support line separator's length larger than one char.
-        char* p = buffer.find(LINE_DELIM_LF, pos);
+        char* p = buffer.find(csv::LINE_DELIM_LF, pos);
         if (p != nullptr) {
             _need_probe_line_delimiter = false;
-            _parse_options.row_delimiter = LINE_DELIM_LF;
+            _parse_options.row_delimiter = csv::LINE_DELIM_LF;
             return p;
         }
-        p = buffer.find(LINE_DELIM_CR, pos);
+        p = buffer.find(csv::LINE_DELIM_CR, pos);
         if (p != nullptr) {
             _need_probe_line_delimiter = false;
-            _parse_options.row_delimiter = LINE_DELIM_CR;
+            _parse_options.row_delimiter = csv::LINE_DELIM_CR;
             return p;
         }
         return nullptr;
@@ -189,7 +190,7 @@ Status HdfsTextScanner::_setup_delimiter(const TTextFileDesc& text_file_desc) {
         }
         _field_delimiter = text_file_desc.field_delim;
     } else {
-        _field_delimiter = DEFAULT_FIELD_DELIM;
+        _field_delimiter = csv::DEFAULT_FIELD_DELIM;
     }
 
     // we should cast string to char now since csv reader only support record delimiter by char.
@@ -200,7 +201,7 @@ Status HdfsTextScanner::_setup_delimiter(const TTextFileDesc& text_file_desc) {
         }
         _line_delimiter = text_file_desc.line_delim.front();
     } else {
-        _line_delimiter = DEFAULT_LINE_DELIM;
+        _line_delimiter = csv::DEFAULT_LINE_DELIM;
         // We didn't get explicit line delimiter from hms, so we need to probe it by ourselves
         _need_probe_line_delimiter = true;
     }
@@ -215,7 +216,7 @@ Status HdfsTextScanner::_setup_delimiter(const TTextFileDesc& text_file_desc) {
         }
         _collection_delimiter = text_file_desc.collection_delim.front();
     } else {
-        _collection_delimiter = DEFAULT_COLLECTION_DELIM.front();
+        _collection_delimiter = csv::DEFAULT_COLLECTION_DELIM.front();
     }
 
     if (text_file_desc.__isset.mapkey_delim) {
@@ -225,7 +226,7 @@ Status HdfsTextScanner::_setup_delimiter(const TTextFileDesc& text_file_desc) {
         }
         _mapkey_delimiter = text_file_desc.mapkey_delim.front();
     } else {
-        _mapkey_delimiter = DEFAULT_MAPKEY_DELIM.front();
+        _mapkey_delimiter = csv::DEFAULT_MAPKEY_DELIM.front();
     }
     return Status::OK();
 }

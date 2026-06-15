@@ -187,21 +187,6 @@ set(EXEC_FILES
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
         ./exprs/http_request_functions_test.cpp
-        ./formats/csv/array_converter_test.cpp
-        ./formats/csv/boolean_converter_test.cpp
-        ./formats/csv/csv_file_writer_test.cpp
-        ./formats/csv/date_converter_test.cpp
-        ./formats/csv/datetime_converter_test.cpp
-        ./formats/csv/decimalv2_converter_test.cpp
-        ./formats/csv/float_converter_test.cpp
-        ./formats/csv/json_converter_test.cpp
-        ./formats/csv/map_converter_test.cpp
-        ./formats/csv/nullable_converter_test.cpp
-        ./formats/csv/numeric_converter_test.cpp
-        ./formats/csv/default_value_converter_test.cpp
-        ./formats/csv/string_converter_test.cpp
-        ./formats/csv/varbinary_converter_test.cpp
-        ./formats/csv/csv_reader_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
@@ -244,7 +229,6 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
-        ./formats/disk_range_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
         ./http/handler_required_privilege_test.cpp
