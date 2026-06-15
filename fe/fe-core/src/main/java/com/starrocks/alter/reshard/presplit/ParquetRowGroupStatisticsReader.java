@@ -67,13 +67,17 @@ import java.util.Objects;
  *       deferred (the load applies a session-tz offset this reader cannot reproduce).</li>
  *   <li>Parquet BINARY with UTF8 (string) annotation → StarRocks CHAR/VARCHAR
  *       (always marked truncated → forces data-tier fallback for string sort keys)</li>
+ *   <li>Parquet INT32/INT64 with DECIMAL annotation → StarRocks DECIMAL of the SAME
+ *       precision and scale (the unscaled integer's signed order equals the decimal
+ *       order). FIXED_LEN_BYTE_ARRAY/BINARY-backed decimals are deferred (their footer
+ *       min/max may use unsigned byte ordering, wrong for negatives) → data tier.</li>
  * </ul>
  * <p>DATE/DATETIME values are additionally gated to {@code [1970-01-01, 9999-12-31]}; values
  * outside that window (year &le; 0 mis-renders through the {@code yyyy} formatters, pre-1970
  * has unverified FE/BE timestamp-division parity, pre-1582 has calendar-parity questions)
  * fall back to data tier.
- * Anything else (DECIMAL, UINT_*, UTC-adjusted/INT96 timestamps, JSON, BSON, UUID,
- * FLOAT, DOUBLE, FIXED_LEN_BYTE_ARRAY, raw BINARY for VARBINARY) makes the reader throw
+ * Anything else (UINT_*, UTC-adjusted/INT96 timestamps, JSON, BSON, UUID, FLOAT, DOUBLE,
+ * FIXED_LEN_BYTE_ARRAY/BINARY-backed DECIMAL, raw BINARY for VARBINARY) makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
  * load failure. Pure I/O failures surface as {@link StarRocksException}.
  */
@@ -145,11 +149,12 @@ public final class ParquetRowGroupStatisticsReader {
      * Reject Parquet/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating row groups. Anything outside the window means
      * "fall back to data tier", not "fail the load". The supported window here is
-     * the unannotated integer/boolean subset, the UTF8 string annotation for
-     * character columns, and INT32 with the DATE annotation → StarRocks DATE.
-     * Other logical annotations (DECIMAL, UINT_*, UTC-adjusted TIMESTAMP, JSON, BSON,
-     * UUID, ...) change the value's meaning and ordering and are deferred (fall back to
-     * data tier).
+     * the unannotated integer/boolean subset, the UTF8 string annotation for character
+     * columns, INT32 with the DATE annotation → StarRocks DATE, INT64 with a non-UTC
+     * TIMESTAMP annotation → StarRocks DATETIME, and INT32/INT64 with a DECIMAL annotation
+     * → a same-precision/scale StarRocks DECIMAL. FIXED_LEN_BYTE_ARRAY/BINARY-backed DECIMAL
+     * and other annotations (UINT_*, UTC-adjusted TIMESTAMP, JSON, BSON, UUID, ...) are
+     * deferred (fall back to data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
