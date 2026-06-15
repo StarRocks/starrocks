@@ -60,10 +60,8 @@ Status SchemaMaterializedViewRefreshJobsScanner::start(RuntimeState* state) {
     if (nullptr != _param->current_user_ident) {
         params.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (_param->limit > 0) {
-        params.__isset.pagination = true;
-        params.pagination.__set_limit(_param->limit);
-    }
+    // Do not push LIMIT down to the task-run query: jobs are aggregated from task runs, so a row limit must
+    // cap final job rows (applied by the executor), not the task runs each job is rolled up from.
     RETURN_IF_ERROR(SchemaHelper::list_materialized_view_refresh_jobs(_ss_state, params, &_jobs_result));
     _jobs_index = 0;
     return Status::OK();
