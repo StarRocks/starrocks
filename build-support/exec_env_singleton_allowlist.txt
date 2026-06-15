@@ -7,7 +7,6 @@ src/agent/task_worker_pool.cpp
 src/exec/pipeline/fragment_executor.cpp
 src/exec/pipeline/lookup/tablet_adaptor.cpp
 src/exec/pipeline/pipeline_driver_poller.cpp
-src/exec/pipeline/query_context.cpp
 src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
 src/exec/write_combined_txn_log.cpp
