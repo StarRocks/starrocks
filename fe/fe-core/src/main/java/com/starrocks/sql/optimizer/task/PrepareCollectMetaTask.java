@@ -80,13 +80,7 @@ public class PrepareCollectMetaTask extends OptimizerTask {
                     futures[i] = CompletableFuture.supplyAsync(() ->
                                     metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
                                             new MetaPreparationItem(op.getTable(), op.getPredicate(),
-<<<<<<< HEAD
                                                     op.getLimit(), op.getTableVersionRange()),
-                                            tracers, connectContext),
-                            executorService)).toArray(CompletableFuture[]::new));
-            allFutures.join();
-=======
-                                                    op.getLimit(), op.getTvrVersionRange()),
                                             forked, connectContext),
                             executorService);
                 }
@@ -98,7 +92,6 @@ public class PrepareCollectMetaTask extends OptimizerTask {
             }
         } finally {
             executorService.shutdown();
->>>>>>> 1758a405aa ([BugFix] Make Tracers fork-aware to prevent `IllegalStateException` in parallel profile collection (#74746))
         }
     }
 
