@@ -16,6 +16,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 ADD_BE_LIB(FormatCore
         column_evaluator.cpp
+        deletion_bitmap.cpp
         disk_range.hpp
         file_writer.cpp
         io/async_flush_output_stream.cpp
@@ -90,7 +91,7 @@ ADD_BE_LIB(FormatAvro
 
 target_link_libraries(FormatAvro PUBLIC FormatCore)
 
-ADD_BE_LIB(Formats
+ADD_BE_LIB(FormatOrc
         orc/orc_chunk_reader.cpp
         orc/orc_file_writer.cpp
         orc/orc_input_stream.cpp
@@ -103,6 +104,11 @@ ADD_BE_LIB(Formats
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
         orc/memory_stream/MemoryOutputStream.cc
+        )
+
+target_link_libraries(FormatOrc PUBLIC FormatCore Cache)
+
+ADD_BE_LIB(Formats
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_materializer.cpp
@@ -136,6 +142,7 @@ ADD_BE_LIB(Formats
         parquet/parquet_pos_reader.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatAvro FormatJson FormatCsv FormatCore Cache)
+target_link_libraries(Formats PUBLIC FormatOrc FormatAvro FormatJson FormatCsv FormatCore Cache)
 
 add_subdirectory(orc/apache-orc)
+target_link_libraries(FormatOrc PUBLIC orc)
