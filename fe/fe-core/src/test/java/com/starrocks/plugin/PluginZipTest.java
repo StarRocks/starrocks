@@ -34,14 +34,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginZipTest {
+    private static final String TARGET_DIR = "target_plugin_zip";
 
     @BeforeEach
     public void setUp() {
         try {
-            FileUtils.deleteQuietly(PluginTestUtil.getTestFile("target"));
-            assertFalse(Files.exists(PluginTestUtil.getTestPath("target")));
-            Files.createDirectory(PluginTestUtil.getTestPath("target"));
-            assertTrue(Files.exists(PluginTestUtil.getTestPath("target")));
+            FileUtils.deleteQuietly(PluginTestUtil.getTestFile(TARGET_DIR));
+            Files.createDirectories(PluginTestUtil.getTestPath(TARGET_DIR));
+            assertTrue(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -63,7 +63,7 @@ public class PluginZipTest {
                 }
             };
 
-            Path zipPath = zip.downloadRemoteZip(PluginTestUtil.getTestPath("target"));
+            Path zipPath = zip.downloadRemoteZip(PluginTestUtil.getTestPath(TARGET_DIR));
             assertTrue(Files.exists(zipPath));
             assertTrue(Files.deleteIfExists(zipPath));
 
@@ -85,7 +85,7 @@ public class PluginZipTest {
                 }
             };
 
-            Path zipPath = zip.downloadRemoteZip(PluginTestUtil.getTestPath("target"));
+            Path zipPath = zip.downloadRemoteZip(PluginTestUtil.getTestPath(TARGET_DIR));
             assertTrue(Files.exists(zipPath));
             assertTrue(Files.deleteIfExists(zipPath));
 
@@ -109,7 +109,7 @@ public class PluginZipTest {
                 }
             };
 
-            Path zipPath = zip.downloadRemoteZip(PluginTestUtil.getTestPath("target"));
+            Path zipPath = zip.downloadRemoteZip(PluginTestUtil.getTestPath(TARGET_DIR));
             assertFalse(Files.exists(zipPath));
         } catch (Exception e) {
             assertTrue(e instanceof StarRocksException);
@@ -121,7 +121,7 @@ public class PluginZipTest {
     public void testDownloadAndValidateZipIOException() {
         PluginZip util = new PluginZip("http://io-exception", null);
         try {
-            Path zipPath = util.downloadRemoteZip(PluginTestUtil.getTestPath("target"));
+            Path zipPath = util.downloadRemoteZip(PluginTestUtil.getTestPath(TARGET_DIR));
         } catch (Exception e) {
             assertTrue(e instanceof IOException);
         }
@@ -135,7 +135,7 @@ public class PluginZipTest {
 
             PluginZip util = new PluginZip(PluginTestUtil.getTestPathString("source/test-a.zip"), null);
 
-            Path actualPath = util.extract(PluginTestUtil.getTestPath("target"));
+            Path actualPath = util.extract(PluginTestUtil.getTestPath(TARGET_DIR));
             assertTrue(Files.isDirectory(actualPath));
 
             Path txtPath = FileSystems.getDefault().getPath(actualPath.toString(), "test.txt");
@@ -153,7 +153,7 @@ public class PluginZipTest {
         // normal
         try {
             PluginZip util = new PluginZip(PluginTestUtil.getTestPathString("source/test.zip"), null);
-            Path p = util.downloadZip(PluginTestUtil.getTestPath("target"));
+            Path p = util.downloadZip(PluginTestUtil.getTestPath(TARGET_DIR));
             assertTrue(Files.exists(p));
 
         } catch (IOException | StarRocksException e) {
@@ -170,7 +170,7 @@ public class PluginZipTest {
                 }
             };
 
-            Path p = util.downloadZip(PluginTestUtil.getTestPath("target"));
+            Path p = util.downloadZip(PluginTestUtil.getTestPath(TARGET_DIR));
             assertNull(p);
 
         } catch (IOException | StarRocksException e) {
@@ -181,7 +181,7 @@ public class PluginZipTest {
         try {
             PluginZip util = new PluginZip("   ", null);
 
-            util.downloadZip(PluginTestUtil.getTestPath("target"));
+            util.downloadZip(PluginTestUtil.getTestPath(TARGET_DIR));
         } catch (Exception e) {
             assertTrue(e instanceof IllegalArgumentException);
         }
