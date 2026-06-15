@@ -25,6 +25,7 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
@@ -45,7 +46,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public abstract class DefaultTraits extends ConnectorPartitionTraits {
@@ -222,10 +222,9 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
             return modifiedTime;
         }
         // Iceberg partition metadata uses microseconds, but some historical MV metadata and fallback paths may
-        // persist epoch milliseconds. 1e14 micros is about 1973-03-03, so any present-day epoch timestamp below
-        // that threshold is almost certainly millis rather than micros. Normalize the legacy comparison branch to
-        // micros to avoid false positives.
-        return modifiedTime < 100_000_000_000_000L ? TimeUnit.MILLISECONDS.toMicros(modifiedTime) : modifiedTime;
+        // persist epoch milliseconds. Infer the stored unit by magnitude and convert to micros (the comparison
+        // unit) so a legacy millisecond value still compares equal to the same instant in microseconds.
+        return TimeUtils.inferEpochUnit(modifiedTime).toMicros(modifiedTime);
     }
 
     @Override

@@ -431,6 +431,7 @@ struct TMaterializedViewStatus {
     35: optional string refresh_policy
     36: optional string resource_group
     37: optional string query_rewrite_status_reason
+    38: optional string base_table_refresh_version_times
 }
 
 struct TListPipesParams {

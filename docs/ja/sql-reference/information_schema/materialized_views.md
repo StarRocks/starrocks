@@ -45,3 +45,4 @@ description: "materialized_viewsはすべてのマテリアライズドビュー
 | REFRESH_POLICY                       | 人間が読めるリフレッシュポリシー。有効な値: `NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`、または `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` のようなスケジュール (`START` 句は開始時刻が定義されている場合にのみ含まれます)。 |
 | RESOURCE_GROUP                       | マテリアライズドビューのリフレッシュタスクに使用されるリソースグループ (マテリアライズドビューの `resource_group` プロパティから)。設定されていない場合は `default_mv_wg` がデフォルトです。 |
 | QUERY_REWRITE_STATUS_REASON          | `QUERY_REWRITE_STATUS` の理由。有効な値: `OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION`、`UNKNOWN`。 |
+| BASE_TABLE_REFRESH_VERSION_TIMES     | 各ベーステーブルのデータバージョン時刻を、ベーステーブルの `catalog.database.table` 名から観測された最新のデータバージョン時刻へのマッピングとして JSON オブジェクトで示します。これは `LAST_REFRESH_TIME`（それらの単一の最大値）の背後にあるテーブルごとの内訳です。外部/データレイクのベーステーブルはパーティションのソース更新時刻を、OLAP（内部）ベーステーブルは可視バージョンのコミット時刻を報告します。記録された時刻を持つベーステーブルがない場合は `{}` です。 |

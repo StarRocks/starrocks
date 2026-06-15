@@ -78,6 +78,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | refresh_policy             | 人間が読めるリフレッシュポリシー。有効な値: `NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`、または `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` のようなスケジュール (`START` 句は開始時刻が定義されている場合にのみ含まれます)。 |
 | resource_group             | マテリアライズドビューのリフレッシュタスクに使用されるリソースグループ (マテリアライズドビューの `resource_group` プロパティから)。設定されていない場合は `default_mv_wg` がデフォルトです。 |
 | query_rewrite_status_reason | `query_rewrite_status` の理由。有効な値: `OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION`、`UNKNOWN`。 |
+| base_table_refresh_version_times | 各ベーステーブルのデータバージョン時刻を、ベーステーブルの `catalog.database.table` 名から観測された最新のデータバージョン時刻へのマッピングとして JSON オブジェクトで示します。これは `last_refresh_time`（それらの単一の最大値）の背後にあるテーブルごとの内訳です。外部/データレイクのベーステーブルはパーティションのソース更新時刻を、OLAP（内部）ベーステーブルは可視バージョンのコミット時刻を報告します。記録された時刻を持つベーステーブルがない場合は `{}` です。 |
 
 ## 例
 

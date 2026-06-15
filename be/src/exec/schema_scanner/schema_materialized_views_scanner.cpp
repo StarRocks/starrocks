@@ -60,6 +60,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"REFRESH_POLICY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"RESOURCE_GROUP", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"QUERY_REWRITE_STATUS_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"BASE_TABLE_REFRESH_VERSION_TIMES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -506,6 +507,17 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // QUERY_REWRITE_STATUS_REASON
             if (info.__isset.query_rewrite_status_reason) {
                 const std::string* str = &info.query_rewrite_status_reason;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 35: {
+            // BASE_TABLE_REFRESH_VERSION_TIMES
+            if (info.__isset.base_table_refresh_version_times) {
+                const std::string* str = &info.base_table_refresh_version_times;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {
