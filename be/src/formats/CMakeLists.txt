@@ -15,13 +15,20 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 ADD_BE_LIB(FormatCore
+        column_evaluator.cpp
+        disk_range.hpp
+        file_writer.cpp
         io/async_flush_output_stream.cpp
         io/formatted_output_stream_file.cpp
+        utils.h
         )
 
 target_link_libraries(FormatCore PUBLIC
+        ExprCore
         RuntimeCore
         FSCore
+        ChunkCore
+        ColumnCore
         Types
         Common
         Base
@@ -29,11 +36,12 @@ target_link_libraries(FormatCore PUBLIC
         StarRocksGen
 )
 
-ADD_BE_LIB(Formats
+ADD_BE_LIB(FormatCsv
         csv/array_converter.cpp
         csv/array_reader.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
+        csv/csv_defaults.h
         csv/csv_reader.cpp
         csv/csv_file_writer.cpp
         csv/date_converter.cpp
@@ -48,6 +56,11 @@ ADD_BE_LIB(Formats
         csv/default_value_converter.cpp
         csv/string_converter.cpp
         csv/varbinary_converter.cpp
+        )
+
+target_link_libraries(FormatCsv PUBLIC FormatCore)
+
+ADD_BE_LIB(Formats
         json/json_utils.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
@@ -110,11 +123,8 @@ ADD_BE_LIB(Formats
         parquet/iceberg_row_id_reader.cpp
         parquet/row_source_reader.cpp
         parquet/parquet_pos_reader.cpp
-        column_evaluator.cpp
-        disk_range.hpp
-        file_writer.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatCore Cache)
+target_link_libraries(Formats PUBLIC FormatCsv FormatCore Cache)
 
 add_subdirectory(orc/apache-orc)
