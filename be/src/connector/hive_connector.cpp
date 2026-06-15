@@ -92,6 +92,14 @@ HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TSc
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const THdfsScanRange& hdfs_scan_range)
         : _provider(provider), _scan_range(hdfs_scan_range) {}
 
+HiveDataSource::~HiveDataSource() {
+    // ColumnExprPredicate objects in predicate_free_pool hold ExprContext references
+    // whose _root pointers point into _pool.  _pool is destroyed before _scanner_ctx
+    // (reverse member-declaration order), so we must destroy the ColumnExprPredicates
+    // here — in the destructor body — while _pool is still alive.
+    _scanner_ctx.predicates.predicate_free_pool.clear();
+}
+
 Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
         if (!slot->is_nullable()) {

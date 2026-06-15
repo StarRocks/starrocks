@@ -68,7 +68,7 @@ protected:
 
 class HiveDataSource final : public DataSource {
 public:
-    ~HiveDataSource() override = default;
+    ~HiveDataSource() override;
 
     HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range);
     HiveDataSource(const HiveDataSourceProvider* provider, const THdfsScanRange& hdfs_scan_range);
