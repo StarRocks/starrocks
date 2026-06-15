@@ -189,7 +189,7 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void starByNameExtraSourceColumnReturnsNull() {
-        // round-3 #1: source [k, v, extra]; target [k, v]; INSERT BY NAME SELECT * -> set mismatch -> null
+        // source [k, v, extra]; target [k, v]; INSERT BY NAME SELECT * -> set mismatch -> null
         List<Column> targetCols = Arrays.asList(col("k"), col("v"));
         List<Column> sourceCols = Arrays.asList(col("k"), col("v"), col("extra"));
         OlapTable target = olapTable(targetCols, targetCols, false);
@@ -206,7 +206,7 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void starWithSourceGeneratedColumnReturnsNull() {
-        // round-2 #B: sourceTable.hasGeneratedColumn()==true -> null
+        // sourceTable.hasGeneratedColumn()==true -> null
         List<Column> cols = Arrays.asList(col("k"), col("v"));
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, true); // has generated column
@@ -284,7 +284,7 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void bareColumnForeignDbQualifierReturnsNull() {
-        // round-2 #D: SELECT db2.src.k while source is db1.src -> db mismatch -> null
+        // SELECT db2.src.k while source is db1.src -> db mismatch -> null
         List<Column> cols = Arrays.asList(col("k"), col("v"));
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
@@ -323,7 +323,7 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void bareColumnVirtualNameReturnsNull() {
-        // round-2 #C: colName absent from physical map (virtual-only) -> null
+        // colName absent from physical map (virtual-only) -> null
         List<Column> targetCols = Arrays.asList(col("k"), col("v"));
         List<Column> sourceCols = Arrays.asList(col("k"), col("v")); // "ghost" not present
         OlapTable target = olapTable(targetCols, targetCols, false);
@@ -380,7 +380,7 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void bareColumnsByNameExtraOrMissingOutputReturnsNull() {
-        // round-3 #1: by-name output-name set != target non-generated set (extra column) -> null
+        // by-name output-name set != target non-generated set (extra column) -> null
         List<Column> targetCols = Arrays.asList(col("k"), col("v"));
         List<Column> sourceCols = Arrays.asList(col("k"), col("v"), col("extra"));
         OlapTable target = olapTable(targetCols, targetCols, false);

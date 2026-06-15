@@ -75,10 +75,10 @@ final class InsertSelectSourceColumns {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
         List<Column> targetCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
-        // round-3 #2: VISIBLE columns — base schema may include hidden columns SELECT * does not output.
+        // Use VISIBLE columns: the base schema may include hidden columns that SELECT * does not output.
         List<Column> sourceCols = sourceTable.getVisibleColumnsWithoutGeneratedColumn();
 
-        // round-2 #C: existence via this map, never OlapTable.getColumn (VirtualColumnRegistry fallback).
+        // Existence is checked via this map, never OlapTable.getColumn (which falls back to VirtualColumnRegistry).
         Map<String, String> sourceColumnMap = new HashMap<>();
         for (Column column : sourceCols) {
             sourceColumnMap.put(column.getName().toLowerCase(), column.getName());
@@ -91,12 +91,12 @@ final class InsertSelectSourceColumns {
         boolean isStar = items.size() == 1 && items.get(0).isStar();
         Map<String, String> targetToSource = new HashMap<>();
         if (isStar) {
-            // round-2 #B: a visible generated source column adds an output our mapping can't see.
+            // A visible generated source column would add an output this mapping cannot see.
             if (sourceTable.hasGeneratedColumn()) {
                 return null;
             }
             if (byName) {
-                // round-3 #1: exact set — reject source columns absent from target and vice versa.
+                // Exact-set match: reject source columns absent from the target, and vice versa.
                 if (!sourceColumnMap.keySet().equals(targetNames)) {
                     return null;
                 }
@@ -138,7 +138,7 @@ final class InsertSelectSourceColumns {
                         return null;   // duplicate output name
                     }
                 }
-                // round-3 #1: exact set — output names must be exactly the target non-generated columns.
+                // Exact-set match: output names must be exactly the target non-generated columns.
                 if (!targetToSource.keySet().equals(targetNames)) {
                     return null;
                 }
