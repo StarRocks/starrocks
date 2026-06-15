@@ -14,12 +14,12 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
-ADD_BE_LIB(FormatsIO
+ADD_BE_LIB(FormatCore
         io/async_flush_output_stream.cpp
         io/formatted_output_stream_file.cpp
         )
 
-target_link_libraries(FormatsIO PUBLIC
+target_link_libraries(FormatCore PUBLIC
         RuntimeCore
         FSCore
         Types
@@ -115,6 +115,6 @@ ADD_BE_LIB(Formats
         file_writer.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatsIO Cache)
+target_link_libraries(Formats PUBLIC FormatCore Cache)
 
 add_subdirectory(orc/apache-orc)

@@ -545,7 +545,6 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    FormatsIO
     Storage
     Rowset
     Runtime
@@ -554,6 +553,7 @@ set(STARROCKS_LINK_LIBS
     Script
     orc
     ${WL_END_GROUP}
+    FormatCore
     ExecRuntime
     ComputeEnv
     ExecPrimitive
