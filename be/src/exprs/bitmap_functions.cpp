@@ -31,6 +31,12 @@
 
 namespace starrocks {
 
+struct Base64ToBitmapState {
+    bool is_constant = false;
+    bool is_null = false;
+    BitmapValue bitmap;
+};
+
 template <LogicalType LT>
 StatusOr<ColumnPtr> BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::Columns& columns) {
     ColumnViewer<LT> viewer(columns[0]);
@@ -507,6 +513,23 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_min(FunctionContext* context, const 
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::base64_to_bitmap(FunctionContext* context, const Columns& columns) {
+    auto* state = reinterpret_cast<Base64ToBitmapState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state != nullptr && state->is_constant && columns[0]->is_constant()) {
+        return base64_to_bitmap_const(context, columns);
+    }
+    return base64_to_bitmap_general(context, columns);
+}
+
+StatusOr<ColumnPtr> BitmapFunctions::base64_to_bitmap_const(FunctionContext* context, const Columns& columns) {
+    auto* state = reinterpret_cast<Base64ToBitmapState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    size_t size = columns[0]->size();
+    if (state->is_null) {
+        return ColumnHelper::create_const_null_column(size);
+    }
+    return ColumnHelper::create_const_column<TYPE_OBJECT>(&state->bitmap, size);
+}
+
+StatusOr<ColumnPtr> BitmapFunctions::base64_to_bitmap_general(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
@@ -540,10 +563,71 @@ StatusOr<ColumnPtr> BitmapFunctions::base64_to_bitmap(FunctionContext* context, 
         }
 
         BitmapValue bitmap;
-        bitmap.deserialize(p.get());
+        if (!bitmap.valid_and_deserialize(p.get(), decode_res)) {
+            if (context->allow_throw_exception()) {
+                std::string truncated(src_value.get_data(),
+                                      std::min(static_cast<size_t>(src_value.get_size()), size_t(200)));
+                return Status::RuntimeError("base64_to_bitmap: failed to deserialize bitmap: " + truncated);
+            }
+            builder.append_null();
+            continue;
+        }
         builder.append(std::move(bitmap));
     }
+
     return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+Status BitmapFunctions::base64_to_bitmap_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new Base64ToBitmapState();
+    context->set_function_state(scope, state);
+
+    if (!context->is_constant_column(0)) {
+        return Status::OK();
+    }
+
+    state->is_constant = true;
+
+    if (!context->is_notnull_constant_column(0)) {
+        state->is_null = true;
+        return Status::OK();
+    }
+
+    auto src_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
+    if (src_value.size == 0) {
+        state->is_null = true;
+        return Status::OK();
+    }
+
+    std::unique_ptr<char[]> p(new char[src_value.size + 3]);
+    int decode_res = base64_decode2(src_value.data, src_value.size, p.get());
+    if (decode_res < 0) {
+        state->is_null = true;
+        return Status::OK();
+    }
+
+    if (!state->bitmap.valid_and_deserialize(p.get(), decode_res)) {
+        if (context->allow_throw_exception()) {
+            std::string truncated(src_value.get_data(),
+                                  std::min(static_cast<size_t>(src_value.get_size()), size_t(200)));
+            return Status::RuntimeError("base64_to_bitmap: failed to deserialize bitmap: " + truncated);
+        }
+        state->is_null = true;
+        return Status::OK();
+    }
+    return Status::OK();
+}
+
+Status BitmapFunctions::base64_to_bitmap_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<Base64ToBitmapState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context, const starrocks::Columns& columns) {

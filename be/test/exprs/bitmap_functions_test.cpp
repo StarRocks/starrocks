@@ -17,6 +17,11 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
+=======
+#include "base/phmap/phmap.h"
+#include "base/testutil/assert.h"
+>>>>>>> 71ab161b3f ([Enhancement] base64_to_bitmap constant optimization (#74684))
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -3470,4 +3475,195 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
         ASSERT_EQ("600123456781", res->get_object(0)->to_string());
     }
 }
+
+TEST_F(VecBitmapFunctionsTest, base64ToBitmapConstOptimization) {
+    const std::string base64_bitmap =
+            "CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAA"
+            "YgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA";
+    // This base64-encoded bitmap contains {90,91,92,93,94,95,96,97,98,99,100} (11 values)
+
+    // Create a const column with the base64 string
+    auto value_col = BinaryColumn::create();
+    value_col->append(Slice(base64_bitmap));
+    auto const_col = ConstColumn::create(std::move(value_col), 1);
+
+    // Set up constant columns and prepare
+    Columns const_cols;
+    const_cols.emplace_back(const_col);
+    ctx->set_constant_columns(std::move(const_cols));
+
+    ASSERT_OK(BitmapFunctions::base64_to_bitmap_prepare(ctx, FunctionContext::FRAGMENT_LOCAL));
+
+    // Evaluate with const column - should take the const fast path
+    {
+        Columns columns;
+        auto test_col = BinaryColumn::create();
+        test_col->append(Slice(base64_bitmap));
+        columns.emplace_back(ConstColumn::create(std::move(test_col), 100));
+
+        auto result = BitmapFunctions::base64_to_bitmap(ctx, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        auto bitmap = ColumnHelper::get_const_value<TYPE_OBJECT>(result);
+        ASSERT_EQ(11, bitmap->cardinality());
+        ASSERT_EQ("90,91,92,93,94,95,96,97,98,99,100", bitmap->to_string());
+    }
+
+    // Evaluate with a different chunk size
+    {
+        Columns columns;
+        auto test_col = BinaryColumn::create();
+        test_col->append(Slice(base64_bitmap));
+        columns.emplace_back(ConstColumn::create(std::move(test_col), 5));
+
+        auto result = BitmapFunctions::base64_to_bitmap(ctx, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_EQ(5, result->size());
+    }
+
+    // Verify the general path still works correctly for non-const columns
+    {
+        auto col = BinaryColumn::create();
+        col->append(Slice(base64_bitmap));
+        col->append(Slice(base64_bitmap));
+
+        Columns columns;
+        columns.emplace_back(std::move(col));
+
+        auto result = BitmapFunctions::base64_to_bitmap(ctx, columns).value();
+        ASSERT_EQ(2, result->size());
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(result);
+        ASSERT_EQ(11, p->get_object(0)->cardinality());
+        ASSERT_EQ(11, p->get_object(1)->cardinality());
+    }
+
+    // Verify cleanup does not leak
+    ASSERT_OK(BitmapFunctions::base64_to_bitmap_close(ctx, FunctionContext::FRAGMENT_LOCAL));
+}
+
+TEST_F(VecBitmapFunctionsTest, base64ToBitmapConstNullHandling) {
+    auto* ctx2 = FunctionContext::create_test_context();
+
+    // NULL constant
+    {
+        auto null_col = ColumnHelper::create_const_null_column(1);
+        Columns const_cols;
+        const_cols.emplace_back(null_col);
+        ctx2->set_constant_columns(std::move(const_cols));
+
+        ASSERT_OK(BitmapFunctions::base64_to_bitmap_prepare(ctx2, FunctionContext::FRAGMENT_LOCAL));
+
+        Columns columns;
+        auto test_null_col = ColumnHelper::create_const_null_column(10);
+        columns.emplace_back(test_null_col);
+
+        auto result = BitmapFunctions::base64_to_bitmap(ctx2, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(result->only_null());
+    }
+
+    ASSERT_OK(BitmapFunctions::base64_to_bitmap_close(ctx2, FunctionContext::FRAGMENT_LOCAL));
+
+    // Empty string constant
+    {
+        auto* ctx3 = FunctionContext::create_test_context();
+
+        auto value_col = BinaryColumn::create();
+        value_col->append(Slice(""));
+        auto const_col = ConstColumn::create(std::move(value_col), 1);
+
+        Columns const_cols;
+        const_cols.emplace_back(const_col);
+        ctx3->set_constant_columns(std::move(const_cols));
+
+        ASSERT_OK(BitmapFunctions::base64_to_bitmap_prepare(ctx3, FunctionContext::FRAGMENT_LOCAL));
+
+        Columns columns;
+        auto test_col = BinaryColumn::create();
+        test_col->append(Slice(""));
+        columns.emplace_back(ConstColumn::create(std::move(test_col), 5));
+
+        auto result = BitmapFunctions::base64_to_bitmap(ctx3, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(result->only_null());
+
+        ASSERT_OK(BitmapFunctions::base64_to_bitmap_close(ctx3, FunctionContext::FRAGMENT_LOCAL));
+    }
+
+    // Invalid base64 constant
+    {
+        auto* ctx4 = FunctionContext::create_test_context();
+
+        auto value_col = BinaryColumn::create();
+        value_col->append(Slice("!!!invalid_base64!!!"));
+        auto const_col = ConstColumn::create(std::move(value_col), 1);
+
+        Columns const_cols;
+        const_cols.emplace_back(const_col);
+        ctx4->set_constant_columns(std::move(const_cols));
+
+        ASSERT_OK(BitmapFunctions::base64_to_bitmap_prepare(ctx4, FunctionContext::FRAGMENT_LOCAL));
+
+        Columns columns;
+        auto test_col = BinaryColumn::create();
+        test_col->append(Slice("!!!invalid_base64!!!"));
+        columns.emplace_back(ConstColumn::create(std::move(test_col), 3));
+
+        auto result = BitmapFunctions::base64_to_bitmap(ctx4, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(result->only_null());
+
+        ASSERT_OK(BitmapFunctions::base64_to_bitmap_close(ctx4, FunctionContext::FRAGMENT_LOCAL));
+    }
+
+    // Truncated valid base64 constant (missing last char -> incomplete final group)
+    {
+        auto* ctx5 = FunctionContext::create_test_context();
+
+        const std::string truncated_base64 =
+                "CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAA"
+                "YgAAAAAAAABjAAAAAAAAAGQAAAAAAAA";
+
+        auto value_col = BinaryColumn::create();
+        value_col->append(Slice(truncated_base64));
+        auto const_col = ConstColumn::create(std::move(value_col), 1);
+
+        Columns const_cols;
+        const_cols.emplace_back(const_col);
+        ctx5->set_constant_columns(std::move(const_cols));
+
+        ASSERT_OK(BitmapFunctions::base64_to_bitmap_prepare(ctx5, FunctionContext::FRAGMENT_LOCAL));
+
+        Columns columns;
+        auto test_col = BinaryColumn::create();
+        test_col->append(Slice(truncated_base64));
+        columns.emplace_back(ConstColumn::create(std::move(test_col), 5));
+
+        auto result = BitmapFunctions::base64_to_bitmap(ctx5, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(result->only_null());
+
+        ASSERT_OK(BitmapFunctions::base64_to_bitmap_close(ctx5, FunctionContext::FRAGMENT_LOCAL));
+    }
+}
+
+TEST_F(VecBitmapFunctionsTest, base64ToBitmapNonConst) {
+    // Verify the general path works when the input is not a constant column
+    const std::string base64_bitmap =
+            "CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAA"
+            "YgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA";
+
+    // No prepare called - direct call with non-const column
+    auto col = BinaryColumn::create();
+    col->append(Slice(base64_bitmap));
+
+    Columns columns;
+    columns.emplace_back(std::move(col));
+
+    auto result = BitmapFunctions::base64_to_bitmap(ctx, columns).value();
+    ASSERT_EQ(1, result->size());
+    auto p = ColumnHelper::cast_to<TYPE_OBJECT>(result);
+    ASSERT_EQ(11, p->get_object(0)->cardinality());
+    ASSERT_EQ("90,91,92,93,94,95,96,97,98,99,100", p->get_object(0)->to_string());
+}
+
 } // namespace starrocks
