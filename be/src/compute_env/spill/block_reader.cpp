@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstring>
+
 #include "base/string/slice.h"
 #include "common/statusor.h"
 #include "compute_env/spill/block_manager.h"
@@ -52,7 +54,19 @@ StatusOr<int64_t> try_to_read_from_file(io::InputStreamWrapper* readable, void* 
     return total_read;
 }
 
-Status BlockReader::read_fully(void* data, int64_t count) {
+void BlockReader::_update_io_metrics(int64_t io_ns, int64_t read_len) {
+    COUNTER_UPDATE(_options.read_io_timer, io_ns);
+    COUNTER_UPDATE(_options.read_io_count, 1);
+    COUNTER_UPDATE(_options.read_io_bytes, read_len);
+    if (_options.global_read_io_duration_ns != nullptr) {
+        _options.global_read_io_duration_ns->increment(io_ns);
+    }
+    if (_options.global_read_bytes != nullptr) {
+        _options.global_read_bytes->increment(read_len);
+    }
+}
+
+Status BlockReader::_init_readable() {
     if (_readable == nullptr) {
         ASSIGN_OR_RETURN(_readable, _block->get_readable());
         _length = _block->size();
@@ -62,6 +76,11 @@ Status BlockReader::read_fully(void* data, int64_t count) {
             _buffer = std::make_unique<uint8_t[]>(_options.max_buffer_bytes);
         }
     }
+    return Status::OK();
+}
+
+Status BlockReader::read_fully(void* data, int64_t count) {
+    RETURN_IF_ERROR(_init_readable());
 
     if (_offset + count > _length) {
         return Status::EndOfFile("no more data in this block");
@@ -90,15 +109,7 @@ Status BlockReader::read_fully(void* data, int64_t count) {
                     SCOPED_RAW_TIMER(&io_ns);
                     ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), offset, length_need_read));
                 }
-                COUNTER_UPDATE(_options.read_io_timer, io_ns);
-                COUNTER_UPDATE(_options.read_io_count, 1);
-                COUNTER_UPDATE(_options.read_io_bytes, read_len);
-                if (_options.global_read_io_duration_ns != nullptr) {
-                    _options.global_read_io_duration_ns->increment(io_ns);
-                }
-                if (_options.global_read_bytes != nullptr) {
-                    _options.global_read_bytes->increment(read_len);
-                }
+                _update_io_metrics(io_ns, read_len);
                 _slice.clear();
             } else {
                 // refill buffer, then read res data from buffer
@@ -109,15 +120,7 @@ Status BlockReader::read_fully(void* data, int64_t count) {
                     ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), _buffer.get(),
                                                                      _options.max_buffer_bytes, length_need_read));
                 }
-                COUNTER_UPDATE(_options.read_io_timer, io_ns);
-                COUNTER_UPDATE(_options.read_io_count, 1);
-                COUNTER_UPDATE(_options.read_io_bytes, read_len);
-                if (_options.global_read_io_duration_ns != nullptr) {
-                    _options.global_read_io_duration_ns->increment(io_ns);
-                }
-                if (_options.global_read_bytes != nullptr) {
-                    _options.global_read_bytes->increment(read_len);
-                }
+                _update_io_metrics(io_ns, read_len);
                 _slice = Slice(_buffer.get(), read_len);
                 std::memcpy(offset, _slice.data, length_need_read);
                 _slice.remove_prefix(length_need_read);
@@ -130,18 +133,53 @@ Status BlockReader::read_fully(void* data, int64_t count) {
             SCOPED_RAW_TIMER(&io_ns);
             ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), data, count));
         }
-        COUNTER_UPDATE(_options.read_io_timer, io_ns);
-        COUNTER_UPDATE(_options.read_io_count, 1);
-        COUNTER_UPDATE(_options.read_io_bytes, read_len);
-        if (_options.global_read_io_duration_ns != nullptr) {
-            _options.global_read_io_duration_ns->increment(io_ns);
-        }
-        if (_options.global_read_bytes != nullptr) {
-            _options.global_read_bytes->increment(read_len);
-        }
+        _update_io_metrics(io_ns, read_len);
     }
     _offset += count;
     return Status::OK();
+}
+
+StatusOr<Slice> BlockReader::read_view(raw::RawString* fallback, int64_t count) {
+    RETURN_IF_ERROR(_init_readable());
+
+    // `count` typically comes from a size field read from disk; a corrupted
+    // value can be negative here and would defeat the unsigned bounds checks
+    // below, so fail fast instead
+    if (count < 0) {
+        return Status::InternalError(fmt::format("invalid read size {}", count));
+    }
+    if (_offset + count > _length) {
+        return Status::EndOfFile("no more data in this block");
+    }
+
+    if (_options.enable_buffer_read && static_cast<int64_t>(_options.max_buffer_bytes) >= count) {
+        int64_t length_in_buffer = _slice.size;
+        if (length_in_buffer < count) {
+            // move the buffered tail to the head of the buffer (regions may
+            // overlap), then refill the rest from the file
+            if (length_in_buffer > 0) {
+                std::memmove(_buffer.get(), _slice.data, length_in_buffer);
+            }
+            int64_t io_ns = 0;
+            int64_t read_len = 0;
+            {
+                SCOPED_RAW_TIMER(&io_ns);
+                ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), _buffer.get() + length_in_buffer,
+                                                                 _options.max_buffer_bytes - length_in_buffer,
+                                                                 count - length_in_buffer));
+            }
+            _update_io_metrics(io_ns, read_len);
+            _slice = Slice(_buffer.get(), length_in_buffer + read_len);
+        }
+        Slice view(_slice.data, count);
+        _slice.remove_prefix(count);
+        _offset += count;
+        return view;
+    }
+
+    fallback->resize(count);
+    RETURN_IF_ERROR(read_fully(fallback->data(), count));
+    return Slice(fallback->data(), count);
 }
 
 } // namespace starrocks::spill

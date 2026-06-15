@@ -25,6 +25,15 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/utility/defer_op.h"
+#include "column/array_column.h"
+#include "column/binary_column.h"
+#include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
+#include "column/decimalv3_column.h"
+#include "column/fixed_length_column.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/object_column.h"
 #include "common/status.h"
 #include "compute_env/sorting/sorted_chunks_merger.h"
 #include "compute_env/spill/block_manager.h"
@@ -89,10 +98,74 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(workgroup::YieldCo
     return Status::EndOfFile("eos");
 }
 
+namespace {
+// Checks that no ColumnPtr anywhere in a column tree is shared with another
+// holder, so the column can be handed out for in-place mutation without
+// copying. Column types not listed here (struct, json, variant,
+// adaptive-nullable, any future type) are conservatively treated as shared.
+class ExclusiveOwnershipChecker final : public ColumnVisitorAdapter<ExclusiveOwnershipChecker> {
+public:
+    ExclusiveOwnershipChecker() : ColumnVisitorAdapter(this) {}
+
+    template <typename PtrT>
+    bool exclusive(const PtrT& column) {
+        // a non-ok accept means the visitor base rejected an unknown type,
+        // which counts as shared as well
+        return column->use_count() == 1 && column->accept(this).ok() && !_shared_found;
+    }
+
+    Status do_visit(const NullableColumn& column) {
+        _shared_found |= !exclusive(column.data_column()) || !exclusive(column.null_column());
+        return Status::OK();
+    }
+    Status do_visit(const ConstColumn& column) {
+        _shared_found |= !exclusive(column.data_column());
+        return Status::OK();
+    }
+    Status do_visit(const ArrayColumn& column) {
+        _shared_found |= !exclusive(column.elements_column()) || !exclusive(column.offsets_column());
+        return Status::OK();
+    }
+    Status do_visit(const MapColumn& column) {
+        _shared_found |= !exclusive(column.keys_column()) || !exclusive(column.values_column()) ||
+                         !exclusive(column.offsets_column());
+        return Status::OK();
+    }
+    template <typename T>
+    Status do_visit(const BinaryColumnBase<T>& column) {
+        return Status::OK();
+    }
+    // the leaf overloads must take the exact dispatched types: a base-class
+    // template like FixedLengthColumnBase<T> only matches with conversion
+    // rank and would lose overload resolution to the generic catch-all below
+    template <typename T>
+    Status do_visit(const FixedLengthColumn<T>& column) {
+        return Status::OK();
+    }
+    template <typename T>
+    Status do_visit(const DecimalV3Column<T>& column) {
+        return Status::OK();
+    }
+    template <typename T>
+    Status do_visit(const ObjectColumn<T>& column) {
+        return Status::OK();
+    }
+    template <typename ColumnT>
+    Status do_visit(const ColumnT&) {
+        _shared_found = true;
+        return Status::OK();
+    }
+
+private:
+    bool _shared_found = false;
+};
+} // namespace
+
 // The raw chunk input stream. all chunks are in memory.
 class RawChunkInputStream final : public SpillInputStream {
 public:
-    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller) : _chunks(std::move(chunks)) {
+    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller)
+            : _chunks(std::move(chunks)), _spiller(spiller) {
         for (const auto& chunk : _chunks) {
             _total_rows += chunk->num_rows();
         }
@@ -107,6 +180,7 @@ private:
     size_t _read_rows{};
     size_t _read_idx{};
     std::vector<ChunkPtr> _chunks;
+    Spiller* _spiller = nullptr;
     DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
@@ -116,10 +190,34 @@ StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(workgroup::YieldContext& 
         DCHECK_EQ(_total_rows, _read_rows);
         return Status::EndOfFile("eos");
     }
-    // TODO: make ChunkPtr could convert to ChunkUniquePtr to avoid unused memory copy
-    auto res = std::move(_chunks[_read_idx++])->clone_unique();
+    auto chunk = std::move(_chunks[_read_idx++]);
+    // consumers are allowed to mutate the returned chunk in place, so the
+    // chunk can only be handed over without copying when its whole column
+    // tree is exclusively owned
+    bool exclusive = chunk.use_count() == 1;
+    if (exclusive) {
+        ExclusiveOwnershipChecker checker;
+        for (const auto& column : chunk->columns()) {
+            if (!checker.exclusive(column)) {
+                exclusive = false;
+                break;
+            }
+        }
+    }
+    ChunkUniquePtr res;
+    if (exclusive) {
+        res = std::make_unique<Chunk>(std::move(*chunk));
+    } else {
+        res = chunk->clone_unique();
+    }
     _read_rows += res->num_rows();
-    _chunks[_read_idx - 1].reset();
+    if (_spiller != nullptr) {
+        const auto& metrics = _spiller->metrics();
+        if (metrics.restore_from_mem_table_rows != nullptr) {
+            COUNTER_UPDATE(metrics.restore_from_mem_table_rows, res->num_rows());
+            COUNTER_UPDATE(metrics.restore_from_mem_table_bytes, res->bytes_usage());
+        }
+    }
 
     return res;
 }
@@ -137,8 +235,8 @@ InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams
     return std::make_shared<UnionAllSpilledInputStream>(_streams);
 }
 
-InputStreamPtr SpillInputStream::as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller) {
-    return detail::make_raw_chunk_input_stream(chunks, spiller);
+InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller) {
+    return detail::make_raw_chunk_input_stream(std::move(chunks), spiller);
 }
 
 class BufferedInputStream : public SpillInputStream {

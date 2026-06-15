@@ -211,9 +211,19 @@ Status RawSpillerWriter::acquire_stream(std::shared_ptr<SpillInputStream>* strea
 
     *stream = input_stream;
 
+    if (_mem_table != nullptr && _mem_table->consumed_by_exclusive_read()) {
+        // the in-memory rows were destructively handed over to a previously
+        // acquired stream; a second reader here means some multi-reader
+        // topology is missing read_shared and would silently lose those rows
+        return Status::InternalError(
+                fmt::format("spill mem table already consumed by an exclusive stream, spiller[{}] node[{}]", opts.name,
+                            opts.plan_node_id));
+    }
     if (_mem_table != nullptr && !_mem_table->is_empty()) {
         DCHECK(opts.is_unordered);
-        ASSIGN_OR_RETURN(auto mem_table_stream, _mem_table->as_input_stream(opts.read_shared));
+        ASSIGN_OR_RETURN(
+                auto mem_table_stream,
+                _mem_table->as_input_stream(opts.read_shared ? MemTableReadMode::SHARED : MemTableReadMode::EXCLUSIVE));
         *stream = SpillInputStream::union_all(mem_table_stream, *stream);
     }
 
@@ -475,8 +485,7 @@ void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHa
     }
 }
 
-Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_ctx, SerdeContext& ctx,
-                                                 SpilledPartition* partition) {
+Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_ctx, SpilledPartition* partition) {
     TRY_CATCH_ALLOC_SCOPE_START()
 
     auto mem_table = partition->spill_writer->mem_table();
@@ -506,7 +515,7 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     return Status::OK();
 }
 
-Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext& yield_ctx, SerdeContext& context,
+Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext& yield_ctx,
                                                          const std::vector<SpilledPartition*>& spilling_partitions) {
     SCOPED_TIMER(_spiller->metrics().flush_timer);
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
@@ -518,7 +527,7 @@ Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext
                                        flush_ctx.processing_idx);
         {
             SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-            RETURN_IF_ERROR(spill_partition(yield_ctx, context, partition));
+            RETURN_IF_ERROR(spill_partition(yield_ctx, partition));
             RETURN_IF_YIELD(yield_ctx.need_yield);
             ++flush_ctx.processing_idx;
             // check time
@@ -528,7 +537,7 @@ Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext
     return Status::OK();
 }
 
-Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext& yield_ctx, SerdeContext& context,
+Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext& yield_ctx,
                                                          const std::vector<SpilledPartition*>& splitting_partitions) {
     SCOPED_TIMER(_spiller->metrics().split_partition_timer);
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
@@ -562,7 +571,7 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
             flush_ctx.right = std::move(right);
         }
 
-        auto st = _split_partition(yield_ctx, context, flush_ctx.reader.get(), partition, flush_ctx.left.get(),
+        auto st = _split_partition(yield_ctx, flush_ctx.reader.get(), partition, flush_ctx.left.get(),
                                    flush_ctx.right.get());
         RETURN_IF_YIELD(yield_ctx.need_yield);
         RETURN_IF(!st.is_ok_or_eof(), st);
@@ -725,9 +734,9 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     return _spiller->options().skew_chunk_compactor(chunks, context);
 }
 
-Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield_ctx, SerdeContext& spill_ctx,
-                                                  SpillerReader* reader, SpilledPartition* partition,
-                                                  SpilledPartition* left_partition, SpilledPartition* right_partition) {
+Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield_ctx, SpillerReader* reader,
+                                                  SpilledPartition* partition, SpilledPartition* left_partition,
+                                                  SpilledPartition* right_partition) {
     size_t current_level = partition->level;
     auto left_mem_table = left_partition->spill_writer->mem_table();
     auto right_mem_table = right_partition->spill_writer->mem_table();
@@ -738,13 +747,13 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
             left_mem_table->num_rows(), right_mem_table->num_rows());
     Status st;
     {
-        auto flush_partition = [this, &spill_ctx, &yield_ctx](SpilledPartition* partition) -> Status {
+        auto flush_partition = [this, &yield_ctx](SpilledPartition* partition) -> Status {
             auto mem_table = partition->spill_writer->mem_table();
             if (mem_table->is_empty()) {
                 return Status::OK();
             }
             RETURN_IF_ERROR(mem_table->done());
-            return this->spill_partition(yield_ctx, spill_ctx, partition);
+            return this->spill_partition(yield_ctx, partition);
         };
 
         auto defer = DeferOp([&]() {
@@ -832,17 +841,14 @@ Status PartitionedSpillerWriter::yieldable_flush_task(workgroup::YieldContext& c
     ctx.total_yield_point_cnt = FINISH;
     DCHECK(ctx.task_context_data.has_value()) << "spill flush context must be set";
 
-    // partition memory usage
-    // now we partitioned sorted spill
-    SerdeContext spill_ctx;
     switch (ctx.yield_point) {
     case SPILL:
-        RETURN_IF_ERROR(_spill_input_partitions(ctx, spill_ctx, spilling_partitions));
+        RETURN_IF_ERROR(_spill_input_partitions(ctx, spilling_partitions));
         RETURN_IF_YIELD(ctx.need_yield);
         TO_NEXT_STAGE(ctx.yield_point);
         [[fallthrough]];
     case SPLIT:
-        RETURN_IF_ERROR(_split_input_partitions(ctx, spill_ctx, splitting_partitions));
+        RETURN_IF_ERROR(_split_input_partitions(ctx, splitting_partitions));
         RETURN_IF_YIELD(ctx.need_yield);
         TO_NEXT_STAGE(ctx.yield_point);
         [[fallthrough]];
