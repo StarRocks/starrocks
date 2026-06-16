@@ -38,10 +38,7 @@ public:
     enum class Op { LT, GE };
 
     IntComparisonPredicate(ColumnId column_id, Op op, int32_t value, std::string label)
-            : ColumnPredicate(get_type_info(TYPE_INT), column_id),
-              _op(op),
-              _value(value),
-              _label(std::move(label)) {}
+            : ColumnPredicate(get_type_info(TYPE_INT), column_id), _op(op), _value(value), _label(std::move(label)) {}
 
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         const auto& values = int_values(column);
