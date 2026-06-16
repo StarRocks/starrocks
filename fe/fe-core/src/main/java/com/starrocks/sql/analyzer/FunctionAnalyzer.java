@@ -158,15 +158,15 @@ public class FunctionAnalyzer {
 
         if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName)) {
             if (!functionCallExpr.getChild(0).getType().isStringType() ||
-                    !functionCallExpr.getChild(0).getType().isStringType()) {
+                    !functionCallExpr.getChild(1).getType().isStringType()) {
                 throw new SemanticException(
                         fnName + " function 's first parameter and second parameter must be string type",
                         functionCallExpr.getPos());
             }
 
-            if (!functionCallExpr.getChild(1).isConstant() || !functionCallExpr.getChild(2).isConstant()) {
+            if (!functionCallExpr.getChild(2).isConstant()) {
                 throw new SemanticException(
-                        fnName + " function 's second parameter and third parameter must be constant",
+                        fnName + " function 's third parameter must be constant",
                         functionCallExpr.getPos());
             }
         }
