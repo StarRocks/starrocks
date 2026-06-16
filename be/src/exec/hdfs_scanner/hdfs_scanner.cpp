@@ -263,8 +263,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             file_record_count = _scanner_ctx->scan_range->record_count;
         }
         _scanner_ctx->append_or_update_count_column_to_chunk(chunk, file_record_count);
-        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
-        _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
+        RETURN_IF_ERROR(_scanner_ctx->append_auxiliary_columns_to_chunk(chunk, 1));
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += 1;
         return Status::OK();
@@ -708,6 +707,7 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
             // handled in min max column
             continue;
         }
+        if (ck->is_slot_exist(slot_desc->id())) continue;
 
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
@@ -731,9 +731,12 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
 }
 
 void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty() || row_count < 0) return;
+    if (not_existed_slots.empty()) return;
+    auto it = std::find_if(not_existed_slots.begin(), not_existed_slots.end(),
+                           [](const SlotDescriptor* slot) { return slot->col_name() == kCountOptColumnName; });
+    if (it == not_existed_slots.end()) return;
+    auto* slot_desc = *it;
     ChunkPtr& ck = (*chunk);
-    auto* slot_desc = not_existed_slots[0];
     TypeDescriptor desc;
     desc.type = TYPE_BIGINT;
     auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
