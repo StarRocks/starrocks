@@ -124,7 +124,11 @@ public final class MVRefreshSchemaChecker {
         return msg.contains("cannot be resolved")
                 || msg.contains("column schema not compatible")
                 || msg.contains("base table schema changed for columns")
-                || msg.contains("No matching function with signature");
+                || msg.contains("No matching function with signature")
+                // IVM re-derive incompatibility (row-id strategy flip / no longer IVM-rewritable) is a
+                // drop-and-recreate condition -- inactivate with the reason, don't retry forever.
+                || msg.contains("row-id strategy")
+                || msg.contains("is not an IVM query");
     }
 
     private static void analyzeAndCompareSchema(MaterializedView mv, ConnectContext context, String selectSql) {
@@ -132,7 +136,10 @@ public final class MVRefreshSchemaChecker {
         mvDb.map(Database::getFullName).ifPresent(context::setDatabase);
 
         QueryStatement queryStmt;
-        if (mv.getCurrentRefreshMode().isIncremental()) {
+        // isIncrementalOrAuto, not isIncremental: legacy AUTO-mode IVM MVs also carry the hidden
+        // __ROW_ID__/__AGG_STATE schema, so they must re-derive too -- else the viewDefineSql branch
+        // (fewer columns) trips the arity check and falsely inactivates them.
+        if (mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
             queryStmt = IvmRefreshDefinition.deriveRewrittenQuery(context, mv);
         } else {
             List<StatementBase> statements = SqlParser.parse(selectSql, context.getSessionVariable());

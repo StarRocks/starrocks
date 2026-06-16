@@ -227,8 +227,8 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         try {
             // An IVM MV's full rebuild must INSERT the rewritten query (with the hidden
             // __ROW_ID__/__AGG_STATE columns it adds), re-derived here inside the lock -- not the
-            // user query that getTaskDefinition() returns.
-            if (mv.getCurrentRefreshMode().isIncremental()) {
+            // user query that getTaskDefinition() returns. isIncrementalOrAuto covers legacy AUTO MVs.
+            if (mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
                 insertStmt = generateInsertAst(ctx, mvToRefreshedPartitions,
                         mv.getTaskDefinition(IvmRefreshDefinition.derive(ctx, mv)));
             }

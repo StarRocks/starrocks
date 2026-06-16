@@ -198,4 +198,26 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
                     "new IVM MV with unchanged external base must stay active, not false-trip schema drift");
         });
     }
+
+    /**
+     * Pins the AUTO-mode gap: a legacy AUTO-mode IVM MV also carries the hidden __ROW_ID__/__AGG_STATE
+     * schema, so the checker must re-derive it (isIncrementalOrAuto), not fall to the viewDefineSql
+     * branch whose fewer columns would false-trip the arity check and inactivate a healthy MV.
+     */
+    @Test
+    public void testCheckerOnAutoModeIvmMvDoesNotFalseDrift() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_checker_auto "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_checker_auto");
+            // AUTO is no longer creatable via SQL; promote in-memory to mimic a legacy AUTO IVM MV.
+            mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
+            Assertions.assertTrue(mv.getCurrentRefreshMode().isAuto());
+            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            Assertions.assertTrue(mv.isActive(),
+                    "AUTO-mode IVM MV with unchanged external base must stay active, not false-trip schema drift");
+        });
+    }
 }

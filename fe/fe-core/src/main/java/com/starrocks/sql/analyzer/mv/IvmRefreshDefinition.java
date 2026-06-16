@@ -20,10 +20,12 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -43,8 +45,11 @@ public final class IvmRefreshDefinition {
      * the refresh-time schema checker.
      */
     public static QueryStatement deriveRewrittenQuery(ConnectContext ctx, MaterializedView mv) {
-        QueryStatement qs = (QueryStatement) SqlParser.parse(mv.getViewDefineSql(),
-                ctx.getSessionVariable()).get(0);
+        List<StatementBase> statements = SqlParser.parse(mv.getViewDefineSql(), ctx.getSessionVariable());
+        if (statements.isEmpty() || !(statements.get(0) instanceof QueryStatement)) {
+            throw new SemanticException("MV %s has no valid query definition to re-derive", mv.getName());
+        }
+        QueryStatement qs = (QueryStatement) statements.get(0);
         Analyzer.analyze(qs, ctx);
 
         IVMAnalyzer analyzer = new IVMAnalyzer(ctx, null, qs);
