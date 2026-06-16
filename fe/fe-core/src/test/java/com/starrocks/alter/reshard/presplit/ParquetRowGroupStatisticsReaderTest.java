@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.List;
 
 class ParquetRowGroupStatisticsReaderTest {
@@ -534,21 +535,37 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void fixedLenByteArrayDecimalFallsBackToDataTier() throws Exception {
-        // Even with an EXACT precision/scale match, a FIXED_LEN_BYTE_ARRAY-backed decimal is
-        // rejected: parquet-mr footer min/max for byte-array decimals can use unsigned byte
-        // ordering (wrong for negatives) unless a typed sort order was set — which we do not
-        // inspect. Conservative gate → data tier. (The gate rejects at schema inspection before
-        // any row group is read, so all-zero bytes are fine.)
+    void readsFixedLenByteArrayDecimalStatistics() throws Exception {
+        // FLBA(8)-backed DECIMAL(18,2) spanning negative→positive: -2.00, -1.00, 0.00, 1.00.
+        // parquet-mr writes column_orders=TypeDefinedOrder, so the byte-array min/max are ordered by
+        // the signed BINARY_AS_SIGNED_INTEGER_COMPARATOR — the gate accepts and decodes them. The
+        // negative span proves signed (not unsigned) ordering end-to-end, including the raw-footer read.
         Path parquetPath = writeParquet(
                 "message schema { required fixed_len_byte_array(8) d (DECIMAL(18,2)); }",
-                /*rowCount=*/ 1,
-                (group, rowIndex) -> group.append("d", Binary.fromConstantByteArray(new byte[8])));
+                /*rowCount=*/ 4,
+                (group, rowIndex) -> group.append("d", flbaDecimal(BigInteger.valueOf((rowIndex - 2) * 100L), 8)));
 
-        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
-                ParquetRowGroupStatisticsReader.read(
-                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2))));
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("-2.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("1.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    /**
+     * Encode {@code unscaled} as a fixed-length, big-endian two's-complement byte array of
+     * {@code byteLen} bytes (sign-extended) — the FIXED_LEN_BYTE_ARRAY layout parquet uses for
+     * DECIMAL. parquet-mr computes the footer min/max with its signed byte-array comparator.
+     */
+    private static Binary flbaDecimal(BigInteger unscaled, int byteLen) {
+        byte[] full = new byte[byteLen];
+        java.util.Arrays.fill(full, (byte) (unscaled.signum() < 0 ? 0xFF : 0x00));
+        byte[] minimal = unscaled.toByteArray();
+        System.arraycopy(minimal, 0, full, byteLen - minimal.length, minimal.length);
+        return Binary.fromConstantByteArray(full);
     }
 
     @Test

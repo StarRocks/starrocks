@@ -26,12 +26,15 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.format.ColumnOrder;
+import org.apache.parquet.format.Util;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.InputFile;
+import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
@@ -41,8 +44,10 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnot
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -84,6 +89,9 @@ import java.util.Objects;
  */
 public final class ParquetRowGroupStatisticsReader {
 
+    // Parquet plaintext-footer trailing magic. "PARE" marks an encrypted footer (unreadable here).
+    private static final byte[] PLAINTEXT_FOOTER_MAGIC = {'P', 'A', 'R', '1'};
+
     private ParquetRowGroupStatisticsReader() {
     }
 
@@ -93,17 +101,19 @@ public final class ParquetRowGroupStatisticsReader {
         Objects.requireNonNull(hadoopConfig, "hadoopConfig");
         Objects.requireNonNull(sortKeyColumn, "sortKeyColumn");
 
-        try (ParquetFileReader reader = ParquetFileReader.open(
-                HadoopInputFile.fromStatus(fileStatus, hadoopConfig))) {
-            ParquetMetadata metadata = reader.getFooter();
-            SortKeyLocation location = locateSortKeyColumn(
-                    metadata.getFileMetaData().getSchema(), sortKeyColumn);
-            List<BlockMetaData> blocks = metadata.getBlocks();
-            List<RowGroupStatistics> rowGroupStatistics = new ArrayList<>(blocks.size());
-            for (BlockMetaData block : blocks) {
-                rowGroupStatistics.add(convertBlock(block, location));
+        try {
+            HadoopInputFile inputFile = HadoopInputFile.fromStatus(fileStatus, hadoopConfig);
+            try (ParquetFileReader reader = ParquetFileReader.open(inputFile)) {
+                ParquetMetadata metadata = reader.getFooter();
+                SortKeyLocation location = locateSortKeyColumn(
+                        metadata.getFileMetaData().getSchema(), inputFile, sortKeyColumn);
+                List<BlockMetaData> blocks = metadata.getBlocks();
+                List<RowGroupStatistics> rowGroupStatistics = new ArrayList<>(blocks.size());
+                for (BlockMetaData block : blocks) {
+                    rowGroupStatistics.add(convertBlock(block, location));
+                }
+                return rowGroupStatistics;
             }
-            return rowGroupStatistics;
         } catch (IOException ioException) {
             throw new StarRocksException(
                     "failed to read Parquet footer for " + fileStatus.getPath() + ": " + ioException.getMessage(),
@@ -111,7 +121,7 @@ public final class ParquetRowGroupStatisticsReader {
         }
     }
 
-    private static SortKeyLocation locateSortKeyColumn(MessageType schema, Column sortKeyColumn)
+    private static SortKeyLocation locateSortKeyColumn(MessageType schema, InputFile inputFile, Column sortKeyColumn)
             throws MetaTierUnavailableException {
         String columnName = sortKeyColumn.getName();
         int fieldIndex = -1;
@@ -140,10 +150,20 @@ public final class ParquetRowGroupStatisticsReader {
         }
         PrimitiveTypeName parquetTypeName = fieldType.asPrimitiveType().getPrimitiveTypeName();
         LogicalTypeAnnotation logicalAnnotation = fieldType.getLogicalTypeAnnotation();
-        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, sortKeyColumn);
-        return new SortKeyLocation(
-                ColumnPath.get(schema.getFieldName(fieldIndex)),
-                parquetTypeName, logicalAnnotation, sortKeyColumn);
+        ColumnPath path = ColumnPath.get(schema.getFieldName(fieldIndex));
+        // Footer min/max for a byte-array (FLBA/BINARY) decimal are only signed-ordered when the
+        // file's raw column_orders entry for this leaf is TypeDefinedOrder. parquet-mr's converted
+        // PrimitiveType.columnOrder() defaults a missing column_orders to TYPE_DEFINED_ORDER, so we
+        // inspect the raw footer instead. Only a byte-array decimal pays this extra footer read.
+        boolean signedByteArrayOrder = false;
+        if ((parquetTypeName == PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
+                || parquetTypeName == PrimitiveTypeName.BINARY)
+                && logicalAnnotation instanceof DecimalLogicalTypeAnnotation) {
+            signedByteArrayOrder = declaresSignedByteArrayOrder(
+                    readColumnOrders(inputFile), leafColumnIndex(schema, path));
+        }
+        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, signedByteArrayOrder, sortKeyColumn);
+        return new SortKeyLocation(path, parquetTypeName, logicalAnnotation, sortKeyColumn);
     }
 
     /**
@@ -160,6 +180,7 @@ public final class ParquetRowGroupStatisticsReader {
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
             LogicalTypeAnnotation logicalAnnotation,
+            boolean signedByteArrayOrder,
             Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
@@ -198,6 +219,9 @@ public final class ParquetRowGroupStatisticsReader {
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> logicalAnnotation instanceof StringLogicalTypeAnnotation
                     && (starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR);
+            case FIXED_LEN_BYTE_ARRAY -> logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
+                    && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
+                    && signedByteArrayOrder;
             default -> false;
         };
         if (!compatible) {
@@ -272,11 +296,18 @@ public final class ParquetRowGroupStatisticsReader {
             return Variant.of(location.starRocksColumn.getType(), renderDateTime(dateTime));
         }
         if (location.logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation) {
-            // Only INT32/INT64-backed decimals reach here — the gate rejects FIXED_LEN/BINARY —
-            // so the stat is the signed unscaled integer. Reconstruct at the source scale; the
-            // exact precision/scale gate guarantees it equals the StarRocks column scale.
-            long unscaled = ((Number) parquetValue).longValue();
-            BigDecimal decoded = BigDecimal.valueOf(unscaled, decimalAnnotation.getScale());
+            // Reconstruct the signed unscaled integer at the source scale; the exact precision/scale
+            // gate guarantees it equals the StarRocks column scale.
+            BigInteger unscaled;
+            if (location.parquetTypeName == PrimitiveTypeName.INT32
+                    || location.parquetTypeName == PrimitiveTypeName.INT64) {
+                unscaled = BigInteger.valueOf(((Number) parquetValue).longValue());
+            } else {
+                // FIXED_LEN_BYTE_ARRAY / BINARY: big-endian two's-complement bytes. The gate accepted
+                // these only when the footer declared TypeDefinedOrder, so the min/max are signed.
+                unscaled = new BigInteger(((Binary) parquetValue).getBytes());
+            }
+            BigDecimal decoded = new BigDecimal(unscaled, decimalAnnotation.getScale());
             return Variant.of(location.starRocksColumn.getType(), decoded.toPlainString());
         }
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
@@ -362,6 +393,62 @@ public final class ParquetRowGroupStatisticsReader {
                 && leafIndex >= 0
                 && leafIndex < columnOrders.size()
                 && columnOrders.get(leafIndex).isSetTYPE_ORDER();
+    }
+
+    /**
+     * Read the raw Thrift footer's {@code column_orders} list, or {@code null} if it cannot be
+     * obtained — an encrypted footer ({@code PARE} magic), a too-short file, a corrupt footer
+     * length, an absent list, or any IO/parse failure. Any failure is non-fatal: the caller
+     * treats {@code null} as "column order unknown" and falls back to the data tier. We read the
+     * raw footer (not the converted schema) because parquet-mr defaults a missing column order to
+     * TYPE_DEFINED_ORDER, which would not distinguish a legacy file.
+     */
+    private static List<ColumnOrder> readColumnOrders(InputFile inputFile) {
+        try (SeekableInputStream input = inputFile.newStream()) {
+            long length = inputFile.getLength();
+            int trailerLength = 8; // [footerLength:4 little-endian][magic:4]
+            if (length < PLAINTEXT_FOOTER_MAGIC.length + trailerLength) {
+                return null;
+            }
+            byte[] trailer = new byte[trailerLength];
+            input.seek(length - trailerLength);
+            input.readFully(trailer);
+            for (int i = 0; i < PLAINTEXT_FOOTER_MAGIC.length; i++) {
+                if (trailer[4 + i] != PLAINTEXT_FOOTER_MAGIC[i]) {
+                    return null; // encrypted ("PARE") or non-parquet footer — cannot confirm order
+                }
+            }
+            int footerLength = (trailer[0] & 0xff)
+                    | ((trailer[1] & 0xff) << 8)
+                    | ((trailer[2] & 0xff) << 16)
+                    | ((trailer[3] & 0xff) << 24);
+            long footerStart = length - trailerLength - footerLength;
+            if (footerLength < 0 || footerStart < PLAINTEXT_FOOTER_MAGIC.length) {
+                return null; // corrupt footer length
+            }
+            byte[] footerBytes = new byte[footerLength];
+            input.seek(footerStart);
+            input.readFully(footerBytes);
+            org.apache.parquet.format.FileMetaData footer =
+                    Util.readFileMetaData(new ByteArrayInputStream(footerBytes));
+            return footer.isSetColumn_orders() ? footer.getColumn_orders() : null;
+        } catch (IOException | RuntimeException failure) {
+            return null;
+        }
+    }
+
+    /**
+     * Leaf index of {@code path} among the schema's leaf columns. The footer's {@code column_orders}
+     * list is parallel to {@link MessageType#getPaths()} (leaf order). Returns -1 if not found.
+     */
+    private static int leafColumnIndex(MessageType schema, ColumnPath path) {
+        List<String[]> paths = schema.getPaths();
+        for (int i = 0; i < paths.size(); i++) {
+            if (ColumnPath.get(paths.get(i)).equals(path)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private record SortKeyLocation(
