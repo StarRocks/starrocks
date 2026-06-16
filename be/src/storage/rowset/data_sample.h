@@ -38,25 +38,27 @@ class DataSample {
 public:
     virtual ~DataSample() = default;
 
-    DataSample(int64_t probability_percent, int64_t random_seed)
+    DataSample(double probability_percent, int64_t random_seed)
             : _probability_percent(probability_percent), _random_seed(random_seed) {}
 
-    static std::unique_ptr<BlockDataSample> make_block_sample(int64_t probability_percent, int64_t random_seed,
+    static std::unique_ptr<BlockDataSample> make_block_sample(double probability_percent, int64_t random_seed,
                                                               size_t rows_per_block, size_t total_rows);
 
-    static std::unique_ptr<PageDataSample> make_page_sample(int64_t probability_percent, int64_t random_seed,
+    static std::unique_ptr<PageDataSample> make_page_sample(double probability_percent, int64_t random_seed,
                                                             size_t num_pages, PageIndexer page_indexer);
 
     virtual StatusOr<RowIdSparseRange> sample(OlapReaderStatistics* stats) = 0;
 
 protected:
-    int64_t _probability_percent;
+    // Sampling probability as a percent in the open range (0, 100). Stored as double so that sub-1%
+    // ratios (e.g. 0.5) on very large tables are preserved instead of being truncated to 0.
+    double _probability_percent;
     int64_t _random_seed;
 };
 
 class BlockDataSample final : public DataSample {
 public:
-    BlockDataSample(int64_t probability_percent, int64_t random_seed, size_t rows_per_block, size_t total_rows)
+    BlockDataSample(double probability_percent, int64_t random_seed, size_t rows_per_block, size_t total_rows)
             : DataSample(probability_percent, random_seed), _rows_per_block(rows_per_block), _total_rows(total_rows) {}
 
     StatusOr<RowIdSparseRange> sample(OlapReaderStatistics* stats) override;
@@ -95,7 +97,7 @@ struct SortableZoneMap {
 
 class PageDataSample final : public DataSample {
 public:
-    PageDataSample(int64_t probability_percent, int64_t random_seed, size_t num_pages, PageIndexer page_indexer)
+    PageDataSample(double probability_percent, int64_t random_seed, size_t num_pages, PageIndexer page_indexer)
             : DataSample(probability_percent, random_seed),
               _num_pages(num_pages),
               _page_indexer(std::move(page_indexer)) {}
