@@ -1,0 +1,80 @@
+-- name: test_iceberg_topn_scan_pruning
+-- Test Point: enable_iceberg_topn_scan_pruning — reorder scan morsels by the leading sort key's
+--             per-file min/max so the TopN runtime filter tightens early (and, with enough data,
+--             whole files are dropped before the footer is read).
+-- Catalog: Hive-metastore-backed Iceberg catalog created inline, same setup as
+--          test_iceberg_min_max_opt, so it runs against the shared CI metastore.
+-- Note: each profile check repeats the scan query first, so get_query_profile(last_query_id())
+--       reads the scan's profile (the preceding check would otherwise be the "last query").
+--       File-level pruning (TopnMinMaxFilteredScanRanges) is NOT asserted: on tiny test files the
+--       RF cannot tighten before all files open (RF/DOP timing), so the count is non-deterministic.
+create external catalog iceberg_topn_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+
+set catalog iceberg_topn_${uuid0};
+create database iceberg_topn_db_${uuid0};
+use iceberg_topn_db_${uuid0};
+
+set enable_profile = true;
+set enable_async_profile = false;
+
+-- Five files (each INSERT = one data file) with DISJOINT id/ts ranges; ts grows with id (unique).
+create table ice_topn (id bigint, ts datetime, s string);
+INSERT INTO ice_topn VALUES (1,'2020-01-01 00:00:01','a'),(2,'2020-01-01 00:00:02','b'),(3,'2020-01-01 00:00:03','c'),(4,'2020-01-01 00:00:04','d');
+INSERT INTO ice_topn VALUES (100,'2020-01-01 00:01:40','a'),(101,'2020-01-01 00:01:41','b'),(102,'2020-01-01 00:01:42','c'),(103,'2020-01-01 00:01:43','d');
+INSERT INTO ice_topn VALUES (200,'2020-01-01 00:03:20','a'),(201,'2020-01-01 00:03:21','b'),(202,'2020-01-01 00:03:22','c'),(203,'2020-01-01 00:03:23','d');
+INSERT INTO ice_topn VALUES (300,'2020-01-01 00:05:00','a'),(301,'2020-01-01 00:05:01','b'),(302,'2020-01-01 00:05:02','c'),(303,'2020-01-01 00:05:03','d');
+INSERT INTO ice_topn VALUES (400,'2020-01-01 00:06:40','a'),(401,'2020-01-01 00:06:41','b'),(402,'2020-01-01 00:06:42','c'),(403,'2020-01-01 00:06:43','d');
+
+select id from ice_topn order by id;
+
+-- ============================================================
+-- Case 1: ORDER BY id DESC LIMIT 3 — result identical with pruning off and on.
+-- ============================================================
+set enable_iceberg_topn_scan_pruning = false;
+select id from ice_topn order by id desc limit 3;
+
+set enable_iceberg_topn_scan_pruning = true;
+select id from ice_topn order by id desc limit 3;
+-- Eligible TopN scan -> BE uses the priority morsel queue.
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%MorselQueueType: priority_morsel_queue%';
+
+-- Every file got a usable bound (FE->BE shipping: NoBound must be 0). Repeat the scan so
+-- last_query_id() points at it, not at the check above.
+select id from ice_topn order by id desc limit 3;
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%TopnReorderNoBoundMorsels: 0%';
+
+-- ============================================================
+-- Case 2: ORDER BY ts DESC LIMIT 3 (datetime key) — identical result off vs on.
+-- ============================================================
+set enable_iceberg_topn_scan_pruning = false;
+select id from ice_topn order by ts desc limit 3;
+
+set enable_iceberg_topn_scan_pruning = true;
+select id from ice_topn order by ts desc limit 3;
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%MorselQueueType: priority_morsel_queue%';
+
+-- ============================================================
+-- Case 3: OR predicate on the sort key — identical result off vs on.
+-- Regression for the OR-flatten over-skip: the file-skip must not AND-test predicates pulled out
+-- of an OR. No file overlaps both arms (id < 50 and id > 350), so AND-testing the flattened arms
+-- would drop every file and ON would return nothing.
+-- ============================================================
+set enable_iceberg_topn_scan_pruning = false;
+select id from ice_topn where id < 50 or id > 350 order by id asc limit 3;
+
+set enable_iceberg_topn_scan_pruning = true;
+select id from ice_topn where id < 50 or id > 350 order by id asc limit 3;
+
+-- ============================================================
+-- Case 4: non-eligible key (string) -> rule does not fire -> dynamic morsel queue.
+-- ============================================================
+set enable_iceberg_topn_scan_pruning = true;
+-- Leading key is the string column (id added only as a deterministic tie-break); the rule keys off
+-- ordering[0] = s, which is not eligible, so it must not fire -> dynamic morsel queue.
+select id from ice_topn order by s desc, id desc limit 3;
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%MorselQueueType: dynamic_morsel_queue%';
+
+drop table ice_topn force;
+drop database iceberg_topn_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_topn_${uuid0};

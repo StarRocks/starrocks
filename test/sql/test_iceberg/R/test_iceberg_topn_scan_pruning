@@ -1,0 +1,157 @@
+-- name: test_iceberg_topn_scan_pruning
+create external catalog iceberg_topn_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+-- result:
+-- !result
+set catalog iceberg_topn_${uuid0};
+-- result:
+-- !result
+create database iceberg_topn_db_${uuid0};
+-- result:
+-- !result
+use iceberg_topn_db_${uuid0};
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+create table ice_topn (id bigint, ts datetime, s string);
+-- result:
+-- !result
+INSERT INTO ice_topn VALUES (1,'2020-01-01 00:00:01','a'),(2,'2020-01-01 00:00:02','b'),(3,'2020-01-01 00:00:03','c'),(4,'2020-01-01 00:00:04','d');
+-- result:
+-- !result
+INSERT INTO ice_topn VALUES (100,'2020-01-01 00:01:40','a'),(101,'2020-01-01 00:01:41','b'),(102,'2020-01-01 00:01:42','c'),(103,'2020-01-01 00:01:43','d');
+-- result:
+-- !result
+INSERT INTO ice_topn VALUES (200,'2020-01-01 00:03:20','a'),(201,'2020-01-01 00:03:21','b'),(202,'2020-01-01 00:03:22','c'),(203,'2020-01-01 00:03:23','d');
+-- result:
+-- !result
+INSERT INTO ice_topn VALUES (300,'2020-01-01 00:05:00','a'),(301,'2020-01-01 00:05:01','b'),(302,'2020-01-01 00:05:02','c'),(303,'2020-01-01 00:05:03','d');
+-- result:
+-- !result
+INSERT INTO ice_topn VALUES (400,'2020-01-01 00:06:40','a'),(401,'2020-01-01 00:06:41','b'),(402,'2020-01-01 00:06:42','c'),(403,'2020-01-01 00:06:43','d');
+-- result:
+-- !result
+select id from ice_topn order by id;
+-- result:
+1
+2
+3
+4
+100
+101
+102
+103
+200
+201
+202
+203
+300
+301
+302
+303
+400
+401
+402
+403
+-- !result
+set enable_iceberg_topn_scan_pruning = false;
+-- result:
+-- !result
+select id from ice_topn order by id desc limit 3;
+-- result:
+403
+402
+401
+-- !result
+set enable_iceberg_topn_scan_pruning = true;
+-- result:
+-- !result
+select id from ice_topn order by id desc limit 3;
+-- result:
+403
+402
+401
+-- !result
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%MorselQueueType: priority_morsel_queue%';
+-- result:
+1
+-- !result
+select id from ice_topn order by id desc limit 3;
+-- result:
+403
+402
+401
+-- !result
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%TopnReorderNoBoundMorsels: 0%';
+-- result:
+1
+-- !result
+set enable_iceberg_topn_scan_pruning = false;
+-- result:
+-- !result
+select id from ice_topn order by ts desc limit 3;
+-- result:
+403
+402
+401
+-- !result
+set enable_iceberg_topn_scan_pruning = true;
+-- result:
+-- !result
+select id from ice_topn order by ts desc limit 3;
+-- result:
+403
+402
+401
+-- !result
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%MorselQueueType: priority_morsel_queue%';
+-- result:
+1
+-- !result
+set enable_iceberg_topn_scan_pruning = false;
+-- result:
+-- !result
+select id from ice_topn where id < 50 or id > 350 order by id asc limit 3;
+-- result:
+1
+2
+3
+-- !result
+set enable_iceberg_topn_scan_pruning = true;
+-- result:
+-- !result
+select id from ice_topn where id < 50 or id > 350 order by id asc limit 3;
+-- result:
+1
+2
+3
+-- !result
+set enable_iceberg_topn_scan_pruning = true;
+-- result:
+-- !result
+select id from ice_topn order by s desc, id desc limit 3;
+-- result:
+403
+303
+203
+-- !result
+select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%MorselQueueType: dynamic_morsel_queue%';
+-- result:
+1
+-- !result
+drop table ice_topn force;
+-- result:
+-- !result
+drop database iceberg_topn_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_topn_${uuid0};
+-- result:
+-- !result
