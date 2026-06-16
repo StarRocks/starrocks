@@ -15,6 +15,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 
 #include "base/compression/compression_utils.h"
+#include "base/string/utf8.h"
 #include "common/simdjson_util.h"
 #include "formats/avro/nullable_column.h"
 #include "formats/json/json_utils.h"
@@ -51,7 +52,10 @@ Status HdfsJsonReader::next_record(Chunk* chunk, int32_t rows_to_read) {
         if (Status st = _read_rows(chunk, rows_to_read - rows_read, &cur_rows_read); !st.ok()) {
             if (st.is_end_of_file()) {
                 rows_read += cur_rows_read;
-                size_t truncated_bytes = _parser->truncated_bytes();
+                // The parser only saw [0, limit - _utf8_partial_tail); the partial UTF-8
+                // tail held back in _read_and_parse_json must be carried over as well, so
+                // add it back to the truncated (unconsumed) byte count.
+                size_t truncated_bytes = _parser->truncated_bytes() + _utf8_partial_tail;
                 if (truncated_bytes == _buf->limit) {
                     // TODO: support later
                     return Status::NotSupported(fmt::format(
@@ -75,7 +79,13 @@ Status HdfsJsonReader::_read_and_parse_json() {
     _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
     _empty_parser = false;
     _buf->flip_to_read();
-    return _parser->parse(_buf->ptr, _buf->limit, _buf->capacity);
+    // simdjson validates UTF-8 across the whole buffer and raises UTF8_ERROR when the
+    // physical end of the buffer falls in the middle of a multi-byte character, which
+    // happens when a fixed-size read boundary splits a character. Hold such a trailing
+    // partial sequence back from this parse; it is carried over (see next_record) and
+    // completed by the following bytes on the next read.
+    _utf8_partial_tail = incomplete_trailing_utf8_len(_buf->ptr, _buf->limit);
+    return _parser->parse(_buf->ptr, _buf->limit - _utf8_partial_tail, _buf->capacity);
 }
 
 Status HdfsJsonReader::_read_file_stream() const {
