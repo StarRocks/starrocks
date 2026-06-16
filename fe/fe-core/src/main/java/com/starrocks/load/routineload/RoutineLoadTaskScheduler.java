@@ -157,6 +157,12 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         // The slot watermark is reset so the next leader re-queries BE slot capacity.
         needScheduleTasksQueue.clear();
         lastBackendSlotUpdateTime = -1;
+        // Release this leader session's BE task-slot reservations: the tasks they accounted for are
+        // abandoned on demotion. Without this the per-backend slot counts only grow across
+        // leader -> follower -> leader cycles (takeBeTaskSlot increments, demotion never releases,
+        // and updateBeTaskSlot does not reset already-present alive backends), eventually exhausting
+        // max_routine_load_task_num_per_be so the next leader can never dispatch a task.
+        routineLoadManager.clearBeTaskSlot();
     }
 
     private static void awaitTermination(String name, java.util.concurrent.ExecutorService pool, long deadlineMs) {

@@ -218,6 +218,30 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+    /**
+     * Release every BE task slot this leader session reserved. Called from
+     * {@link RoutineLoadTaskScheduler#onStopped()} on leader demotion: the routine-load tasks the
+     * counts accounted for are abandoned once the leader session ends, so the per-backend usage must
+     * return to zero. Without this, every leader -> follower -> leader cycle leaks slots
+     * (takeBeTaskSlot only increments, demotion never releases, and updateBeTaskSlot does not reset
+     * already-present alive backends), eventually exhausting max_routine_load_task_num_per_be so
+     * takeBeTaskSlot returns -1 and no routine-load task can be scheduled again. Keeps the backend
+     * entries (capacity structure) intact; only zeroes usage.
+     */
+    public void clearBeTaskSlot() {
+        slotLock.lock();
+        try {
+            for (Map<Long, Integer> nodeMap : warehouseNodeTasksNum.values()) {
+                nodeMap.replaceAll((nodeId, count) -> 0);
+            }
+            for (Map<Long, Set<Long>> nodeToJobs : warehouseNodeToJobs.values()) {
+                nodeToJobs.values().forEach(Set::clear);
+            }
+        } finally {
+            slotLock.unlock();
+        }
+    }
+
     public void updateBeTaskSlot() {
         slotLock.lock();
         try {
