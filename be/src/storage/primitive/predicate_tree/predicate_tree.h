@@ -20,8 +20,8 @@
 
 #include "column/chunk.h"
 #include "common/overloaded.h"
-#include "storage/column_predicate.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/column_predicate.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 
 namespace starrocks {
 

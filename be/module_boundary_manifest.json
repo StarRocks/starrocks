@@ -390,7 +390,7 @@
     {
       "id": "storageprimitive",
       "doc_label": "StoragePrimitive",
-      "summary": "Primitive storage contracts and value types shared below ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
+      "summary": "Primitive storage contracts, predicate contracts, predicate trees, and value types shared below ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
       "owned_targets": ["StoragePrimitive"],
       "owned_roots": ["be/src/storage/primitive"],
       "allowed_include_prefixes": [
@@ -409,7 +409,7 @@
       "allowed_target_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["storage_primitive_test"],
       "allowed_test_link_deps": ["StoragePrimitive", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep StoragePrimitive limited to reusable storage contracts and value types; move concrete storage engine, tablet, rowset, lake, service, connector, and full Exec integration upward."
+      "remediation": "Keep StoragePrimitive limited to reusable storage contracts, predicate contracts, predicate trees, and value types; move concrete storage engine, tablet, rowset, lake, service, connector, and full Exec integration upward."
     },
     {
       "id": "storagebase",

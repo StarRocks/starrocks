@@ -22,7 +22,7 @@
 #include "column/global_dict/types.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"

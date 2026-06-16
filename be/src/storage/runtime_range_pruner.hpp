@@ -24,7 +24,7 @@
 #include "runtime/runtime_in_filter.h"
 #include "storage/column_and_predicate.h"
 #include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/predicate_parser.h"
 #include "storage/runtime_range_pruner.h"
 
