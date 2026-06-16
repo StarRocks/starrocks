@@ -679,24 +679,6 @@ public class MetaFunctions {
         }
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Return the query ID of the last executed query in the current session.
-     */
-    @ConstantFunction(name = "last_query_id", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator lastQueryId() {
-        ConnectContext connectContext = ConnectContext.get();
-        if (connectContext == null) {
-            return ConstantOperator.createNull(VarcharType.VARCHAR);
-        }
-        UUID lastQueryId = connectContext.getLastQueryId();
-        if (lastQueryId == null) {
-            return ConstantOperator.createNull(VarcharType.VARCHAR);
-        }
-        return ConstantOperator.createVarchar(lastQueryId.toString());
-    }
-
     /**
      * Invalidate global dictionary for a column, and return the result status.
      */
@@ -743,7 +725,7 @@ public class MetaFunctions {
                         new StatsVersion(-1, version));
 
         return minMax.map(columnMinMax -> ConstantOperator.createVarchar(columnMinMax.toString()))
-                .orElseGet(() -> ConstantOperator.createNull(VarcharType.VARCHAR));
+                .orElseGet(() -> ConstantOperator.createNull(Type.VARCHAR));
     }
 
     /**
@@ -770,6 +752,4 @@ public class MetaFunctions {
         }
         return ConstantOperator.createVarchar("invalidated column minmax");
     }
-
->>>>>>> f0951bee70 ([Enhancement] add inspect_minmax & invalidate meta functions (#63015))
 }

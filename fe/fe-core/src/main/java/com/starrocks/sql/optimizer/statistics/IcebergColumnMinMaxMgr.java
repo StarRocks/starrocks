@@ -89,7 +89,7 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
         }
 
         try {
-            CompletableFuture<Optional<ColumnMinMax>> result = cache.get(new CacheKey(identifier, version.getVersion()));
+            CompletableFuture<Optional<ColumnMinMax>> result = cache.get(new CacheKey(identifier, version));
             return result.get();
         } catch (Exception e) {
             LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
