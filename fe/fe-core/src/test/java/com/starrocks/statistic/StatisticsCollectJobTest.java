@@ -69,6 +69,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     private static long t0StatsTableId = 0;
 
+    @Test
+    public void testHistogramFormatSamplePercent() {
+        // Sub-1% ratios on large tables previously truncated to "0", producing the illegal SAMPLE('percent'='0').
+        // They must now be rendered as their true percent value.
+        Assertions.assertEquals("0.5", HistogramStatisticsCollectJob.formatSamplePercent(0.005));
+        Assertions.assertEquals("0.1", HistogramStatisticsCollectJob.formatSamplePercent(0.001));
+        // 10M / 2B = 0.005 -> 0.5%
+        Assertions.assertEquals("0.5",
+                HistogramStatisticsCollectJob.formatSamplePercent(10_000_000.0 / 2_000_000_000.0));
+        // Integral percents stay clean, no trailing zeros, no scientific notation.
+        Assertions.assertEquals("50", HistogramStatisticsCollectJob.formatSamplePercent(0.5));
+        Assertions.assertEquals("1", HistogramStatisticsCollectJob.formatSamplePercent(0.01));
+        // Very small ratios must remain a positive decimal, never "0".
+        String tiny = HistogramStatisticsCollectJob.formatSamplePercent(0.0000001);
+        Assertions.assertNotEquals("0", tiny);
+        Assertions.assertFalse(tiny.contains("E"));
+        Assertions.assertFalse(tiny.contains("e"));
+    }
+
     private static LocalDateTime t0UpdateTime = LocalDateTime.of(2022, 1, 1, 1, 1, 1);
 
     @TempDir
