@@ -253,7 +253,29 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         //     fill_dst_column() at Phase 7.  The evaluate-line contract is
         //     therefore covered without eagerly decoding pure-dict-filter
         //     predicate-only columns.
+        //
+        //     VARIANT virtual projection slots must be materialised before
+        //     compound conjuncts are evaluated: the missing-column provider
+        //     can fill physical lazy / hidden source slots on demand, but
+        //     variant virtual slots are created by emit_projections() which
+        //     runs later.  When a compound conjunct references such a slot,
+        //     we fetch only the needed hidden sources and project only the
+        //     needed virtual slots early.  The projected slots stay in
+        //     active_chunk through filtering and are reused by
+        //     emit_projections() at Phase 7.  Any remaining hidden sources
+        //     are fetched by the normal Phase 3 call — fetch_sources()
+        //     skips already-populated slots via _fetched_hidden_slots.
+        std::unordered_set<SlotId> early_projected_slots;
         if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+            if (!_variant->empty()) {
+                early_projected_slots = _variant->referenced_variant_virtual_slot_ids(
+                        _param.scanner_ctx->conjuncts.scanner_ctxs);
+                if (!early_projected_slots.empty()) {
+                    RETURN_IF_ERROR(_variant->fetch_and_project_virtual_slots(
+                            early_projected_slots, r, active_chunk, _variant->projection_timezone()));
+                }
+            }
+
             if (active_chunk->num_rows() > 0) {
                 RETURN_IF_ERROR(
                         _param.scanner_ctx->append_auxiliary_columns_to_chunk(&active_chunk, active_chunk->num_rows()));
@@ -276,7 +298,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
         active_chunk->set_missing_column_provider(nullptr);
 
-        // 3. Fetch variant sources (for subfield conjuncts)
+        // 3. Fetch variant sources (for subfield conjuncts).
+        //    _fetched_hidden_slots tracks already-populated columns from any
+        //    early fetch in Phase 2b; fetch_sources() skips those.
         RETURN_IF_ERROR(_variant->fetch_sources(r, active_chunk));
 
         // 4. Filter by subfields (variant deferred conjuncts)

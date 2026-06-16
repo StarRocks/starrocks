@@ -31,6 +31,8 @@
 #include "common/statusor.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/variant_path_reader.h"
 #include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
@@ -738,16 +740,86 @@ void VariantProjectionHandler::init_read_chunk_slots() {
 
 // ── get_next() phases ────────────────────────────────────────────────────────
 
+std::unordered_set<SlotId> VariantProjectionHandler::referenced_variant_virtual_slot_ids(
+        const std::vector<ExprContext*>& conjunct_ctxs) const {
+    std::unordered_set<SlotId> result;
+    std::vector<SlotId> slot_ids;
+    for (ExprContext* ctx : conjunct_ctxs) {
+        if (ctx == nullptr) continue;
+        slot_ids.clear();
+        ctx->root()->get_slot_ids(&slot_ids);
+        for (SlotId id : slot_ids) {
+            if (is_virtual_slot(id)) {
+                result.insert(id);
+            }
+        }
+    }
+    return result;
+}
+
+Status VariantProjectionHandler::fetch_and_project_virtual_slots(const std::unordered_set<SlotId>& virtual_slot_ids,
+                                                                   const Range<uint64_t>& range, ChunkPtr& active_chunk,
+                                                                   const cctz::time_zone& zone) {
+    // 1. Collect hidden source slots that are needed but not yet fetched.
+    for (SlotId virtual_slot_id : virtual_slot_ids) {
+        auto proj_it = _projections.find(virtual_slot_id);
+        if (proj_it == _projections.end()) {
+            return Status::InternalError(
+                    fmt::format("variant virtual slot {} not found in projections", virtual_slot_id));
+        }
+        SlotId source_slot_id = proj_it->second.source_slot_id;
+        // Physical sources (slot_id >= 0) are already populated as active columns.
+        if (source_slot_id < 0 && !_fetched_hidden_slots.count(source_slot_id)) {
+            auto it = _hidden_slot_index.find(source_slot_id);
+            if (it == _hidden_slot_index.end()) {
+                return Status::InternalError(
+                        fmt::format("hidden source slot {} not found in index", source_slot_id));
+            }
+            // Read into the pre-created column (from init_read_chunk_slots) if it
+            // exists; otherwise create a new one.
+            if (active_chunk->is_slot_exist(source_slot_id)) {
+                auto& col = active_chunk->get_column_by_slot_id(source_slot_id);
+                RETURN_IF_ERROR(it->second->reader->read_range(range, nullptr, col));
+                RETURN_IF_ERROR(it->second->reader->finalize_lazy_state(col));
+            } else {
+                ColumnPtr col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
+                RETURN_IF_ERROR(it->second->reader->read_range(range, nullptr, col));
+                RETURN_IF_ERROR(it->second->reader->finalize_lazy_state(col));
+                active_chunk->append_column(std::move(col), source_slot_id);
+            }
+            _fetched_hidden_slots.insert(source_slot_id);
+        }
+    }
+
+    // 2. Project each needed virtual slot from its source column.
+    for (SlotId virtual_slot_id : virtual_slot_ids) {
+        if (active_chunk->is_slot_exist(virtual_slot_id)) continue;
+        auto proj_it = _projections.find(virtual_slot_id);
+        DCHECK(proj_it != _projections.end());
+        const auto& projection = proj_it->second;
+        DCHECK(active_chunk->is_slot_exist(projection.source_slot_id));
+        const ColumnPtr& source_col = active_chunk->get_column_by_slot_id(projection.source_slot_id);
+        ASSIGN_OR_RETURN(auto result_col,
+                         project_variant_leaf_column(source_col, projection.parsed_path, projection.target_type, zone));
+        active_chunk->append_column(std::move(result_col), virtual_slot_id);
+    }
+    return Status::OK();
+}
+
 void VariantProjectionHandler::reset_iteration_state() {
     _deferred_projected_chunk.reset();
+    _fetched_hidden_slots.clear();
 }
 
 Status VariantProjectionHandler::fetch_sources(const Range<uint64_t>& range, ChunkPtr& active_chunk) {
     for (SlotId slot_id : _active_hidden_slot_ids) {
+        // Skip columns that were already populated by an early fetch in Phase 2b.
+        if (_fetched_hidden_slots.count(slot_id)) continue;
         auto* hidden_src = _hidden_slot_index.at(slot_id);
         auto& hidden_col = active_chunk->get_column_by_slot_id(slot_id);
         RETURN_IF_ERROR(hidden_src->reader->read_range(range, nullptr, hidden_col));
         RETURN_IF_ERROR(hidden_src->reader->finalize_lazy_state(hidden_col));
+        _fetched_hidden_slots.insert(slot_id);
     }
     return Status::OK();
 }
@@ -884,6 +956,12 @@ Status VariantProjectionHandler::emit_projections(ChunkPtr& active_chunk, ChunkP
                                     slot_id, projected_col->size(), active_chunk->num_rows()));
             }
             (*dst)->get_column_by_slot_id(slot_id) = projected_col;
+            continue;
+        }
+        // Early-projected virtual slot (Phase 2b compound-conjunct prep) —
+        // already filtered and ready to move to dst.
+        if (active_chunk->is_slot_exist(slot_id)) {
+            (*dst)->get_column_by_slot_id(slot_id) = active_chunk->get_column_by_slot_id(slot_id);
             continue;
         }
         if (!active_chunk->is_slot_exist(projection.source_slot_id)) {

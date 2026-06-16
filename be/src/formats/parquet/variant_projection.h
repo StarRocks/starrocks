@@ -150,6 +150,20 @@ public:
     bool is_virtual_slot(SlotId slot_id) const { return _projections.count(slot_id) > 0; }
     std::unordered_set<SlotId> projection_slot_ids() const;
 
+    // Returns the subset of variant virtual slot ids that are referenced by
+    // the given conjuncts.  Used to decide which projections must be
+    // materialised before compound-conjunct evaluation (Phase 2b).
+    std::unordered_set<SlotId> referenced_variant_virtual_slot_ids(
+            const std::vector<ExprContext*>& conjunct_ctxs) const;
+
+    // Project only the requested variant virtual slots into active_chunk.
+    // Fetches only the hidden source columns that are needed for the given
+    // virtual slots (skipping ones already present in active_chunk).
+    // Returns the set of virtual slots that were successfully projected.
+    Status fetch_and_project_virtual_slots(const std::unordered_set<SlotId>& virtual_slot_ids,
+                                           const Range<uint64_t>& range, ChunkPtr& active_chunk,
+                                           const cctz::time_zone& zone);
+
     //    Reset per-iteration state (call at start of each get_next() call).
     void reset_iteration_state();
 
@@ -192,6 +206,12 @@ private:
 
     cctz::time_zone _timezone_obj = cctz::utc_time_zone();
     bool _timezone_resolved = false;
+
+    // Tracks hidden source slots that have already been populated with data
+    // during the current iteration (either by the normal fetch_sources() path
+    // or by an early fetch for compound-conjunct variant virtual slots).
+    // Reset by reset_iteration_state().
+    std::unordered_set<SlotId> _fetched_hidden_slots;
 
     // Per-iteration state — set by filter_subfields, consumed by
     // align_after_combined_filter and emit_projections.

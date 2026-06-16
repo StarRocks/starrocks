@@ -65,7 +65,7 @@ bool ReadRangePlanner::should_coalesce_active_lazy() const {
     if (_param.lazy_column_coalesce_counter == nullptr) {
         return true;
     }
-    return _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed) >= 0;
+    return _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed) > 0;
 }
 
 void ReadRangePlanner::pre_plan_lazy_ranges(const std::vector<int>& lazy_column_indices, int64_t* end_offset,
