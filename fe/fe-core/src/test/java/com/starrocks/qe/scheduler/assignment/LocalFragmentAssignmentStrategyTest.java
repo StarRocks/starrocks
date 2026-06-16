@@ -14,29 +14,68 @@
 
 package com.starrocks.qe.scheduler.assignment;
 
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.FragmentInstance.DeployedScanRangeLayout;
+import com.starrocks.thrift.TScanRangeParams;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
 public class LocalFragmentAssignmentStrategyTest {
     @Test
-    public void testIncrementalScanRangeReuseKeepsAssignedDopWithinDeployedDop() {
-        int logicalDop = LocalFragmentAssignmentStrategy.adjustLogicalDopForIncrementalScanRangeReuse(true, 32, 14);
+    public void testFragmentInstanceRecordsDeployedScanRangeLayoutPerScanNode() {
+        FragmentInstance instance = new FragmentInstance(null, null);
 
-        Assertions.assertEquals(14, logicalDop);
+        instance.recordDeployedScanRangesWithoutDriverSeq(1);
+        instance.recordDeployedScanRangesPerDriverSeq(2, 4);
+
+        DeployedScanRangeLayout normalLayout = instance.getDeployedScanRangeLayout(1).orElseThrow();
+        Assertions.assertFalse(normalLayout.isPerDriverSeq());
+
+        DeployedScanRangeLayout perDriverLayout = instance.getDeployedScanRangeLayout(2).orElseThrow();
+        Assertions.assertTrue(perDriverLayout.isPerDriverSeq());
+        Assertions.assertEquals(4, perDriverLayout.getDriverSeqCount());
     }
 
     @Test
-    public void testIncrementalScanRangeReuseAllowsSmallerComputedDop() {
-        int logicalDop = LocalFragmentAssignmentStrategy.adjustLogicalDopForIncrementalScanRangeReuse(true, 12, 14);
+    public void testPaddingScanRangesUsesPerScanNodeDeployedLayout() {
+        FragmentInstance instance = new FragmentInstance(null, null);
+        instance.recordDeployedScanRangesPerDriverSeq(1, 2);
+        instance.recordDeployedScanRangesPerDriverSeq(2, 4);
 
-        Assertions.assertEquals(12, logicalDop);
+        instance.addScanRanges(1, 0, List.of());
+        instance.addScanRanges(2, 0, List.of());
+        instance.paddingScanRanges();
+
+        Map<Integer, List<TScanRangeParams>> scanNode1DriverSeqToScanRanges =
+                instance.getNode2DriverSeqToScanRanges().get(1);
+        Assertions.assertEquals(2, scanNode1DriverSeqToScanRanges.size());
+        Assertions.assertTrue(scanNode1DriverSeqToScanRanges.containsKey(0));
+        Assertions.assertTrue(scanNode1DriverSeqToScanRanges.containsKey(1));
+
+        Map<Integer, List<TScanRangeParams>> scanNode2DriverSeqToScanRanges =
+                instance.getNode2DriverSeqToScanRanges().get(2);
+        Assertions.assertEquals(4, scanNode2DriverSeqToScanRanges.size());
+        Assertions.assertTrue(scanNode2DriverSeqToScanRanges.containsKey(0));
+        Assertions.assertTrue(scanNode2DriverSeqToScanRanges.containsKey(1));
+        Assertions.assertTrue(scanNode2DriverSeqToScanRanges.containsKey(2));
+        Assertions.assertTrue(scanNode2DriverSeqToScanRanges.containsKey(3));
     }
 
     @Test
-    public void testInitialScanRangeAssignmentUsesComputedDop() {
-        int logicalDop = LocalFragmentAssignmentStrategy.adjustLogicalDopForIncrementalScanRangeReuse(false, 32, 14);
+    public void testResetScanRangesKeepsDeployedScanRangeLayout() {
+        FragmentInstance instance = new FragmentInstance(null, null);
+        instance.recordDeployedScanRangesPerDriverSeq(1, 3);
+        instance.addScanRanges(1, 0, List.of());
 
-        Assertions.assertEquals(32, logicalDop);
+        instance.resetAllScanRanges();
+
+        Assertions.assertTrue(instance.getNode2DriverSeqToScanRanges().isEmpty());
+        DeployedScanRangeLayout layout = instance.getDeployedScanRangeLayout(1).orElseThrow();
+        Assertions.assertTrue(layout.isPerDriverSeq());
+        Assertions.assertEquals(3, layout.getDriverSeqCount());
     }
 
 }

@@ -69,17 +69,6 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         this.useIncrementalScanRanges = useIncrementalScanRanges;
     }
 
-    static int adjustLogicalDopForIncrementalScanRangeReuse(
-            boolean reuseFragmentInstance,
-            int logicalDop,
-            int deployedLogicalDop) {
-        if (!reuseFragmentInstance) {
-            return logicalDop;
-        }
-
-        return Math.max(1, Math.min(logicalDop, deployedLogicalDop));
-    }
-
     @Override
     public void assignFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
         for (ScanNode scanNode : execFragment.getScanNodes()) {
@@ -159,6 +148,42 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
             return true;
         }
         return visitedReplicatedScanIds.add(scanId);
+    }
+
+    private List<List<TScanRangeParams>> splitScanRangesByDriverSeqCount(
+            List<TScanRangeParams> scanRanges, int driverSeqCount) {
+        if (Config.enable_schedule_insert_query_by_row_count && isLoadType
+                && !scanRanges.isEmpty()
+                && scanRanges.get(0).getScan_range().isSetInternal_scan_range()) {
+            return splitScanRangeParamByRowCount(scanRanges, driverSeqCount);
+        }
+        return ListUtil.splitBySize(scanRanges, driverSeqCount);
+    }
+
+    private void addScanRangesPerDriverSeq(
+            FragmentInstance instance, Integer scanId, List<List<TScanRangeParams>> scanRangesPerDriverSeq) {
+        for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
+            instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
+        }
+    }
+
+    private void assignIncrementalScanRangesToDeployedLayout(
+            PlanFragment fragment, FragmentInstance instance, Integer scanId, List<TScanRangeParams> scanRanges) {
+        FragmentInstance.DeployedScanRangeLayout deployedLayout =
+                instance.getDeployedScanRangeLayout(scanId).orElse(null);
+        if (deployedLayout == null || !deployedLayout.isPerDriverSeq()) {
+            instance.addScanRanges(scanId, scanRanges);
+            if (deployedLayout == null) {
+                instance.recordDeployedScanRangesWithoutDriverSeq(scanId);
+            }
+            fragment.disablePhysicalPropertyOptimize();
+            return;
+        }
+
+        List<List<TScanRangeParams>> scanRangesPerDriverSeq =
+                splitScanRangesByDriverSeqCount(scanRanges, deployedLayout.getDriverSeqCount());
+        addScanRangesPerDriverSeq(instance, scanId, scanRangesPerDriverSeq);
+        instance.paddingScanRanges();
     }
 
     private void assignScanRangesToColocateFragmentInstancePerWorker(
@@ -300,8 +325,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                                 new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
                         execFragment.addInstance(instance);
                     }
-                    if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
+                    if (reuse) {
+                        assignIncrementalScanRangesToDeployedLayout(fragment, instance, scanId, scanRanges);
+                    } else if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
+                        instance.recordDeployedScanRangesWithoutDriverSeq(scanId);
                         fragment.disablePhysicalPropertyOptimize();
                     } else {
                         int expectedPhysicalDop = Math.max(1, Math.min(pipelineDop, scanRanges.size()));
@@ -316,32 +344,19 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             maxDop = Math.max(maxDop, expectedPhysicalDop);
                             logicalDop = Math.min(scanRanges.size(), maxDop);
                         }
-                        logicalDop = adjustLogicalDopForIncrementalScanRangeReuse(
-                                reuse,
-                                logicalDop,
-                                instance.getGroupExecutionScanDop());
-                        List<List<TScanRangeParams>> scanRangesPerDriverSeq;
-                        if (Config.enable_schedule_insert_query_by_row_count && isLoadType
-                                && !scanRanges.isEmpty()
-                                && scanRanges.get(0).getScan_range().isSetInternal_scan_range()) {
-                            scanRangesPerDriverSeq = splitScanRangeParamByRowCount(scanRanges, logicalDop);
-                        } else {
-                            scanRangesPerDriverSeq = ListUtil.splitBySize(scanRanges, logicalDop);
-                        }
+                        List<List<TScanRangeParams>> scanRangesPerDriverSeq =
+                                splitScanRangesByDriverSeqCount(scanRanges, logicalDop);
                         // Make pipeline input dop == sink dop to avoid extra local-shuffle.
                         // TODO: Make XXXSink support group execution to further improve performance.
-                        if (!reuse && fragment.isForceAssignScanRangesPerDriverSeq() &&
+                        if (fragment.isForceAssignScanRangesPerDriverSeq() &&
                                 expectedPhysicalDop != pipelineDop) {
                             fragment.setPipelineDop(expectedPhysicalDop);
                         }
-                        if (!reuse) {
-                            instance.setPipelineDop(expectedPhysicalDop);
-                            instance.setGroupExecutionScanDop(logicalDop);
-                        }
+                        instance.setPipelineDop(expectedPhysicalDop);
+                        instance.setGroupExecutionScanDop(logicalDop);
+                        instance.recordDeployedScanRangesPerDriverSeq(scanId, logicalDop);
 
-                        for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
-                            instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
-                        }
+                        addScanRangesPerDriverSeq(instance, scanId, scanRangesPerDriverSeq);
                         instance.paddingScanRanges();
                     }
                 }

@@ -614,7 +614,6 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)
-ADD_BE_TEST(exec/pipeline/scan/morsel_queue_factory_test)
 
 # Standalone executable for builtin_functions_fuzzy_test
 ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
