@@ -18,9 +18,12 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.alter.reshard.TabletReshardUtils;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
@@ -28,15 +31,24 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.util.List;
+
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -178,6 +190,69 @@ public class InsertPreSplitHookFilesPartitionedTest {
                 // message did NOT escape; we confirmed that in the catch above.
             }
         }
+    }
+
+    // ---------- Automatic-partition gate (PreSplitFlow.dispatch) ----------
+
+    @Test
+    public void skipsManuallyPartitionedFilesTarget() {
+        // A partitioned FILES target whose supportedAutomaticPartition() is false (a manual
+        // list/range partition table) must not reach runMultiPartitionFlow: pre-creating
+        // partitions from sampled values would fabricate system partitions outside the
+        // user-defined set. The automatic-partition gate lives in PreSplitFlow.dispatch and
+        // reaches through every INSERT entry; this drives the FILES load kind directly.
+        //
+        // The full multi-partition scaffolding (CN count, sampler, grouper) is wired even
+        // though the gate short-circuits before any of it runs: were the gate removed, the
+        // flow would progress all the way to submitForPartitionsCombined and FAIL on the
+        // never() verification below — a clean bite signal rather than an NPE inside
+        // computeNodeCount on uninitialized global state.
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(7L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getName()).thenReturn("manual_partitioned_files_t");
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(true);
+        when(table.getPartitionInfo()).thenReturn(partitionInfo);
+        when(table.supportedAutomaticPartition()).thenReturn(false);
+
+        PreSplitFlow.Prepared prepared = filesPrepared();
+        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
+            grouper.when(() -> PartitionSampleGrouper.group(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), anyLong()))
+                    .thenReturn(List.of(mock(PartitionSamples.class)));
+
+            PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_FILES,
+                    () -> false, mock(ConnectContext.class));
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any()), never());
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+        }
+    }
+
+    /**
+     * Build a {@link PreSplitFlow.Prepared} bundle carrying an
+     * {@link InsertFromFilesScanContext} so the dispatched flow is genuinely FILES-flavored.
+     * The sort key / partition columns are the ones the data-tier sampler would project.
+     */
+    private static PreSplitFlow.Prepared filesPrepared() {
+        InsertFromFilesScanContext scanContext =
+                new InsertFromFilesScanContext(mock(TableFunctionTable.class), mock(ComputeResource.class));
+        List<Column> sortKey = List.of(bigintColumn("sort_col"));
+        List<Column> partitionColumns = List.of(bigintColumn("p_col"));
+        return new PreSplitFlow.Prepared(scanContext, sortKey, partitionColumns,
+                /*estimatedBytes*/ 0L, mock(ComputeResource.class));
     }
 
     // ---------- Outer try/catch swallows internal throws ----------

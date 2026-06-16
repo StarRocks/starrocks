@@ -184,6 +184,51 @@ public class BrokerLoadPreSplitHookPartitionedTest {
     }
 
     @Test
+    public void manuallyPartitionedBrokerLoadSkipsPreSplit() {
+        // A partitioned Broker Load target whose supportedAutomaticPartition() is false (a
+        // manual list/range partition table) must not reach the multi-partition flow: the
+        // automatic-partition gate in PreSplitFlow.dispatch reaches through the Broker Load
+        // entry too. Mirror partitionedBrokerLoadTakesMultiPartitionBranch's scaffolding so
+        // the flow would reach submitForPartitionsCombined if the gate were removed — that is
+        // the bite signal. Override only this instance's supportedAutomaticPartition() to
+        // false; the shared mockPartitionedRangeTable() default (true) stays untouched.
+        OlapTable table = mockPartitionedRangeTable();
+        when(table.supportedAutomaticPartition()).thenReturn(false);
+        List<Column> sortKey = List.of(bigintColumn("sort_col"));
+        List<Column> partitionColumns = List.of(bigintColumn("p_col"));
+        when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(partitionColumns);
+
+        SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(sampledRows))) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(sortKey);
+            grouper.when(() -> PartitionSampleGrouper.group(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), anyLong()))
+                    .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
+
+            BrokerLoadPreSplitHook.maybeRunPreSplit(
+                    mockConnectContextWithSessionPreSplit(true),
+                    mock(Database.class), table, mock(BrokerDesc.class),
+                    List.of(mock(BrokerFileGroup.class)),
+                    List.of(List.<TBrokerFileStatus>of()),
+                    mock(ComputeResource.class), () -> false);
+
+            // The automatic-partition gate must skip before either submit path.
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any()), never());
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+        }
+    }
+
+    @Test
     public void multiPartitionBrokerLoadCapsSampleAtPreSubmitBudget() {
         // The multi-partition data-tier sample must be capped at the pre-submit
         // budget — the same bound the single-partition DefaultPreSplitPipeline path
