@@ -552,11 +552,11 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    orc
     ${WL_END_GROUP}
     FormatAvro
     FormatCsv
     FormatJson
+    FormatOrc
     FormatCore
     ExecRuntime
     ComputeEnv

@@ -20,7 +20,7 @@
 #include <bitset>
 
 #include "base/container/raw_container.h"
-#include "connector/deletion_vector/deletion_bitmap.h"
+#include "formats/deletion_bitmap.h"
 
 namespace starrocks {
 

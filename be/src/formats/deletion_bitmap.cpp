@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "deletion_bitmap.h"
+#include "formats/deletion_bitmap.h"
 
 #include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"

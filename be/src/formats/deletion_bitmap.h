@@ -17,6 +17,7 @@
 #include <roaring/roaring64.h>
 
 #include <memory>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"

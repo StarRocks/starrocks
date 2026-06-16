@@ -17,9 +17,16 @@
 #include <cstdio>
 
 #include "common/configbase.h"
+#include "formats/orc/lzo_decompressor_registration.h"
 #include "types/time_types.h"
 
 int main(int argc, char** argv) {
+    auto lzo_status = starrocks::register_orc_lzo_decompressor();
+    if (!lzo_status.ok()) {
+        std::fprintf(stderr, "fail to register ORC LZO decompressor: %s\n", lzo_status.to_string().c_str());
+        return 1;
+    }
+
     if (!starrocks::config::init(nullptr)) {
         std::fprintf(stderr, "failed to initialize config defaults\n");
         return 1;

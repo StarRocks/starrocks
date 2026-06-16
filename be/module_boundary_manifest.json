@@ -315,6 +315,7 @@
       "owned_targets": ["FormatCore"],
       "owned_globs": [
         "be/src/formats/column_evaluator.*",
+        "be/src/formats/deletion_bitmap.*",
         "be/src/formats/disk_range.hpp",
         "be/src/formats/file_writer.*",
         "be/src/formats/io/**",
@@ -322,6 +323,7 @@
       ],
       "allowed_include_prefixes": [
         "formats/column_evaluator.h",
+        "formats/deletion_bitmap.h",
         "formats/disk_range.hpp",
         "formats/file_writer.h",
         "formats/io/",
@@ -351,6 +353,7 @@
       ],
       "allowed_test_targets": ["format_test"],
       "allowed_test_link_deps": [
+        "FormatOrc",
         "FormatAvro",
         "FormatJson",
         "FormatCsv",
