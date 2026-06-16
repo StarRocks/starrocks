@@ -119,14 +119,14 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         // cannot include T_load. Regression guard: source-level structural
         // assertion that the two await helpers exist and are called.
         String source = readSource(
-                "fe-core/src/main/java/com/starrocks/alter/reshard/presplit/BrokerLoadPreSplitHook.java");
+                "fe-core/src/main/java/com/starrocks/alter/reshard/presplit/PreSplitFlow.java");
         String codeOnly = stripLineComments(source);
         Assertions.assertTrue(containsCall(codeOnly, "awaitFinishedAllowingFallback"),
-                "BrokerLoadPreSplitHook MUST call awaitFinishedAllowingFallback on the single-partition path");
+                "PreSplitFlow MUST call awaitFinishedAllowingFallback on the single-partition path");
         Assertions.assertTrue(containsCall(codeOnly, "awaitCombinedJobAllowingFallback"),
-                "BrokerLoadPreSplitHook MUST call awaitCombinedJobAllowingFallback on the multi-partition path");
+                "PreSplitFlow MUST call awaitCombinedJobAllowingFallback on the multi-partition path");
         Assertions.assertTrue(source.contains("submitForPartitionsCombined"),
-                "BrokerLoadPreSplitHook multi-partition flow MUST call submitForPartitionsCombined");
+                "PreSplitFlow multi-partition flow MUST call submitForPartitionsCombined");
     }
 
     @Test
@@ -503,6 +503,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
         when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
         when(table.getName()).thenReturn("partitioned_t");
+        when(table.supportedAutomaticPartition()).thenReturn(true);
         PartitionInfo partitionInfo = mock(PartitionInfo.class);
         when(partitionInfo.isPartitioned()).thenReturn(true);
         when(table.getPartitionInfo()).thenReturn(partitionInfo);

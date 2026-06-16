@@ -260,7 +260,8 @@ public class BrokerLoadPreSplitHookTest {
                     .getMetric(label).getValue();
 
             assertHookDoesNotDelegate(() ->
-                    invokeHook(target, List.of(mock(BrokerFileGroup.class)), List.of()));
+                    invokeHook(target, List.of(mock(BrokerFileGroup.class)),
+                            List.of(List.<TBrokerFileStatus>of())));
 
             Assertions.assertEquals(baseline + 1L,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
