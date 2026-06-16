@@ -210,6 +210,13 @@ Status HdfsScanner::_build_scanner_context() {
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_ctx->conjuncts.all_ctxs;
     opts.tuple_desc = _scanner_ctx->tuple_desc;
+    // Must use the fragment-scoped pool (runtime_state->obj_pool()), not
+    // _scanner_ctx->obj_pool.  BoxedExpr::expr_context() deep-copies Expr
+    // nodes into this pool, and those nodes are later referenced by cloned
+    // ExprContexts inside ColumnExprPredicate (which live in the predicates
+    // struct and outlive the data source's _pool).  Using any shorter-lived
+    // pool would free the Expr nodes before the predicates are destroyed,
+    // causing the same use-after-free pattern described in HdfsScanner::close().
     opts.obj_pool = _runtime_state->obj_pool();
     opts.runtime_filters = _scanner_ctx->runtime_filter_collector;
     opts.runtime_state = _runtime_state;
