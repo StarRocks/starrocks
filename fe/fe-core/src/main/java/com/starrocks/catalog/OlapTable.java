@@ -2687,7 +2687,28 @@ public class OlapTable extends Table {
         return true;
     }
 
+    public boolean isSetEnableStatisticCollectOnFirstLoad() {
+        return tableProperty != null && tableProperty.isSetEnableStatisticCollectOnFirstLoad();
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
+<<<<<<< HEAD
+=======
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                Boolean.valueOf(enable).toString());
+        tableProperty.buildEnableStatisticCollectOnFirstLoad();
+        tableProperty.setEnableStatisticCollectOnFirstLoad(enable);
+    }
+
+    public int getTableQueryTimeout() {
+        if (tableProperty != null) {
+            return tableProperty.getTableQueryTimeout();
+        }
+        return -1;
+    }
+
+    public void setTableQueryTimeout(int tableQueryTimeout) {
+>>>>>>> 1675b2c421 ([Enhancement] Support table-level override for first load statistics collection (#74794))
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
@@ -3493,9 +3514,9 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
         }
 
-        Boolean enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad();
-        if (!enableStatisticCollectOnFirstLoad) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
+        if (isSetEnableStatisticCollectOnFirstLoad()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                    Boolean.toString(enableStatisticCollectOnFirstLoad()));
         }
 
         // base compaction forbidden time ranges
