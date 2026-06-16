@@ -44,6 +44,8 @@ import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.zone.ZoneOffsetTransition;
+import java.time.zone.ZoneRules;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -191,15 +193,24 @@ public final class IcebergUtil {
                 Types.TimestampType timestampType = (Types.TimestampType) type;
                 if (timestampType.shouldAdjustToUTC() && low instanceof Long && high instanceof Long) {
                     // Iceberg TIMESTAMP WITH TIME ZONE stores instants in UTC, while StarRocks compares DATETIME
-                    // values in the session timezone, so we convert file-level bounds into session-local micros
-                    // before sending them to BE.
+                    // values in the session timezone, so file-level bounds are converted into session-local micros
+                    // before being sent to BE.
                     //
-                    // Note that this is an endpoint conversion on file-level min/max only. For timezones whose
-                    // UTC offset changes over time (for example DST or historical rule changes), UTC->local is
-                    // not strictly monotonic over an arbitrary interval, so the converted low/high remain a
-                    // best-effort approximation rather than an exact local min/max for the full file.
-                    minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
-                    minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                    // This is an endpoint-only conversion: it maps just the file's min and max instants. It is exact
+                    // only while UTC->local is monotonic across the file's [low, high] range, i.e. local = utc + offset
+                    // never folds back on itself. A spring-forward transition (offset jumps up, e.g. -08:00 -> -07:00)
+                    // keeps local time strictly increasing, so the endpoints stay the true local min/max. A fall-back
+                    // transition (offset drops, e.g. -07:00 -> -08:00) rewinds local time, so the real min/max can sit
+                    // strictly inside the file and is unrecoverable from the endpoints alone. Only that case is
+                    // rejected: the file-level min/max is dropped and BE reads this file directly (a per-file
+                    // fallback) instead of trusting an inexact bound.
+                    ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
+                    if (isEndpointConversionExact(zoneId, (Long) low, (Long) high)) {
+                        minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
+                        minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                    } else {
+                        minMaxValues.remove(field.fieldId());
+                    }
                 }
             }
         }
@@ -213,6 +224,34 @@ public final class IcebergUtil {
         ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
         ZoneOffset offset = zoneId.getRules().getOffset(Instant.ofEpochSecond(seconds, nanos));
         return micros + offset.getTotalSeconds() * 1_000_000L;
+    }
+
+    /**
+     * Returns true when the endpoint UTC-&gt;local conversion in {@link #adjustTimestampMicrosToSessionTz(long)}
+     * produces the exact local min/max for a file covering the instant range {@code [lowMicros, highMicros]} in
+     * {@code zoneId}.
+     *
+     * <p>{@code local = utc + offset(utc)} preserves order as long as the offset never decreases across the range, so
+     * the file's earliest/latest instants stay its earliest/latest local times. A spring-forward jump (offset
+     * increases) only widens the gap and keeps that order; a fall-back jump (offset decreases) rewinds local time and
+     * can move the true min/max onto an interior row that the endpoints no longer represent. We therefore reject the
+     * range only if it contains an offset-decreasing transition; constant-offset and spring-forward ranges stay exact.
+     */
+    private static boolean isEndpointConversionExact(ZoneId zoneId, long lowMicros, long highMicros) {
+        Instant low = Instant.ofEpochSecond(Math.floorDiv(lowMicros, 1_000_000L));
+        Instant high = Instant.ofEpochSecond(Math.floorDiv(highMicros, 1_000_000L));
+        ZoneRules rules = zoneId.getRules();
+        // nextTransition returns the first transition strictly after its argument; zone transitions never land on
+        // sub-second boundaries, so truncating micros to whole seconds cannot skip one. Walk every transition in
+        // (low, high] and reject as soon as one decreases the UTC offset (a fall-back).
+        for (ZoneOffsetTransition t = rules.nextTransition(low);
+                t != null && !t.getInstant().isAfter(high);
+                t = rules.nextTransition(t.getInstant())) {
+            if (t.getOffsetAfter().getTotalSeconds() < t.getOffsetBefore().getTotalSeconds()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static Map<Integer, TExprMinMaxValue> toThriftMinMaxValueBySlots(Schema schema,
