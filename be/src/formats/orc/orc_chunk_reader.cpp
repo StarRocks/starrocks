@@ -30,6 +30,7 @@
 #include "common/stack_util.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "compute_env/load_path/rejected_record_writer.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/orc_mapping.h"
