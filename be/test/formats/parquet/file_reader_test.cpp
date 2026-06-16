@@ -63,7 +63,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScannerStats g_hdfs_stats;
+static FormatScannerStats g_hdfs_stats;
 using starrocks::HdfsScannerContext;
 
 static const ColumnPtr& get_struct_field_column(const ColumnPtr& column, const std::string& field_name) {
@@ -873,9 +873,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     ColumnPtr partition_col3 = ColumnHelper::create_const_column<TYPE_INT>(5, 1);
     ColumnPtr partition_col4 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
     ColumnPtr partition_col5 = ColumnHelper::create_const_null_column(1);
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{3, ctx->slot_descs[2], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{4, ctx->slot_descs[3], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{5, ctx->slot_descs[4], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{3, ctx->slot_descs[2], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{4, ctx->slot_descs[3], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{5, ctx->slot_descs[4], false});
     ctx->partition_values.emplace_back(partition_col3);
     ctx->partition_values.emplace_back(partition_col4);
     ctx->partition_values.emplace_back(partition_col5);
@@ -918,9 +918,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
     ColumnPtr partition_col3 = ColumnHelper::create_const_column<TYPE_INT>(5, 1);
     ColumnPtr partition_col4 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
     ColumnPtr partition_col5 = ColumnHelper::create_const_null_column(1);
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{3, ctx->slot_descs[2], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{4, ctx->slot_descs[3], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{5, ctx->slot_descs[4], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{3, ctx->slot_descs[2], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{4, ctx->slot_descs[3], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{5, ctx->slot_descs[4], false});
     ctx->partition_values.emplace_back(partition_col3);
     ctx->partition_values.emplace_back(partition_col4);
     ctx->partition_values.emplace_back(partition_col5);

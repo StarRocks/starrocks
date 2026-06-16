@@ -742,7 +742,7 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(ObjectPool*
     return c;
 }
 
-static HdfsScannerStats g_hdfs_stats;
+static FormatScannerStats g_hdfs_stats;
 GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c1 =
             _create_group_reader_param_of_column(&_pool, 0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);

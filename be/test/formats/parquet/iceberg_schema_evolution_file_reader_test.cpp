@@ -39,7 +39,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScannerStats g_hdfs_stats{};
+static FormatScannerStats g_hdfs_stats{};
 
 class IcebergSchemaEvolutionTest : public testing::Test {
 public:

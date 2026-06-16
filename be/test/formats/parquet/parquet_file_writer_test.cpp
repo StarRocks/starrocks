@@ -119,7 +119,7 @@ protected:
                                                                 std::vector<bool> nullable = {},
                                                                 std::vector<std::string> column_names = {});
 
-    HdfsScannerStats _hdfs_stats;
+    FormatScannerStats _hdfs_stats;
     MemoryFileSystem _fs;
     std::string _file_path{"/dummy_file.parquet"};
     std::unique_ptr<parquet::ParquetOutputStream> _output_stream;

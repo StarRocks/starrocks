@@ -41,7 +41,7 @@ static const IcebergColumnMeta k_delete_file_pos{
         .id = INT32_MAX - 102, .col_name = "pos", .type = TPrimitiveType::BIGINT};
 
 StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
-        const TIcebergDeleteFile& delete_file, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
+        const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _ctx.fs,
@@ -77,8 +77,8 @@ Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
 }
 
 Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {
-    HdfsScannerStats app_stats;
-    HdfsScannerStats fs_stats;
+    FormatScannerStats app_stats;
+    FormatScannerStats fs_stats;
     std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
     std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
 
@@ -98,7 +98,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
 
     auto scanner_ctx = std::make_unique<HdfsScannerContext>();
 
-    std::vector<HdfsScannerContext::ColumnInfo> columns;
+    std::vector<FormatColumnInfo> columns;
     THdfsScanRange scan_range;
     scan_range.offset = 0;
     scan_range.length = delete_file.length;
@@ -106,7 +106,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
                                  &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
     for (size_t i = 0; i < slot_descriptors.size(); i++) {
         auto* slot = slot_descriptors[i];
-        HdfsScannerContext::ColumnInfo column;
+        FormatColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = i;
         column.decode_needed = true;
@@ -166,8 +166,8 @@ Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) co
     std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
                                  &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
 
-    HdfsScannerStats app_stats;
-    HdfsScannerStats fs_stats;
+    FormatScannerStats app_stats;
+    FormatScannerStats fs_stats;
     std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
     std::shared_ptr<CacheInputStream> cache_input_stream;
 
@@ -235,7 +235,7 @@ SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& m
 }
 
 void IcebergDeleteBuilder::update_delete_file_io_counter(
-        RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
+        RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
         const std::shared_ptr<CacheInputStream>& cache_input_stream,
         const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
     const std::string ICEBERG_TIMER = "ICEBERG_V2_MOR";

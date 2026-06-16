@@ -32,8 +32,8 @@ struct OpenFileOptions {
     FileSystem* fs = nullptr;
     std::string file_path;
     int64_t file_size = -1;
-    HdfsScannerStats* fs_stats = nullptr;
-    HdfsScannerStats* app_stats = nullptr;
+    FormatScannerStats* fs_stats = nullptr;
+    FormatScannerStats* app_stats = nullptr;
 
     // for datacache
     DataCacheOptions datacache_options;
@@ -107,8 +107,8 @@ private:
 protected:
     HdfsScannerContext* _scanner_ctx = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    HdfsScannerStats _app_stats;
-    HdfsScannerStats _fs_stats;
+    FormatScannerStats _app_stats;
+    FormatScannerStats _fs_stats;
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;

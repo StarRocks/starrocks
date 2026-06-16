@@ -32,7 +32,7 @@ protected:
         return *FileSystem::Default()->new_random_access_file(file_path);
     }
 
-    HdfsScannerStats stats;
+    FormatScannerStats stats;
     HdfsScannerContext ctx;
 };
 

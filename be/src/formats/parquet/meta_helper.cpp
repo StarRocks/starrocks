@@ -34,7 +34,7 @@ struct ExtendedVariantVirtualBinding {
 // Returns the parquet column name to use when looking up a column by name (no-field-id
 // path).  Prefers col_physical_name() so that renamed columns are found correctly; falls
 // back to the logical name when no physical name is recorded.
-std::string_view parquet_lookup_name(const HdfsScannerContext::ColumnInfo& column) {
+std::string_view parquet_lookup_name(const FormatColumnInfo& column) {
     if (!column.col_physical_name().empty()) {
         return column.col_physical_name();
     }
@@ -42,7 +42,7 @@ std::string_view parquet_lookup_name(const HdfsScannerContext::ColumnInfo& colum
 }
 
 int32_t find_field_idx_for_materialized_column(const FileMetaData* file_metadata,
-                                               const HdfsScannerContext::ColumnInfo& materialized_column) {
+                                               const FormatColumnInfo& materialized_column) {
     const SlotDescriptor* slot_desc = materialized_column.slot_desc;
     if (slot_desc->col_unique_id() != -1) {
         return file_metadata->schema().get_field_idx_by_field_id(materialized_column.col_unique_id());
@@ -72,7 +72,7 @@ std::optional<ExtendedVariantVirtualBinding> find_extended_variant_virtual_bindi
 
 } // namespace
 
-void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
@@ -249,7 +249,7 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
     return has_valid_child;
 }
 
-void LakeMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+void LakeMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                                           const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                           std::vector<GroupReaderParam::Column>& read_cols,
                                           std::unordered_set<std::string>& existed_column_names) const {

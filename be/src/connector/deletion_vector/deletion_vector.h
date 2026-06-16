@@ -46,7 +46,7 @@ public:
 
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
-            const std::string& file_path, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
+            const std::string& file_path, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
@@ -56,8 +56,8 @@ private:
     std::string assemble_deletion_vector_path(const std::string& table_location, std::string&& uuid,
                                               std::string& prefix) const;
 
-    void update_dv_file_io_counter(RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats,
-                                   const HdfsScannerStats& fs_stats,
+    void update_dv_file_io_counter(RuntimeProfile* parent_profile, const FormatScannerStats& app_stats,
+                                   const FormatScannerStats& fs_stats,
                                    const std::shared_ptr<CacheInputStream>& cache_input_stream,
                                    const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream);
 
