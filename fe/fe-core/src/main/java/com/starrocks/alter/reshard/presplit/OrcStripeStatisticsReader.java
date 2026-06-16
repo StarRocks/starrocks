@@ -20,10 +20,13 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.orc.ColumnStatistics;
 import org.apache.orc.DateColumnStatistics;
+import org.apache.orc.DecimalColumnStatistics;
 import org.apache.orc.IntegerColumnStatistics;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
@@ -50,10 +53,12 @@ import java.util.Objects;
  *   <li>ORC DATE → StarRocks DATE (day-of-epoch, timezone-free), gated to
  *       {@code [1970-01-01, 9999-12-31]} — values outside that window (year &le; 0
  *       rendering, pre-1582 proleptic/hybrid calendar ambiguity) fall back to data tier</li>
+ *   <li>ORC DECIMAL → StarRocks DECIMAL of the SAME precision and scale (ORC orders decimal
+ *       stats correctly, so footer min/max are usable). Non-matching precision/scale → data tier</li>
  * </ul>
  * Everything else — STRING/CHAR/VARCHAR (data-tier fallback anyway), BOOLEAN,
  * FLOAT/DOUBLE, TIMESTAMP/TIMESTAMP_INSTANT (reader-local-tz stats, deferred),
- * DECIMAL, and any complex type — makes the reader throw
+ * non-matching-precision/scale DECIMAL, and any complex type — makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier. That is
  * NOT a load failure. Pure I/O failures surface as {@link StarRocksException}.
  */
@@ -125,7 +130,7 @@ public final class OrcStripeStatisticsReader {
                     "ORC schema does not contain sort-key column \"" + columnName + "\"");
         }
         TypeDescription fieldType = fieldTypes.get(fieldIndex);
-        rejectIncompatibleTypeMapping(fieldType.getCategory(), sortKeyColumn);
+        rejectIncompatibleTypeMapping(fieldType, sortKeyColumn);
         // ORC assigns column ids in schema pre-order; getColumnStatistics() is
         // indexed by that id (index 0 is the struct root).
         return new SortKeyLocation(fieldType.getId(), sortKeyColumn);
@@ -135,17 +140,21 @@ public final class OrcStripeStatisticsReader {
      * Reject ORC/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating stripes. Anything outside the window means "fall
      * back to data tier", not "fail the load". The supported window is the unannotated
-     * integer categories plus ORC DATE → StarRocks DATE. String, boolean, floating-point,
-     * TIMESTAMP/TIMESTAMP_INSTANT, decimal, and complex types are deferred (fall back to
-     * data tier).
+     * integer categories, ORC DATE → StarRocks DATE, and ORC DECIMAL → a same-precision/scale
+     * StarRocks DECIMAL. String, boolean, floating-point, TIMESTAMP/TIMESTAMP_INSTANT,
+     * non-matching DECIMAL, and complex types are deferred (fall back to data tier).
      */
     private static void rejectIncompatibleTypeMapping(
-            TypeDescription.Category orcCategory, Column sortKeyColumn) throws MetaTierUnavailableException {
+            TypeDescription fieldType, Column sortKeyColumn) throws MetaTierUnavailableException {
+        TypeDescription.Category orcCategory = fieldType.getCategory();
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (orcCategory) {
             case BYTE, SHORT, INT, LONG -> starRocksPrimitive.isIntegerType();
             // ORC DATE is day-of-epoch (no timezone) → StarRocks DATE only.
             case DATE -> starRocksPrimitive == PrimitiveType.DATE;
+            // ORC orders decimal stats correctly (no Parquet unsigned-byte trap), so footer
+            // min/max are usable; require an exact precision/scale match with the StarRocks column.
+            case DECIMAL -> decimalMatchesExactly(fieldType, sortKeyColumn);
             default -> false;
         };
         if (!compatible) {
@@ -153,6 +162,21 @@ public final class OrcStripeStatisticsReader {
                     "ORC %s cannot map to StarRocks %s for sort-key column \"%s\"",
                     orcCategory, starRocksPrimitive, sortKeyColumn.getName()));
         }
+    }
+
+    /**
+     * True only when the StarRocks sort-key column is a DECIMAL whose precision and scale
+     * exactly equal the ORC decimal field's. The BE split validator requires an exact match
+     * too; anything else falls back to data tier.
+     */
+    private static boolean decimalMatchesExactly(TypeDescription fieldType, Column sortKeyColumn) {
+        Type starRocksType = sortKeyColumn.getType();
+        if (!starRocksType.isDecimalOfAnyVersion()) {
+            return false;
+        }
+        ScalarType scalarType = (ScalarType) starRocksType;
+        return fieldType.getPrecision() == scalarType.getScalarPrecision()
+                && fieldType.getScale() == scalarType.getScalarScale();
     }
 
     private static RowGroupStatistics convertStripe(
@@ -169,6 +193,10 @@ public final class OrcStripeStatisticsReader {
         if (sortKeyStatistics instanceof DateColumnStatistics dateStatistics
                 && dateStatistics.getNumberOfValues() > 0) {
             return convertDateStripe(dateStatistics, rowCount, location);
+        }
+        if (sortKeyStatistics instanceof DecimalColumnStatistics decimalStatistics
+                && decimalStatistics.getNumberOfValues() > 0) {
+            return convertDecimalStripe(decimalStatistics, rowCount, location);
         }
         // Absent / all-null stats (no presence flag on ORC numeric/date stats, so an
         // empty stripe is detected via getNumberOfValues() == 0) → missing min/max.
@@ -219,6 +247,33 @@ public final class OrcStripeStatisticsReader {
         } catch (RuntimeException conversionFailure) {
             throw new MetaTierUnavailableException(String.format(
                     "ORC date stats value not representable for sort-key column \"%s\": %s",
+                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
+        }
+        return new RowGroupStatistics(
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertDecimalStripe(
+            DecimalColumnStatistics decimalStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        Variant minVariant;
+        Variant maxVariant;
+        try {
+            // HiveDecimal min/max carry the source scale; ORC orders decimal stats correctly
+            // (no Parquet-style unsigned-byte trap), and the exact precision/scale gate
+            // guarantees the source scale equals the StarRocks column scale. Variant.of
+            // RuntimeExceptions are wrapped as a meta-tier fallback signal — mirroring
+            // convertIntegerStripe/convertDateStripe — so an unrepresentable value falls back
+            // to data tier instead of escaping read() (which only catches IOException).
+            // Render via toPlainString() (not toString()) so large-exponent values never
+            // surface in scientific notation, which the BE datum_from_string would reject.
+            minVariant = Variant.of(location.starRocksColumn.getType(),
+                    decimalStatistics.getMinimum().bigDecimalValue().toPlainString());
+            maxVariant = Variant.of(location.starRocksColumn.getType(),
+                    decimalStatistics.getMaximum().bigDecimalValue().toPlainString());
+        } catch (RuntimeException conversionFailure) {
+            throw new MetaTierUnavailableException(String.format(
+                    "ORC decimal stats value not representable for sort-key column \"%s\": %s",
                     location.starRocksColumn.getName(), conversionFailure.getMessage()));
         }
         return new RowGroupStatistics(
