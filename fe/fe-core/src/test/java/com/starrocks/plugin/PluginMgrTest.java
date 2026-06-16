@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginMgrTest {
+    private static final String TARGET_DIR = "target_plugin_mgr";
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -59,11 +60,11 @@ public class PluginMgrTest {
 
     @BeforeEach
     public void setUp() throws IOException {
-        FileUtils.deleteQuietly(PluginTestUtil.getTestFile("target"));
-        assertFalse(Files.exists(PluginTestUtil.getTestPath("target")));
-        Files.createDirectory(PluginTestUtil.getTestPath("target"));
-        assertTrue(Files.exists(PluginTestUtil.getTestPath("target")));
-        Config.plugin_dir = PluginTestUtil.getTestPathString("target");
+        FileUtils.deleteQuietly(PluginTestUtil.getTestFile(TARGET_DIR));
+        assertFalse(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
+        Files.createDirectory(PluginTestUtil.getTestPath(TARGET_DIR));
+        assertTrue(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
+        Config.plugin_dir = PluginTestUtil.getTestPathString(TARGET_DIR);
     }
 
     @Test
