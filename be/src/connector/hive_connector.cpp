@@ -752,7 +752,28 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
+=======
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
+    if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.column_access_paths.empty()) {
+        bool failed = false;
+        auto path_resolver = make_column_access_path_resolver(state, &_pool);
+        for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
+            auto st = ColumnAccessPath::create(thrift_path, path_resolver);
+            if (LIKELY(st.ok())) {
+                _scanner_ctx.column_access_paths.emplace_back(std::move(st.value()));
+            } else {
+                LOG(WARNING) << "Failed to create column access path: " << st.status();
+                failed = true;
+                break;
+            }
+        }
+        if (failed) {
+            _scanner_ctx.column_access_paths.clear();
+        }
+    }
+>>>>>>> 9f95b67b1b ([BugFix] Fix heap-use-after-free in HiveDataSource destructor caused by predicates outliving _pool (#74818))
     RETURN_IF_ERROR(_init_global_dicts(&_scanner_ctx));
     _scanner_ctx.runtime_filter_collector = _runtime_filters;
     _scanner_ctx.tuple_desc = _tuple_desc;
@@ -925,11 +946,24 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
+<<<<<<< HEAD
     Expr::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
     Expr::close(_partition_filter.conjunct_ctxs, state);
     Expr::close(_scanner_ctx.partition_expr_ctxs, state);
     Expr::close(_scanner_ctx.extended_col_expr_ctxs, state);
     Expr::close(_scanner_ctx.conjuncts.scanner_ctxs, state);
+=======
+    // ColumnExprPredicate destructors call ExprContext::close() on cloned
+    // ExprContexts whose root() Expr* lives in HiveDataSource::_pool
+    // (ExprContext::clone() shares _root, it does NOT deep-copy the tree).
+    // Release predicates here while _pool is still alive.
+    _scanner_ctx.predicates = {};
+    ExprExecutor::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
+    ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
+    ExprExecutor::close(_scanner_ctx.partition_expr_ctxs, state);
+    ExprExecutor::close(_scanner_ctx.extended_col_expr_ctxs, state);
+    ExprExecutor::close(_scanner_ctx.conjuncts.scanner_ctxs, state);
+>>>>>>> 9f95b67b1b ([BugFix] Fix heap-use-after-free in HiveDataSource destructor caused by predicates outliving _pool (#74818))
     for (auto& it : _scanner_ctx.conjuncts.by_slot) {
         Expr::close(it.second, state);
     }
