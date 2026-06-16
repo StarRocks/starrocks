@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/rejected_record_writer.h"
+#include "compute_env/load_path/rejected_record_writer.h"
 
 #include <gtest/gtest.h>
 
@@ -117,9 +117,10 @@ TQueryOptions make_load_options(TLoadJobType::type job_type, bool set_job_type =
 }
 
 // Build a RuntimeState suitable for exercising append_serialized with no
-// actual file IO: query_type=LOAD, no ExecEnv → resolve_file_path returns
-// empty → append_serialized skips the write but still runs all the JSON-
-// building code and the enable_log_rejected_record() guard.
+// actual file IO: query_type=LOAD, no QueryExecutionServices →
+// resolve_file_path returns empty → append_serialized skips the write but
+// still runs all the JSON-building code and the enable_log_rejected_record()
+// guard.
 std::unique_ptr<RuntimeState> make_load_state(TLoadJobType::type job_type = TLoadJobType::STREAM_LOAD,
                                               bool set_job_type = true) {
     TQueryOptions opts = make_load_options(job_type, set_job_type);
@@ -235,14 +236,14 @@ TEST(RejectedRecordWriterCoreTest, BuildJsonFromChunkNullColumnEmitsJsonNull) {
 }
 
 // ===========================================================================
-// New tests: append_serialized path (no ExecEnv → path empty → no file IO,
-// but all JSON-building code is covered by the function body)
+// New tests: append_serialized path (no QueryExecutionServices → path empty
+// → no file IO, but all JSON-building code is covered by the function body)
 // ===========================================================================
 
 // Helper: run append_serialized and return true if enable_log_rejected_record()
 // was checked (i.e. the call didn't get blocked before entering the function).
-// Since we have no ExecEnv the file write is skipped, but the JSON construction
-// lines are still exercised.
+// Since we have no QueryExecutionServices the file write is skipped, but the
+// JSON construction lines are still exercised.
 void run_append_through_chunk(RuntimeState& state, TLoadJobType::type /*hint*/) {
     RejectedRecordWriter writer(&state);
 
@@ -425,8 +426,9 @@ TEST(RejectedRecordWriterAppendTest, NoteRejectedRecordIncrements) {
     EXPECT_TRUE(state->enable_log_rejected_record());
 
     // Each append_raw that reaches append_serialized calls note_rejected_record.
-    // But since there's no ExecEnv the file write is skipped (path empty), so
-    // the note_rejected_record() call after the ofstream section is NOT reached.
+    // But since there's no QueryExecutionServices the file write is skipped
+    // (path empty), so the note_rejected_record() call after the write section
+    // is NOT reached.
     // Still exercise enable_log_rejected_record() branches.
     EXPECT_EQ(0, state->_num_log_rejected_rows.load());
     state->note_rejected_record();

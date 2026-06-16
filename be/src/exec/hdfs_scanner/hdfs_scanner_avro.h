@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/file_scanner/file_scanner.h"
+#include "compute_env/scanner_counter.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/avro/cpp/avro_reader.h"
 #include "formats/avro/cpp/column_reader.h"

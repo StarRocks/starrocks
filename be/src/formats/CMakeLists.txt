@@ -24,6 +24,7 @@ ADD_BE_LIB(FormatCore
         )
 
 target_link_libraries(FormatCore PUBLIC
+        ComputeEnv
         ExprCore
         RuntimeCore
         FSCore
@@ -71,7 +72,7 @@ ADD_BE_LIB(FormatJson
 
 target_link_libraries(FormatJson PUBLIC FormatCore)
 
-ADD_BE_LIB(Formats
+ADD_BE_LIB(FormatAvro
         avro/nullable_column.cpp
         avro/numeric_column.cpp
         avro/binary_column.cpp
@@ -85,6 +86,11 @@ ADD_BE_LIB(Formats
         avro/cpp/nullable_column_reader.cpp
         avro/cpp/numeric_column_reader.cpp
         avro/cpp/utils.cpp
+        )
+
+target_link_libraries(FormatAvro PUBLIC FormatCore)
+
+ADD_BE_LIB(Formats
         orc/orc_chunk_reader.cpp
         orc/orc_file_writer.cpp
         orc/orc_input_stream.cpp
@@ -130,6 +136,6 @@ ADD_BE_LIB(Formats
         parquet/parquet_pos_reader.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatJson FormatCsv FormatCore Cache)
+target_link_libraries(Formats PUBLIC FormatAvro FormatJson FormatCsv FormatCore Cache)
 
 add_subdirectory(orc/apache-orc)

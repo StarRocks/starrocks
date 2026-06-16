@@ -32,10 +32,10 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load_path/rejected_record_writer.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "gen_cpp/InternalService_types.h"
 #include "rapidjson/document.h"
-#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

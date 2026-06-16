@@ -27,14 +27,14 @@
 
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
-#include "exec/file_scanner/file_scanner.h"
+#include "compute_env/load_path/load_path_state_helper.h"
+#include "compute_env/scanner_counter.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "formats/avro/cpp/direct_column_reader.h"
 #include "formats/avro/cpp/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -753,7 +753,7 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read, int64_t* rows_c
                         // Direct path: no GenericDatum is allocated, so row context is unavailable.
                         json_str = "(row context unavailable in direct decode mode)";
                     }
-                    RuntimeStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
+                    LoadPathStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;
                 }
                 // Rollback the partially-written row before processing the next record.

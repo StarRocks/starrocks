@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Tests for the rejected-record helpers in runtime_state_helper.cpp
+// Tests for the rejected-record helpers in load_path_state_helper.cpp
 // (lines 132-178):
-//   * RuntimeStateHelper::rejected_record_writer(state) lazy accessor
-//   * RuntimeStateHelper::append_rejected_record_to_file dispatcher
+//   * LoadPathStateHelper::rejected_record_writer(state) lazy accessor
+//   * LoadPathStateHelper::append_rejected_record_to_file dispatcher
 
-#include "runtime/runtime_state_helper.h"
+#include "compute_env/load_path/load_path_state_helper.h"
 
 #include <gtest/gtest.h>
 
 #include <memory>
 
+#include "compute_env/load_path/rejected_record_writer.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -63,34 +63,34 @@ std::unique_ptr<RuntimeState> make_select_state() {
 // rejected_record_writer() accessor tests (lines 164-179)
 // ===========================================================================
 
-TEST(RuntimeStateHelperRejectedRecordWriterTest, NullStateReturnsNullptr) {
+TEST(LoadPathStateHelperRejectedRecordWriterTest, NullStateReturnsNullptr) {
     // Covers the early null guard on lines 165-167.
-    RejectedRecordWriter* w = RuntimeStateHelper::rejected_record_writer(nullptr);
+    RejectedRecordWriter* w = LoadPathStateHelper::rejected_record_writer(nullptr);
     EXPECT_EQ(nullptr, w);
 }
 
-TEST(RuntimeStateHelperRejectedRecordWriterTest, SelectQueryReturnsNullptr) {
+TEST(LoadPathStateHelperRejectedRecordWriterTest, SelectQueryReturnsNullptr) {
     // Covers lines 171-173: query_type != LOAD → return nullptr.
     auto state = make_select_state();
-    RejectedRecordWriter* w = RuntimeStateHelper::rejected_record_writer(state.get());
+    RejectedRecordWriter* w = LoadPathStateHelper::rejected_record_writer(state.get());
     EXPECT_EQ(nullptr, w);
 }
 
-TEST(RuntimeStateHelperRejectedRecordWriterTest, LoadQueryReturnsNonNullWriter) {
+TEST(LoadPathStateHelperRejectedRecordWriterTest, LoadQueryReturnsNonNullWriter) {
     // Covers lines 174-178: lazy construction under lock.
     auto state = make_load_state();
     EXPECT_EQ(nullptr, state->rejected_record_writer_or_null()) << "writer should not exist before first call";
 
-    RejectedRecordWriter* w = RuntimeStateHelper::rejected_record_writer(state.get());
+    RejectedRecordWriter* w = LoadPathStateHelper::rejected_record_writer(state.get());
     ASSERT_NE(nullptr, w);
     EXPECT_EQ(w, state->rejected_record_writer_or_null()) << "writer should be stored on the state after construction";
 }
 
-TEST(RuntimeStateHelperRejectedRecordWriterTest, LoadQueryReturnsSameInstanceOnSecondCall) {
+TEST(LoadPathStateHelperRejectedRecordWriterTest, LoadQueryReturnsSameInstanceOnSecondCall) {
     // Covers the lazy-singleton contract: repeated calls return the same ptr.
     auto state = make_load_state();
-    RejectedRecordWriter* w1 = RuntimeStateHelper::rejected_record_writer(state.get());
-    RejectedRecordWriter* w2 = RuntimeStateHelper::rejected_record_writer(state.get());
+    RejectedRecordWriter* w1 = LoadPathStateHelper::rejected_record_writer(state.get());
+    RejectedRecordWriter* w2 = LoadPathStateHelper::rejected_record_writer(state.get());
     ASSERT_NE(nullptr, w1);
     EXPECT_EQ(w1, w2) << "should return the same writer on subsequent calls";
 }
@@ -99,46 +99,46 @@ TEST(RuntimeStateHelperRejectedRecordWriterTest, LoadQueryReturnsSameInstanceOnS
 // append_rejected_record_to_file() dispatcher tests (lines 123-162)
 // ===========================================================================
 
-TEST(RuntimeStateHelperAppendRejectedRecordTest, SelectQueryIsNoOp) {
+TEST(LoadPathStateHelperAppendRejectedRecordTest, SelectQueryIsNoOp) {
     // Lines 129-131: query_type != LOAD → early return.
     auto state = make_select_state();
     // Should silently do nothing.
-    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(state.get(), "raw record", "error msg",
-                                                                               "source_file.csv"));
+    EXPECT_NO_FATAL_FAILURE(LoadPathStateHelper::append_rejected_record_to_file(state.get(), "raw record", "error msg",
+                                                                                "source_file.csv"));
     // No writer should have been created.
     EXPECT_EQ(nullptr, state->rejected_record_writer_or_null());
 }
 
-TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryCreatesWriterAndDelegates) {
+TEST(LoadPathStateHelperAppendRejectedRecordTest, LoadQueryCreatesWriterAndDelegates) {
     // Lines 132-162: writer is lazily created and append_raw is called.
-    // Since there's no ExecEnv the file write is skipped, but the path to
-    // resolve_file_path and the writer construction is exercised.
+    // Since there's no QueryExecutionServices the file write is skipped, but
+    // the path to resolve_file_path and the writer construction is exercised.
     auto state = make_load_state();
 
-    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(state.get(), "10001,Alice,bad_value",
-                                                                               "column type mismatch", "data.csv"));
+    EXPECT_NO_FATAL_FAILURE(LoadPathStateHelper::append_rejected_record_to_file(state.get(), "10001,Alice,bad_value",
+                                                                                "column type mismatch", "data.csv"));
 
     // Writer must have been constructed as a side-effect.
     EXPECT_NE(nullptr, state->rejected_record_writer_or_null());
 }
 
-TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryEmptySourceIsWrappedWithNoJson) {
+TEST(LoadPathStateHelperAppendRejectedRecordTest, LoadQueryEmptySourceIsWrappedWithNoJson) {
     // Lines 150-160: when source is empty, source_info_json stays empty and
     // the writer's append_raw is called with an empty source_info string.
     auto state = make_load_state();
 
     EXPECT_NO_FATAL_FAILURE(
-            RuntimeStateHelper::append_rejected_record_to_file(state.get(), "raw_row", "some error", /*source=*/""));
+            LoadPathStateHelper::append_rejected_record_to_file(state.get(), "raw_row", "some error", /*source=*/""));
     EXPECT_NE(nullptr, state->rejected_record_writer_or_null());
 }
 
-TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryNonEmptySourceBuildsJsonSourceInfo) {
+TEST(LoadPathStateHelperAppendRejectedRecordTest, LoadQueryNonEmptySourceBuildsJsonSourceInfo) {
     // Lines 151-160: when source is non-empty, a JSON object
     // {"source": "<source>"} is constructed and passed as source_info.
     auto state = make_load_state();
 
-    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(state.get(), "10001,Alice", "type error",
-                                                                               "hdfs://nn/data/part0000.csv"));
+    EXPECT_NO_FATAL_FAILURE(LoadPathStateHelper::append_rejected_record_to_file(
+            state.get(), "10001,Alice", "type error", "hdfs://nn/data/part0000.csv"));
     EXPECT_NE(nullptr, state->rejected_record_writer_or_null());
 }
 
@@ -147,39 +147,39 @@ TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryNonEmptySourceBuildsJs
 // decides what JSON ends up in _statistics_.rejected_records.source_info.
 // ===========================================================================
 
-TEST(RuntimeStateHelperSourceInfoTest, EmptySourceWithoutKafkaAnchorReturnsEmpty) {
+TEST(LoadPathStateHelperSourceInfoTest, EmptySourceWithoutKafkaAnchorReturnsEmpty) {
     TQueryOptions opts;
-    EXPECT_EQ("", RuntimeStateHelper::build_rejected_record_source_info(opts, ""));
+    EXPECT_EQ("", LoadPathStateHelper::build_rejected_record_source_info(opts, ""));
 }
 
-TEST(RuntimeStateHelperSourceInfoTest, NonEmptySourceWrapsInJsonObject) {
+TEST(LoadPathStateHelperSourceInfoTest, NonEmptySourceWrapsInJsonObject) {
     TQueryOptions opts;
-    EXPECT_EQ("{\"source\":\"data.csv\"}", RuntimeStateHelper::build_rejected_record_source_info(opts, "data.csv"));
+    EXPECT_EQ("{\"source\":\"data.csv\"}", LoadPathStateHelper::build_rejected_record_source_info(opts, "data.csv"));
 }
 
-TEST(RuntimeStateHelperSourceInfoTest, NonEmptySourceWithSpecialCharsIsJsonEscaped) {
+TEST(LoadPathStateHelperSourceInfoTest, NonEmptySourceWithSpecialCharsIsJsonEscaped) {
     // rapidjson escapes embedded backslashes and double quotes so a
     // pathological filename can't break out of the JSON object.
     TQueryOptions opts;
-    EXPECT_EQ("{\"source\":\"a\\\"b\\\\c\"}", RuntimeStateHelper::build_rejected_record_source_info(opts, "a\"b\\c"));
+    EXPECT_EQ("{\"source\":\"a\\\"b\\\\c\"}", LoadPathStateHelper::build_rejected_record_source_info(opts, "a\"b\\c"));
 }
 
-TEST(RuntimeStateHelperSourceInfoTest, RoutineLoadAnchorOverridesEvenWhenSourceProvided) {
+TEST(LoadPathStateHelperSourceInfoTest, RoutineLoadAnchorOverridesEvenWhenSourceProvided) {
     // When RoutineLoadTaskExecutor has stuffed a kafka anchor into the
     // query options, we forward it verbatim and ignore the file scanner's
     // hardcoded "stream-load-pipe" placeholder string.
     TQueryOptions opts;
     opts.__set_routine_load_source_info("{\"format\":\"kafka\",\"topic\":\"t\",\"partitions\":[0,1]}");
     EXPECT_EQ("{\"format\":\"kafka\",\"topic\":\"t\",\"partitions\":[0,1]}",
-              RuntimeStateHelper::build_rejected_record_source_info(opts, "stream-load-pipe"));
+              LoadPathStateHelper::build_rejected_record_source_info(opts, "stream-load-pipe"));
 }
 
-TEST(RuntimeStateHelperSourceInfoTest, EmptyRoutineLoadAnchorFallsBackToSourceWrapping) {
+TEST(LoadPathStateHelperSourceInfoTest, EmptyRoutineLoadAnchorFallsBackToSourceWrapping) {
     // Defensive: an explicitly-empty anchor falls through to the legacy
     // wrap so we don't lose the file-load source string.
     TQueryOptions opts;
     opts.__set_routine_load_source_info("");
-    EXPECT_EQ("{\"source\":\"data.csv\"}", RuntimeStateHelper::build_rejected_record_source_info(opts, "data.csv"));
+    EXPECT_EQ("{\"source\":\"data.csv\"}", LoadPathStateHelper::build_rejected_record_source_info(opts, "data.csv"));
 }
 
 // ===========================================================================
