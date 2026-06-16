@@ -174,13 +174,13 @@ Core runtime building blocks without full Runtime/Exec/Storage coupling.
 - Core tests: `runtime_core_test`
 - Remediation: Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime.
 
-### FormatsIO (`formatsio`)
-Format-oriented output stream primitives above RuntimeCore, FSCore, and Types.
-- Targets: `FormatsIO`
-- Allowed internal include prefixes: `formats/io/`, `runtime/`, `fs/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `FSCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `formats_io_test`
-- Remediation: Keep FormatsIO limited to reusable format output stream primitives; move connector orchestration and higher execution policy upward.
+### FormatCore (`formatcore`)
+Format-oriented core primitives above ComputeEnv, ExprCore, RuntimeCore, FSCore, ChunkCore, ColumnCore, and Types.
+- Targets: `FormatCore`
+- Allowed internal include prefixes: `formats/column_evaluator.h`, `formats/deletion_bitmap.h`, `formats/disk_range.hpp`, `formats/file_writer.h`, `formats/io/`, `formats/utils.h`, `exprs/`, `runtime/`, `fs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ExprCore`, `RuntimeCore`, `FSCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `format_test`
+- Remediation: Keep FormatCore limited to reusable format primitives; move connector orchestration and higher execution policy upward.
 
 ### RuntimeEnv (`runtimeenv`)
 Process-scoped runtime environment resources below full Runtime and above RuntimeCore.
@@ -207,12 +207,12 @@ Base storage algorithms and mask-buffer helpers above StoragePrimitive and Compu
 - Remediation: Keep StorageBase limited to reusable storage algorithms and helpers that may depend on ComputeEnv; move concrete storage engine, tablet, rowset, lake, service, connector, cache, and full Exec integration upward.
 
 ### ComputeEnv (`computeenv`)
-Shared compute-side BE environment boundary for process-scoped compute resources, query-scoped scan coordination helpers, query-cache primitives, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.
+Shared compute-side BE environment boundary for process-scoped compute resources, load-path management, query-scoped scan coordination helpers, query-cache primitives, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.
 - Targets: `ComputeEnv`
 - Allowed internal include prefixes: `compute_env/`, `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `util/time_guard.h`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `StoragePrimitive`, `ExecPrimitive`, `ExprCore`, `Serde`, `Util`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `compute_env_test`, `compute_env_sorting_test`
-- Remediation: Keep ComputeEnv limited to process-scoped compute resources, query-scoped scan coordination helpers without concrete scan/storage policy, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward.
+- Remediation: Keep ComputeEnv limited to process-scoped compute resources, load-path management without ExecEnv or concrete storage engine coupling, query-scoped scan coordination helpers without concrete scan/storage policy, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward.
 
 ### ExprCore (`exprcore`)
 Core expression infrastructure that depends only on RuntimeCore and lower layers.

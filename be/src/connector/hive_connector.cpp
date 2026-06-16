@@ -792,7 +792,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.column_access_paths.empty()) {
         bool failed = false;
-        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
+        auto path_resolver = make_column_access_path_resolver(state, &_pool);
         for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
             auto st = ColumnAccessPath::create(thrift_path, path_resolver);
             if (LIKELY(st.ok())) {
@@ -979,6 +979,11 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
+    // ColumnExprPredicate destructors call ExprContext::close() on cloned
+    // ExprContexts whose root() Expr* lives in HiveDataSource::_pool
+    // (ExprContext::clone() shares _root, it does NOT deep-copy the tree).
+    // Release predicates here while _pool is still alive.
+    _scanner_ctx.predicates = {};
     ExprExecutor::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
     ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
     ExprExecutor::close(_scanner_ctx.partition_expr_ctxs, state);

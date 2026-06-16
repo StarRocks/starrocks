@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/rejected_record_writer.h"
+#include "compute_env/load_path/rejected_record_writer.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -23,20 +23,21 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 
 #include "base/uid_util.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "common/system/master_info.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/exec_env.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -171,18 +172,20 @@ const std::string& RejectedRecordWriter::resolve_file_path() {
     }
 
     DCHECK(_state != nullptr);
-    ExecEnv* env = _state->exec_env();
-    if (env == nullptr || env->load_path_mgr() == nullptr) {
+    const auto* query_execution_services = _state->query_execution_services();
+    if (query_execution_services == nullptr || query_execution_services->runtime == nullptr ||
+        query_execution_services->runtime->load_path_mgr == nullptr) {
         _path_resolve_failed = true;
         return _file_path;
     }
+    auto* load_path_mgr = query_execution_services->runtime->load_path_mgr;
 
     // Reuse the rejected-record directory layout (store-path-relative so it
     // lives on the same mount that the legacy retention policy already
     // sweeps). `.jsonl` suffix lets the sync daemon filter files picked up
     // by this writer from anything else that might coexist under the
     // rejected-record root.
-    std::string base = env->load_path_mgr()->get_load_rejected_record_absolute_path(
+    std::string base = load_path_mgr->get_load_rejected_record_absolute_path(
             /*rejected_record_dir=*/"", _state->db(), _state->load_label(), _state->load_job_id(),
             _state->fragment_instance_id());
     _file_path = base + ".jsonl";
@@ -394,7 +397,7 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
 
     // Single counter-increment site for the entire feature. All paths
     // that eventually reach the writer -- legacy
-    // RuntimeStateHelper::append_rejected_record_to_file, ORC's
+    // LoadPathStateHelper::append_rejected_record_to_file, ORC's
     // capture_rejected_rows_before_filter, and the Parquet
     // ArrowConvertContext::report_error_message -- go through
     // append_serialized, so enable_log_rejected_record()'s cap now

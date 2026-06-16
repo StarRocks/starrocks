@@ -25,7 +25,6 @@
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"

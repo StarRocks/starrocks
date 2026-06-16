@@ -247,12 +247,6 @@ jobs:
     concurrency:
       group: ai-sr-skills-module-risk-${{ github.event.number }}
       cancel-in-progress: true
-    # Least privilege: only this job posts the sticky comment (Issues comments API), so issues:write
-    # lives here, not workflow-wide where it would also reach assign-reviewer's GITHUB_TOKEN.
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: write
     continue-on-error: true
     if: >
       (github.event.action == 'opened' || github.event.action == 'reopened' ||

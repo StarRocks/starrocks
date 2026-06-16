@@ -115,7 +115,7 @@ public:
     //
     // These are pure-functional helpers exposed publicly so unit tests can
     // exercise them without instantiating a writer (which otherwise needs a
-    // RuntimeState backed by an ExecEnv + LoadPathMgr). They produce the
+    // RuntimeState backed by query execution services + LoadPathMgr). They produce the
     // JSON text stored in the `raw_record` column of the system table.
 
     // Build the `raw_record` JSON object from a Chunk row.

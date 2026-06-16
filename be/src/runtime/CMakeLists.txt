@@ -87,11 +87,8 @@ set(RUNTIME_FILES
     plan_fragment_executor.cpp
     pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
-    rejected_record_writer.cpp
     rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
-    load_path_mgr.cpp
-    dummy_load_path_mgr.cpp
     agg_state_desc.cpp
     load_channel_mgr.cpp
     load_channel.cpp

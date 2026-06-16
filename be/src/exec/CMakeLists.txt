@@ -167,7 +167,7 @@ set(PIPELINE_RUNTIME_SRCS
 set(PIPELINE_ADAPTERS_SRCS
     pipeline/exec_node_pipeline_adapter.cpp
     pipeline/fragment_executor.cpp
-    pipeline/pipeline_builder.cpp
+    pipeline/pipeline_builder_operators.cpp
     pipeline/pipeline_driver_instantiator.cpp
 )
 
@@ -374,6 +374,7 @@ set(EXEC_NON_PIPELINE_FILES
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
     hdfs_scanner/hdfs_scanner_avro.cpp
+    hdfs_scanner/hdfs_scanner_context.cpp
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
     file_scanner/avro_cpp_scanner.cpp
@@ -502,6 +503,7 @@ ADD_BE_LIB(ExecRuntime
     runtime/group_execution/execution_group.cpp
     runtime/group_execution/execution_group_builder.cpp
     runtime/pipeline.cpp
+    runtime/pipeline_builder_context.cpp
     runtime/pipeline_driver.cpp
     runtime/fragment_context.cpp
     runtime/fragment_context_manager.cpp
@@ -540,4 +542,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatsIO Platform)
+target_link_libraries(Exec PRIVATE FormatCore Platform)

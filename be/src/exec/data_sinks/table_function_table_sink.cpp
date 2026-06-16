@@ -18,9 +18,9 @@
 #include "connector/connector_registry.h"
 #include "connector/file_chunk_sink.h"
 #include "exec/data_sink.h"
-#include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
@@ -142,9 +142,9 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
 
     size_t sink_dop = target_table.write_single_file ? 1 : context->data_sink_dop();
     if (sink_ctx->partition_column_indices.empty()) {
-        auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
-                pipeline::LocalExchanger::PassThroughType::SCALE);
+        auto ops = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+                sink_dop, pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
         context->add_pipeline(ops);
 
@@ -157,8 +157,8 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
         std::vector<ExprContext*> partition_expr_ctxs;
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
                                                        runtime_state));
-        auto ops = context->interpolate_local_key_partition_exchange(
-                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+        auto ops = ::starrocks::pipeline::builder::interpolate_local_key_partition_exchange(
+                context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);
         ops.emplace_back(std::move(op));
         context->add_pipeline(ops);

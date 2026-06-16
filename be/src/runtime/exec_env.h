@@ -155,7 +155,7 @@ public:
     workgroup::WorkGroupManager* workgroup_manager();
 
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
+    BaseLoadPathMgr* load_path_mgr();
     RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
@@ -234,7 +234,6 @@ private:
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<ComputeEnv> _compute_env;
 
-    BaseLoadPathMgr* _load_path_mgr = nullptr;
     RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;
 
     BrokerMgr* _broker_mgr = nullptr;

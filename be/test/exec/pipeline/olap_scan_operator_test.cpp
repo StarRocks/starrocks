@@ -22,6 +22,7 @@
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

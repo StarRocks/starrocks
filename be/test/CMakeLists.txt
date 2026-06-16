@@ -187,21 +187,6 @@ set(EXEC_FILES
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
         ./exprs/http_request_functions_test.cpp
-        ./formats/csv/array_converter_test.cpp
-        ./formats/csv/boolean_converter_test.cpp
-        ./formats/csv/csv_file_writer_test.cpp
-        ./formats/csv/date_converter_test.cpp
-        ./formats/csv/datetime_converter_test.cpp
-        ./formats/csv/decimalv2_converter_test.cpp
-        ./formats/csv/float_converter_test.cpp
-        ./formats/csv/json_converter_test.cpp
-        ./formats/csv/map_converter_test.cpp
-        ./formats/csv/nullable_converter_test.cpp
-        ./formats/csv/numeric_converter_test.cpp
-        ./formats/csv/default_value_converter_test.cpp
-        ./formats/csv/string_converter_test.cpp
-        ./formats/csv/varbinary_converter_test.cpp
-        ./formats/csv/csv_reader_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
@@ -217,11 +202,7 @@ set(EXEC_FILES
         ./formats/avro/cpp/numeric_column_reader_test.cpp
         ./formats/avro/cpp/utils_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
-        ./formats/orc/orc_column_reader_test.cpp
-        ./formats/orc/orc_emit_rejected_rows_test.cpp
         ./formats/orc/orc_file_writer_test.cpp
-        ./formats/orc/orc_lazy_load_test.cpp
-        ./formats/orc/utils_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
@@ -244,7 +225,6 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
-        ./formats/disk_range_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
         ./http/handler_required_privilege_test.cpp
@@ -278,8 +258,6 @@ set(EXEC_FILES
         ./runtime/runtime_metrics_test.cpp
         ./runtime/stream_load_metrics_test.cpp
         ./runtime/rejected_record_sync_daemon_test.cpp
-        ./runtime/rejected_record_writer_test.cpp
-        ./runtime/runtime_state_helper_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
         ./runtime/batch_write/isomorphic_batch_write_test.cpp
@@ -469,6 +447,7 @@ SET(DW_TEST_FILES
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
     ./storage/lake/partial_update_test.cpp
+    ./storage/lake/partial_update_vector_index_test.cpp
     ./storage/lake/persistent_index_memtable_test.cpp
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
