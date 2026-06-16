@@ -20,8 +20,9 @@
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "gutil/casts.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/in_predicate_utils.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "types/olap_type_infra.h"
 

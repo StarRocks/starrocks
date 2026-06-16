@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/column_predicate.h"
-
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -21,6 +19,7 @@
 #include "gtest/gtest.h"
 #include "runtime/runtime_filter.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate_factory.h"
 
 namespace starrocks {
 

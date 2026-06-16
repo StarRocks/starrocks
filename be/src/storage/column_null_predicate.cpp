@@ -18,7 +18,7 @@
 #include "column/nullable_column.h"
 #include "common/bloom_filter.h"
 #include "gutil/casts.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/rowset/bitmap_index_reader.h"
 
 namespace starrocks {

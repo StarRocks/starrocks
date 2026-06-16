@@ -21,7 +21,7 @@
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 #include "storage/primitive/range.h"
 
 namespace starrocks::parquet {

@@ -15,9 +15,9 @@
 #include "formats/orc/orc_input_stream.h"
 
 #include "common/config_scan_io_fwd.h"
-#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/cast_expr.h"
 #include "formats/orc/orc_mapping.h"
+#include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 

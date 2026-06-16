@@ -34,7 +34,7 @@
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_expr_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"

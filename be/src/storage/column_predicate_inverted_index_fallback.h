@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "roaring/roaring.hh"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/olap_common.h"
 
 namespace starrocks {
