@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <exec/filter_condition.h>
+#include "storage/primitive/column_value_range.h"
 
 #include "base/testutil/assert.h"
 #include "column/runtime_type_traits.h"
-#include "exec/olap_common.h"
 #include "gtest/gtest.h"
+#include "storage/primitive/filter_condition.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -169,46 +169,6 @@ TEST(NormalizeRangeTest, BoolRangeTest) {
         ASSERT_OK(range.add_fixed_values(SQLFilterOp::FILTER_NOT_IN, {false}));
         ASSERT_ERROR(range.add_range(SQLFilterOp::FILTER_LESS, true));
         ASSERT_FALSE(range.is_empty_value_range());
-    }
-}
-
-TEST(NormalizeRangeTest, ExtendScanKeyTest) {
-    const constexpr LogicalType Type = TYPE_BIGINT;
-    using CppType = RunTimeCppType<Type>;
-    // Test OverFlow
-    {
-        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
-                                        std::numeric_limits<CppType>::max());
-        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS, 0));
-
-        OlapScanKeys scan_keys;
-        scan_keys._begin_scan_keys.emplace_back();
-        scan_keys._begin_scan_keys.emplace_back();
-        bool res = scan_keys.extend_scan_key(range, 1024).ok();
-        ASSERT_TRUE(res);
-    }
-    {
-        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
-                                        std::numeric_limits<CppType>::max());
-        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER, std::numeric_limits<CppType>::max()));
-        OlapScanKeys scan_keys;
-        scan_keys._begin_scan_keys.emplace_back();
-        scan_keys._begin_scan_keys.emplace_back();
-        bool res = scan_keys.extend_scan_key(range, 1024).ok();
-        ASSERT_TRUE(res);
-    }
-    {
-        ColumnValueRange<CppType> range("test", Type, std::numeric_limits<CppType>::lowest(),
-                                        std::numeric_limits<CppType>::max());
-        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, std::numeric_limits<CppType>::max()));
-        ASSERT_OK(range.add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, std::numeric_limits<CppType>::max()));
-        OlapScanKeys scan_keys;
-        scan_keys._begin_scan_keys.emplace_back();
-        scan_keys._begin_scan_keys.emplace_back();
-        scan_keys._end_scan_keys.emplace_back();
-        scan_keys._end_scan_keys.emplace_back();
-        bool res = scan_keys.extend_scan_key(range, 1024).ok();
-        ASSERT_TRUE(res);
     }
 }
 

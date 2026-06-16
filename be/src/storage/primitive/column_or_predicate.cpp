@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/column_or_predicate.h"
+#include "storage/primitive/column_or_predicate.h"
+
+#include <sstream>
 
 #include "common/object_pool.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 

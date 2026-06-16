@@ -36,6 +36,7 @@
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "storage/runtime_range_pruner.hpp"
 
 namespace starrocks::parquet {
 

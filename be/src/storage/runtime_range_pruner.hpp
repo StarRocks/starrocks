@@ -19,13 +19,14 @@
 #include <utility>
 
 #include "column/global_dict/config.h"
-#include "exec/olap_common.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_in_filter.h"
-#include "storage/column_and_predicate.h"
-#include "storage/column_or_predicate.h"
 #include "storage/column_predicate_factory.h"
-#include "storage/predicate_parser.h"
+#include "storage/primitive/column_and_predicate.h"
+#include "storage/primitive/column_or_predicate.h"
+#include "storage/primitive/column_value_range.h"
+#include "storage/primitive/filter_condition.h"
+#include "storage/primitive/predicate_parser.h"
 #include "storage/runtime_range_pruner.h"
 
 namespace starrocks {

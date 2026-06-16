@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/column_and_predicate.h"
+#include "storage/primitive/column_and_predicate.h"
+
+#include <sstream>
+
+#include "common/object_pool.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 Status ColumnAndPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
