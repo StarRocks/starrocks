@@ -395,7 +395,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
     }
 
     // The await-helper polling semantics (finished, aborted, disappeared, timeout)
-    // are covered by InsertFromFilesPreSplitHookPartitionedTest's
+    // are covered by InsertPreSplitHookFilesPartitionedTest's
     // awaitCombinedJobAllowingFallback* tests now that the helper lives on
     // TabletPreSplitCoordinator. Broker-side coverage is the source-level
     // structural assertion above ("MUST call awaitCombinedJobAllowingFallback").

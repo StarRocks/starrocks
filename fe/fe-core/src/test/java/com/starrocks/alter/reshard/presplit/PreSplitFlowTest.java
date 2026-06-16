@@ -54,7 +54,7 @@ import static org.mockito.Mockito.when;
  * past the {@code Prepared} bundle.
  *
  * <p>Coverage mirrors the per-hook tests' Mockito patterns
- * ({@link InsertFromFilesPreSplitHookPartitionedTest}): {@code MockedStatic} on
+ * ({@link InsertPreSplitHookFilesPartitionedTest}): {@code MockedStatic} on
  * {@link TabletPreSplitCoordinator} / {@link PreSplitTargets} /
  * {@link PartitionSampleGrouper} / {@link DefaultPreSplitPipeline} and a
  * {@code MockedConstruction<ReservoirSampler>} for the direct data-tier
@@ -210,6 +210,29 @@ public class PreSplitFlowTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
                     eq(LoadKind.INSERT_FROM_FILES), eq(table), eq(pipeline), eq(preparedJob), eq(shouldAbort)),
                     times(1));
+        }
+    }
+
+    @Test
+    public void singleFlowSkipsWhenNoEligibleTarget() {
+        // PreSplitTargets.findEligibleTarget returns null -> the guard short-circuits
+        // before the pipeline factory and the coordinator: no submit, no await.
+        Database database = mock(Database.class);
+        OlapTable table = mockTable(/*partitioned*/ false, /*automatic*/ false);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+
+        try (MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+            targets.when(() -> PreSplitTargets.findEligibleTarget(database, table)).thenReturn(null);
+
+            PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
+                    LoadKind.INSERT_FROM_FILES, () -> false);
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+            coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
+                    any(), any(), any(), any(), any()), never());
         }
     }
 
