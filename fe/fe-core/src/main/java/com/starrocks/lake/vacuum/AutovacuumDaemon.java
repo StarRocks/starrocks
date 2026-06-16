@@ -217,6 +217,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
+            // The longest this FE waits for the response (the brpc timeout of the vacuum RPC).
+            // The BE checks it periodically during execution and aborts the task once it has
+            // elapsed, instead of running on as a zombie that no caller is waiting for.
+            vacuumRequest.timeoutMs = LakeService.TIMEOUT_VACUUM;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
