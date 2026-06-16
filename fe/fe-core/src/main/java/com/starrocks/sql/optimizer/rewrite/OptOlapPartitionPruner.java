@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -295,7 +296,10 @@ public class OptOlapPartitionPruner {
             return null;
         }
 
-        if (!table.getDistributionColumnNames().contains(columnName)) {
+        Set<String> distributionColumnNames = table.getDistributionColumnNames();
+        boolean shouldRemovePrunedPartitionPredicates = !distributionColumnNames.contains(columnName)
+                || !areAllDistributionColumnsInFilter(logicalOlapScanOperator, distributionColumnNames);
+        if (shouldRemovePrunedPartitionPredicates) {
             scanPredicates.removeAll(prunedPartitionPredicates);
         }
 
@@ -461,6 +465,30 @@ public class OptOlapPartitionPruner {
                     && !tmpIdToRange.containsKey(candidatePartitions.get(0));
         }
         return false;
+    }
+
+    private static boolean areAllDistributionColumnsInFilter(LogicalOlapScanOperator operator,
+                                                            Set<String> distributionColumnNames) {
+        if (distributionColumnNames.isEmpty()) {
+            return true;
+        }
+
+        ScalarOperator predicate = operator.getPredicate();
+        if (predicate == null) {
+            return false;
+        }
+        ColumnRefSet usedColumns = predicate.getUsedColumns();
+        if (usedColumns.isEmpty()) {
+            return false;
+        }
+
+        for (Map.Entry<Column, ColumnRefOperator> entry : operator.getColumnMetaToColRefMap().entrySet()) {
+            String name = entry.getKey().getName();
+            if (distributionColumnNames.contains(name) && !usedColumns.contains(entry.getValue().getId())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean containsNullValue(PartitionKey minRange) {
