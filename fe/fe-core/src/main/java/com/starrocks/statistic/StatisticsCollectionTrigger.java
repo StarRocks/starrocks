@@ -124,13 +124,7 @@ public class StatisticsCollectionTrigger {
     }
 
     private void process() {
-        if (table instanceof OlapTable) {
-            if (!((OlapTable) table).enableStatisticCollectOnFirstLoad()) {
-                return;
-            }
-        }
-
-        if (!Config.enable_statistic_collect_on_first_load) {
+        if (!enableStatisticCollectOnFirstLoad()) {
             return;
         }
         if (!Config.enable_statistic_collect_on_update && dmlType.equals(DmlType.UPDATE)) {
@@ -170,6 +164,13 @@ public class StatisticsCollectionTrigger {
             executeCollect();
             waitFinish();
         }
+    }
+
+    private boolean enableStatisticCollectOnFirstLoad() {
+        if (table instanceof OlapTable olapTable && olapTable.isSetEnableStatisticCollectOnFirstLoad()) {
+            return olapTable.enableStatisticCollectOnFirstLoad();
+        }
+        return Config.enable_statistic_collect_on_first_load;
     }
 
     private void executeOverWrite() {
