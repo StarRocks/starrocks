@@ -47,7 +47,7 @@ public class StatisticSQLBuilder {
     private static final String QUERY_TABLE_STATISTIC_TEMPLATE =
             "select cast(" + STATISTIC_TABLE_VERSION + " as INT), partition_id, any_value(row_count)"
                     + " FROM " + FULL_STATISTICS_TABLE_NAME
-                    + " WHERE $predicate"
+                    + " WHERE $predicate AND row_count > 0"
                     + " GROUP BY partition_id";
 
     private static final String QUERY_PARTITION_STATISTIC_TEMPLATE =
