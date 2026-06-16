@@ -99,7 +99,6 @@ public class ShowMaterializedViewStatus {
         private long mvRefreshStartTime;
         private long mvRefreshProcessTime;
         private long mvRefreshEndTime;
-        private long totalProcessDuration;
         private boolean isForce;
         private List<String> refreshedPartitionStarts;
         private List<String> refreshedPartitionEnds;
@@ -135,14 +134,6 @@ public class ShowMaterializedViewStatus {
 
         public void setMvRefreshEndTime(long mvRefreshEndTime) {
             this.mvRefreshEndTime = mvRefreshEndTime;
-        }
-
-        public long getTotalProcessDuration() {
-            return totalProcessDuration;
-        }
-
-        public void setTotalProcessDuration(long totalProcessDuration) {
-            this.totalProcessDuration = totalProcessDuration;
         }
 
         public boolean isForce() {
@@ -247,8 +238,8 @@ public class ShowMaterializedViewStatus {
                     "taskOwner='" + taskOwner + '\'' +
                     ", refreshState=" + refreshState +
                     ", mvRefreshStartTime=" + mvRefreshStartTime +
+                    ", mvRefreshProcessTime=" + mvRefreshProcessTime +
                     ", mvRefreshEndTime=" + mvRefreshEndTime +
-                    ", totalProcessDuration=" + totalProcessDuration +
                     ", isForce=" + isForce +
                     ", refreshedPartitionStarts=" + refreshedPartitionStarts +
                     ", refreshedPartitionEnds=" + refreshedPartitionEnds +
@@ -705,14 +696,24 @@ public class ShowMaterializedViewStatus {
             long mvRefreshFinishTime = lastTaskRunStatus.getFinishTime();
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
-            long totalProcessDuration = sorted.stream()
-                    .map(TaskRunStatus::calculateRefreshProcessDuration)
-                    .collect(Collectors.summingLong(Long::longValue));
-            status.setTotalProcessDuration(totalProcessDuration);
             status.setErrorCode(String.valueOf(lastTaskRunStatus.getErrorCode()));
             status.setErrorMsg(Strings.nullToEmpty(lastTaskRunStatus.getErrorMessage()));
         }
         return status;
+    }
+
+    /**
+     * Wall-clock duration (ms) of a refresh job: the last run's finish minus the first run's process start,
+     * falling back to the submit time when the process start is unknown (0), clamped to 0 to tolerate clock skew.
+     * Shared with materialized_view_refresh_jobs.DURATION_TIME so both surfaces report the same elapsed time.
+     */
+    public static long getRefreshJobWallClockDurationMs(RefreshJobStatus job) {
+        if (!job.isRefreshFinished()) {
+            return 0L;
+        }
+        long startBasis = job.getMvRefreshProcessTime() > 0
+                ? job.getMvRefreshProcessTime() : job.getMvRefreshStartTime();
+        return Math.max(0L, job.getMvRefreshEndTime() - startBasis);
     }
 
     public String getQueryRewriteStatus() {
@@ -765,7 +766,7 @@ public class ShowMaterializedViewStatus {
         // only updated when refresh is finished
         if (refreshJobStatus.isRefreshFinished()) {
             status.setLast_refresh_finished_time(TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshEndTime()));
-            status.setLast_refresh_duration(formatDuration(refreshJobStatus.getTotalProcessDuration()));
+            status.setLast_refresh_duration(formatDuration(getRefreshJobWallClockDurationMs(refreshJobStatus)));
             status.setLast_refresh_error_code(refreshJobStatus.getErrorCode());
             status.setLast_refresh_error_message(refreshJobStatus.getErrorMsg());
         }
@@ -833,7 +834,7 @@ public class ShowMaterializedViewStatus {
         // process finish time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshEndTime()));
         // process duration
-        addField(resultRow, formatDuration(refreshJobStatus.getTotalProcessDuration()));
+        addField(resultRow, formatDuration(getRefreshJobWallClockDurationMs(refreshJobStatus)));
         // last refresh state
         addField(resultRow, refreshJobStatus.getRefreshState());
         // whether it's force refresh

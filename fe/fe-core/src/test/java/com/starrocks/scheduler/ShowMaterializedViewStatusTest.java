@@ -91,8 +91,9 @@ public class ShowMaterializedViewStatusTest {
 
         Assertions.assertTrue(status.isRefreshFinished());
         Assertions.assertEquals(5900L, status.getMvRefreshEndTime());
-        long expectedDuration = (1500L - 1000L) + (3700L - 3000L) + (5900L - 5000L);
-        Assertions.assertEquals(expectedDuration, status.getTotalProcessDuration());
+        // Wall-clock span of the whole job: last run finish (5900) minus first run process start (1000),
+        // not the per-run execution sum (which would be 2100).
+        Assertions.assertEquals(4900L, ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(status));
     }
 
     @Test
@@ -128,6 +129,7 @@ public class ShowMaterializedViewStatusTest {
         Assertions.assertNotNull(empty);
         Assertions.assertFalse(empty.isRefreshFinished());
         Assertions.assertNull(empty.getJobId());
+        Assertions.assertEquals(0L, ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(empty));
 
         ShowMaterializedViewStatus.RefreshJobStatus fromNull = ShowMaterializedViewStatus.fromTaskRuns(null);
         Assertions.assertNotNull(fromNull);
@@ -147,7 +149,7 @@ public class ShowMaterializedViewStatusTest {
         Assertions.assertEquals("job-3", status.getJobId());
         Assertions.assertTrue(status.isRefreshFinished());
         Assertions.assertEquals(2600L, status.getMvRefreshEndTime());
-        Assertions.assertEquals(600L, status.getTotalProcessDuration());
+        Assertions.assertEquals(600L, ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(status));
     }
 
     @Test
@@ -212,6 +214,28 @@ public class ShowMaterializedViewStatusTest {
         Assertions.assertEquals("", resultSet.get(31)); // refresh policy
         Assertions.assertEquals("", resultSet.get(32)); // resource group
         Assertions.assertEquals("", resultSet.get(33)); // query rewrite status reason
+    }
+
+    @Test
+    public void wallClockDurationFallsBackToSubmitTimeWhenProcessStartUnknown() {
+        // A finished run whose processStartTime was never persisted (0): the wall-clock start basis falls back
+        // to the submit (create) time so the duration stays meaningful instead of jumping to the epoch.
+        TaskRunStatus run = mvTaskRun("job-f", "run-1", 1000L, 0L, 1500L, Constants.TaskRunState.SUCCESS);
+        ShowMaterializedViewStatus.RefreshJobStatus status =
+                ShowMaterializedViewStatus.fromTaskRuns(Collections.singletonList(run));
+
+        Assertions.assertEquals(0L, status.getMvRefreshProcessTime());
+        Assertions.assertEquals(500L, ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(status));
+    }
+
+    @Test
+    public void wallClockDurationClampsNegativeToZeroOnClockSkew() {
+        // Clock skew can persist a finish time earlier than the process start; the duration must not go negative.
+        TaskRunStatus run = mvTaskRun("job-skew", "run-1", 5000L, 5000L, 4000L, Constants.TaskRunState.SUCCESS);
+        ShowMaterializedViewStatus.RefreshJobStatus status =
+                ShowMaterializedViewStatus.fromTaskRuns(Collections.singletonList(run));
+
+        Assertions.assertEquals(0L, ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(status));
     }
 
     @Test

@@ -190,10 +190,7 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
 
             if (rjs.isRefreshFinished()) {
                 info.setFinish_time(TimeUtils.longToTimeString(rjs.getMvRefreshEndTime()));
-                // Wall-clock span of the whole job, not the per-run totalProcessDuration sum.
-                long startBasis = rjs.getMvRefreshProcessTime() > 0
-                        ? rjs.getMvRefreshProcessTime() : rjs.getMvRefreshStartTime();
-                long wallMs = rjs.getMvRefreshEndTime() - startBasis;
+                long wallMs = ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(rjs);
                 // Locale.ROOT so the BE's std::stod always receives a '.' decimal regardless of FE JVM locale.
                 info.setDuration_time(String.format(Locale.ROOT, "%.3f", wallMs / 1000D));
             }

@@ -22,7 +22,7 @@ description: "materialized_views 提供所有物化视图的信息。"
 | TASK_NAME                            | 物化视图刷新任务的名称。                         |
 | LAST_REFRESH_START_TIME              | 最近一次刷新任务的开始时间。                     |
 | LAST_REFRESH_FINISHED_TIME           | 最近一次刷新任务的结束时间。                     |
-| LAST_REFRESH_DURATION                | 最近一次刷新任务的持续时间。                     |
+| LAST_REFRESH_DURATION                | 最近一次刷新的墙钟耗时（秒）：最后一个 task run 的完成时间减去第一个 task run 的开始执行时间。与该 job 在 `materialized_view_refresh_jobs.DURATION_TIME` 中的值一致。 |
 | LAST_REFRESH_STATE                   | 最近一次刷新任务的状态。                         |
 | LAST_REFRESH_FORCE_REFRESH           | 最近一次刷新任务是否强制刷新。                   |
 | LAST_REFRESH_START_PARTITION         | 最近一次刷新任务的开始分区。                     |
