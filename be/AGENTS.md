@@ -177,7 +177,7 @@ Core runtime building blocks without full Runtime/Exec/Storage coupling.
 ### FormatCore (`formatcore`)
 Format-oriented core primitives above ComputeEnv, ExprCore, RuntimeCore, FSCore, ChunkCore, ColumnCore, and Types.
 - Targets: `FormatCore`
-- Allowed internal include prefixes: `formats/column_evaluator.h`, `formats/disk_range.hpp`, `formats/file_writer.h`, `formats/io/`, `formats/utils.h`, `exprs/`, `runtime/`, `fs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `formats/column_evaluator.h`, `formats/deletion_bitmap.h`, `formats/disk_range.hpp`, `formats/file_writer.h`, `formats/io/`, `formats/utils.h`, `exprs/`, `runtime/`, `fs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ComputeEnv`, `ExprCore`, `RuntimeCore`, `FSCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `format_test`
 - Remediation: Keep FormatCore limited to reusable format primitives; move connector orchestration and higher execution policy upward.

@@ -57,7 +57,15 @@ set(FORMAT_AVRO_TEST_FILES
     avro/cpp/utils_test.cpp
 )
 
+set(FORMAT_ORC_TEST_FILES
+    orc/orc_column_reader_test.cpp
+    orc/orc_emit_rejected_rows_test.cpp
+    orc/orc_lazy_load_test.cpp
+    orc/utils_test.cpp
+)
+
 set(FORMAT_TEST_LINK_LIBS
+    FormatOrc
     FormatAvro
     FormatJson
     FormatCsv
@@ -97,11 +105,16 @@ add_library(starrocks_format_avro_test_objs OBJECT ${FORMAT_AVRO_TEST_FILES})
 target_link_libraries(starrocks_format_avro_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_format_avro_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+add_library(starrocks_format_orc_test_objs OBJECT ${FORMAT_ORC_TEST_FILES})
+target_link_libraries(starrocks_format_orc_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_format_orc_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 add_executable(format_test
     format_test_main.cpp
     $<TARGET_OBJECTS:starrocks_format_core_test_objs>
     $<TARGET_OBJECTS:starrocks_format_csv_test_objs>
     $<TARGET_OBJECTS:starrocks_format_json_test_objs>
     $<TARGET_OBJECTS:starrocks_format_avro_test_objs>
+    $<TARGET_OBJECTS:starrocks_format_orc_test_objs>
 )
 target_link_libraries(format_test ${FORMAT_TEST_LINK_LIBS})
