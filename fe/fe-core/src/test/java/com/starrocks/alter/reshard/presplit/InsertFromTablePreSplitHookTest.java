@@ -194,6 +194,18 @@ public class InsertFromTablePreSplitHookTest {
                 InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
+    @Test
+    public void testInsertWithLoadPropertiesShortCircuits() throws Exception {
+        // INSERT PROPERTIES(strict_mode=true) ... — load properties are only validated by
+        // InsertAnalyzer.analyzeProperties after this hook, so pre-splitting for a statement that
+        // may fail property validation is wrong. Skip conservatively when any property is present.
+        InsertStmt stmt = simpleTableInsertStmt();
+        when(stmt.getProperties()).thenReturn(Map.of("strict_mode", "true"));
+
+        assertHookDoesNotDelegate(() ->
+                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+    }
+
     // ---------- extractSingleTableSource: query-shape filters ----------
 
     @Test
@@ -402,6 +414,26 @@ public class InsertFromTablePreSplitHookTest {
             fixture.metaUtils.when(() -> MetaUtils.getSessionAwareTable(
                             any(), Mockito.argThat(db -> db != fixture.sourceDb), any()))
                     .thenReturn(mv);
+
+            fixture.assertNoSubmit();
+        }
+    }
+
+    // ---------- tryRunPreSplit: partition-branch gate ----------
+
+    @Test
+    public void testManuallyPartitionedTargetShortCircuits() throws Exception {
+        // A partitioned target that does NOT support automatic partitioning (e.g. a plain
+        // list/range partition table) must not reach runMultiPartitionFlow: pre-creating
+        // partitions from sampled values would fabricate system partitions outside the
+        // user-defined partition set.
+        try (SourceFixture fixture = sourceFixture()) {
+            // Override the default (isPartitioned=false) to make it partitioned but non-automatic.
+            PartitionInfo manualPartitionInfo = mock(PartitionInfo.class);
+            when(manualPartitionInfo.isPartitioned()).thenReturn(true);
+            when(manualPartitionInfo.getPartitionColumns(any())).thenReturn(List.of());
+            when(fixture.target().getPartitionInfo()).thenReturn(manualPartitionInfo);
+            when(fixture.target().supportedAutomaticPartition()).thenReturn(false);
 
             fixture.assertNoSubmit();
         }
@@ -795,11 +827,16 @@ public class InsertFromTablePreSplitHookTest {
         private final ConnectContext context;
         private final Database sourceDb;
         private final OlapTable sourceTable;
+        private final OlapTable targetTable;
         private final MockedStatic<MetaUtils> metaUtils;
         private final MockedStatic<Authorizer> authorizer;
         private final MockedStatic<TabletPreSplitCoordinator> coordinator;
         private final MockedStatic<com.starrocks.server.GlobalStateMgr> globalStateMgr;
         private final MockedStatic<com.starrocks.sql.analyzer.AnalyzerUtils> analyzerUtils;
+
+        OlapTable target() {
+            return targetTable;
+        }
 
         private SourceFixture(List<String> targetColumns, List<String> sourceColumns) {
             this.context = mockConnectContextWithSessionPreSplit(true);
@@ -807,6 +844,7 @@ public class InsertFromTablePreSplitHookTest {
 
             // Target: single-tier, range-distribution, NORMAL, one index, scalar sort key.
             OlapTable target = mock(OlapTable.class);
+            this.targetTable = target;
             when(target.getName()).thenReturn("target_t");
             when(target.isCloudNativeTableOrMaterializedView()).thenReturn(true);
             when(target.isRangeDistribution()).thenReturn(true);

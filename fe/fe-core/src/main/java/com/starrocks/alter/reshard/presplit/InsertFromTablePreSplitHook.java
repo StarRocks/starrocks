@@ -202,6 +202,13 @@ public final class InsertFromTablePreSplitHook {
                 wherePredicateSql, computeResource);
 
         if (target.getPartitionInfo().isPartitioned()) {
+            if (!Boolean.TRUE.equals(target.supportedAutomaticPartition())) {
+                // Manually-partitioned targets (list/range without automatic-partition enabled) do
+                // not support pre-creating partitions from sampled values. Pre-creating system
+                // partitions for an INSERT whose rows must fit existing user-defined partitions is
+                // wrong; we skip pre-split conservatively and let the load proceed normally.
+                return;
+            }
             runMultiPartitionFlow(resolvedTable.database(), target, resolvedSource.sourceTable(),
                     scanContext, sortKeyColumns, partitionColumns, context);
         } else {
@@ -365,6 +372,13 @@ public final class InsertFromTablePreSplitHook {
         // source and can pre-create or split partitions outside the target set,
         // diverging from what the load actually writes.
         if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
+            return null;
+        }
+        // INSERT PROPERTIES(...) (strict_mode, timeout, max_filter_ratio, etc.) are validated only
+        // by InsertAnalyzer.analyzeProperties, which runs after this hook. Pre-splitting for a
+        // statement that may fail property validation would apply a tablet-layout change for a load
+        // that never runs, so skip conservatively when any explicit load property is present.
+        if (insertStmt.getProperties() != null && !insertStmt.getProperties().isEmpty()) {
             return null;
         }
         return insertStmt;
