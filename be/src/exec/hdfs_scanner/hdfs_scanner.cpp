@@ -263,7 +263,8 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             file_record_count = _scanner_ctx->scan_range->record_count;
         }
         _scanner_ctx->append_or_update_count_column_to_chunk(chunk, file_record_count);
-        RETURN_IF_ERROR(_scanner_ctx->append_auxiliary_columns_to_chunk(chunk, 1));
+        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
+        _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += 1;
         return Status::OK();

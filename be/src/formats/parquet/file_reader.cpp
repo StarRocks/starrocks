@@ -30,6 +30,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/utils.h"
@@ -413,12 +414,17 @@ Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
         if (_scanner_ctx->options.use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
             _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
-            _scanner_ctx->append_auxiliary_columns_to_chunk(chunk, 1);
+            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
+            _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
         } else {
             read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
             RETURN_IF_ERROR(_scanner_ctx->append_auxiliary_columns_to_chunk(chunk, read_size));
         }
         _scan_row_count += read_size;
+        if (!_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+            RETURN_IF_ERROR(
+                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
+        }
         return Status::OK();
     }
 

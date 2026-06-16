@@ -87,7 +87,7 @@ GroupReader::~GroupReader() {
         // suggests the active/lazy classification (Phase 3b) would help.
         if (_param.stats) {
             size_t total_lazy = _column_materializer->lazy_slot_ids().size() + _variant->lazy_hidden_slot_ids().size();
-            int64_t triggered = _column_materializer->lazy_triggered_count();
+            size_t triggered = _column_materializer->lazy_triggered_count();
             if (total_lazy > 0 && static_cast<size_t>(triggered) >= total_lazy) {
                 _param.stats->parquet_lazy_full_trigger_count++;
             }

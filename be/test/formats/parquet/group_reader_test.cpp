@@ -250,7 +250,7 @@ public:
             _temp_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
         }
         dst = _temp_col;
-        _temp_col->append_datum(Datum(int32_t(42)));
+        _temp_col->as_mutable_raw_ptr()->append_datum(Datum(int32_t(42)));
         return Status::OK();
     }
 
@@ -4347,23 +4347,15 @@ TEST_F(GroupReaderTest, LazyMaterializationContextMaterializeSlotDelegatesToColu
     auto active_chunk = group_reader->_column_materializer->create_active_chunk();
     LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
 
-    // Trigger count starts at 0.
-    EXPECT_EQ(0, group_reader->_column_materializer->lazy_triggered_count());
+    // Trigger set starts empty.
+    EXPECT_EQ(0u, group_reader->_column_materializer->lazy_triggered_count());
 
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
-    EXPECT_EQ(1, group_reader->_column_materializer->lazy_triggered_count());
+    EXPECT_EQ(1u, group_reader->_column_materializer->lazy_triggered_count());
 
-    // Idempotent: second materialize is a no-op.
+    // Idempotent: second materialize on same slot is a no-op.
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
-    EXPECT_EQ(1, group_reader->_column_materializer->lazy_triggered_count());
-
-    // After reset, materialize increments again.
-    group_reader->_column_materializer->reset_triggered_lazy_count();
-    EXPECT_EQ(0, group_reader->_column_materializer->lazy_triggered_count());
-    // Need to clear slot_cache too so materialize_slot actually reads again.
-    group_reader->_column_materializer->reset_read_chunk();
-    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
-    EXPECT_EQ(1, group_reader->_column_materializer->lazy_triggered_count());
+    EXPECT_EQ(1u, group_reader->_column_materializer->lazy_triggered_count());
 }
 
 // Covers: LazyMaterializationContext::get_column returns nullptr for

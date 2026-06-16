@@ -132,10 +132,7 @@ public:
     // Also records the trigger for fallback tracking.
     Status materialize_slot(SlotId slot_id, const Range<uint64_t>& range, const Filter* filter);
 
-    // Per-row-group count of lazy slots triggered via materialize_slot().
-    // Reset at row-group boundaries (see reset_triggered_lazy_count).
-    int64_t lazy_triggered_count() const { return _lazy_triggered_count; }
-    void reset_triggered_lazy_count() { _lazy_triggered_count = 0; }
+    size_t lazy_triggered_count() const { return _triggered_lazy_slots.size(); }
 
     // Post-filter lazy-column backfill.
     // chunk_filter has full_range.span_size() entries and is used to apply the
@@ -196,14 +193,17 @@ private:
 
     ChunkPtr _read_chunk;
 
-    // Per-range slot cache: populated by read_slot(), cleared by reset_read_chunk().
+    // Per-range slot cache: populated by materialize_slot() (NOT read_slot()),
+    // cleared by reset_read_chunk(). All entries hold logical (finalized) columns.
     std::unordered_map<SlotId, SlotCacheEntry> _slot_cache;
 
     bool _lazy_column_needed = false;
 
-    // Per-row-group count: number of lazy slots triggered via materialize_slot().
-    // Reset at GroupReader destructor boundary for fallback ratio calculation.
-    int64_t _lazy_triggered_count = 0;
+    // Per-row-group set of unique lazy slots triggered via materialize_slot().
+    // NOT cleared by reset_read_chunk() — accumulates across ranges within
+    // the same row group to track full-trigger diagnostics.
+    // Lifetime = one row group (owned by GroupReader, destroyed in ~GroupReader).
+    std::unordered_set<SlotId> _triggered_lazy_slots;
 
     std::unique_ptr<ReadRangePlanner> _read_range_planner;
 };

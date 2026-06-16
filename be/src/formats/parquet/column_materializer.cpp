@@ -350,9 +350,12 @@ Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
             }
             active_chunk->merge(std::move(*lazy_chunk));
         }
+        _lazy_column_needed = !backfill_indices.empty();
+    } else {
+        _lazy_column_needed = false;
     }
+    _lazy_column_needed = _lazy_column_needed || !_slot_cache.empty();
 
-    _lazy_column_needed = !untriggered_indices.empty() || !_slot_cache.empty();
     return Status::OK();
 }
 
@@ -455,7 +458,7 @@ Status ColumnMaterializer::materialize_slot(SlotId slot_id, const Range<uint64_t
     {
         SCOPED_RAW_TIMER(&_param.stats->parquet_lazy_read_ns);
         _param.stats->parquet_lazy_read_count++;
-        _lazy_triggered_count++;
+        _triggered_lazy_slots.insert(slot_id);
         RETURN_IF_ERROR(
                 (*_column_readers)[slot_id]->read_range(range, filter, _read_chunk->get_column_by_slot_id(slot_id)));
     }
