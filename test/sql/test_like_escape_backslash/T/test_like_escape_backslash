@@ -49,3 +49,35 @@ SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\%' OR c1 LIKE 'star%' ORDER
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'abc\\_def' ORDER BY c0;
 
 DROP TABLE t_like_escape;
+
+-- ============================================================================
+-- Constant LIKE constant: both sides literal -> folded in FE (FoldConstantsRule).
+-- These exercise the FE constant-folding path (the buggy path), unlike the column
+-- cases above which run on BE. Results must match MySQL.
+-- ============================================================================
+
+-- C1: two-layer escaping regression ('a\b' LIKE 'a\\b' -> 1 ; 'a\b' LIKE 'a\b' -> 0)
+SELECT 'a\\b' LIKE 'a\\\\b';
+SELECT 'a\\b' LIKE 'a\\b';
+
+-- C2: escaped wildcard treated as literal
+SELECT '100%' LIKE '100\\%';
+SELECT '100abc' LIKE '100\\%';
+SELECT 'a_b' LIKE 'a\\_b';
+SELECT 'aXb' LIKE 'a\\_b';
+
+-- C3: escaped wildcard directly adjacent to a real wildcard (stripEnd boundary bug)
+SELECT 'abc%xyz' LIKE 'abc\\%%';
+SELECT 'abcXyz' LIKE 'abc\\%%';
+SELECT 'xyz%abc' LIKE '%\\%abc';
+SELECT 'xa%by' LIKE '%a\\%b%';
+SELECT 'xaXby' LIKE '%a\\%b%';
+
+-- C4: double backslash + wildcard / trailing escaped backslash
+SELECT 'a\\xyz' LIKE 'a\\\\%';
+SELECT 'abc\\' LIKE 'abc\\\\';
+
+-- C5: plain prefix/suffix/substring wildcards (no escape) still fold correctly
+SELECT 'abcdef' LIKE 'abc%';
+SELECT 'xyzabc' LIKE '%abc';
+SELECT 'xyzabcdef' LIKE '%abc%';
