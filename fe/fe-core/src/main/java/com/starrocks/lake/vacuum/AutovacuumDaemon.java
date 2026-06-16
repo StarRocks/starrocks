@@ -315,6 +315,14 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
+<<<<<<< HEAD
+=======
+            vacuumRequest.enableSharedFileCleanup = enableSharedFileCleanup;
+            // The longest this FE waits for the response (the brpc timeout of the vacuum RPC).
+            // The BE checks it periodically during execution and aborts the task once it has
+            // elapsed, instead of running on as a zombie that no caller is waiting for.
+            vacuumRequest.timeoutMs = LakeService.TIMEOUT_VACUUM;
+>>>>>>> 4e25291a18 ([BugFix] Abort BE vacuum tasks once the FE caller's timeout elapses (#74694))
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
