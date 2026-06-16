@@ -693,7 +693,11 @@ public class ShowMaterializedViewStatus {
         if (lastTaskRunStatus.isRefreshFinished()) {
             status.setRefreshFinished(true);
 
-            long mvRefreshFinishTime = lastTaskRunStatus.getFinishTime();
+            // A pending follow-up run aborted by clearUnfinishedTaskRun() is marked FAILED without a finishTime,
+            // so the tail run's finishTime can be 0; take the max across the batch to keep the real job end.
+            long mvRefreshFinishTime = sorted.stream()
+                    .mapToLong(TaskRunStatus::getFinishTime)
+                    .max().orElse(lastTaskRunStatus.getFinishTime());
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
             status.setErrorCode(String.valueOf(lastTaskRunStatus.getErrorCode()));

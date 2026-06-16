@@ -239,6 +239,22 @@ public class ShowMaterializedViewStatusTest {
     }
 
     @Test
+    public void wallClockUsesMaxFinishWhenPendingTailAbortedWithoutFinishTime() {
+        // A completed first sub-run plus a follow-up aborted while PENDING: clearUnfinishedTaskRun marks the tail
+        // FAILED without a finishTime (0). The job end must be the last real finish, not the aborted tail's 0,
+        // so the elapsed work of the completed sub-run is not lost.
+        TaskRunStatus firstRun = mvTaskRun("job-a", "run-1", 1000L, 1000L, 1500L, Constants.TaskRunState.SUCCESS);
+        TaskRunStatus abortedTail = mvTaskRun("job-a", "run-2", 2000L, 0L, 0L, Constants.TaskRunState.FAILED);
+
+        ShowMaterializedViewStatus.RefreshJobStatus status =
+                ShowMaterializedViewStatus.fromTaskRuns(Arrays.asList(abortedTail, firstRun));
+
+        Assertions.assertTrue(status.isRefreshFinished());
+        Assertions.assertEquals(1500L, status.getMvRefreshEndTime());
+        Assertions.assertEquals(500L, ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(status));
+    }
+
+    @Test
     public void toThriftIncludesLastRefreshTimeWhenPresent() {
         ShowMaterializedViewStatus viewStatus = new ShowMaterializedViewStatus(1L, "testDb", "testView");
         viewStatus.setLastRefreshTime(1735697100000L);
