@@ -21,6 +21,7 @@
 #include <string_view>
 #include <utility>
 
+#include "cache/mem_cache/page_cache.h"
 #include "common/util/thrift_util.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/schema.h"

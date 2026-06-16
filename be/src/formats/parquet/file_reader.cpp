@@ -29,7 +29,6 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/utils.h"
