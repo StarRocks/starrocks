@@ -48,7 +48,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"

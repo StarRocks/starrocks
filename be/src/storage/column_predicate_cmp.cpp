@@ -22,7 +22,8 @@
 #include "column/raw_data_visitor.h"
 #include "common/bloom_filter.h"
 #include "common/object_pool.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/primitive/range.h"
 #include "storage/primitive/zone_map_detail.h"

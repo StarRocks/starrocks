@@ -4,7 +4,7 @@
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
 

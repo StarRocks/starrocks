@@ -32,7 +32,7 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/delete_predicates.h"

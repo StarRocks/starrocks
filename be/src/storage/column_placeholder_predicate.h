@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 
 namespace starrocks {
 

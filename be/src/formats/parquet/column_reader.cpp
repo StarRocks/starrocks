@@ -30,7 +30,7 @@
 #include "formats/utils.h"
 #include "gen_cpp/parquet_types.h"
 #include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 
 namespace starrocks::parquet {
 

@@ -20,7 +20,8 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class TabletSchema;

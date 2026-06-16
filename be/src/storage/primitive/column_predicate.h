@@ -15,52 +15,32 @@
 #pragma once
 
 #include <cstdint>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/runtime_type_traits.h"
-#include "common/object_pool.h"
+#include "common/column_id.h"
+#include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/Opcodes_types.h"
-#include "storage/index/inverted/inverted_index_iterator.h"
-#include "storage/index/inverted/inverted_reader.h"
-#include "storage/olap_common.h" // ColumnId
+#include "common/statusor.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/zone_map_detail.h"
-#include "storage/types.h"
 #include "types/datum.h"
-#include "types/decimalv3.h"
-#include "types/json_value.h"
-#include "types/logical_type.h"
-#include "types/storage_type_traits.h"
+#include "types/type_info.h"
 
+namespace roaring {
 class Roaring;
+} // namespace roaring
 
 namespace starrocks {
-class BloomFilter;
-class Slice;
-class ObjectPool;
-class ExprContext;
-class RuntimeState;
-class SlotDescriptor;
+
 class BitmapIndexIterator;
+class BloomFilter;
+class InvertedIndexIterator;
+class ObjectPool;
 struct NgramBloomFilterReaderOptions;
-class RuntimeFilterProbeDescriptor;
-} // namespace starrocks
-
-namespace starrocks {
-
-template <LogicalType ftype>
-struct PredicateCmpTypeForField {
-    using ValueType = StorageCppType<ftype>;
-};
-
-template <>
-struct PredicateCmpTypeForField<TYPE_JSON> {
-    using ValueType = JsonValue;
-};
 
 enum class PredicateType {
     kUnknown = 0,
@@ -81,39 +61,6 @@ enum class PredicateType {
     kMap = 15,
     kPlaceHolder = 16,
     kGinFallback = 17,
-};
-
-std::ostream& operator<<(std::ostream& os, PredicateType p);
-
-template <typename T>
-static inline T string_to_int(const Slice& s) {
-    StringParser::ParseResult r;
-    T v = StringParser::string_to_int<T>(s.data, s.size, &r);
-    DCHECK_EQ(StringParser::PARSE_SUCCESS, r);
-    return v;
-}
-
-template <typename T>
-static inline T string_to_float(const Slice& s) {
-    StringParser::ParseResult r;
-    T v = StringParser::string_to_float<T>(s.data, s.size, &r);
-    DCHECK_EQ(StringParser::PARSE_SUCCESS, r);
-    return v;
-}
-
-class ColumnPredicateAssignOp {
-public:
-    static uint8_t apply(uint8_t a, uint8_t b) { return b; }
-};
-
-class ColumnPredicateAndOp {
-public:
-    static uint8_t apply(uint8_t a, uint8_t b) { return a & b; }
-};
-
-class ColumnPredicateOrOp {
-public:
-    static uint8_t apply(uint8_t a, uint8_t b) { return a | b; }
 };
 
 // ColumnPredicate represents a predicate that can only be applied to a column.
@@ -237,46 +184,4 @@ protected:
 
 using PredicateList = std::vector<const ColumnPredicate*>;
 
-ColumnPredicate* new_column_eq_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
-ColumnPredicate* new_column_ne_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
-ColumnPredicate* new_column_lt_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
-ColumnPredicate* new_column_le_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
-ColumnPredicate* new_column_gt_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
-ColumnPredicate* new_column_ge_predicate(const TypeInfoPtr& type, ColumnId id, const Slice& operand);
-ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInfoPtr& type, ColumnId id,
-                                          const Slice& operand);
-
-ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
-                                         const std::vector<std::string>& operands);
-
-ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
-                                                  const std::vector<int32_t>& operands, size_t size);
-ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
-                                             const std::vector<std::string>& operands);
-ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
-
-ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
-                                                   std::vector<uint8_t> dict_mapping);
-
-ColumnPredicate* new_column_placeholder_predicate(const TypeInfoPtr& type_info, ColumnId id);
-
-ColumnPredicate* new_column_eq_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
-ColumnPredicate* new_column_ne_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
-ColumnPredicate* new_column_lt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
-ColumnPredicate* new_column_le_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
-ColumnPredicate* new_column_gt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
-ColumnPredicate* new_column_ge_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
-ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
-                                                    const std::vector<Datum>& operands);
-ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
-                                                        const std::vector<Datum>& operands);
-
-Status compound_and_predicates_evaluate(const std::vector<const ColumnPredicate*>& predicates, const Column* col,
-                                        uint8_t* selection, uint16_t* selected_idx, uint16_t from, uint16_t to);
-
-template <LogicalType LT>
-class Bitset;
-template <LogicalType LT>
-ColumnPredicate* new_bitset_in_predicate(const TypeInfoPtr& type_info, ColumnId id, const Bitset<LT>& bitset);
-
-} //namespace starrocks
+} // namespace starrocks

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "storage/predicate_tree/predicate_tree.h"
+#include "storage/primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 

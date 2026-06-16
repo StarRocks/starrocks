@@ -39,7 +39,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"

@@ -27,7 +27,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/conjunctive_predicates.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 

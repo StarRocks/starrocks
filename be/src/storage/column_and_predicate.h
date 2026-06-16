@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 
 namespace starrocks {
 

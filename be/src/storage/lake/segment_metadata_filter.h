@@ -15,7 +15,7 @@
 #pragma once
 
 #include "gen_cpp/lake_types.pb.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {

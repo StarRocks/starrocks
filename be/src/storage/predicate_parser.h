@@ -19,7 +19,7 @@
 
 #include "common/statusor.h"
 #include "exec/filter_condition.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 #include "tablet_schema.h"
 
 namespace starrocks {
