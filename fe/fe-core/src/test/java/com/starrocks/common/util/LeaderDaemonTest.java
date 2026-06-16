@@ -77,6 +77,44 @@ public class LeaderDaemonTest {
         Assertions.assertTrue(daemon.isStopped());
     }
 
+    @Test
+    public void testZeroIntervalKeepsLoopingInsteadOfHangingAfterOneCycle(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        mockValidLeaderLease(globalStateMgr);
+        // An interval==0 LeaderDaemon is a "tight drain loop" (report-handler / resource-report-handler /
+        // routine-load-task-scheduler): runAfterLeaseValid() self-paces via a blocking poll/sleep and the
+        // outer loop must call it again immediately. The regression was that loop() ran
+        // stopSignal.wait(intervalMs) == wait(0), which blocks forever, so the daemon ran exactly one cycle
+        // then hung. This test requires the daemon to run several cycles.
+        CountDownLatch cycles = new CountDownLatch(3);
+        LeaderDaemon daemon = new LeaderDaemon("zero-interval-daemon", 0L) {
+            @Override
+            protected GlobalStateMgr getGlobalStateMgr() {
+                return globalStateMgr;
+            }
+
+            @Override
+            protected void runAfterLeaseValid() throws InterruptedException {
+                cycles.countDown();
+                Thread.sleep(10);
+            }
+
+            @Override
+            protected void onJoinTimeout() {
+                // tests only: never terminate the JVM
+            }
+        };
+
+        daemon.start();
+        try {
+            Assertions.assertTrue(cycles.await(5, TimeUnit.SECONDS),
+                    "interval=0 daemon must keep looping, not hang after a single cycle");
+        } finally {
+            daemon.stopGracefully(5000L);
+        }
+        Assertions.assertFalse(daemon.isRunning());
+    }
+
     private void mockValidLeaderLease(GlobalStateMgr globalStateMgr) {
         LeaderLease lease = new LeaderLease(1L, 1L);
         new Expectations() {

@@ -185,14 +185,22 @@ public abstract class LeaderDaemon {
             if (isStopped.get()) {
                 break;
             }
-            try {
-                synchronized (stopSignal) {
-                    stopSignal.wait(intervalMs);
-                }
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                if (isStopped.get()) {
-                    break;
+            // intervalMs <= 0 means "tight drain loop with no inter-cycle delay" (e.g. report-handler,
+            // resource-report-handler, routine-load-task-scheduler, whose runAfterLeaseValid() self-paces
+            // via a blocking poll/sleep). Object.wait(0) would block the worker forever - it would run
+            // exactly one cycle per leader activation and then never drain its queue again - so only wait
+            // for a strictly positive interval. setStop()/stopGracefully() still wake the loop promptly via
+            // the isStopped checks (and the daemon's own bounded blocking call).
+            if (intervalMs > 0) {
+                try {
+                    synchronized (stopSignal) {
+                        stopSignal.wait(intervalMs);
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    if (isStopped.get()) {
+                        break;
+                    }
                 }
             }
         }
