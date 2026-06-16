@@ -707,16 +707,15 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
             // handled in min max column
             continue;
         }
+        if (slot_desc->col_name() == kCountOptColumnName) {
+            // Filled by append_or_update_count_column_to_chunk() in the
+            // count-opt short-circuit path.  Don't overwrite with default 1.
+            continue;
+        }
 
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
-            if (slot_desc->col_name() == kCountOptColumnName) {
-                TypeDescriptor desc;
-                desc.type = TYPE_BIGINT;
-                col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
-                col->append_datum(int64_t(1));
-                col->assign(row_count, 0);
-            } else if (auto it = materialize_slot_default_values.find(slot_desc->id());
+            if (auto it = materialize_slot_default_values.find(slot_desc->id());
                        it != materialize_slot_default_values.end()) {
                 RETURN_IF_ERROR(fill_default_value_for_not_existed_slot(slot_desc, it->second, row_count, col.get()));
             } else {
