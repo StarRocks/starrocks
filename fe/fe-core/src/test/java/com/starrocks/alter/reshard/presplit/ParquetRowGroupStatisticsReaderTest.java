@@ -23,6 +23,8 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.format.ColumnOrder;
+import org.apache.parquet.format.TypeDefinedOrder;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
@@ -562,6 +564,25 @@ class ParquetRowGroupStatisticsReaderTest {
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
                         new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2))));
+    }
+
+    @Test
+    void declaresSignedByteArrayOrderRequiresTypeOrderEntry() {
+        // parquet-mr's high-level writer always emits column_orders, so the "no column_orders /
+        // unknown order → data tier" rejection is verified at the raw-footer-mapping predicate level.
+        ColumnOrder typeOrder = ColumnOrder.TYPE_ORDER(new TypeDefinedOrder());
+        // Footer positively declares TypeDefinedOrder for the leaf → signed order confirmed.
+        Assertions.assertTrue(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 0));
+        // Legacy file with no column_orders → not confirmed.
+        Assertions.assertFalse(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(null, 0));
+        // Entry present but no TypeDefinedOrder set (UNDEFINED order) → not confirmed.
+        Assertions.assertFalse(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(new ColumnOrder()), 0));
+        // Leaf index past the end of the list → not confirmed.
+        Assertions.assertFalse(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 5));
     }
 
     private Path writeParquet(

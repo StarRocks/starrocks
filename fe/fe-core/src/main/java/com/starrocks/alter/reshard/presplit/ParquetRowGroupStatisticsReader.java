@@ -25,6 +25,7 @@ import com.starrocks.type.Type;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.parquet.column.statistics.Statistics;
+import org.apache.parquet.format.ColumnOrder;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
@@ -342,6 +343,25 @@ public final class ParquetRowGroupStatisticsReader {
         ScalarType scalarType = (ScalarType) starRocksType;
         return annotation.getPrecision() == scalarType.getScalarPrecision()
                 && annotation.getScale() == scalarType.getScalarScale();
+    }
+
+    /**
+     * True only when the file's raw footer positively declares a {@code TypeDefinedOrder} column
+     * order for this leaf. For a DECIMAL logical type that guarantees parquet ordered the byte-array
+     * min/max as signed two's-complement (parquet-mr's {@code BINARY_AS_SIGNED_INTEGER_COMPARATOR}).
+     *
+     * <p>A null/short {@code column_orders} list (legacy file that omitted it) or an unset entry
+     * (UNDEFINED order) is treated as unknown → data tier. We must read the RAW footer for this:
+     * parquet-mr's converted {@code PrimitiveType.columnOrder()} defaults a missing {@code column_orders}
+     * to {@code TYPE_DEFINED_ORDER}, so it cannot distinguish a legacy file. Package-private so the
+     * predicate is unit-testable (parquet-mr's high-level writer cannot produce a file without
+     * {@code column_orders}).
+     */
+    static boolean declaresSignedByteArrayOrder(List<ColumnOrder> columnOrders, int leafIndex) {
+        return columnOrders != null
+                && leafIndex >= 0
+                && leafIndex < columnOrders.size()
+                && columnOrders.get(leafIndex).isSetTYPE_ORDER();
     }
 
     private record SortKeyLocation(
