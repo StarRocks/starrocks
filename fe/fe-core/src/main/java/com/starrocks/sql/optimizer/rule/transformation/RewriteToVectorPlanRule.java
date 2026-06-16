@@ -143,10 +143,15 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                                                      ScalarOperator newPredicate,
                                                      VectorFuncInfo info,
                                                      VectorSearchOptions opts) {
-        // Add index distanceColumn to the scan operator, including table, colRefToColumnMetaMap, and columnMetaToColRefMap.
+        // The distance column is per-query synthetic state: it only needs to live in the scan operator's
+        // colRef maps below (PlanFragmentBuilder builds the scan slot's Column from colRefToColumnMetaMap).
+        // It must NOT be added to the shared catalog table's fullSchema. Table.addColumn appends to
+        // fullSchema (a List that does not dedup) while only nameToColumn dedups, so adding it here
+        // appended a duplicate "__vector_*" column on every vector query that planned on the live table
+        // (the whole-phase-lock path). Once two duplicates accumulated, building the Column-keyed map in
+        // RelationTransformer threw "Multiple entries with same key" for any later statement on the table.
         String distanceColumnName = scanOp.getVectorSearchOptions().getDistanceColumnName();
         Column distanceColumn = new Column(distanceColumnName, Type.FLOAT);
-        scanOp.getTable().addColumn(distanceColumn);
 
         ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, Type.FLOAT, false);
         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap = new HashMap<>(scanOp.getColRefToColumnMetaMap());
