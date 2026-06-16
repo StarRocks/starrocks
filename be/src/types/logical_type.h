@@ -261,6 +261,8 @@ constexpr bool support_column_expr_predicate(LogicalType ltype) {
     case TYPE_INT:      /* 5 */
     case TYPE_BIGINT:   /* 6 */
     case TYPE_LARGEINT: /* 7 */
+    case TYPE_FLOAT:    /* 8 */
+    case TYPE_DOUBLE:   /* 9 */
     case TYPE_VARCHAR:  /* 10 */
     case TYPE_DATE:     /* 11 */
     case TYPE_DATETIME: /* 12 */
