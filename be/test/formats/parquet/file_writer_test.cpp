@@ -38,7 +38,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScannerStats g_hdfs_stats;
+static FormatScannerStats g_hdfs_stats;
 using starrocks::HdfsScannerContext;
 
 class FileWriterTest : public testing::Test {

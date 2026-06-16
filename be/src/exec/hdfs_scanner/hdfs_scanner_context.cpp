@@ -96,7 +96,7 @@ void HdfsScannerContext::update_return_count_columns() {
     // special handling for ___count__ optimization.
     // this is different from `can_use_count_optimization` ,  which uses iceberg metadata to return count value
     // this optimizaton is to fill with `count` rows of default value from parquet/orc header
-    std::vector<ColumnInfo> updated_columns;
+    std::vector<FormatColumnInfo> updated_columns;
     for (auto& column : materialized_columns) {
         if (column.name() == kCountOptColumnName) {
             update_with_none_existed_slot(column.slot_desc);
@@ -111,7 +111,7 @@ void HdfsScannerContext::update_min_max_columns() {
     if (!options.use_min_max_opt) {
         return;
     }
-    std::vector<ColumnInfo> updated_columns;
+    std::vector<FormatColumnInfo> updated_columns;
     const std::map<int32_t, TExprMinMaxValue>& min_max_values = scan_range->min_max_values;
     for (auto& column : materialized_columns) {
         if (min_max_values.find(column.slot_id()) != min_max_values.end()) {
@@ -146,7 +146,7 @@ void HdfsScannerContext::update_min_max_columns() {
 }
 
 Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
-    std::vector<ColumnInfo> updated_columns;
+    std::vector<FormatColumnInfo> updated_columns;
     for (auto& column : materialized_columns) {
         auto col_name = column.formatted_name(options.case_sensitive);
         if (names.find(col_name) == names.end()) {
@@ -353,7 +353,7 @@ void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chu
 }
 
 void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
-                                                          const std::vector<ColumnInfo>& columns,
+                                                          const std::vector<FormatColumnInfo>& columns,
                                                           const Columns& values) {
     if (columns.size() == 0) return;
 

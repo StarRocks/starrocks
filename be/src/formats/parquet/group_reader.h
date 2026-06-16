@@ -42,7 +42,7 @@
 
 namespace starrocks {
 class RandomAccessFile;
-struct HdfsScannerStats;
+struct FormatScannerStats;
 struct HdfsScannerContext;
 class ExprContext;
 class TIcebergSchemaField;
@@ -95,7 +95,7 @@ struct GroupReaderParam {
     // columns
     std::vector<Column> read_cols;
 
-    HdfsScannerStats* stats = nullptr;
+    FormatScannerStats* stats = nullptr;
 
     SharedBufferedInputStream* sb_stream = nullptr;
 
