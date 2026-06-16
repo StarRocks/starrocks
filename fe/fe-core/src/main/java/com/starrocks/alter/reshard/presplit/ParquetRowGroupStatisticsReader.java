@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.io.ByteStreams;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -44,7 +45,6 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnot
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -449,11 +449,13 @@ public final class ParquetRowGroupStatisticsReader {
             if (footerLength < 0 || footerStart < PLAINTEXT_FOOTER_MAGIC.length) {
                 return null; // corrupt footer length
             }
-            byte[] footerBytes = new byte[footerLength];
             input.seek(footerStart);
-            input.readFully(footerBytes);
+            // footerLength comes from the (untrusted) trailer, so do NOT materialize a
+            // new byte[footerLength] — a corrupt/huge value could raise OutOfMemoryError, an Error
+            // that escapes the IOException|RuntimeException fail-safe below. Cap Thrift to the
+            // footer's own bytes with a length-bounded view instead.
             org.apache.parquet.format.FileMetaData footer =
-                    Util.readFileMetaData(new ByteArrayInputStream(footerBytes));
+                    Util.readFileMetaData(ByteStreams.limit(input, footerLength));
             return footer.isSetColumn_orders() ? footer.getColumn_orders() : null;
         } catch (IOException | RuntimeException failure) {
             return null;
