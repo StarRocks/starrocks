@@ -500,8 +500,7 @@ private:
 
         // col_arr_arr_dt : list<list<timestamp>>
         auto inner_ts_builder = std::make_shared<arrow::TimestampBuilder>(ts_type, arrow::default_memory_pool());
-        auto inner_list_builder =
-                std::make_shared<arrow::ListBuilder>(arrow::default_memory_pool(), inner_ts_builder);
+        auto inner_list_builder = std::make_shared<arrow::ListBuilder>(arrow::default_memory_pool(), inner_ts_builder);
         arrow::ListBuilder outer_list_builder(arrow::default_memory_pool(), inner_list_builder);
         ASSERT_OK(outer_list_builder.Append());
         ASSERT_OK(inner_list_builder->Append());
@@ -533,18 +532,17 @@ private:
     // Arrow writer cannot produce this -- enable_deprecated_int96_timestamps() is a global switch
     // that would turn every timestamp leaf into INT96 -- so the low-level parquet column writers
     // are driven directly. Both leaves store the same `micros`.
-    void create_mixed_int96_int64_struct_parquet(const std::string& file_name, int64_t micros,
-                                                  std::string* file_path) {
+    void create_mixed_int96_int64_struct_parquet(const std::string& file_name, int64_t micros, std::string* file_path) {
         *file_path = (_tmp_root_dir / file_name).string();
 
         namespace ps = ::parquet::schema;
         auto a_node = ps::PrimitiveNode::Make("a", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT96,
                                               ::parquet::ConvertedType::NONE);
-        auto b_node = ps::PrimitiveNode::Make(
-                "b", ::parquet::Repetition::OPTIONAL,
-                ::parquet::LogicalType::Timestamp(/*is_adjusted_to_utc=*/false,
-                                                  ::parquet::LogicalType::TimeUnit::MICROS),
-                ::parquet::Type::INT64);
+        auto b_node =
+                ps::PrimitiveNode::Make("b", ::parquet::Repetition::OPTIONAL,
+                                        ::parquet::LogicalType::Timestamp(/*is_adjusted_to_utc=*/false,
+                                                                          ::parquet::LogicalType::TimeUnit::MICROS),
+                                        ::parquet::Type::INT64);
         auto s_node = ps::GroupNode::Make("s", ::parquet::Repetition::OPTIONAL, {a_node, b_node});
         auto schema = std::static_pointer_cast<ps::GroupNode>(
                 ps::GroupNode::Make("schema", ::parquet::Repetition::REQUIRED, {s_node}));
@@ -1283,9 +1281,9 @@ TEST_F(ParquetScannerTest, int96_timestamp_mixed_nested_no_over_tagging) {
     create_mixed_int96_int64_struct_parquet("int96_mixed_struct.parquet", kMicros, &parquet_file_name);
     DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
 
-    auto type_struct =
-            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor::from_logical_type(TYPE_DATETIME),
-                                                            TypeDescriptor::from_logical_type(TYPE_DATETIME)});
+    auto type_struct = TypeDescriptor::create_struct_type(
+            {"a", "b"},
+            {TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME)});
     const SlotTypeDescInfoArray slot_infos{{"s", type_struct, true}};
 
     auto read_first_row = [&](const std::string& timezone) -> std::string {
