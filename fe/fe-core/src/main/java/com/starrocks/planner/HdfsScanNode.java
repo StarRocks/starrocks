@@ -220,6 +220,11 @@ public class HdfsScanNode extends ScanNode {
         tHdfsScanNode.setCan_use_min_max_opt(option.getCanUseMinMaxOpt());
         tHdfsScanNode.setUse_partition_column_value_only(option.getUsePartitionColumnValueOnly());
         tHdfsScanNode.setCan_use_count_opt(option.getCanUseCountOpt());
+        if (option.getTopnReorderKey() != null) {
+            tHdfsScanNode.setTopn_reorder_slot_id(option.getTopnReorderKey().getId());
+            tHdfsScanNode.setTopn_reorder_desc(option.isTopnReorderDesc());
+            tHdfsScanNode.setTopn_reorder_nulls_first(option.isTopnReorderNullsFirst());
+        }
     }
 
     public static void setCloudConfigurationToThrift(THdfsScanNode tHdfsScanNode, CloudConfiguration cc) {

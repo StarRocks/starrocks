@@ -56,6 +56,12 @@ public:
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual Status append_morsels(Morsels&& morsels);
     virtual Type type() const = 0;
+
+    // TopN reorder diagnostics (PriorityMorselQueue only): how many morsels had a usable min/max
+    // bound and how many had none; -1 on queues that do not reorder. Shown in the scan operator
+    // profile to compare reorder on/off and to spot a broken bound path (all morsels with no bound).
+    virtual int64_t reorder_eligible_morsels() const { return -1; }
+    virtual int64_t reorder_no_bound_morsels() const { return -1; }
     // is there any more scan ranges delivered from FE to be processed?
     bool has_more() const { return _has_more_scan_ranges || _has_more_from_split; }
     bool has_more_scan_ranges() const { return _has_more_scan_ranges; }

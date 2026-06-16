@@ -89,6 +89,12 @@ public:
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 
+    // TopN scan reorder (ORDER BY <col> [ASC|DESC] LIMIT k): slot id of the leading sort key used to
+    // order morsels by their min/max (-1 = disabled), plus its sort direction and null ordering.
+    virtual int32_t topn_reorder_slot_id() const { return -1; }
+    virtual bool topn_reorder_desc() const { return false; }
+    virtual bool topn_reorder_nulls_first() const { return false; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
     std::vector<TBucketProperty> _bucket_properties;
