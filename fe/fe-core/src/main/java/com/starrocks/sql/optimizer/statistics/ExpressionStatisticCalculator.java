@@ -34,6 +34,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
@@ -98,10 +100,22 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visit(ScalarOperator operator, Void context) {
             if (operator.getChildren().size() > 1) {
-                return operator.getChild(0).accept(this, context);
+                ColumnStatistic firstChildStat = operator.getChild(0).accept(this, context);
+                // Predicates without a dedicated visitor (IN, LIKE, BETWEEN, EXISTS, MULTI_IN, MATCH, ...)
+                // fall through to here. Returning the first operand's stats MCV for a boolean expression is potentially
+                // dangerous, so we are removing histograms here.
+                if (!firstChildStat.isUnknown() && firstChildStat.getHistogram() != null
+                        && isBooleanPredicate(operator)) {
+                    return ColumnStatistic.buildFrom(firstChildStat).setHistogram(null).build();
+                }
+                return firstChildStat;
             } else {
                 return ColumnStatistic.unknown();
             }
+        }
+
+        private static boolean isBooleanPredicate(ScalarOperator operator) {
+            return operator instanceof PredicateOperator || operator instanceof MatchExprOperator;
         }
 
         @Override

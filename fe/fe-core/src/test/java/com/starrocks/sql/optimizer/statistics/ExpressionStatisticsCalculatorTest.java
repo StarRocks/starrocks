@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.type.ArrayType;
@@ -1323,6 +1324,32 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNotNull(isNotNullStat.getHistogram());
         Assertions.assertEquals(700_000L, isNotNullStat.getHistogram().getMCV().get("1"));
         Assertions.assertEquals(300_000L, isNotNullStat.getHistogram().getMCV().get("0"));
+    }
+
+    @Test
+    public void testInPredicateDoesNotLeakOperandHistogram() {
+        final var col = new ColumnRefOperator(0, IntegerType.INT, "flag", true);
+        final var hist = new Histogram(List.of(), Map.of("0", 300L, "1", 700L));
+        final var stats = Statistics.builder()
+                .setOutputRowCount(1_000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(1).setNullsFraction(0)
+                        .setAverageRowSize(4).setDistinctValuesCount(2)
+                        .setHistogram(hist).build())
+                .build();
+
+        final var in = new InPredicateOperator(col, new ConstantOperator(5, IntegerType.INT));
+        final var notIn = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, in);
+
+        final var resultIn = ExpressionStatisticCalculator.calculate(in, stats);
+        final var resultNotIn = ExpressionStatisticCalculator.calculate(notIn, stats);
+
+        Assertions.assertTrue(resultIn.getHistogram() == null || resultIn.getHistogram().getMCV().isEmpty());
+        Assertions.assertNotNull(resultNotIn.getHistogram());
+        long trueRows = resultNotIn.getHistogram().getMCV().getOrDefault("1", 0L);
+        long falseRows = resultNotIn.getHistogram().getMCV().getOrDefault("0", 0L);
+        Assertions.assertTrue(trueRows >= 990L);
+        Assertions.assertTrue(falseRows <= 10L);
     }
 
     @Test
