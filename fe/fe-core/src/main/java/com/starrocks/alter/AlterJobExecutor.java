@@ -35,6 +35,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -163,7 +164,25 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
         if (table instanceof OlapTable && ((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
             OlapTable olapTable = (OlapTable) table;
-            throw new AlterJobException("", InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName()));
+            OlapTable.OlapTableState state = olapTable.getState();
+            // Partition creation is metadata-only and provably safe to run concurrently with a narrow
+            // set of alter operations: the transient UPDATING_META window of fast schema evolution
+            // (only observable by lock-free readers; addPartitions serializes behind the table WRITE
+            // lock, by which time the state is NORMAL again), and the shared-data ADD/DROP INDEX
+            // fast-path jobs (which declare allowConcurrentPartitionCreation()). Mixed-clause
+            // statements, all other states, and all non-partition clauses keep the legacy rejection.
+            boolean addPartitionOnly = statement.getAlterClauseList().stream()
+                    .allMatch(c -> AlterOpType.getOpType(c) == AlterOpType.ADD_PARTITION);
+            boolean tolerable = Config.enable_concurrent_add_partition_during_alter
+                    && addPartitionOnly
+                    && (state == OlapTable.OlapTableState.UPDATING_META
+                        || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
+                            && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId())));
+            if (!tolerable) {
+                throw new AlterJobException("", InvalidOlapTableStateException.of(state, olapTable.getName()));
+            }
+            LOG.info("allow ADD PARTITION on table {} concurrent with alter, state={}",
+                    olapTable.getName(), state);
         }
 
         this.db = db;
