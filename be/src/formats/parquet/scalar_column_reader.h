@@ -167,9 +167,14 @@ public:
     Status prepare() override {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
                                                                  _opts.timezone, &_converter));
-        // Finalize lazy dict-decode eligibility now that _converter is known.
-        // Lazy dict decode is only valid when no value conversion is required, because the dict-decode
-        // path materialises values directly into dst and bypasses converters (e.g. UUID bytes -> string).
+        // Adaptive lazy dict-decode (_can_lazy_dict_decode) is disabled when a
+        // converter exists, because the automatic decode-on-first-touch path
+        // would materialise values directly into dst, bypassing conversion.
+        //
+        // Dict-filter forced dict-code reads (via _dict_filter_ctx) are NOT
+        // affected: finalize_lazy_state() / fill_dst_column() perform a
+        // two-step decode → intermediate → convert, so dict-code + converter
+        // pairs work correctly for filter-only scenarios.
         if (_can_lazy_dict_decode && _converter->need_convert) {
             _can_lazy_dict_decode = false;
         }
@@ -206,7 +211,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
-    Status materialize_lazy_decode(ColumnPtr& col) override;
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -253,7 +258,11 @@ private:
     bool _can_lazy_convert = false;
     // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;
-    // tmp columns used during lazy-decode / lazy-convert paths; at most one is non-null
+    // Temporary columns used during lazy-decode / lazy-convert paths.
+    // Both may be non-null simultaneously (e.g. dict-code read with a
+    // converter: _tmp_code_column for raw dict codes, _tmp_intermediate_column
+    // for decoded-but-unconverted bytes).  At most one is installed in the
+    // caller slot at any time — dispatch is by col.get() pointer identity.
     ColumnPtr _tmp_code_column = nullptr;
     ColumnPtr _tmp_intermediate_column = nullptr;
 };
@@ -282,7 +291,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
-    Status materialize_lazy_decode(ColumnPtr& col) override;
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -330,6 +339,8 @@ public:
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,

@@ -451,7 +451,7 @@ StatusOr<bool> RawColumnReader::_row_group_bloom_filter(const std::vector<const 
 
 // If `column` still refers to one of the reader's temporary columns, a previous fill_dst_column()
 // was skipped (e.g. the whole range was filtered out and GroupReader::get_next() continued without
-// ScalarColumnReader
+// calling fill_dst_column).  _restore_saved_dst at the top of read_range() repairs this state.
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
@@ -513,6 +513,7 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
             _tmp_code_column = ColumnHelper::create_column(
                     TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
         }
+        _tmp_code_column->as_mutable_raw_ptr()->reset_column();
         _swap_in_tmp_column(dst, _tmp_code_column);
         dst->as_mutable_raw_ptr()->reserve(range.span_size());
         SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
@@ -625,12 +626,37 @@ bool ScalarColumnReader::_is_intermediate_column(const ColumnPtr& column) const 
     return _tmp_intermediate_column != nullptr && column.get() == _tmp_intermediate_column.get();
 }
 
-Status ScalarColumnReader::materialize_lazy_decode(ColumnPtr& col) {
-    if (_saved_dst != nullptr && col.get() == _tmp_code_column.get()) {
-        auto saved = std::move(_saved_dst);
-        _saved_dst = nullptr;
-        RETURN_IF_ERROR(_dict_decode(saved, col));
-        col = std::move(saved);
+Status ScalarColumnReader::finalize_lazy_state(ColumnPtr& col) {
+    if (_saved_dst != nullptr) {
+        if (col.get() == _tmp_code_column.get()) {
+            auto saved = std::move(_saved_dst);
+            _saved_dst = nullptr;
+            if (_converter->need_convert) {
+                if (_tmp_intermediate_column == nullptr) {
+                    _tmp_intermediate_column = _converter->create_src_column();
+                }
+                _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
+                RETURN_IF_ERROR(_dict_decode(_tmp_intermediate_column, col));
+                {
+                    SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+                    RETURN_IF_ERROR(
+                            _converter->convert(_tmp_intermediate_column.get(), saved->as_mutable_raw_ptr()));
+                }
+                _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
+            } else {
+                RETURN_IF_ERROR(_dict_decode(saved, col));
+            }
+            col = std::move(saved);
+        } else if (col.get() == _tmp_intermediate_column.get()) {
+            auto saved = std::move(_saved_dst);
+            _saved_dst = nullptr;
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+                RETURN_IF_ERROR(_converter->convert(col, saved->as_mutable_raw_ptr()));
+            }
+            col->as_mutable_raw_ptr()->reset_column();
+            col = std::move(saved);
+        }
     }
     return Status::OK();
 }
@@ -661,6 +687,7 @@ Status LowCardColumnReader::read_range(const Range<uint64_t>& range, const Filte
         _dict_code = ColumnHelper::create_column(
                 TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
     }
+    _dict_code->as_mutable_raw_ptr()->reset_column();
     _swap_in_tmp_column(dst, _dict_code);
     dst->as_mutable_raw_ptr()->reserve(range.span_size());
 
@@ -733,7 +760,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     return Status::OK();
 }
 
-Status LowCardColumnReader::materialize_lazy_decode(ColumnPtr& col) {
+Status LowCardColumnReader::finalize_lazy_state(ColumnPtr& col) {
     if (_saved_dst != nullptr && col.get() == _dict_code.get()) {
         auto saved = std::move(_saved_dst);
         _saved_dst = nullptr;
@@ -813,6 +840,7 @@ Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filte
     if (_tmp_column == nullptr) {
         _tmp_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     }
+    _tmp_column->as_mutable_raw_ptr()->reset_column();
     _swap_in_tmp_column(dst, _tmp_column);
     dst->as_mutable_raw_ptr()->reserve(range.span_size());
 
@@ -856,6 +884,16 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     src->as_mutable_raw_ptr()->reset_column();
     _finish_fill(src);
 
+    return Status::OK();
+}
+
+Status LowRowsColumnReader::finalize_lazy_state(ColumnPtr& col) {
+    if (_saved_dst != nullptr && col.get() == _tmp_column.get()) {
+        auto saved = std::move(_saved_dst);
+        _saved_dst = nullptr;
+        RETURN_IF_ERROR(fill_dst_column(saved, col));
+        col = std::move(saved);
+    }
     return Status::OK();
 }
 

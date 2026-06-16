@@ -131,8 +131,16 @@ ChunkPtr ColumnMaterializer::create_read_chunk(const std::vector<SlotId>& slot_i
 
 Status ColumnMaterializer::read_slot(SlotId slot_id, const Range<uint64_t>& range, const Filter* filter,
                                      ChunkPtr* chunk) {
+    // read_slot() deliberately does NOT populate _slot_cache.
+    //
+    // During active-column reads, the column may be in physical form (dict
+    // codes or intermediate values).  Caching it would violate the invariant
+    // that _slot_cache holds only logical (finalized) columns.
+    //
+    // On-demand lazy reads go through materialize_slot() instead, which
+    // finalizes before caching.  read_lazy_columns() detects triggered lazy
+    // slots via _slot_cache populated by materialize_slot(), not read_slot().
     RETURN_IF_ERROR((*_column_readers)[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id)));
-    _slot_cache[slot_id] = {(*chunk)->get_column_by_slot_id(slot_id)};
     return Status::OK();
 }
 
@@ -189,6 +197,8 @@ StatusOr<size_t> ColumnMaterializer::read_active_range_round_by_round(const Rang
         }
 
         if (_post_read_conjuncts_by_slot.find(slot_id) != _post_read_conjuncts_by_slot.end()) {
+            RETURN_IF_ERROR(
+                    (*_column_readers)[slot_id]->finalize_lazy_state((*chunk)->get_column_by_slot_id(slot_id)));
             SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
             std::vector<ExprContext*> ctxs = _post_read_conjuncts_by_slot.at(slot_id);
             ASSIGN_OR_RETURN(hit_count, eval_slot_conjuncts(ctxs, slot_id, chunk, filter));
@@ -334,6 +344,11 @@ Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
                 return Status::InternalError(fmt::format("Unmatched row count, active_rows={}, lazy_rows={}",
                                                          active_chunk->num_rows(), lazy_chunk->num_rows()));
             }
+            for (int col_idx : backfill_indices) {
+                SlotId slot_id = _param.read_cols[col_idx].slot_id();
+                auto& col = lazy_chunk->get_column_by_slot_id(slot_id);
+                RETURN_IF_ERROR((*_column_readers)[slot_id]->finalize_lazy_state(col));
+            }
             active_chunk->merge(std::move(*lazy_chunk));
         }
     }
@@ -445,6 +460,7 @@ Status ColumnMaterializer::materialize_slot(SlotId slot_id, const Range<uint64_t
         RETURN_IF_ERROR(
                 (*_column_readers)[slot_id]->read_range(range, filter, _read_chunk->get_column_by_slot_id(slot_id)));
     }
+    RETURN_IF_ERROR((*_column_readers)[slot_id]->finalize_lazy_state(_read_chunk->get_column_by_slot_id(slot_id)));
     _slot_cache[slot_id] = {_read_chunk->get_column_by_slot_id(slot_id)};
     return Status::OK();
 }

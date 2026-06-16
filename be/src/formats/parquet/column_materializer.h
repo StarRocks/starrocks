@@ -112,8 +112,11 @@ public:
     Status fill_dst_column(SlotId slot_id, ColumnPtr& dst, ColumnPtr& src);
 
     // Per-slot cache scoped to the current get_next() range.  Populated by
-    // read_slot(); cleared by reset_read_chunk().  Avoids repeated Parquet
-    // I/O when the same slot is referenced by multiple expression branches.
+    // materialize_slot() (on-demand lazy reads); NOT by read_slot().
+    // Cleared by reset_read_chunk().  All cached entries hold logical
+    // (finalized) columns — never dict codes or intermediate values.
+    // Avoids repeated Parquet I/O when the same slot is referenced by
+    // multiple expression branches during predicate evaluation.
     struct SlotCacheEntry {
         ColumnPtr values;
     };
@@ -123,8 +126,9 @@ public:
     }
 
     // On-demand single-slot materialization.  Reads the slot through its
-    // ColumnReader into _read_chunk and populates _slot_cache.  Returns OK
-    // (no-op) if the slot is already cached for the current range.
+    // ColumnReader into _read_chunk, calls finalize_lazy_state() so that
+    // the cached column is always logical, and populates _slot_cache.
+    // Returns OK (no-op) if the slot is already cached for the current range.
     // Also records the trigger for fallback tracking.
     Status materialize_slot(SlotId slot_id, const Range<uint64_t>& range, const Filter* filter);
 

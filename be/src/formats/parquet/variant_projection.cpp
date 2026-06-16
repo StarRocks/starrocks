@@ -747,6 +747,7 @@ Status VariantProjectionHandler::fetch_sources(const Range<uint64_t>& range, Chu
         auto* hidden_src = _hidden_slot_index.at(slot_id);
         auto& hidden_col = active_chunk->get_column_by_slot_id(slot_id);
         RETURN_IF_ERROR(hidden_src->reader->read_range(range, nullptr, hidden_col));
+        RETURN_IF_ERROR(hidden_src->reader->finalize_lazy_state(hidden_col));
     }
     return Status::OK();
 }
@@ -832,6 +833,7 @@ Status VariantProjectionHandler::backfill_sources(const Range<uint64_t>& full_ra
         } else {
             RETURN_IF_ERROR(hidden_src->reader->read_range(full_range, nullptr, col));
         }
+        RETURN_IF_ERROR(hidden_src->reader->finalize_lazy_state(col));
         lazy_hidden_chunk->append_column(std::move(col), slot_id);
     }
     if (lazy_hidden_chunk->num_columns() == 0) {
@@ -863,6 +865,7 @@ Status VariantProjectionHandler::materialize_hidden_source(SlotId slot_id, const
     }
     ColumnPtr col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
     RETURN_IF_ERROR(it->second->reader->read_range(range, filter, col));
+    RETURN_IF_ERROR(it->second->reader->finalize_lazy_state(col));
     active_chunk->append_column(std::move(col), slot_id);
     return Status::OK();
 }

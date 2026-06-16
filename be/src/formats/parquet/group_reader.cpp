@@ -240,18 +240,28 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         }
 
         // 2b. Evaluate compound (multi-slot) conjuncts with lazy_ctx
-        //     still attached.  Append partition / not-existed / extended
-        //     columns to active_chunk first so that compound conjuncts
+        //     still attached.  Finalize all active columns to logical form
+        //     first so that compound conjuncts never see dict codes or
+        //     intermediate physical values.  Append partition / not-existed /
+        //     extended columns to active_chunk so that compound conjuncts
         //     referencing those slots can be evaluated correctly.
+        //
+        //     Single-slot post-read conjuncts are finalized per-slot inside
+        //     read_active_range_round_by_round().  Variant sources are
+        //     finalized in fetch_sources()/backfill_sources()/
+        //     materialize_hidden_source().  Physical emit is handled by
+        //     fill_dst_column() at Phase 7.  The evaluate-line contract is
+        //     therefore covered without eagerly decoding pure-dict-filter
+        //     predicate-only columns.
         if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
             if (active_chunk->num_rows() > 0) {
                 RETURN_IF_ERROR(
                         _param.scanner_ctx->append_auxiliary_columns_to_chunk(&active_chunk, active_chunk->num_rows()));
             }
-            for (int col_idx : _column_materializer->dict_column_indices()) {
+            for (int col_idx : _column_materializer->active_column_indices()) {
                 SlotId slot_id = _param.read_cols[col_idx].slot_id();
                 auto& col = active_chunk->get_column_by_slot_id(slot_id);
-                RETURN_IF_ERROR(get_column_reader(slot_id)->materialize_lazy_decode(col));
+                RETURN_IF_ERROR(get_column_reader(slot_id)->finalize_lazy_state(col));
             }
             ASSIGN_OR_RETURN(size_t compound_hit,
                              ChunkPredicateEvaluator::eval_conjuncts_into_filter(

@@ -239,6 +239,48 @@ private:
     std::vector<SharedBufferedInputStream::IORange> _ranges;
 };
 
+class MockTempColumnReader : public ColumnReader {
+public:
+    explicit MockTempColumnReader() : ColumnReader(nullptr) {}
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter*, ColumnPtr& dst) override {
+        if (_temp_col == nullptr) {
+            _temp_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        }
+        dst = _temp_col;
+        _temp_col->append_datum(Datum(int32_t(42)));
+        return Status::OK();
+    }
+
+    Status finalize_lazy_state(ColumnPtr& col) override {
+        if (col.get() == _temp_col.get()) {
+            _finalize_called = true;
+            size_t n = _temp_col->size();
+            auto dest = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+            dest->append_default(n);
+            _temp_col->as_mutable_raw_ptr()->reset_column();
+            col = std::move(dest);
+        }
+        return Status::OK();
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override {
+        dst = src;
+        return Status::OK();
+    }
+
+    void set_need_parse_levels(bool) override {}
+    void get_levels(level_t**, level_t**, size_t*) override {}
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*,
+                                 ColumnIOTypeFlags, bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+
+    ColumnPtr _temp_col = nullptr;
+    bool _finalize_called = false;
+};
+
 class GroupReaderTest : public ::testing::Test {
 protected:
     void SetUp() override {}
@@ -4577,6 +4619,178 @@ TEST_F(GroupReaderTest, ReadRangePlannerShouldCoalesceReadsCounter) {
 
     counter.store(0, std::memory_order_relaxed);
     EXPECT_TRUE(planner.should_coalesce_active_lazy());
+}
+
+// ── Temp Column Lifecycle Tests ──────────────────────────────────────────────
+
+// Covers: ColumnMaterializer::materialize_slot finalizes lazy state
+//         before caching, so _slot_cache always holds logical columns.
+TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(300, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(301, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto mock_lazy = std::make_unique<MockTempColumnReader>();
+    auto* mock_lazy_ptr = mock_lazy.get();
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::move(mock_lazy));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 2);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called)
+            << "materialize_slot must call finalize_lazy_state before caching";
+
+    const auto* entry = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
+    ASSERT_NE(nullptr, entry);
+    auto col = entry->values;
+    ASSERT_NE(nullptr, col);
+    EXPECT_EQ(1u, col->size());
+
+    auto result = ctx.provide(lazy_slot->id());
+    ASSERT_TRUE(result.ok());
+    auto provided = result.value();
+    ASSERT_NE(nullptr, provided);
+    EXPECT_EQ(1u, provided->size());
+    EXPECT_NE(mock_lazy_ptr->_temp_col.get(), provided.get())
+            << "provide() must return logical column, not raw temp";
+}
+
+// Contract test / mock reproducer: MockTempColumnReader's read_range() is
+// append-only (simulating StoredColumnReader).  Without reset, two consecutive
+// reads WITHOUT an intervening finalize accret stale data — this is the
+// production bug that reset_column() in ScalarColumnReader / LowCardColumnReader /
+// LowRowsColumnReader read_range() fixes.
+//
+// This is a contract test; production reset_column() coverage is indirect
+// (integration tests exercise the real reader path).
+TEST_F(GroupReaderTest, TempColumnAccretesStaleWithoutReset) {
+    MockTempColumnReader reader;
+
+    ColumnPtr col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col1));
+    EXPECT_EQ(1u, col1->size()) << "First read: 1 row";
+
+    // Simulate skipped fill: don't call finalize_lazy_state
+
+    ColumnPtr col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col2));
+    EXPECT_EQ(2u, col2->size())
+            << "Without reset, second read accretes stale data: 1 stale + 1 new = 2 rows";
+
+    // finalize_lazy_state produces n logical rows where n = temp size.
+    // With stale accretion: temp has 2 rows, so finalize yields 2 rows.
+    ASSERT_OK(reader.finalize_lazy_state(col2));
+    EXPECT_EQ(2u, col2->size())
+            << "Stale accretion propagates: 2 logical rows from 2 temp rows";
+    EXPECT_TRUE(reader._finalize_called);
+    EXPECT_EQ(0u, reader._temp_col->size()) << "Temp column is empty after finalize";
+}
+
+// Contract test: finalize_lazy_state resets the temp column so that a
+// subsequent read_range starts fresh — even when the mock itself does
+// not reset before appending.  Verifies the finalize → reset → no-accretion
+// lifecycle contract through the ColumnMaterializer pipeline.
+//
+// Production read_range() reset is exercised by integration tests.
+TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(310, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(311, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto mock_lazy = std::make_unique<MockTempColumnReader>();
+    auto* mock_lazy_ptr = mock_lazy.get();
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::move(mock_lazy));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    // First materialize: read_range appends 1 row, finalize_lazy_state resets temp.
+    Range<uint64_t> range1(0, 1);
+    auto active_chunk1 = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx1(*group_reader->_column_materializer, nullptr, range1, nullptr, active_chunk1);
+    ASSERT_OK(ctx1.materialize_slot(lazy_slot->id()));
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called);
+
+    auto* entry1 = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
+    ASSERT_NE(nullptr, entry1);
+    EXPECT_EQ(1u, entry1->values->size());
+
+    // Reset between iterations.
+    group_reader->_column_materializer->reset_read_chunk();
+    mock_lazy_ptr->_finalize_called = false;
+
+    // Second materialize: because finalize reset _temp_col in range1,
+    // read_range starts fresh → 1 row, not 2.
+    Range<uint64_t> range2(0, 1);
+    auto active_chunk2 = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx2(*group_reader->_column_materializer, nullptr, range2, nullptr, active_chunk2);
+    ASSERT_OK(ctx2.materialize_slot(lazy_slot->id()));
+
+    auto* entry2 = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
+    ASSERT_NE(nullptr, entry2);
+    EXPECT_EQ(1u, entry2->values->size())
+            << "After finalize, temp is empty → no stale accretion across iterations";
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called);
 }
 
 } // namespace starrocks::parquet

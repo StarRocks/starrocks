@@ -1090,16 +1090,17 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
         EXPECT_FALSE(reader.fill_dst_column(dst, src).ok());
     }
 
-    // RawColumnReader::_restore_tmp_column errors when a temporary column is still referenced as the
-    // caller-visible column but the original destination column was lost.
+    // RawColumnReader::_restore_saved_dst is a no-op when _saved_dst is nullptr.
+    // Verify the column reference is left unchanged.
     {
         ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr code = make_int_col();
         reader._dict_code = code;
-        reader._ori_column = nullptr;
+        reader._saved_dst = nullptr;
         ColumnPtr col = code;
-        EXPECT_FALSE(reader._restore_tmp_column(col).ok());
+        reader._restore_saved_dst(col);
+        EXPECT_EQ(col.get(), code.get());
     }
 }
 

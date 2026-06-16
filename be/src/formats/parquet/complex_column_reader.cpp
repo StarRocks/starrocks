@@ -230,7 +230,7 @@ Status ListColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src_in) {
     return Status::OK();
 }
 
-Status ListColumnReader::materialize_lazy_decode(ColumnPtr& col) {
+Status ListColumnReader::finalize_lazy_state(ColumnPtr& col) {
     auto* col_mut = col->as_mutable_raw_ptr();
     ArrayColumn* array_column = nullptr;
     if (col->is_nullable()) {
@@ -242,7 +242,7 @@ Status ListColumnReader::materialize_lazy_decode(ColumnPtr& col) {
         array_column = down_cast<ArrayColumn*>(col_mut);
     }
     auto& elements = array_column->elements_column();
-    RETURN_IF_ERROR(_element_reader->materialize_lazy_decode(elements));
+    RETURN_IF_ERROR(_element_reader->finalize_lazy_state(elements));
     return Status::OK();
 }
 
@@ -451,7 +451,7 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     return Status::OK();
 }
 
-Status StructColumnReader::materialize_lazy_decode(ColumnPtr& col) {
+Status StructColumnReader::finalize_lazy_state(ColumnPtr& col) {
     auto* col_mut = col->as_mutable_raw_ptr();
     StructColumn* struct_column = nullptr;
     if (col->is_nullable()) {
@@ -468,7 +468,7 @@ Status StructColumnReader::materialize_lazy_decode(ColumnPtr& col) {
         auto it = _child_readers.find(field_name);
         if (it != _child_readers.end() && it->second != nullptr) {
             ASSIGN_OR_RETURN(auto& child_col, struct_column->field_column(field_name));
-            RETURN_IF_ERROR(it->second->materialize_lazy_decode(child_col));
+            RETURN_IF_ERROR(it->second->finalize_lazy_state(child_col));
         }
     }
     return Status::OK();

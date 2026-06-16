@@ -37,7 +37,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
-    Status materialize_lazy_decode(ColumnPtr& col) override;
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
@@ -206,7 +206,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
-    Status materialize_lazy_decode(ColumnPtr& col) override;
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
@@ -531,7 +531,7 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override { return _reader->fill_dst_column(dst, src); }
 
-    Status materialize_lazy_decode(ColumnPtr& col) override { return _reader->materialize_lazy_decode(col); }
+    Status finalize_lazy_state(ColumnPtr& col) override { return _reader->finalize_lazy_state(col); }
 
     void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
