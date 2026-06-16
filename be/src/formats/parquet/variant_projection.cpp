@@ -752,7 +752,7 @@ Status VariantProjectionHandler::fetch_sources(const Range<uint64_t>& range, Chu
 }
 
 StatusOr<Filter> VariantProjectionHandler::filter_subfields(ChunkPtr& active_chunk, size_t raw_count,
-                                                            HdfsScannerStats* stats, const cctz::time_zone& zone) {
+                                                            FormatScannerStats* stats, const cctz::time_zone& zone) {
     if (_deferred_variant_virtual_conjunct_ctxs.empty()) {
         return Filter{};
     }

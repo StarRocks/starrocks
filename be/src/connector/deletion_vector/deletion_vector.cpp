@@ -33,8 +33,8 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
     } else {
         std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
         std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
-        HdfsScannerStats app_stats;
-        HdfsScannerStats fs_stats;
+        FormatScannerStats app_stats;
+        FormatScannerStats fs_stats;
 
         ASSIGN_OR_RETURN(auto path, get_absolute_path(_ctx.table_location));
         int64_t offset = _deletion_vector_descriptor->offset;
@@ -78,7 +78,7 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_file(
-        const std::string& file_path, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
+        const std::string& file_path, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
     const OpenFileOptions options{.fs = _ctx.fs,
@@ -172,7 +172,7 @@ std::string DeletionVector::assemble_deletion_vector_path(const string& table_lo
 }
 
 void DeletionVector::update_dv_file_io_counter(
-        RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
+        RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
         const std::shared_ptr<CacheInputStream>& cache_input_stream,
         const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) {
     const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;

@@ -37,12 +37,12 @@ public:
 
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
-            const TIcebergDeleteFile& delete_file, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
+            const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     static void update_delete_file_io_counter(
-            RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats, const HdfsScannerStats& fs_stats,
+            RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
             const std::shared_ptr<CacheInputStream>& cache_input_stream,
             const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream);
     Status fill_skip_rowids(const ChunkPtr& chunk) const;

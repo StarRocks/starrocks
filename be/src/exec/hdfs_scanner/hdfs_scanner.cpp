@@ -34,7 +34,8 @@ namespace starrocks {
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
 public:
-    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScannerStats* stats)
+    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream,
+                                        FormatScannerStats* stats)
             : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
 
     ~CountedSeekableInputStream() override = default;
@@ -69,7 +70,7 @@ public:
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
-    HdfsScannerStats* _stats;
+    FormatScannerStats* _stats;
 };
 
 Status HdfsScanner::init(RuntimeState* runtime_state, HdfsScannerContext* scanner_ctx) {
@@ -127,7 +128,7 @@ Status HdfsScanner::_build_scanner_context() {
             slot->col_name() == ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
             ctx.reserved_field_slots.emplace_back(slot);
         } else {
-            HdfsScannerContext::ColumnInfo column;
+            FormatColumnInfo column;
             column.slot_desc = slot;
             column.idx_in_chunk = _scanner_ctx->materialize_index_in_chunk[i];
             // A slot must be decoded eagerly if it is an output column OR if it
@@ -140,7 +141,7 @@ Status HdfsScanner::_build_scanner_context() {
 
     for (size_t i = 0; i < _scanner_ctx->partition_slots.size(); i++) {
         auto* slot = _scanner_ctx->partition_slots[i];
-        HdfsScannerContext::ColumnInfo column;
+        FormatColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_ctx->partition_index_in_chunk[i];
         ctx.partition_columns.emplace_back(column);
@@ -148,7 +149,7 @@ Status HdfsScanner::_build_scanner_context() {
 
     for (size_t i = 0; i < _scanner_ctx->extended_col_slots.size(); i++) {
         auto* slot = _scanner_ctx->extended_col_slots[i];
-        HdfsScannerContext::ColumnInfo column;
+        FormatColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_ctx->extended_col_index_in_chunk[i];
         ctx.extended_columns.emplace_back(column);

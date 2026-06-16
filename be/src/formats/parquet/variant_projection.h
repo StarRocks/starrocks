@@ -37,7 +37,7 @@
 namespace starrocks {
 class Chunk;
 class ExprContext;
-struct HdfsScannerStats;
+struct FormatScannerStats;
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -123,7 +123,7 @@ public:
     //    Returns an empty Filter when there are no conjuncts.
     //    Projected columns are stored internally for later use by
     //    align_after_combined_filter and emit_projections.
-    StatusOr<Filter> filter_subfields(ChunkPtr& active_chunk, size_t raw_count, HdfsScannerStats* stats,
+    StatusOr<Filter> filter_subfields(ChunkPtr& active_chunk, size_t raw_count, FormatScannerStats* stats,
                                       const cctz::time_zone& zone);
     bool has_deferred_conjuncts() const { return !_deferred_variant_virtual_conjunct_ctxs.empty(); }
 
