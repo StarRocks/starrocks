@@ -588,6 +588,11 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_iceberg_topn_scan_pruning
+
+* **描述**: 是否根据 Iceberg 数据文件各自的 min/max 统计信息，对 `ORDER BY <column> LIMIT <k>` 查询中的数据文件进行裁剪。启用后，扫描会按排序列的 min/max 对文件排序，使 TopN Runtime Filter 更早收紧；并在读取文件 footer 之前跳过 min/max 无法进入 top-k 的文件，从而减少读取的文件数量。查询结果不变。该功能依赖 `enable_topn_runtime_filter`；首个排序列必须为整数、date 或 datetime 类型。
+* **默认值**: false
+
 ### enable_incremental_mv
 
 * **描述**: 会话变量，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，对于刷新方案为增量刷新的物化视图创建语句，系统会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新物化视图的规划将被跳过。
