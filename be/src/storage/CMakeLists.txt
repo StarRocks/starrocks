@@ -22,6 +22,9 @@ add_subdirectory(rowset)
 ADD_BE_LIB(StoragePrimitive
     primitive/aggregate_type.cpp
     primitive/chunk_iterator.cpp
+    primitive/column_and_predicate.cpp
+    primitive/column_or_predicate.cpp
+    primitive/column_value_range.cpp
     primitive/edit_version.cpp
     primitive/empty_iterator.cpp
     primitive/flat_json_config.cpp
@@ -177,8 +180,6 @@ set(STORAGE_FILES
     column_in_predicate.cpp
     column_not_in_predicate.cpp
     column_null_predicate.cpp
-    column_or_predicate.cpp
-    column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
     runtime_filter_predicate.cpp

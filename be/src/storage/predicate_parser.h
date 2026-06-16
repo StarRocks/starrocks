@@ -17,48 +17,12 @@
 #include <string>
 #include <utility>
 
-#include "common/statusor.h"
-#include "exec/filter_condition.h"
-#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/predicate_parser.h"
 #include "tablet_schema.h"
 
 namespace starrocks {
 
 class TabletSchema;
-class TCondition;
-class ExprContext;
-class SlotDescriptor;
-class RuntimeState;
-
-class ColumnPredicate;
-
-class PredicateParser {
-public:
-    virtual ~PredicateParser() = default;
-    // check if an expression can be pushed down to the storage level
-    virtual bool can_pushdown(const ColumnPredicate* predicate) const = 0;
-
-    virtual bool can_pushdown(const ConstPredicateNodePtr& pred_tree) const = 0;
-
-    virtual bool can_pushdown(const SlotDescriptor* slot_desc) const = 0;
-
-    // Parse |condition| into a predicate that can be pushed down.
-    // return nullptr if parse failed.
-    virtual StatusOr<ColumnPredicate*> parse_thrift_cond(const TCondition& condition) const = 0;
-    virtual StatusOr<ColumnPredicate*> parse_thrift_cond(const GeneralCondition& condition) const = 0;
-
-    virtual StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
-                                                      ExprContext* expr_ctx) const = 0;
-
-    virtual uint32_t column_id(const SlotDescriptor& slot_desc) const = 0;
-
-protected:
-    static ColumnPredicate* create_column_predicate(const TCondition& condition, TypeInfoPtr& type_info,
-                                                    ColumnId index);
-    static ColumnPredicate* create_column_predicate(const GeneralCondition& condition, TypeInfoPtr& type_info,
-                                                    ColumnId index);
-};
-
 class OlapPredicateParser final : public PredicateParser {
 public:
     explicit OlapPredicateParser(TabletSchemaCSPtr schema) : _schema(std::move(schema)) {}

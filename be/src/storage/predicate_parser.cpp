@@ -27,8 +27,9 @@
 
 namespace starrocks {
 
-ColumnPredicate* PredicateParser::create_column_predicate(const TCondition& condition, TypeInfoPtr& type_info,
-                                                          ColumnId index) {
+namespace {
+
+ColumnPredicate* create_column_predicate(const TCondition& condition, TypeInfoPtr& type_info, ColumnId index) {
     ColumnPredicate* pred = nullptr;
     if ((condition.condition_op == "*=" || condition.condition_op == "=") && condition.condition_values.size() == 1) {
         pred = new_column_eq_predicate(type_info, index, condition.condition_values[0]);
@@ -60,8 +61,7 @@ ColumnPredicate* PredicateParser::create_column_predicate(const TCondition& cond
     return pred;
 }
 
-ColumnPredicate* PredicateParser::create_column_predicate(const GeneralCondition& condition, TypeInfoPtr& type_info,
-                                                          ColumnId index) {
+ColumnPredicate* create_column_predicate(const GeneralCondition& condition, TypeInfoPtr& type_info, ColumnId index) {
     ColumnPredicate* pred = nullptr;
     if ((condition.condition_op == "*=" || condition.condition_op == "=") && condition.condition_values.size() == 1) {
         pred = new_column_eq_predicate_from_datum(type_info, index, condition.condition_values[0]);
@@ -91,6 +91,8 @@ ColumnPredicate* PredicateParser::create_column_predicate(const GeneralCondition
     }
     return pred;
 }
+
+} // namespace
 
 bool OlapPredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
     RETURN_IF(predicate->column_id() >= _schema->num_columns(), false);

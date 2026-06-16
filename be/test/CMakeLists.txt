@@ -49,7 +49,6 @@ set(EXEC_FILES
         ./fs/output_stream_wrapper_test.cpp
         ./fs/poco_http_client_test.cpp
         ./fs/bundle_file_test.cpp
-        ./exec/column_value_range_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
@@ -117,6 +116,7 @@ set(EXEC_FILES
         ./exec/data_sinks/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
+        ./exec/olap_scan_keys_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
         ./exec/file_scanner/avro_scanner_test.cpp
         ./exec/file_scanner/csv_scanner_test.cpp
