@@ -805,6 +805,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The interval at which the cache of statistical information is updated.
 - Introduced in: -
 
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls how followers (and restart recovery) refresh the connector (external table) statistics cache when replaying statistics journals. When set to `true`, the cache is invalidated by the table UUID persisted in the journal and reloaded lazily on the next query, which avoids resolving external table metadata (`MetadataMgr.getTable`) during replay — such resolution may block the journal replayer on the Hive Metastore or object storage. When set to `false` (default), the legacy eager refresh is used, preserving existing behavior. Statistics journals written before this UUID was persisted always fall back to eager refresh regardless of this setting.
+
 ### `statistics_large_string_column_merge_threshold`
 
 - Default: 0

@@ -2510,6 +2510,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_statistic_cache_refresh_after_write = false;
 
+    @ConfField(mutable = true, comment = "When replaying external-table statistics journals on followers " +
+            "(and during restart recovery), invalidate the connector statistics cache by the table UUID " +
+            "persisted in the journal and reload it lazily on the next query, instead of eagerly refreshing " +
+            "it. Eager refresh resolves external table metadata (MetadataMgr.getTable), which may block the " +
+            "replayer thread on HMS/object storage. Disabled by default to preserve the legacy eager-refresh " +
+            "behavior; journals without a persisted UUID always fall back to eager refresh regardless of this flag.")
+    public static boolean enable_external_stats_lazy_refresh_on_replay = false;
+
     @ConfField(mutable = true)
     public static long statistic_collect_too_many_version_sleep = 600000; // 10min
     /**
