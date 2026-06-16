@@ -18,44 +18,25 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
-import com.starrocks.alter.reshard.TabletReshardUtils;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.thrift.TBrokerFileStatus;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -63,29 +44,23 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for the multi-partition pre-split flow added in
- * {@link InsertFromFilesPreSplitHook}. The hook itself is heavily coupled to
- * {@code StmtExecutor}-time analyzer/authorizer/catalog state — each early
- * branch already has dedicated coverage in {@link InsertFromFilesPreSplitHookTest},
- * which exhaustively drives the AST-shape filters. This file focuses on the
- * multi-partition code paths:
+ * Multi-partition support coverage for the FILES path of {@link InsertPreSplitHook}.
+ * The single/multi routing and the data-tier sampler branches now live in
+ * {@link PreSplitFlow} and are covered by {@link PreSplitFlowTest}; this file
+ * retains the FILES-specific building blocks those branches rely on:
  *
  * <ol>
  *   <li>{@link DefaultPreSplitPipeline#forLoadKind} bypasses the meta tier (Parquet
  *       metadata) when the target table is partitioned, falling through to
  *       the data tier (sub-query) — and leaves the meta tier in place for unpartitioned
  *       targets.</li>
- *   <li>The hook's outer {@code maybeRunPreSplit} swallows any throw from the
- *       partitioned-branch resolution so an analyzer failure cannot abort the
- *       triggering INSERT.</li>
+ *   <li>The hook's outer {@code maybeRunPreSplit} swallows any throw so an
+ *       analyzer failure cannot abort the triggering INSERT.</li>
  *   <li>{@link TabletPreSplitCoordinator#awaitCombinedJobAllowingFallback}
  *       polls {@code TabletReshardJobMgr} for the combined job's terminal
  *       state, bumps {@code tablet_pre_split_post_submit_hard_cap} exactly
  *       once on timeout, and never aborts the load on timeout / abort /
- *       disappearance. The "ONCE per combined-job submission, NOT once per
- *       PartitionSamples" structural invariant is enforced by the single
- *       call site in {@code runMultiPartitionFlow} (see the call-site
- *       comment in the production source).</li>
+ *       disappearance.</li>
  * </ol>
  *
  * <p>End-to-end "FILES → grouper → pre-create → planner sees new partitions"
@@ -94,7 +69,7 @@ import static org.mockito.Mockito.when;
  * suite; the two integration-shaped
  * tests at the bottom are intentionally {@code @Disabled} with a pointer.
  */
-public class InsertFromFilesPreSplitHookPartitionedTest {
+public class InsertPreSplitHookFilesPartitionedTest {
 
     private boolean savedConfigInsertFromFiles;
     private boolean savedMetricHasInit;
@@ -219,7 +194,7 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
         // No assertion needed beyond "no throw escapes" — Assertions.assertDoesNotThrow
         // is the contract.
         Assertions.assertDoesNotThrow(() ->
-                InsertFromFilesPreSplitHook.maybeRunPreSplit(parsedStmt, context),
+                InsertPreSplitHook.maybeRunPreSplit(parsedStmt, context),
                 "hook must never propagate a throw");
     }
 
@@ -231,8 +206,7 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
         // counter. The single-poll assertion (times(1) on getTabletReshardJob)
         // is the per-call-of-the-helper proof. The "ONCE per combined-job
         // submission, NOT once per PartitionSamples" structural invariant is
-        // enforced by the single call site in runMultiPartitionFlow (see the
-        // call-site comment above InsertFromFilesPreSplitHook line 246).
+        // enforced by the single call site in PreSplitFlow.runMultiPartitionFlow.
         OlapTable table = mock(OlapTable.class);
         when(table.getName()).thenReturn("t_finished");
 
@@ -449,332 +423,6 @@ public class InsertFromFilesPreSplitHookPartitionedTest {
                 // Clear the interrupt flag so it does not leak into sibling tests.
                 Thread.interrupted();
             }
-        }
-    }
-
-    // ---------- runMultiPartitionFlow body (driven via reflection) ----------
-
-    @Test
-    public void runMultiPartitionFlowSubmittedDrivesAwaitOnce() throws Exception {
-        // INSERT path: a SubmittedCombined outcome MUST drive the shared
-        // TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback exactly once
-        // (the single await call site). Sampler returns a non-empty SampleSet,
-        // grouper returns a non-empty list, the coordinator returns
-        // SubmittedCombined; the await helper itself is stubbed via MockedStatic
-        // and its inner polling behavior is covered by the dedicated semantic
-        // tests above (awaitReturnsImmediatelyWhenJobAlreadyFinishedSinglePoll etc.).
-        Database database = mock(Database.class);
-        when(database.getId()).thenReturn(7L);
-        OlapTable table = mockPartitionedSamplerTable();
-        TableFunctionTable sourceTable = mockSourceTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
-        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
-
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                    .thenReturn(List.of(bigintColumn("sort_col")));
-            grouper.when(() -> PartitionSampleGrouper.group(
-                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
-                    .thenReturn(List.of(mock(PartitionSamples.class)));
-            coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                            any(), any(), anyList(), anyInt(), any()))
-                    .thenReturn(new PreSplitOutcome.SubmittedCombined(combinedJob, List.of()));
-
-            invokeRunMultiPartitionFlow(database, table, sourceTable, context);
-
-            // The combined submit ran once...
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), times(1));
-            // ...and the shared await helper was invoked once on the combined job
-            // with a non-null shouldAbort (the hook passes context::isKilled so KILL
-            // <query_id> during the wait releases the session thread promptly).
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
-                    eq(LoadKind.INSERT_FROM_FILES), eq(table), eq(combinedJob), any()), times(1));
-        }
-    }
-
-    @Test
-    public void runMultiPartitionFlowCapsSampleAtPreSubmitBudget() throws Exception {
-        // The multi-partition data-tier sample must be capped at the pre-submit
-        // budget — the same bound the single-partition DefaultPreSplitPipeline path
-        // applies. This path bypasses the pipeline, so without the cap the sample
-        // would run until the default query_timeout. Capture the SampleRequest and
-        // assert its query-timeout equals tablet_pre_split_pre_submit_timeout_seconds.
-        long savedTimeout = Config.tablet_pre_split_pre_submit_timeout_seconds;
-        Config.tablet_pre_split_pre_submit_timeout_seconds = 123L;
-        try {
-            Database database = mock(Database.class);
-            when(database.getId()).thenReturn(7L);
-            OlapTable table = mockPartitionedSamplerTable();
-            TableFunctionTable sourceTable = mockSourceTable();
-            ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-            when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-            SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
-            AtomicReference<SampleRequest> capturedRequest = new AtomicReference<>();
-
-            try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                    MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                    MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
-                    MockedStatic<TabletPreSplitCoordinator> coordinator =
-                            Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                    MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                            (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenAnswer(invocation -> {
-                                capturedRequest.set(invocation.getArgument(0));
-                                return samples;
-                            }))) {
-                metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                        .thenReturn(List.of(bigintColumn("sort_col")));
-                // Empty grouped list -> short-circuits after the sample; we only need
-                // the sample to have run with the capped request.
-                grouper.when(() -> PartitionSampleGrouper.group(
-                                any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                                anyLong(), anyLong()))
-                        .thenReturn(List.of());
-
-                invokeRunMultiPartitionFlow(database, table, sourceTable, context);
-
-                Assertions.assertNotNull(capturedRequest.get(), "data-tier sampler must have been invoked");
-                Assertions.assertEquals(123, capturedRequest.get().getQueryTimeoutSeconds(),
-                        "multi-partition INSERT sample must be capped at pre_submit_timeout");
-            }
-        } finally {
-            Config.tablet_pre_split_pre_submit_timeout_seconds = savedTimeout;
-        }
-    }
-
-    @Test
-    public void runMultiPartitionFlowSkippedDoesNotAwait() throws Exception {
-        // A Skipped outcome (e.g. NO_USEFUL_CUTS) must NOT enter the await branch:
-        // there is no combined job to poll. Verify the reshard manager is never asked
-        // for a job.
-        Database database = mock(Database.class);
-        when(database.getId()).thenReturn(7L);
-        OlapTable table = mockPartitionedSamplerTable();
-        TableFunctionTable sourceTable = mockSourceTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
-        TabletReshardJobMgr reshardMgr = mock(TabletReshardJobMgr.class);
-
-        try (MockedStatic<GlobalStateMgr> gsm = Mockito.mockStatic(GlobalStateMgr.class);
-                MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
-            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
-            when(globalState.getTabletReshardJobMgr()).thenReturn(reshardMgr);
-            gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
-
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                    .thenReturn(List.of(bigintColumn("sort_col")));
-            grouper.when(() -> PartitionSampleGrouper.group(
-                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
-                    .thenReturn(List.of(mock(PartitionSamples.class)));
-            coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                            any(), any(), anyList(), anyInt(), any()))
-                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
-
-            invokeRunMultiPartitionFlow(database, table, sourceTable, context);
-
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), times(1));
-            // No SubmittedCombined -> no await -> reshard manager never polled.
-            verify(reshardMgr, never()).getTabletReshardJob(anyLong());
-        }
-    }
-
-    @Test
-    public void runMultiPartitionFlowNullSamplesSkipsBeforeGrouper() throws Exception {
-        // runDataTierSampler returns null (sampler threw) -> runMultiPartitionFlow
-        // returns before the grouper / coordinator are ever touched.
-        Database database = mock(Database.class);
-        when(database.getId()).thenReturn(7L);
-        OlapTable table = mockPartitionedSamplerTable();
-        TableFunctionTable sourceTable = mockSourceTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class)))
-                                .thenThrow(new StarRocksException("synthetic sample failure")))) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                    .thenReturn(List.of(bigintColumn("sort_col")));
-
-            invokeRunMultiPartitionFlow(database, table, sourceTable, context);
-
-            grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(), any(), any(), anyLong(), anyLong()), never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
-        }
-    }
-
-    @Test
-    public void runMultiPartitionFlowEmptyGroupsSkipsBeforeSubmit() throws Exception {
-        // Sampler succeeds but grouper returns an empty list -> short-circuit before
-        // submitForPartitionsCombined (grouper already recorded its own skip bvar).
-        Database database = mock(Database.class);
-        when(database.getId()).thenReturn(7L);
-        OlapTable table = mockPartitionedSamplerTable();
-        TableFunctionTable sourceTable = mockSourceTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
-
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                    .thenReturn(List.of(bigintColumn("sort_col")));
-            grouper.when(() -> PartitionSampleGrouper.group(
-                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
-                    .thenReturn(List.of());
-
-            invokeRunMultiPartitionFlow(database, table, sourceTable, context);
-
-            grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(), any(), any(), anyLong(), anyLong()), times(1));
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
-        }
-    }
-
-    // ---------- runDataTierSampler (driven via reflection) ----------
-
-    @Test
-    public void runDataTierSamplerReturnsSampleSetOnSuccess() throws Exception {
-        // The data-tier sampler succeeds -> the SampleSet is returned unchanged.
-        OlapTable table = mockPartitionedSamplerTable();
-        TableFunctionTable sourceTable = mockSourceTable();
-        SampleSet expected = new SampleSet(List.of(), List.of(), Estimates.ZERO);
-
-        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(expected))) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                    .thenReturn(List.of(bigintColumn("sort_col")));
-
-            Object result = invokeRunDataTierSampler(table, sourceTable, mock(ComputeResource.class));
-            Assertions.assertSame(expected, result, "successful sample must be returned unchanged");
-        }
-    }
-
-    @Test
-    public void runDataTierSamplerReturnsNullOnStarRocksException() throws Exception {
-        // StarRocksException from the sampler -> caught, SAMPLE_FAILED bvar recorded, null returned.
-        OlapTable table = mockPartitionedSamplerTable();
-        TableFunctionTable sourceTable = mockSourceTable();
-
-        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class)))
-                                .thenThrow(new StarRocksException("synthetic checked sample failure")))) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                    .thenReturn(List.of(bigintColumn("sort_col")));
-
-            Assertions.assertNull(invokeRunDataTierSampler(table, sourceTable, mock(ComputeResource.class)),
-                    "StarRocksException sampler failure must yield null");
-        }
-    }
-
-    @Test
-    public void runDataTierSamplerReturnsNullOnRuntimeException() throws Exception {
-        // RuntimeException from the sampler -> caught by the second catch arm, null returned.
-        OlapTable table = mockPartitionedSamplerTable();
-        TableFunctionTable sourceTable = mockSourceTable();
-
-        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class)))
-                                .thenThrow(new RuntimeException("synthetic runtime sample failure")))) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
-                    .thenReturn(List.of(bigintColumn("sort_col")));
-
-            Assertions.assertNull(invokeRunDataTierSampler(table, sourceTable, mock(ComputeResource.class)),
-                    "RuntimeException sampler failure must yield null");
-        }
-    }
-
-    // ---------- Reflection helpers for the private multi-partition methods ----------
-
-    /**
-     * Mock a partitioned {@link OlapTable} whose partition-info answers the
-     * sampler's {@code getPartitionColumns} call. The sort-key list is supplied
-     * separately by the per-test {@code MetaUtils.getRangeDistributionColumns}
-     * stub. The hook resolves partition source columns via
-     * {@code table.getPartitionInfo().getPartitionColumns(table.getIdToColumn())}.
-     */
-    private static OlapTable mockPartitionedSamplerTable() {
-        OlapTable table = mock(OlapTable.class);
-        when(table.getName()).thenReturn("partitioned_insert_t");
-        PartitionInfo partitionInfo = mock(PartitionInfo.class);
-        when(partitionInfo.isPartitioned()).thenReturn(true);
-        List<Column> partitionColumns = List.of(bigintColumn("p_col"));
-        when(partitionInfo.getPartitionColumns(any())).thenReturn(partitionColumns);
-        when(table.getPartitionInfo()).thenReturn(partitionInfo);
-        return table;
-    }
-
-    /** Mock a FILES source table with one zero-byte file so {@code sumFileBytes} is harmless. */
-    private static TableFunctionTable mockSourceTable() {
-        TableFunctionTable sourceTable = mock(TableFunctionTable.class);
-        when(sourceTable.loadFileList()).thenReturn(List.<TBrokerFileStatus>of());
-        return sourceTable;
-    }
-
-    private static void invokeRunMultiPartitionFlow(
-            Database database, OlapTable table, TableFunctionTable sourceTable, ConnectContext context)
-            throws Exception {
-        Method method = InsertFromFilesPreSplitHook.class.getDeclaredMethod(
-                "runMultiPartitionFlow", Database.class, OlapTable.class, TableFunctionTable.class,
-                ConnectContext.class);
-        method.setAccessible(true);
-        try {
-            method.invoke(null, database, table, sourceTable, context);
-        } catch (InvocationTargetException invocationFailure) {
-            // Surface the real cause so a production throw is not masked by reflection.
-            Throwable cause = invocationFailure.getCause();
-            throw cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
-        }
-    }
-
-    private static Object invokeRunDataTierSampler(
-            OlapTable table, TableFunctionTable sourceTable, ComputeResource computeResource) throws Exception {
-        Method method = InsertFromFilesPreSplitHook.class.getDeclaredMethod(
-                "runDataTierSampler", OlapTable.class, TableFunctionTable.class, ComputeResource.class);
-        method.setAccessible(true);
-        try {
-            return method.invoke(null, table, sourceTable, computeResource);
-        } catch (InvocationTargetException invocationFailure) {
-            Throwable cause = invocationFailure.getCause();
-            throw cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
         }
     }
 

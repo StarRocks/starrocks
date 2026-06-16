@@ -14,8 +14,6 @@
 
 package com.starrocks.alter.reshard.presplit;
 
-import com.starrocks.alter.reshard.TabletReshardJob;
-import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -51,15 +49,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
@@ -71,20 +65,21 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /**
- * Detection-side and flow coverage for {@link InsertFromTablePreSplitHook}. The
- * detection tests drive each early-return branch and assert the hook never
- * reaches {@link TabletPreSplitCoordinator#submitAsynchronously}. The flow tests
- * drive the private single/multi-partition methods via reflection (mirroring
- * {@link InsertFromFilesPreSplitHookPartitionedTest}) and assert delegation to
- * the coordinator with arg-captors. End-to-end coverage (catalog, partitions,
- * tablet inverted index, compute-resource-bound ConnectContext) lives in the TSP
- * regression suite.
+ * Detection-side and source coverage for the OLAP-table path of
+ * {@link InsertPreSplitHook}. The detection tests drive each early-return branch
+ * and assert the hook never reaches
+ * {@link TabletPreSplitCoordinator#submitAsynchronously}. The source-content
+ * tests exercise {@link TablePreSplitSource#prepare} directly and assert the
+ * built {@link InsertFromTableScanContext} carries the resolved source columns /
+ * WHERE predicate. The shared single/multi-partition routing now lives in
+ * {@link PreSplitFlow} and is covered by {@link PreSplitFlowTest}. End-to-end
+ * coverage (catalog, partitions, tablet inverted index, compute-resource-bound
+ * ConnectContext) lives in the TSP regression suite.
  */
-public class InsertFromTablePreSplitHookTest {
+public class InsertPreSplitHookTableTest {
 
     private boolean savedConfigInsertFromTable;
 
@@ -116,7 +111,7 @@ public class InsertFromTablePreSplitHookTest {
                     .getMetric(label).getValue();
 
             assertHookDoesNotDelegate(() ->
-                    InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                    InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
 
             Assertions.assertEquals(baseline + 1L,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
@@ -130,7 +125,7 @@ public class InsertFromTablePreSplitHookTest {
     public void testNonInsertStatementShortCircuits() throws Exception {
         StatementBase stmt = mock(StatementBase.class);
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -140,7 +135,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.getExplainLevel()).thenReturn(ExplainLevel.NORMAL);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -150,7 +145,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.hasOverwriteJob()).thenReturn(false);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -159,7 +154,7 @@ public class InsertFromTablePreSplitHookTest {
         ConnectContext context = mockConnectContextWithSessionPreSplit(true);
         when(context.getTxnId()).thenReturn(42L);
 
-        assertHookDoesNotDelegate(() -> InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, context));
+        assertHookDoesNotDelegate(() -> InsertPreSplitHook.maybeRunPreSplit(stmt, context));
     }
 
     @Test
@@ -168,7 +163,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.getTxnId()).thenReturn(99L);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -180,7 +175,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.isSpecifyPartitionNames()).thenReturn(true);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -191,7 +186,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.isStaticKeyPartitionInsert()).thenReturn(true);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -203,7 +198,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.getProperties()).thenReturn(Map.of("strict_mode", "true"));
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     // ---------- extractSingleTableSource: query-shape filters ----------
@@ -215,7 +210,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.getQueryStatement()).thenReturn(null);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -225,7 +220,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -236,7 +231,7 @@ public class InsertFromTablePreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(setOp);
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -244,7 +239,7 @@ public class InsertFromTablePreSplitHookTest {
         // INSERT INTO t SELECT * FROM a JOIN b — the FROM is not a single TableRelation.
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(mock(Relation.class)));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -253,7 +248,7 @@ public class InsertFromTablePreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(
                 bareStarSelectRelationOver(mock(FileTableFunctionRelation.class)));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -262,7 +257,7 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.getTargetColumnNames()).thenReturn(List.of("a", "b"));
 
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -275,7 +270,7 @@ public class InsertFromTablePreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(
                 selectRelationWithSelectList(selectListOf(exprItem), mock(TableRelation.class)));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -288,7 +283,7 @@ public class InsertFromTablePreSplitHookTest {
         InsertStmt stmt = insertStmtWithQueryRelation(
                 selectRelationWithSelectList(distinctSelectList, plainTableRelation()));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -298,7 +293,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -308,7 +303,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -318,7 +313,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -328,7 +323,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     // ---------- isPlainTableReference: source-slice modifiers ----------
@@ -342,7 +337,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(sourceRelation));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -353,7 +348,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(sourceRelation));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -365,7 +360,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(sourceRelation));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     @Test
@@ -377,7 +372,7 @@ public class InsertFromTablePreSplitHookTest {
 
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(sourceRelation));
         assertHookDoesNotDelegate(() ->
-                InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
     // ---------- WHERE gate (downstream of source resolution) ----------
@@ -517,285 +512,77 @@ public class InsertFromTablePreSplitHookTest {
         when(stmt.getTxnId()).thenThrow(new RuntimeException("simulated stmt failure"));
 
         Assertions.assertDoesNotThrow(() ->
-                        InsertFromTablePreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)),
+                        InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)),
                 "hook must never propagate a throw");
     }
 
-    // ---------- Single-partition flow (driven via reflection) ----------
+    // ---------- TablePreSplitSource.prepare: scan-context content (re-homed) ----------
 
     @Test
-    public void runSinglePartitionFlowSubmittedDrivesAwaitOnce() throws Exception {
-        // A Submitted outcome MUST drive awaitFinishedAllowingFallback exactly
-        // once. The pipeline factory + coordinator are stubbed; the await helper
-        // semantics are covered by InsertFromFilesPreSplitHookPartitionedTest.
-        Database database = mock(Database.class);
-        OlapTable table = mockSingleTierTarget();
-        OlapTable sourceTable = mockSourceOlapTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
+    public void prepareBuildsScanContextWithResolvedSourceColumns() throws Exception {
+        // The shared single/multi routing is covered by PreSplitFlowTest; what is
+        // source-specific here is the scan-context content TablePreSplitSource.prepare
+        // builds. Drive prepare directly against the wired resolve path: the captured
+        // InsertFromTableScanContext must carry the source column resolved for the
+        // target sort key (here target "k" maps by-position to source "k"), an empty
+        // partition source-column list (unpartitioned target), and a null WHERE.
+        try (SourceFixture fixture = sourceFixture()) {
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
-        InsertSelectSourceColumns mapping = mappingOf(List.of("k"), List.of());
-        PreSplitTargets.EligibleTarget eligibleTarget =
-                new PreSplitTargets.EligibleTarget(database, table, /*partitionId*/ 5L, /*oldTabletId*/ 9L);
-        DefaultPreSplitPipeline pipeline = mock(DefaultPreSplitPipeline.class);
-        PreSplitPipeline.PreparedReshardJob preparedJob = mock(PreSplitPipeline.PreparedReshardJob.class);
-
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
-                MockedStatic<DefaultPreSplitPipeline> pipelineFactory =
-                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
-            targets.when(() -> PreSplitTargets.findEligibleTarget(database, table)).thenReturn(eligibleTarget);
-            pipelineFactory.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                            any(), any(), anyLong(), anyLong(), eq(LoadKind.INSERT_FROM_TABLE)))
-                    .thenReturn(pipeline);
-            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), eq(LoadKind.INSERT_FROM_TABLE), any(), anyInt()))
-                    .thenReturn(new PreSplitOutcome.Submitted(preparedJob));
-
-            invokeRunSinglePartitionFlow(database, table, sourceTable, "`db`.`src`", null, mapping, context);
-
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), eq(LoadKind.INSERT_FROM_TABLE), any(), anyInt()), times(1));
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
-                    eq(LoadKind.INSERT_FROM_TABLE), eq(table), eq(pipeline), eq(preparedJob), any()), times(1));
-        }
-    }
-
-    @Test
-    public void runSinglePartitionFlowCarriesScanContextSourceColumns() throws Exception {
-        // Reordered bare columns: the captured scan context must carry the source
-        // column the mapping resolved (not the target column's name).
-        Database database = mock(Database.class);
-        OlapTable table = mockSingleTierTarget();
-        OlapTable sourceTable = mockSourceOlapTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-        // Target sort key "k" maps to source column "k_src" after reordering.
-        InsertSelectSourceColumns mapping = mappingOf(List.of("k_src"), List.of("p_src"));
-        PreSplitTargets.EligibleTarget eligibleTarget =
-                new PreSplitTargets.EligibleTarget(database, table, 5L, 9L);
-        AtomicReference<InsertFromTableScanContext> capturedScan = new AtomicReference<>();
-
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
-                MockedStatic<DefaultPreSplitPipeline> pipelineFactory =
-                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
-            targets.when(() -> PreSplitTargets.findEligibleTarget(database, table)).thenReturn(eligibleTarget);
-            pipelineFactory.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                            any(), any(), anyLong(), anyLong(), eq(LoadKind.INSERT_FROM_TABLE)))
-                    .thenReturn(mock(DefaultPreSplitPipeline.class));
-            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
-                    .thenAnswer(invocation -> {
-                        capturedScan.set(invocation.getArgument(3));
-                        return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
-                    });
-
-            invokeRunSinglePartitionFlow(
-                    database, table, sourceTable, "`db`.`src`", "`a` > 10", mapping, context);
-
-            Assertions.assertNotNull(capturedScan.get(), "scan context must be captured at submit");
-            Assertions.assertEquals(List.of("k_src"), capturedScan.get().sortKeySourceColumnNames(),
+            Assertions.assertNotNull(scanContext, "prepare must build a scan context for the eligible source");
+            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames(),
                     "scan context must carry the resolved source sort-key column");
-            Assertions.assertEquals(List.of("p_src"), capturedScan.get().partitionSourceColumnNames());
-            Assertions.assertEquals("`a` > 10", capturedScan.get().wherePredicateSql());
+            Assertions.assertEquals(List.of(), scanContext.partitionSourceColumnNames());
+            Assertions.assertNull(scanContext.wherePredicateSql(),
+                    "no WHERE clause must yield a null predicate SQL");
+            Assertions.assertSame(fixture.sourceTable, scanContext.sourceTable(),
+                    "scan context must carry the resolved OLAP source table");
         }
     }
 
     @Test
-    public void runSinglePartitionFlowNoEligibleTargetDoesNotSubmit() throws Exception {
-        Database database = mock(Database.class);
-        OlapTable table = mockSingleTierTarget();
-        OlapTable sourceTable = mockSourceOlapTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
+    public void prepareThreadsWherePredicateSqlIntoScanContext() throws Exception {
+        // A deterministic, safe WHERE clause must be rendered by SamplingPredicateGate.toSql
+        // and threaded verbatim into the scan context. Mock the WHERE Expr so the gate's
+        // safety walk finds nothing unsafe, and stub toSql to a sentinel so the assertion
+        // does not couple to AstToSQLBuilder's exact rendering (the gate itself is unit-tested
+        // separately in SamplingPredicateGateTest).
+        try (SourceFixture fixture = sourceFixture()) {
+            Expr where = mock(Expr.class);
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(where);
 
-        try (MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
-            targets.when(() -> PreSplitTargets.findEligibleTarget(database, table)).thenReturn(null);
+            try (MockedStatic<SamplingPredicateGate> gate =
+                         Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS)) {
+                gate.when(() -> SamplingPredicateGate.toSql(where)).thenReturn("`a` > 10");
 
-            invokeRunSinglePartitionFlow(
-                    database, table, sourceTable, "`db`.`src`", null, mappingOf(List.of("k"), List.of()), context);
+                InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                Assertions.assertNotNull(scanContext, "prepare must build a scan context");
+                Assertions.assertEquals("`a` > 10", scanContext.wherePredicateSql(),
+                        "the rendered WHERE predicate SQL must be threaded into the scan context");
+            }
         }
     }
 
     @Test
-    public void runSinglePartitionFlowSourceEqualsTargetStillSubmits() throws Exception {
-        // INSERT INTO t SELECT * FROM t WHERE ... — the source resolves to the
-        // SAME OlapTable instance as the target. The hook holds no locks, so
-        // there is no deadlock to exercise; this confirms the single-partition
-        // flow still submits + awaits normally when source == target.
-        Database database = mock(Database.class);
-        OlapTable sameTable = mockSingleTierTarget();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
+    public void prepareSourceEqualsTargetStillProducesScanContext() throws Exception {
+        // INSERT INTO t SELECT * FROM t -- the source resolves to the SAME OlapTable
+        // instance as the target. The hook holds no locks, so source == target is NOT
+        // rejected: prepare must still resolve the source and build a scan context
+        // (the prior flow-seam test asserted only submit+await, which PreSplitFlowTest
+        // now covers; the source-specific signal that survives is "source == target is
+        // accepted at prepare").
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.resolveSourceToTarget();
 
-        InsertSelectSourceColumns mapping = mappingOf(List.of("k"), List.of());
-        PreSplitTargets.EligibleTarget eligibleTarget =
-                new PreSplitTargets.EligibleTarget(database, sameTable, /*partitionId*/ 5L, /*oldTabletId*/ 9L);
-        DefaultPreSplitPipeline pipeline = mock(DefaultPreSplitPipeline.class);
-        PreSplitPipeline.PreparedReshardJob preparedJob = mock(PreSplitPipeline.PreparedReshardJob.class);
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
-                MockedStatic<DefaultPreSplitPipeline> pipelineFactory =
-                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
-            targets.when(() -> PreSplitTargets.findEligibleTarget(database, sameTable)).thenReturn(eligibleTarget);
-            pipelineFactory.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                            any(), any(), anyLong(), anyLong(), eq(LoadKind.INSERT_FROM_TABLE)))
-                    .thenReturn(pipeline);
-            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), eq(LoadKind.INSERT_FROM_TABLE), any(), anyInt()))
-                    .thenReturn(new PreSplitOutcome.Submitted(preparedJob));
-
-            // source table == target table, with a WHERE predicate.
-            invokeRunSinglePartitionFlow(
-                    database, sameTable, sameTable, "`db`.`t`", "`k` > 100", mapping, context);
-
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), eq(LoadKind.INSERT_FROM_TABLE), any(), anyInt()), times(1));
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
-                    eq(LoadKind.INSERT_FROM_TABLE), eq(sameTable), eq(pipeline), eq(preparedJob), any()), times(1));
+            Assertions.assertNotNull(scanContext, "source == target must still build a scan context");
+            Assertions.assertSame(fixture.target(), scanContext.sourceTable(),
+                    "scan context must carry the target table as its source when source == target");
+            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames());
         }
-    }
-
-    // ---------- Multi-partition flow (driven via reflection) ----------
-
-    @Test
-    public void runMultiPartitionFlowSubmittedDrivesAwaitOnce() throws Exception {
-        Database database = mock(Database.class);
-        when(database.getId()).thenReturn(7L);
-        OlapTable table = mockPartitionedTarget();
-        OlapTable sourceTable = mockSourceOlapTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-        InsertSelectSourceColumns mapping = mappingOf(List.of("k"), List.of("p"));
-        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
-        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
-
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
-            grouper.when(() -> PartitionSampleGrouper.group(
-                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
-                    .thenReturn(List.of(mock(PartitionSamples.class)));
-            coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                            any(), any(), anyList(), anyInt(), any()))
-                    .thenReturn(new PreSplitOutcome.SubmittedCombined(combinedJob, List.of()));
-
-            invokeRunMultiPartitionFlow(
-                    database, table, sourceTable, "`db`.`src`", null, mapping,
-                    List.of(bigintColumn("k")), List.of(bigintColumn("p")), context);
-
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), times(1));
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
-                    eq(LoadKind.INSERT_FROM_TABLE), eq(table), eq(combinedJob), any()), times(1));
-        }
-    }
-
-    @Test
-    public void runMultiPartitionFlowSamplerThrowDoesNotPropagate() throws Exception {
-        // The sampler throwing inside the flow must not propagate: runDataTierSampler
-        // catches it, records SAMPLE_FAILED, returns null, and the flow short-circuits
-        // before the grouper / coordinator.
-        Database database = mock(Database.class);
-        when(database.getId()).thenReturn(7L);
-        OlapTable table = mockPartitionedTarget();
-        OlapTable sourceTable = mockSourceOlapTable();
-        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
-        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
-
-        InsertSelectSourceColumns mapping = mappingOf(List.of("k"), List.of("p"));
-
-        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
-                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
-                MockedStatic<TabletPreSplitCoordinator> coordinator =
-                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
-                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class)))
-                                .thenThrow(new RuntimeException("synthetic sample failure")))) {
-            invokeRunMultiPartitionFlow(
-                    database, table, sourceTable, "`db`.`src`", null, mapping,
-                    List.of(bigintColumn("k")), List.of(bigintColumn("p")), context);
-
-            grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(), any(), any(), anyLong(), anyLong()), never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
-        }
-    }
-
-    // ---------- Reflection drivers for the private flow methods ----------
-
-    private static void invokeRunSinglePartitionFlow(
-            Database database, OlapTable table, OlapTable sourceTable, String sourceFromSql,
-            String wherePredicateSql, InsertSelectSourceColumns mapping, ConnectContext context) throws Exception {
-        InsertFromTableScanContext scanContext = scanContextOf(sourceTable, sourceFromSql, wherePredicateSql, mapping,
-                context);
-        Method method = InsertFromTablePreSplitHook.class.getDeclaredMethod(
-                "runSinglePartitionFlow", Database.class, OlapTable.class, OlapTable.class,
-                InsertFromTableScanContext.class, ConnectContext.class);
-        method.setAccessible(true);
-        try {
-            method.invoke(null, database, table, sourceTable, scanContext, context);
-        } catch (InvocationTargetException invocationFailure) {
-            Throwable cause = invocationFailure.getCause();
-            throw cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
-        }
-    }
-
-    private static void invokeRunMultiPartitionFlow(
-            Database database, OlapTable table, OlapTable sourceTable, String sourceFromSql,
-            String wherePredicateSql, InsertSelectSourceColumns mapping,
-            List<Column> sortKeyColumns, List<Column> partitionColumns, ConnectContext context) throws Exception {
-        InsertFromTableScanContext scanContext = scanContextOf(sourceTable, sourceFromSql, wherePredicateSql, mapping,
-                context);
-        Method method = InsertFromTablePreSplitHook.class.getDeclaredMethod(
-                "runMultiPartitionFlow", Database.class, OlapTable.class, OlapTable.class,
-                InsertFromTableScanContext.class, List.class, List.class, ConnectContext.class);
-        method.setAccessible(true);
-        try {
-            method.invoke(null, database, table, sourceTable, scanContext,
-                    sortKeyColumns, partitionColumns, context);
-        } catch (InvocationTargetException invocationFailure) {
-            Throwable cause = invocationFailure.getCause();
-            throw cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
-        }
-    }
-
-    /**
-     * Builds the shared scan context the way {@code tryRunPreSplit} does before
-     * the partition branch, so the reflection drivers can exercise the flow
-     * methods against their post-cleanup signatures. Falls back to a fresh
-     * compute-resource mock when the context does not stub one (the scan-context
-     * record requires a non-null compute resource).
-     */
-    private static InsertFromTableScanContext scanContextOf(
-            OlapTable sourceTable, String sourceFromSql, String wherePredicateSql,
-            InsertSelectSourceColumns mapping, ConnectContext context) {
-        ComputeResource computeResource = context.getCurrentComputeResource();
-        if (computeResource == null) {
-            computeResource = mock(ComputeResource.class);
-        }
-        return new InsertFromTableScanContext(
-                sourceTable, sourceFromSql, mapping.sortKeySourceColumnNames(),
-                mapping.partitionSourceColumnNames(), wherePredicateSql, computeResource);
     }
 
     // ---------- Shared fixtures ----------
@@ -927,11 +714,41 @@ public class InsertFromTablePreSplitHookTest {
          * multi-partition ({@code submitForPartitionsCombined}) path.
          */
         private void assertNoSubmit() {
-            InsertFromTablePreSplitHook.maybeRunPreSplit(insertStmt, context);
+            InsertPreSplitHook.maybeRunPreSplit(insertStmt, context);
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any()), never());
+        }
+
+        /**
+         * Drives {@link TablePreSplitSource#prepare} directly against the wired
+         * resolve path and returns the built {@link InsertFromTableScanContext}
+         * (or {@code null} when prepare skipped). The {@code database} argument is
+         * unused by {@code prepare} (it resolves the source db itself), so a bare
+         * mock suffices.
+         */
+        private InsertFromTableScanContext prepareScanContext() throws AccessDeniedException {
+            SelectRelation selectRelation =
+                    (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+            PreSplitFlow.Prepared prepared = new TablePreSplitSource().prepare(
+                    insertStmt, selectRelation, targetTable, mock(Database.class), context);
+            return prepared == null ? null : (InsertFromTableScanContext) prepared.scanContext();
+        }
+
+        /**
+         * Re-points the source resolution so the source table resolves to the SAME
+         * instance as the target (INSERT INTO t SELECT * FROM t), stubbing the
+         * source-side accessors prepare reads on the target.
+         */
+        private void resolveSourceToTarget() {
+            when(targetTable.getVisibleColumnsWithoutGeneratedColumn())
+                    .thenReturn(columnsOf(List.of("k", "v")));
+            when(targetTable.getBaseSchema()).thenReturn(columnsOf(List.of("k", "v")));
+            when(targetTable.hasGeneratedColumn()).thenReturn(false);
+            when(targetTable.getDataSize()).thenReturn(0L);
+            metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(sourceDb), any()))
+                    .thenReturn(targetTable);
         }
 
         @Override
@@ -952,37 +769,11 @@ public class InsertFromTablePreSplitHookTest {
         }
     }
 
-    private static OlapTable mockSingleTierTarget() {
-        OlapTable table = mock(OlapTable.class);
-        when(table.getName()).thenReturn("target_t");
-        return table;
-    }
-
-    private static OlapTable mockPartitionedTarget() {
-        OlapTable table = mock(OlapTable.class);
-        when(table.getName()).thenReturn("partitioned_target_t");
-        return table;
-    }
-
-    private static OlapTable mockSourceOlapTable() {
-        OlapTable sourceTable = mock(OlapTable.class);
-        when(sourceTable.getDataSize()).thenReturn(0L);
-        return sourceTable;
-    }
-
-    private static InsertSelectSourceColumns mappingOf(
-            List<String> sortKeySourceColumns, List<String> partitionSourceColumns) throws Exception {
-        java.lang.reflect.Constructor<InsertSelectSourceColumns> constructor =
-                InsertSelectSourceColumns.class.getDeclaredConstructor(List.class, List.class);
-        constructor.setAccessible(true);
-        return constructor.newInstance(sortKeySourceColumns, partitionSourceColumns);
-    }
-
     private static List<Column> columnsOf(List<String> names) {
         return names.stream().map(PresplitTestSupport::bigintColumn).collect(java.util.stream.Collectors.toList());
     }
 
-    // ---------- AST-shape builders (mirror InsertFromFilesPreSplitHookTest) ----------
+    // ---------- AST-shape builders (mirror InsertPreSplitHookFilesTest) ----------
 
     private static InsertStmt simpleTableInsertStmt() {
         return insertStmtWithQueryRelation(bareStarSelectRelationOver(plainTableRelation()));
