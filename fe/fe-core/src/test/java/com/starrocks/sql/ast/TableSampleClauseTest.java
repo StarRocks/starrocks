@@ -36,4 +36,35 @@ public class TableSampleClauseTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains("SAMPLE");
     }
 
+    @Test
+    public void testFractionalPercent() throws Exception {
+        // Sub-1% percent must be accepted and preserved (not truncated to 0 or rounded to 1).
+        final String sql = "select * from t1 sample('method'='by_block', 'seed'='1', 'percent'='0.5')";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+        Assertions.assertEquals("SELECT `test`.`t1`.`v4`, `test`.`t1`.`v5`, `test`.`t1`.`v6`\n" +
+                        "FROM `test`.`t1` SAMPLE('method'='BY_BLOCK','seed'='1','percent'='0.5')",
+                AstToSQLBuilder.toSQL(statementBase));
+    }
+
+    @Test
+    public void testIntegralPercentHasNoTrailingZero() throws Exception {
+        // An integral percent should still serialize without a trailing ".0".
+        final String sql = "select * from t1 sample('method'='by_block', 'seed'='1', 'percent'='10')";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+        Assertions.assertEquals("SELECT `test`.`t1`.`v4`, `test`.`t1`.`v5`, `test`.`t1`.`v6`\n" +
+                        "FROM `test`.`t1` SAMPLE('method'='BY_BLOCK','seed'='1','percent'='10')",
+                AstToSQLBuilder.toSQL(statementBase));
+    }
+
+    @Test
+    public void testPercentOutOfRangeRejected() {
+        // 0 and 100 remain invalid; the lower bound is open so fractional values just above 0 are allowed.
+        Assertions.assertThrows(Exception.class, () -> UtFrameUtils.parseStmtWithNewParser(
+                "select * from t1 sample('percent'='0')", connectContext));
+        Assertions.assertThrows(Exception.class, () -> UtFrameUtils.parseStmtWithNewParser(
+                "select * from t1 sample('percent'='100')", connectContext));
+    }
+
 }
