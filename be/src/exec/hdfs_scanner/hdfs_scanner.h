@@ -165,7 +165,6 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* parquet_lazy_slot_triggered_counter = nullptr;
     RuntimeProfile::Counter* parquet_lazy_read_count_counter = nullptr;
     RuntimeProfile::Counter* parquet_lazy_read_timer = nullptr;
-    RuntimeProfile::Counter* parquet_lazy_materialization_enabled_counter = nullptr;
     RuntimeProfile::Counter* parquet_lazy_full_trigger_count_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_size = nullptr;

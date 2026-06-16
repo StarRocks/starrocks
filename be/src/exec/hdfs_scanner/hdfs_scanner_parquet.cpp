@@ -268,8 +268,6 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    // Multi-slot conjuncts are now evaluated inside GroupReader (step 2b)
-    // with lazy-materialization support, making a post-hoc pass unnecessary.
     return _reader->get_next(chunk);
 }
 
