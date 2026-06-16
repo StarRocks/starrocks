@@ -90,6 +90,27 @@ public class CredentialUtilTest {
     }
 
     @Test
+    public void testMaskTencentCOSCredential() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "test_cos_access_key");
+        properties.put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "test_cos_secret_key");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY));
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY));
+    }
+
+    @Test
+    public void testMaskIcebergJdbcCatalogPassword() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD, "12345678");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("12******78", properties.get(
+                IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                        IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD));
+    }
+
+    @Test
     public void testAzurePathParseWithABFS() {
         String uri = "abfs://bottle@smith.dfs.core.windows.net/path/1/2";
         AzureStoragePath path = CredentialUtil.parseAzureStoragePath(uri);
