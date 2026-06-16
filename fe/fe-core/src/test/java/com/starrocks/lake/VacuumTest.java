@@ -41,6 +41,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
@@ -143,6 +144,43 @@ public class VacuumTest {
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
         Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
+    }
+
+    @Test
+    public void testVacuumRequestCarriesTimeout() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+
+        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 10L;
+        mockResponse.vacuumedFileSize = 1024L;
+        mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        lakeService = mock(LakeService.class);
+        ArgumentCaptor<VacuumRequest> requestCaptor = ArgumentCaptor.forClass(VacuumRequest.class);
+        when(lakeService.vacuum(requestCaptor.capture())).thenReturn(mockFuture);
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
+        }
+
+        Assertions.assertFalse(requestCaptor.getAllValues().isEmpty());
+        for (VacuumRequest request : requestCaptor.getAllValues()) {
+            // The BE aborts the vacuum task once this duration has elapsed, so it must match
+            // the longest the FE actually waits, i.e. the brpc timeout of the vacuum RPC.
+            Assertions.assertEquals(LakeService.TIMEOUT_VACUUM, (long) request.timeoutMs);
+        }
     }
 
     @Test
