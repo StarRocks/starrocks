@@ -595,8 +595,8 @@ struct TTableSampleOptions {
   1: optional bool enable_sampling;
   2: optional SampleMethod sample_method;
   3: optional i64 random_seed;
-  4: optional i64 probability_percent;
-
+  4: optional i64 probability_percent;       // kept for backward compatibility with old BE/FE; integer percent in (0, 100)
+  5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
