@@ -41,6 +41,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
@@ -143,6 +144,382 @@ public class VacuumTest {
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
         Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
+<<<<<<< HEAD
+=======
+        Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
+    }
+
+    @Test
+    public void testVacuumRequestCarriesTimeout() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+
+        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 10L;
+        mockResponse.vacuumedFileSize = 1024L;
+        mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        lakeService = mock(LakeService.class);
+        ArgumentCaptor<VacuumRequest> requestCaptor = ArgumentCaptor.forClass(VacuumRequest.class);
+        when(lakeService.vacuum(requestCaptor.capture())).thenReturn(mockFuture);
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
+        }
+
+        Assertions.assertFalse(requestCaptor.getAllValues().isEmpty());
+        for (VacuumRequest request : requestCaptor.getAllValues()) {
+            // The BE aborts the vacuum task once this duration has elapsed, so it must match
+            // the longest the FE actually waits, i.e. the brpc timeout of the vacuum RPC.
+            Assertions.assertEquals(LakeService.TIMEOUT_VACUUM, (long) request.timeoutMs);
+        }
+    }
+
+    @Test
+    public void testAggregateVacuum() throws Exception {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        partition = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+
+        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 10L;
+        mockResponse.vacuumedFileSize = 1024L;
+        mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        lakeService = mock(LakeService.class);
+        when(lakeService.vacuum(any(VacuumRequest.class))).thenReturn(mockFuture);
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+
+        Assertions.assertEquals(5L, partition.getLastSuccVacuumVersion());
+
+        mockResponse.vacuumedVersion = 7L;
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+        Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
+    }
+
+    @Test
+    public void testMetadataSwitchVersionVacuum() throws Exception {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        partition = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(0L);
+        partition.setLastSuccVacuumVersion(4L);
+        partition.setMetadataSwitchVersion(6L);
+
+        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 10L;
+        mockResponse.vacuumedFileSize = 1024L;
+        mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        lakeService = mock(LakeService.class);
+        when(lakeService.vacuum(any(VacuumRequest.class))).thenReturn(mockFuture);
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+
+        Assertions.assertEquals(5L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(6L, partition.getMetadataSwitchVersion());
+
+        mockResponse.vacuumedVersion = 7L;
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+        Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
+    }
+
+    @Test
+    public void testFullVacuumBasic() {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        FullVacuumDaemon fullVacuumDaemon = new FullVacuumDaemon();
+
+        Set<Long> allTabletIds = new HashSet<>();
+        long testDbId = 0;
+        List<Long> dbIds = currentState.getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database currDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (currDb != null && !currDb.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        final Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                OlapTable olapTbl = (OlapTable) tbl;
+                for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
+                    part.setLastFullVacuumTime(1L);
+                    for (MaterializedIndex index : part.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        allTabletIds.addAll(index.getTablets().stream().map(Tablet::getId).toList());
+                    }
+                }
+            }
+        }
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getVisibleVersion() {
+                return 10L;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return sourceDb;
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return sourceDb.getTables();
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return new ComputeNode();
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return new LakeServiceWithMetrics(null);
+            }
+        };
+        
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+                VacuumFullResponse resp = new VacuumFullResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = 0;
+                resp.vacuumedFiles = 1L;
+                resp.vacuumedFileSize = 1L;
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        final StarOSAgent starOSAgent = new StarOSAgent();
+        final ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        final WarehouseManager curWarehouseManager = new WarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return clusterSnapshotMgr;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return curWarehouseManager;
+            }
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<VacuumFullRequest>() {
+            @Mock
+            public void setRetainVersions(List<Long> retainVersions) {
+                Assertions.assertEquals(1, retainVersions.size());
+                return;
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return 454545L;
+            }
+        };
+
+        Config.lake_enable_fullvacuum = true;
+        FeConstants.runningUnitTest = false;
+        int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
+        long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
+        Config.lake_fullvacuum_parallel_partitions = 1;
+        Config.lake_fullvacuum_partition_naptime_seconds = 0;
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
+        Config.lake_fullvacuum_parallel_partitions = oldValue1;
+        FeConstants.runningUnitTest = true;
+        Config.lake_enable_fullvacuum = false;
+    }
+
+    @Test
+    public void testFullVacuumMaxCheckVersionRespectsMinRetainVersion() {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        FullVacuumDaemon fullVacuumDaemon = new FullVacuumDaemon();
+
+        long expectedVisibleVersion = 10L;
+        long expectedMinRetainVersion = 6L;
+
+        long testDbId = 0;
+        List<Long> dbIds = currentState.getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database currDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (currDb != null && !currDb.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        final Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                OlapTable olapTbl = (OlapTable) tbl;
+                for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
+                    part.setLastFullVacuumTime(1L);
+                    part.setMinRetainVersion(expectedMinRetainVersion);
+                }
+            }
+        }
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getVisibleVersion() {
+                return expectedVisibleVersion;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return sourceDb;
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return sourceDb.getTables();
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return new ComputeNode();
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return new LakeServiceWithMetrics(null);
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+                VacuumFullResponse resp = new VacuumFullResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = 0;
+                resp.vacuumedFiles = 1L;
+                resp.vacuumedFileSize = 1L;
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        final StarOSAgent starOSAgent = new StarOSAgent();
+        final ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        final WarehouseManager curWarehouseManager = new WarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return clusterSnapshotMgr;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return curWarehouseManager;
+            }
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return 454545L;
+            }
+        };
+
+        new MockUp<VacuumFullRequest>() {
+            @Mock
+            public void setMaxCheckVersion(long v) {
+                // Expect min(visibleVersion, minRetainVersion)
+                Assertions.assertEquals(Math.min(expectedVisibleVersion, expectedMinRetainVersion), v);
+            }
+        };
+
+        FeConstants.runningUnitTest = false;
+        int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
+        long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
+        Config.lake_fullvacuum_parallel_partitions = 1;
+        Config.lake_fullvacuum_partition_naptime_seconds = 0;
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
+        Config.lake_fullvacuum_parallel_partitions = oldValue1;
+        FeConstants.runningUnitTest = true;
+>>>>>>> 4e25291a18 ([BugFix] Abort BE vacuum tasks once the FE caller's timeout elapses (#74694))
     }
 
     @Test

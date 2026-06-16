@@ -1013,11 +1013,22 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
 
     TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
 
+    // Anchor the deadline at the time the request is received: the FE caller waits at most
+    // |timeout_ms| from now, so once the deadline passes (whether the task waited in the
+    // thread pool queue or is in the middle of vacuuming) the task aborts itself instead of
+    // keeping a vacuum worker occupied for a response nobody reads. Requests without the
+    // field (older FE versions) carry no deadline and run to completion as before, and
+    // setting |lake_vacuum_enable_task_timeout| to false disables the deadline entirely.
+    int64_t deadline_ms = 0;
+    if (config::lake_vacuum_enable_task_timeout && request->has_timeout_ms() && request->timeout_ms() > 0) {
+        deadline_ms = butil::gettimeofday_ms() + request->timeout_ms();
+    }
+
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
                 DeferOp defer([&] { latch.count_down(); });
-                lake::vacuum(_tablet_mgr, *request, response);
+                lake::vacuum(_tablet_mgr, *request, response, deadline_ms);
             },
             [&] {
                 Status st = Status::Cancelled("vacuum task has been cancelled");

@@ -28,7 +28,7 @@ namespace starrocks::lake {
 
 class TabletManager;
 
-void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response);
+void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response, int64_t deadline_ms = 0);
 
 void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response);
 

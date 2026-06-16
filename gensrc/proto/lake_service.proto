@@ -276,6 +276,24 @@ message VacuumRequest {
     optional int64 partition_id = 6;
     // The tablet infos to be vacuumed.
     repeated TabletInfoPB tablet_infos = 7;
+<<<<<<< HEAD
+=======
+    // Whether enable file bundling
+    optional bool enable_file_bundling = 8;
+    // retain version info of tablet metadata
+    // The version here means the version of tablet metadata or the physical partition version
+    // (because vacuun request is send by <node, physical partition>)
+    // All tablet metadata and their data files of these verisons should be retained and can not be
+    // vaccummed.
+    repeated int64 retain_versions = 9;
+    // Whether enable shared file cleanup in vacuum.
+    // This flag is used for both file-bundling tables and range-distribution tables.
+    optional bool enable_shared_file_cleanup = 10;
+    // The maximum duration the FE caller waits for this request, measured from the time
+    // the request is received. After it elapses the FE has given up, so the BE task
+    // should abort itself proactively instead of keeping a vacuum worker occupied.
+    optional int64 timeout_ms = 11;
+>>>>>>> 4e25291a18 ([BugFix] Abort BE vacuum tasks once the FE caller's timeout elapses (#74694))
 }
 
 message VacuumResponse {
