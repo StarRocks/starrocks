@@ -601,6 +601,45 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
+    void readsFixedLenByteArrayDecimal128Statistics() throws Exception {
+        // Mirrors StarRocks' own unload: BE encodes DECIMAL128 as FLBA(16). DECIMAL(38,2) with a
+        // 38-digit unscaled value exercises the full 16-byte signed decode — the case that fell to
+        // the data tier before this phase.
+        BigInteger small = BigInteger.valueOf(100L);                                       // 1.00
+        BigInteger large = new BigInteger("99999999999999999999999999999999999999");       // 38-digit unscaled
+        Path parquetPath = writeParquet(
+                "message schema { required fixed_len_byte_array(16) d (DECIMAL(38,2)); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", flbaDecimal(rowIndex == 0 ? small : large, 16)));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        // Assert the max by VALUE (the unscaled `large` at scale 2), not a hand-counted digit string.
+        Assertions.assertEquals(0, new BigDecimal(large, 2).compareTo(
+                new BigDecimal(stats.get(0).getMaxTuple().getValues().get(0).getStringValue())));
+    }
+
+    @Test
+    void fixedLenByteArrayDecimalScaleMismatchFallsBackToDataTier() throws Exception {
+        // A byte-array decimal still requires an EXACT precision/scale match, independent of the
+        // (TypeDefinedOrder) column order: source DECIMAL(18,2) into a StarRocks DECIMAL64(18,4).
+        Path parquetPath = writeParquet(
+                "message schema { required fixed_len_byte_array(8) d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", flbaDecimal(BigInteger.valueOf((rowIndex + 1) * 100L), 8)));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))));
+    }
+
+    @Test
     void declaresSignedByteArrayOrderRequiresTypeOrderEntry() {
         // parquet-mr's high-level writer always emits column_orders, so the "no column_orders /
         // unknown order → data tier" rejection is verified at the raw-footer-mapping predicate level.
