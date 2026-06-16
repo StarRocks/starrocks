@@ -17,11 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include "base/phmap/phmap.h"
-#include "base/testutil/assert.h"
->>>>>>> 71ab161b3f ([Enhancement] base64_to_bitmap constant optimization (#74684))
+#include "testutil/assert.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
