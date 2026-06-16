@@ -3876,11 +3876,6 @@ public class StmtExecutor {
 
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
-<<<<<<< HEAD
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
-            coord.setTopProfileSupplier(this::buildTopLevelProfile);
-            coord.setExecPlan(plan);
-=======
             // Register with the ConnectContext and SQL so that these coordinator-backed internal queries
             // (e.g. statistics dict/sample/table-stats collection, internal SimpleExecutor and user-variable
             // sub-queries) are visible in "SHOW PROC '/current_queries'" and '/global_current_queries',
@@ -3888,7 +3883,8 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                     new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
->>>>>>> 4ccf09ccf92... [Enhancement] Surface internal queries in current_queries with a type and make them killable (#74488)
+            coord.setTopProfileSupplier(this::buildTopLevelProfile);
+            coord.setExecPlan(plan);
             coord.exec();
             RowBatch batch;
             do {
