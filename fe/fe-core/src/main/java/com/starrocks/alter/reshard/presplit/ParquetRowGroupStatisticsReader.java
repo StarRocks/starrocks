@@ -226,15 +226,9 @@ public final class ParquetRowGroupStatisticsReader {
                 if (logicalAnnotation instanceof StringLogicalTypeAnnotation) {
                     yield starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR;
                 }
-                // BINARY-backed DECIMAL is big-endian two's-complement; accept only with an exact
-                // precision/scale match AND a footer-declared TypeDefinedOrder (signed min/max).
-                yield logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
-                        && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
-                        && signedByteArrayOrder;
+                yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, signedByteArrayOrder);
             }
-            case FIXED_LEN_BYTE_ARRAY -> logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
-                    && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
-                    && signedByteArrayOrder;
+            case FIXED_LEN_BYTE_ARRAY -> isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, signedByteArrayOrder);
             default -> false;
         };
         if (!compatible) {
@@ -391,6 +385,18 @@ public final class ParquetRowGroupStatisticsReader {
         ScalarType scalarType = (ScalarType) starRocksType;
         return annotation.getPrecision() == scalarType.getScalarPrecision()
                 && annotation.getScale() == scalarType.getScalarScale();
+    }
+
+    /**
+     * A byte-array (FIXED_LEN_BYTE_ARRAY/BINARY) DECIMAL is accepted only with an exact
+     * precision/scale match AND a footer-declared TypeDefinedOrder — then its big-endian
+     * two's-complement footer min/max are signed-ordered (see {@link #declaresSignedByteArrayOrder}).
+     */
+    private static boolean isSignedByteArrayDecimal(
+            LogicalTypeAnnotation logicalAnnotation, Column sortKeyColumn, boolean signedByteArrayOrder) {
+        return logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
+                && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
+                && signedByteArrayOrder;
     }
 
     /**
