@@ -14,10 +14,14 @@
 
 #pragma once
 
+#include <strings.h>
+
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "gen_cpp/InternalService_types.h"
+#include "storage/primitive/value_cast.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 

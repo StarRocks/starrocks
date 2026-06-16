@@ -30,7 +30,6 @@
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/runtime_range_pruner.hpp"
 
 namespace tparquet {
 class ColumnMetaData;
@@ -44,6 +43,7 @@ struct HdfsScannerContext;
 class BlockCache;
 class StoragePageCache;
 class SlotDescriptor;
+class RuntimeScanRangePruner;
 
 namespace parquet {
 struct ParquetField;
