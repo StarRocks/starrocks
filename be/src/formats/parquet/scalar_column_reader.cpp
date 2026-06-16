@@ -639,8 +639,7 @@ Status ScalarColumnReader::finalize_lazy_state(ColumnPtr& col) {
                 RETURN_IF_ERROR(_dict_decode(_tmp_intermediate_column, col));
                 {
                     SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-                    RETURN_IF_ERROR(
-                            _converter->convert(_tmp_intermediate_column.get(), saved->as_mutable_raw_ptr()));
+                    RETURN_IF_ERROR(_converter->convert(_tmp_intermediate_column.get(), saved->as_mutable_raw_ptr()));
                 }
                 _tmp_intermediate_column->as_mutable_raw_ptr()->reset_column();
             } else {

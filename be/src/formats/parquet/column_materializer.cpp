@@ -197,8 +197,7 @@ StatusOr<size_t> ColumnMaterializer::read_active_range_round_by_round(const Rang
         }
 
         if (_post_read_conjuncts_by_slot.find(slot_id) != _post_read_conjuncts_by_slot.end()) {
-            RETURN_IF_ERROR(
-                    (*_column_readers)[slot_id]->finalize_lazy_state((*chunk)->get_column_by_slot_id(slot_id)));
+            RETURN_IF_ERROR((*_column_readers)[slot_id]->finalize_lazy_state((*chunk)->get_column_by_slot_id(slot_id)));
             SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
             std::vector<ExprContext*> ctxs = _post_read_conjuncts_by_slot.at(slot_id);
             ASSIGN_OR_RETURN(hit_count, eval_slot_conjuncts(ctxs, slot_id, chunk, filter));

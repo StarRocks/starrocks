@@ -273,8 +273,8 @@ public:
 
     void set_need_parse_levels(bool) override {}
     void get_levels(level_t**, level_t**, size_t*) override {}
-    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*,
-                                 ColumnIOTypeFlags, bool) override {}
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
     void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
 
     ColumnPtr _temp_col = nullptr;
@@ -4670,8 +4670,7 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
 
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
 
-    EXPECT_TRUE(mock_lazy_ptr->_finalize_called)
-            << "materialize_slot must call finalize_lazy_state before caching";
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called) << "materialize_slot must call finalize_lazy_state before caching";
 
     const auto* entry = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
     ASSERT_NE(nullptr, entry);
@@ -4684,8 +4683,7 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
     auto provided = result.value();
     ASSERT_NE(nullptr, provided);
     EXPECT_EQ(1u, provided->size());
-    EXPECT_NE(mock_lazy_ptr->_temp_col.get(), provided.get())
-            << "provide() must return logical column, not raw temp";
+    EXPECT_NE(mock_lazy_ptr->_temp_col.get(), provided.get()) << "provide() must return logical column, not raw temp";
 }
 
 // Contract test / mock reproducer: MockTempColumnReader's read_range() is
@@ -4707,14 +4705,12 @@ TEST_F(GroupReaderTest, TempColumnAccretesStaleWithoutReset) {
 
     ColumnPtr col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
     ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col2));
-    EXPECT_EQ(2u, col2->size())
-            << "Without reset, second read accretes stale data: 1 stale + 1 new = 2 rows";
+    EXPECT_EQ(2u, col2->size()) << "Without reset, second read accretes stale data: 1 stale + 1 new = 2 rows";
 
     // finalize_lazy_state produces n logical rows where n = temp size.
     // With stale accretion: temp has 2 rows, so finalize yields 2 rows.
     ASSERT_OK(reader.finalize_lazy_state(col2));
-    EXPECT_EQ(2u, col2->size())
-            << "Stale accretion propagates: 2 logical rows from 2 temp rows";
+    EXPECT_EQ(2u, col2->size()) << "Stale accretion propagates: 2 logical rows from 2 temp rows";
     EXPECT_TRUE(reader._finalize_called);
     EXPECT_EQ(0u, reader._temp_col->size()) << "Temp column is empty after finalize";
 }
@@ -4788,8 +4784,7 @@ TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
 
     auto* entry2 = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
     ASSERT_NE(nullptr, entry2);
-    EXPECT_EQ(1u, entry2->values->size())
-            << "After finalize, temp is empty → no stale accretion across iterations";
+    EXPECT_EQ(1u, entry2->values->size()) << "After finalize, temp is empty → no stale accretion across iterations";
     EXPECT_TRUE(mock_lazy_ptr->_finalize_called);
 }
 
