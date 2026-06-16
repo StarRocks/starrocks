@@ -20,7 +20,10 @@
 #include <gtest/gtest.h>
 
 #include <cstdlib>
+#include <string>
+#include <vector>
 
+#include "base/coding.h"
 #include "base/hash/hash_util.hpp"
 #include "base/string/slice.h"
 
@@ -234,6 +237,159 @@ TEST_F(TestHll, Normal) {
         new_sparse_hll.merge(full_hll);
         ASSERT_TRUE(new_sparse_hll.estimate_cardinality() > full_hll.estimate_cardinality());
     }
+}
+
+static std::string serialize_to_string(const HyperLogLog& h) {
+    std::string buf;
+    buf.resize(h.max_serialized_size());
+    size_t n = h.serialize(reinterpret_cast<uint8_t*>(buf.data()));
+    buf.resize(n);
+    return buf;
+}
+
+// merge(const Slice&) must yield byte-identical serialized state and the same
+// cardinality as the temp-object path it replaces: merge(HyperLogLog(slice)).
+static void expect_merge_slice_matches(const HyperLogLog& dst_proto, const std::string& src_bytes) {
+    Slice slice(src_bytes);
+    HyperLogLog via_slice(dst_proto);
+    HyperLogLog via_temp(dst_proto);
+    via_slice.merge(slice);
+    via_temp.merge(HyperLogLog(slice));
+    EXPECT_EQ(serialize_to_string(via_slice), serialize_to_string(via_temp));
+    EXPECT_EQ(via_slice.estimate_cardinality(), via_temp.estimate_cardinality());
+}
+
+TEST_F(TestHll, MergeSlice) {
+    // Build serialized sources of each on-wire format.
+    HyperLogLog empty_src;
+    HyperLogLog explicit_src; // EXPLICIT: <= 160 hashes
+    for (int i = 0; i < 50; ++i) {
+        explicit_src.update(hash(i));
+    }
+    HyperLogLog low_card; // serializes to SPARSE (few non-zero registers)
+    for (int i = 0; i < 1024; ++i) {
+        low_card.update(hash(i + 1024));
+    }
+    HyperLogLog full_src; // FULL
+    for (int i = 0; i < 64 * 1024; ++i) {
+        full_src.update(hash(64 * 1024 + i));
+    }
+
+    const std::string empty_bytes = serialize_to_string(empty_src);
+    const std::string explicit_bytes = serialize_to_string(explicit_src);
+    const std::string sparse_bytes = serialize_to_string(low_card);
+    const std::string full_bytes = serialize_to_string(full_src);
+    ASSERT_EQ(HLL_DATA_SPARSE, static_cast<uint8_t>(sparse_bytes[0]));
+    ASSERT_EQ(HLL_DATA_FULL, static_cast<uint8_t>(full_bytes[0]));
+
+    // Destination prototypes covering every in-memory _type, including a genuine
+    // SPARSE state (only reachable by deserializing a sparse slice).
+    HyperLogLog dst_empty;
+    HyperLogLog dst_explicit;
+    for (int i = 0; i < 50; ++i) {
+        dst_explicit.update(hash(i + 500));
+    }
+    HyperLogLog dst_sparse{Slice(sparse_bytes)};
+    HyperLogLog dst_full;
+    for (int i = 0; i < 64 * 1024; ++i) {
+        dst_full.update(hash(i + 200000));
+    }
+
+    const std::vector<const HyperLogLog*> dsts = {&dst_empty, &dst_explicit, &dst_sparse, &dst_full};
+    const std::vector<const std::string*> srcs = {&empty_bytes, &explicit_bytes, &sparse_bytes, &full_bytes};
+    for (const auto* dst : dsts) {
+        for (const auto* src : srcs) {
+            expect_merge_slice_matches(*dst, *src);
+        }
+    }
+
+    // EXPLICIT + EXPLICIT crossing 160 unique => promotion to FULL.
+    {
+        HyperLogLog big_explicit; // 120 hashes, still EXPLICIT on the wire
+        for (int i = 0; i < 120; ++i) {
+            big_explicit.update(hash(i + 900000));
+        }
+        expect_merge_slice_matches(dst_explicit, serialize_to_string(big_explicit));
+    }
+
+    // EXPLICIT slice containing a hash == 0 must be preserved, not dropped.
+    {
+        HyperLogLog with_zero;
+        with_zero.update(0);
+        with_zero.update(hash(7));
+        const std::string with_zero_bytes = serialize_to_string(with_zero);
+        for (const auto* dst : dsts) {
+            expect_merge_slice_matches(*dst, with_zero_bytes);
+        }
+    }
+
+    // Non-canonical SPARSE slice with a duplicate index: deserialize is
+    // last-write-wins, so merge(slice) must match it (it delegates, not max).
+    {
+        uint8_t buf[1 + 4 + 3 * 2];
+        uint8_t* p = buf;
+        *p++ = HLL_DATA_SPARSE;
+        encode_fixed32_le(p, 2);
+        p += 4;
+        encode_fixed16_le(p, 100);
+        p += 2;
+        *p++ = 10;
+        encode_fixed16_le(p, 100);
+        p += 2;
+        *p++ = 5; // last write (5) wins over 10 in deserialize
+        std::string dup_bytes(reinterpret_cast<char*>(buf), sizeof(buf));
+        ASSERT_TRUE(HyperLogLog::is_valid(Slice(dup_bytes)));
+        for (const auto* dst : dsts) {
+            expect_merge_slice_matches(*dst, dup_bytes);
+        }
+    }
+
+    // Invalid / truncated / null slices must be a no-op (no crash, no change).
+    {
+        HyperLogLog ref(full_src);
+        const std::string before = serialize_to_string(ref);
+
+        HyperLogLog t1(full_src);
+        t1.merge(Slice((char*)nullptr, 0));
+        EXPECT_EQ(before, serialize_to_string(t1));
+
+        // Null data pointer with a non-zero size must not be dereferenced by is_valid().
+        HyperLogLog t1b(full_src);
+        t1b.merge(Slice((char*)nullptr, 5));
+        EXPECT_EQ(before, serialize_to_string(t1b));
+
+        HyperLogLog t2(full_src);
+        t2.merge(Slice(full_bytes.data(), full_bytes.size() - 1)); // truncated FULL
+        EXPECT_EQ(before, serialize_to_string(t2));
+
+        uint8_t bad_type = 60;
+        HyperLogLog t3(full_src);
+        t3.merge(Slice(reinterpret_cast<char*>(&bad_type), 1)); // unknown type
+        EXPECT_EQ(before, serialize_to_string(t3));
+    }
+}
+
+// Locks the byte layout that HllNdvAggregateFunction::convert_to_serialize_format
+// relies on when it emits a single hashed value directly (Change 2): a one-element
+// EXPLICIT record [type][count=1][hash:8], or an EMPTY record when the hash is 0.
+TEST_F(TestHll, SingleValueExplicitFormat) {
+    const uint64_t value = hash(424242);
+    ASSERT_NE(0, value);
+
+    HyperLogLog one;
+    one.update(value);
+    const std::string from_hll = serialize_to_string(one);
+
+    uint8_t expected[2 + sizeof(uint64_t)];
+    expected[0] = HLL_DATA_EXPLICIT;
+    expected[1] = 1;
+    encode_fixed64_le(expected + 2, value);
+    EXPECT_EQ(std::string(reinterpret_cast<char*>(expected), sizeof(expected)), from_hll);
+
+    HyperLogLog zero; // hash == 0 contributes nothing -> EMPTY record
+    const std::string from_empty = serialize_to_string(zero);
+    ASSERT_EQ(1u, from_empty.size());
+    EXPECT_EQ(HLL_DATA_EMPTY, static_cast<uint8_t>(from_empty[0]));
 }
 
 TEST_F(TestHll, InvalidPtr) {
