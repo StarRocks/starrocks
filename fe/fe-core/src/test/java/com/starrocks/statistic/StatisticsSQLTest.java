@@ -379,6 +379,18 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
+    public void testQueryTableStatisticsFiltersZeroRowCount() {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, Lists.newArrayList());
+        assertContains(sql, "WHERE table_id = 2 AND row_count > 0");
+
+        sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, Lists.newArrayList(10L, 20L));
+        assertContains(sql, "WHERE table_id = 2 and partition_id in (10, 20) AND row_count > 0");
+
+        sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, 10L);
+        assertContains(sql, "WHERE table_id = 2 and partition_id = 10 AND row_count > 0");
+    }
+
+    @Test
     public void testCacheExternalQueryColumnStatics() {
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(Type.INT, Type.INT));
