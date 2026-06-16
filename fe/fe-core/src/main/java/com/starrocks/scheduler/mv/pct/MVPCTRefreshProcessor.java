@@ -50,6 +50,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PCellSetMapping;
@@ -224,6 +225,13 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvPctRefreshPartitioner);
         MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, predicateBuilder);
         try {
+            // An IVM MV's full rebuild must INSERT the rewritten query (with the hidden
+            // __ROW_ID__/__AGG_STATE columns it adds), re-derived here inside the lock -- not the
+            // user query that getTaskDefinition() returns.
+            if (mv.getCurrentRefreshMode().isIncremental()) {
+                insertStmt = generateInsertAst(ctx, mvToRefreshedPartitions,
+                        mv.getTaskDefinition(IvmRefreshDefinition.derive(ctx, mv)));
+            }
             // Analyze and prepare a partition & Rebuild insert statement by
             // considering to-refresh partitions of ref tables/ mv
             try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {

@@ -889,6 +889,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return formatInsertSql("insert overwrite");
     }
 
+    public String getTaskDefinition(String selectSql) {
+        return formatInsertSql("insert overwrite", selectSql);
+    }
+
     public String getIVMTaskDefinition(String selectSql) {
         return formatInsertSql("INSERT INTO", selectSql);
     }
