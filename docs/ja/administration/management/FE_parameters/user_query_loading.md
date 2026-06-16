@@ -805,6 +805,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：統計情報のキャッシュが更新される間隔。
 - 導入時期：-
 
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：統計情報ジャーナルのリプレイ時に、Follower（および再起動リカバリ）が Connector（外部テーブル）統計情報キャッシュをどのようにリフレッシュするかを制御します。`true` の場合、ジャーナルに永続化されたテーブル UUID でキャッシュを無効化し、次回クエリ時に遅延ロードします。これにより、リプレイ中の外部テーブルメタデータ解決（`MetadataMgr.getTable`）を回避できます。この解決は Hive Metastore やオブジェクトストレージが遅い場合にジャーナルリプレイスレッドをブロックする可能性があります。`false`（デフォルト）の場合は従来の積極的なリフレッシュを使用し、既存の動作を維持します。この UUID が永続化される前に書き込まれた統計情報ジャーナルは、この設定に関係なく常に積極的なリフレッシュにフォールバックします。
+
 ### `statistics_large_string_column_merge_threshold`
 
 - デフォルト：0

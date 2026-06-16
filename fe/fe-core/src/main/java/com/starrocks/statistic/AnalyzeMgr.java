@@ -498,6 +498,80 @@ public class AnalyzeMgr implements Writable {
         GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
     }
 
+    /**
+     * Replay handler for OP_ADD_EXTERNAL_BASIC_STATS_META on followers.
+     * <p>
+     * Prefer invalidating the connector cache by the table UUID persisted in the journal, so that replay
+     * never resolves external table metadata (which may block on HMS/object storage and stall the replayer).
+     * The fresh statistics are reloaded lazily on the next query. Fall back to the legacy metadata-based
+     * refresh only for journals written before the UUID was persisted.
+     */
+    public void replayRefreshExternalBasicStatsCache(ExternalBasicStatsMeta basicStatsMeta) {
+        if (invalidateConnectorColumnStatsByUUID(basicStatsMeta.getTableUUID(), basicStatsMeta.getColumns())) {
+            return;
+        }
+        refreshConnectorTableBasicStatisticsCache(basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                basicStatsMeta.getTableName(), basicStatsMeta.getColumns(), true);
+    }
+
+    /**
+     * Replay handler for OP_REMOVE_EXTERNAL_BASIC_STATS_META on followers.
+     * See {@link #replayRefreshExternalBasicStatsCache} for the UUID-first / legacy-fallback rationale.
+     */
+    public void replayExpireExternalBasicStatsCache(ExternalBasicStatsMeta basicStatsMeta) {
+        if (invalidateConnectorColumnStatsByUUID(basicStatsMeta.getTableUUID(), basicStatsMeta.getColumns())) {
+            return;
+        }
+        expireConnectorTableAndColumnStatistics(basicStatsMeta.getCatalogName(), basicStatsMeta.getDbName(),
+                basicStatsMeta.getTableName(), basicStatsMeta.getColumns());
+    }
+
+    /**
+     * Replay handler for OP_ADD_EXTERNAL_HISTOGRAM_STATS_META on followers.
+     * See {@link #replayRefreshExternalBasicStatsCache} for the UUID-first / legacy-fallback rationale.
+     */
+    public void replayRefreshExternalHistogramStatsCache(ExternalHistogramStatsMeta histogramStatsMeta) {
+        List<String> columns = Lists.newArrayList(histogramStatsMeta.getColumn());
+        if (invalidateConnectorHistogramStatsByUUID(histogramStatsMeta.getTableUUID(), columns)) {
+            return;
+        }
+        refreshConnectorTableHistogramStatisticsCache(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), columns, true);
+    }
+
+    /**
+     * Replay handler for OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META on followers.
+     * See {@link #replayRefreshExternalBasicStatsCache} for the UUID-first / legacy-fallback rationale.
+     */
+    public void replayExpireExternalHistogramStatsCache(ExternalHistogramStatsMeta histogramStatsMeta) {
+        List<String> columns = Lists.newArrayList(histogramStatsMeta.getColumn());
+        if (invalidateConnectorHistogramStatsByUUID(histogramStatsMeta.getTableUUID(), columns)) {
+            return;
+        }
+        expireConnectorTableHistogramStatisticsCache(histogramStatsMeta.getCatalogName(),
+                histogramStatsMeta.getDbName(), histogramStatsMeta.getTableName(), columns);
+    }
+
+    private boolean invalidateConnectorColumnStatsByUUID(String tableUUID, List<String> columns) {
+        // Feature off (default) or legacy journal without a UUID: fall back to the legacy eager refresh.
+        if (!Config.enable_external_stats_lazy_refresh_on_replay || tableUUID == null || tableUUID.isEmpty()) {
+            return false;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .invalidateConnectorTableColumnStatistics(tableUUID, columns);
+        return true;
+    }
+
+    private boolean invalidateConnectorHistogramStatsByUUID(String tableUUID, List<String> columns) {
+        // Feature off (default) or legacy journal without a UUID: fall back to the legacy eager refresh.
+        if (!Config.enable_external_stats_lazy_refresh_on_replay || tableUUID == null || tableUUID.isEmpty()) {
+            return false;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .invalidateConnectorHistogramStatistics(tableUUID, columns);
+        return true;
+    }
+
     public void clearStatisticFromDroppedTable() {
         clearStatisticFromNativeDroppedTable();
         clearStatisticFromExternalDroppedTable();
