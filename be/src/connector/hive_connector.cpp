@@ -226,6 +226,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
         _scanner_ctx.options.enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
     }
+    _scanner_ctx.options.topn_reorder_slot_id = _provider->topn_reorder_slot_id();
+    _scanner_ctx.options.topn_reorder_desc = _provider->topn_reorder_desc();
+    _scanner_ctx.options.topn_reorder_nulls_first = _provider->topn_reorder_nulls_first();
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);

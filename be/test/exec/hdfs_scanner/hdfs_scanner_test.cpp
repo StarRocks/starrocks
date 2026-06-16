@@ -43,6 +43,10 @@
 #include "runtime/runtime_filter_builder.h"
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
+#include "storage/column_predicate_factory.h"
+#include "storage/primitive/predicate_tree/predicate_tree.h"
+#include "storage/runtime_range_pruner.h"
+#include "storage/types.h"
 
 namespace starrocks {
 
@@ -394,6 +398,263 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     ASSERT_EQ(2, col->size());
     EXPECT_EQ("1969-12-31 23:59:59.999999", col->debug_item(0));
     EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
+}
+
+// decode_min_max_endpoint (TopN scan-range skip): decode the raw Iceberg endpoints into the slot's
+// internal Datum, the same way as the aggregate min/max column build.
+TEST_F(HdfsScannerTest, TestDecodeMinMaxEndpointInt) {
+    TExprMinMaxValue v;
+    v.__set_type(TExprNodeType::INT_LITERAL);
+    v.__set_has_null(false);
+    v.__set_all_null(false);
+    v.__set_min_int_value(10);
+    v.__set_max_int_value(20);
+    Datum mn;
+    Datum mx;
+    ASSERT_TRUE(HdfsScannerContext::decode_min_max_endpoint(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), v,
+                                                            &mn, &mx));
+    EXPECT_EQ(10, mn.get_int32());
+    EXPECT_EQ(20, mx.get_int32());
+}
+
+TEST_F(HdfsScannerTest, TestDecodeMinMaxEndpointDate) {
+    TExprMinMaxValue v;
+    v.__set_type(TExprNodeType::INT_LITERAL);
+    v.__set_has_null(false);
+    v.__set_all_null(false);
+    v.__set_min_int_value(0); // days since unix epoch
+    v.__set_max_int_value(1);
+    Datum mn;
+    Datum mx;
+    ASSERT_TRUE(HdfsScannerContext::decode_min_max_endpoint(TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE),
+                                                            v, &mn, &mx));
+    EXPECT_EQ("1970-01-01", mn.get_date().to_string());
+    EXPECT_EQ("1970-01-02", mx.get_date().to_string());
+}
+
+TEST_F(HdfsScannerTest, TestDecodeMinMaxEndpointDatetime) {
+    TExprMinMaxValue v;
+    v.__set_type(TExprNodeType::INT_LITERAL);
+    v.__set_has_null(false);
+    v.__set_all_null(false);
+    v.__set_min_int_value(-1); // micros; negative handled like create_min_max_value_column
+    v.__set_max_int_value(0);
+    Datum mn;
+    Datum mx;
+    ASSERT_TRUE(HdfsScannerContext::decode_min_max_endpoint(
+            TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME), v, &mn, &mx));
+    EXPECT_EQ("1969-12-31 23:59:59.999999", mn.get_timestamp().to_string());
+    EXPECT_EQ("1970-01-01 00:00:00", mx.get_timestamp().to_string());
+}
+
+TEST_F(HdfsScannerTest, TestDecodeMinMaxEndpointUnsupportedTypes) {
+    TExprMinMaxValue v;
+    v.__set_type(TExprNodeType::INT_LITERAL);
+    v.__set_has_null(false);
+    v.__set_all_null(false);
+    v.__set_min_float_value(1.0);
+    v.__set_max_float_value(2.0);
+    Datum mn;
+    Datum mx;
+    // float/double (NaN ordering) and time are not eligible for the skip.
+    EXPECT_FALSE(HdfsScannerContext::decode_min_max_endpoint(
+            TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE), v, &mn, &mx));
+    EXPECT_FALSE(HdfsScannerContext::decode_min_max_endpoint(TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME),
+                                                             v, &mn, &mx));
+}
+
+TEST_F(HdfsScannerTest, TestDecodeMinMaxEndpointNullLiteral) {
+    TExprMinMaxValue v;
+    v.__set_type(TExprNodeType::NULL_LITERAL);
+    v.__set_has_null(true);
+    v.__set_all_null(true);
+    Datum mn;
+    Datum mx;
+    EXPECT_FALSE(HdfsScannerContext::decode_min_max_endpoint(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT),
+                                                             v, &mn, &mx));
+}
+
+// should_skip_scan_range_by_topn_min_max: the pre-footer file skip must never drop a file that
+// holds matching rows. The regression case is an OR predicate on the sort column, whose arms the
+// predicate tree's all-column map flattens out of the OR node; testing them conjunctively would
+// skip a file that satisfies one arm. The skip therefore reads only the root-level (immediate)
+// predicates, which form a true AND.
+static TExprMinMaxValue topn_int_min_max(int64_t mn, int64_t mx, bool has_null, bool all_null) {
+    TExprMinMaxValue v;
+    v.__set_type(TExprNodeType::INT_LITERAL);
+    v.__set_has_null(has_null);
+    v.__set_all_null(all_null);
+    v.__set_min_int_value(mn);
+    v.__set_max_int_value(mx);
+    return v;
+}
+
+// Single bigint sort key; _create_tuple_desc numbers slots from 0, so the slot id is 0.
+TEST_F(HdfsScannerTest, TopnSkipKeepsFileMatchingOneOrArm) {
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+
+    THdfsScanRange range;
+    range.min_max_values[0] = topn_int_min_max(2000, 3000, false, false);
+    range.__isset.min_max_values = true;
+
+    // WHERE id < 5 OR id > 1000 -> the two arms live under an OR node, not the root AND.
+    auto type = get_type_info(LogicalType::TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> lt5(new_column_lt_predicate(type, 0, "5"));
+    std::unique_ptr<ColumnPredicate> gt1000(new_column_gt_predicate(type, 0, "1000"));
+    PredicateOrNode or_node;
+    or_node.add_child(PredicateColumnNode(lt5.get()));
+    or_node.add_child(PredicateColumnNode(gt1000.get()));
+    PredicateAndNode root;
+    root.add_child(std::move(or_node));
+
+    HdfsScannerContext ctx;
+    ctx.tuple_desc = tuple_desc;
+    ctx.scan_range = &range;
+    ctx.options.topn_reorder_slot_id = 0;
+    ctx.predicates.predicate_tree = PredicateTree::create(std::move(root));
+    ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>();
+
+    auto res = ctx.should_skip_scan_range_by_topn_min_max();
+    ASSERT_TRUE(res.ok());
+    // [2000,3000] satisfies the id>1000 arm, so the file holds matching rows and must be kept.
+    EXPECT_FALSE(res.value());
+}
+
+TEST_F(HdfsScannerTest, TopnSkipsFileExcludedByRootPredicate) {
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+
+    THdfsScanRange range;
+    range.min_max_values[0] = topn_int_min_max(2000, 3000, false, false);
+    range.__isset.min_max_values = true;
+
+    // WHERE id > 5000 at the root AND level: [2000,3000] cannot satisfy it.
+    auto type = get_type_info(LogicalType::TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> gt5000(new_column_gt_predicate(type, 0, "5000"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(gt5000.get()));
+
+    HdfsScannerContext ctx;
+    ctx.tuple_desc = tuple_desc;
+    ctx.scan_range = &range;
+    ctx.options.topn_reorder_slot_id = 0;
+    ctx.predicates.predicate_tree = PredicateTree::create(std::move(root));
+    ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>();
+
+    auto res = ctx.should_skip_scan_range_by_topn_min_max();
+    ASSERT_TRUE(res.ok());
+    // No row in [2000,3000] satisfies id>5000 -> skipping matches feature-off.
+    EXPECT_TRUE(res.value());
+}
+
+TEST_F(HdfsScannerTest, TopnKeepsFileOverlappingRootPredicate) {
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+
+    THdfsScanRange range;
+    range.min_max_values[0] = topn_int_min_max(2000, 3000, false, false);
+    range.__isset.min_max_values = true;
+
+    auto type = get_type_info(LogicalType::TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> gt1000(new_column_gt_predicate(type, 0, "1000"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(gt1000.get()));
+
+    HdfsScannerContext ctx;
+    ctx.tuple_desc = tuple_desc;
+    ctx.scan_range = &range;
+    ctx.options.topn_reorder_slot_id = 0;
+    ctx.predicates.predicate_tree = PredicateTree::create(std::move(root));
+    ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>();
+
+    auto res = ctx.should_skip_scan_range_by_topn_min_max();
+    ASSERT_TRUE(res.ok());
+    EXPECT_FALSE(res.value());
+}
+
+TEST_F(HdfsScannerTest, TopnSkipKeepsAllNullFile) {
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+
+    THdfsScanRange range;
+    range.min_max_values[0] = topn_int_min_max(0, 0, true, true);
+    range.__isset.min_max_values = true;
+
+    // An excluding root predicate would skip a non-null file, but all-null short-circuits first.
+    auto type = get_type_info(LogicalType::TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> gt5000(new_column_gt_predicate(type, 0, "5000"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(gt5000.get()));
+
+    HdfsScannerContext ctx;
+    ctx.tuple_desc = tuple_desc;
+    ctx.scan_range = &range;
+    ctx.options.topn_reorder_slot_id = 0;
+    ctx.predicates.predicate_tree = PredicateTree::create(std::move(root));
+    ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>();
+
+    auto res = ctx.should_skip_scan_range_by_topn_min_max();
+    ASSERT_TRUE(res.ok());
+    EXPECT_FALSE(res.value());
+}
+
+TEST_F(HdfsScannerTest, TopnSkipKeepsNullFileWhenNullsFirst) {
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+
+    THdfsScanRange range;
+    range.min_max_values[0] = topn_int_min_max(2000, 3000, true, false);
+    range.__isset.min_max_values = true;
+
+    auto type = get_type_info(LogicalType::TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> gt5000(new_column_gt_predicate(type, 0, "5000"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(gt5000.get()));
+
+    HdfsScannerContext ctx;
+    ctx.tuple_desc = tuple_desc;
+    ctx.scan_range = &range;
+    ctx.options.topn_reorder_slot_id = 0;
+    ctx.options.topn_reorder_nulls_first = true;
+    ctx.predicates.predicate_tree = PredicateTree::create(std::move(root));
+    ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>();
+
+    auto res = ctx.should_skip_scan_range_by_topn_min_max();
+    ASSERT_TRUE(res.ok());
+    // With NULLS FIRST a null-bearing file may hold top-k rows -> never skip.
+    EXPECT_FALSE(res.value());
+}
+
+TEST_F(HdfsScannerTest, TopnSkipDisabledByGuards) {
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+
+    THdfsScanRange range;
+    range.min_max_values[0] = topn_int_min_max(9000, 9000, false, false);
+    range.__isset.min_max_values = true;
+
+    // Reorder/skip off for this scan (slot id < 0): never skip.
+    {
+        HdfsScannerContext ctx;
+        ctx.tuple_desc = tuple_desc;
+        ctx.scan_range = &range;
+        ctx.options.topn_reorder_slot_id = -1;
+        ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>();
+        auto res = ctx.should_skip_scan_range_by_topn_min_max();
+        ASSERT_TRUE(res.ok());
+        EXPECT_FALSE(res.value());
+    }
+    // No runtime-filter pruner built: nothing to test the file against.
+    {
+        HdfsScannerContext ctx;
+        ctx.tuple_desc = tuple_desc;
+        ctx.scan_range = &range;
+        ctx.options.topn_reorder_slot_id = 0;
+        auto res = ctx.should_skip_scan_range_by_topn_min_max();
+        ASSERT_TRUE(res.ok());
+        EXPECT_FALSE(res.value());
+    }
 }
 
 // ========================= ORC SCANNER ============================
