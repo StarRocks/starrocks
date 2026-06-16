@@ -18,9 +18,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
@@ -429,6 +432,136 @@ class ParquetRowGroupStatisticsReaderTest {
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
                         new Column("event_ts", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void readsDecimalStatisticsForInt32Decimal() throws Exception {
+        // INT32-backed DECIMAL(9,2): precision 9 fits int32. Unscaled (rowIndex+1)*100 → 1.00..3.00.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 d (DECIMAL(9,2)); }",
+                /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("d", (rowIndex + 1) * 100));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("3.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsDecimalStatisticsForInt64Decimal() throws Exception {
+        // INT64-backed DECIMAL(18,2): unscaled (rowIndex+1)*100 → 1.00, 2.00, ... 5.00.
+        // Signed INT64 order == decimal order, so footer min/max are safe to use.
+        Path parquetPath = writeParquet(
+                "message schema { required int64 d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("d", (rowIndex + 1) * 100L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("5.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsNegativeDecimalPreservesSignedOrder() throws Exception {
+        // INT64-backed DECIMAL(18,2) spanning negative→positive: -2.00, -1.00, 0.00, 1.00.
+        // parquet-mr orders INT64 stats by SIGNED comparison, so min is the most negative.
+        Path parquetPath = writeParquet(
+                "message schema { required int64 d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 4,
+                (group, rowIndex) -> group.append("d", (rowIndex - 2) * 100L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertEquals("-2.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("1.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void decimalScaleMismatchFallsBackToDataTier() throws Exception {
+        // Source DECIMAL(18,2) into a StarRocks DECIMAL64(18,4): scales differ → reject.
+        Path parquetPath = writeParquet(
+                "message schema { required int64 d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", (rowIndex + 1) * 100L));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))));
+    }
+
+    @Test
+    void decimalPrecisionMismatchFallsBackToDataTier() throws Exception {
+        // Source DECIMAL(18,2) into a StarRocks DECIMAL64(10,2): precisions differ → reject.
+        Path parquetPath = writeParquet(
+                "message schema { required int64 d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", (rowIndex + 1) * 100L));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2))));
+    }
+
+    @Test
+    void decimalIntoNonDecimalSortKeyFallsBackToDataTier() throws Exception {
+        // Source DECIMAL into a BIGINT sort key → reject (publishing unscaled ints would be wrong).
+        Path parquetPath = writeParquet(
+                "message schema { required int64 d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", (rowIndex + 1) * 100L));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("d", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void fixedLenByteArrayDecimalFallsBackToDataTier() throws Exception {
+        // Even with an EXACT precision/scale match, a FIXED_LEN_BYTE_ARRAY-backed decimal is
+        // rejected: parquet-mr footer min/max for byte-array decimals can use unsigned byte
+        // ordering (wrong for negatives) unless a typed sort order was set — which we do not
+        // inspect. Conservative gate → data tier. (The gate rejects at schema inspection before
+        // any row group is read, so all-zero bytes are fine.)
+        Path parquetPath = writeParquet(
+                "message schema { required fixed_len_byte_array(8) d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("d", Binary.fromConstantByteArray(new byte[8])));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2))));
+    }
+
+    @Test
+    void binaryBackedDecimalFallsBackToDataTier() throws Exception {
+        // BINARY-backed decimal: same unsigned-byte-order trap as FIXED_LEN → reject (the BINARY
+        // arm only admits the UTF8 string annotation). DECIMAL128(20,2) exactly matches precision/scale.
+        Path parquetPath = writeParquet(
+                "message schema { required binary d (DECIMAL(20,2)); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("d", Binary.fromConstantByteArray(new byte[] {0})));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2))));
     }
 
     private Path writeParquet(
