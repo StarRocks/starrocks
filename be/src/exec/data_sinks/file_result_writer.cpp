@@ -44,10 +44,10 @@
 #include "exec/parquet_builder.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
+#include "formats/io/formatted_output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
-#include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

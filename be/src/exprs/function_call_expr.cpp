@@ -30,7 +30,6 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/user_function_cache.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

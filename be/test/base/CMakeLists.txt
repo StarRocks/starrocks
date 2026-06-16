@@ -36,6 +36,7 @@ set(BASE_TEST_FILES
     concurrency/concurrent_limiter_test.cpp
     concurrency/limit_setter_test.cpp
     concurrency/countdown_latch_test.cpp
+    concurrency/multi_level_concurrent_queue_test.cpp
     concurrency/once_test.cpp
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
+description: "FE configuration parameters for statistics collection and storage settings."
 ---
 
 # FE Configuration - Statistics and Storage
@@ -87,6 +88,15 @@ This topic introduces the following types of FE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
+- Introduced in: -
+
+### `enable_concurrent_add_partition_during_alter`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When `true`, partition creation (manual `ALTER TABLE ... ADD PARTITION`, automatic creation during loading, and the dynamic partition scheduler) is allowed to proceed concurrently with metadata-only alter operations that are provably safe — currently the shared-data ADD/DROP INDEX fast-path jobs and the transient `UPDATING_META` state of fast schema evolution — instead of rejecting the DDL or cancelling the alter job. Set to `false` to restore the legacy exclusive behavior. This setting only relaxes partition creation; all other alter jobs and all non-`ADD PARTITION` DDL keep the legacy state checks.
 - Introduced in: -
 
 ### `capacity_used_percent_high_water`
@@ -561,3 +571,85 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_files`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM FILES()` loads. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_broker_load`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for Broker Load. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_pre_submit_timeout_seconds`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Wall-clock budget for the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). On expiry the coordinator skips pre-split and the load proceeds against the original single tablet. Default 300s: the data-tier sampler can take tens of seconds on large datasets / slow object storage (a ~40GB many-file Parquet load sampled in ~78s in testing), and this budget mainly bites large loads — exactly the ones pre-split benefits; small loads sample in well under a second regardless. The load stays `PENDING` for at most this long during sampling, so keep it below the load's own timeout.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_post_submit_wait_seconds`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Maximum time the coordinator will wait for an admitted Sample-Based Tablet Pre-Split reshard job to reach `FINISHED`. Both INSERT-from-FILES and Broker Load synchronously wait and on expiry **proceed without abort** — the load then plans against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); the `tablet_pre_split_post_submit_hard_cap` counter records the timeout. The strict `runPreSplit` wrapper used by tests aborts the calling load via `PreSplitPostSubmitTimeoutException`. For Broker Load the wait runs after the broker pending task resolves file statuses but before `beginTxn` opens `T_load` — it occupies a `pending_load_task_scheduler` thread for at most this many seconds per table, so size `max_broker_load_job_concurrency` accordingly when many concurrent Broker Loads target a pre-splittable layout. **Operator note:** the Broker Load remains `PENDING` in `SHOW LOAD` during the wait and is still subject to its own `timeoutSecond` — set this well below the smallest Broker Load timeout in normal use.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_sample_byte_limit`
+
+- Default: 16777216 (16 MiB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Soft byte cap on the FE-side accumulation buffer of the data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops reading once accumulated values exceed this limit. The first row is always admitted so an oversize row still produces a non-empty sample.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_meta_tier_overlap_threshold`
+
+- Default: 0.3
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum overlap fraction tolerated when Sample-Based Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. Above this threshold the cumulative-row count stops being monotone in sorted-min order so meta tier falls back to data tier (row sampling).
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_max_partitions_per_load`
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
+- Introduced in: v4.1.0
+
+#### Rolling back Sample-Based Tablet Pre-Split
+
+To disable the feature safely before a downgrade or during a production rollback:
+
+1. Set both `enable_tablet_pre_split_for_insert_from_files = false` and `enable_tablet_pre_split_for_broker_load = false`. New loads will skip pre-split immediately.
+2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
+3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
+
+#### Behavioral notes for multi-partition Sample-Based Tablet Pre-Split (P2-a)
+
+The multi-partition path extends Sample-Based Tablet Pre-Split to loads that target many partitions in one statement. Two operational caveats apply:
+
+- **Broker Load triggering-load asymmetry.** The multi-partition pre-split hook fires from `BrokerLoadJob.createLoadingTask` **after** `task.prepare()` has built the load's sink plan against the catalog as it existed at that moment. For Broker Load, pre-created partitions and the post-reshard tablet layout are therefore only visible to **subsequent** loads on the same table — the triggering Broker Load itself runs against the original layout and uses BE runtime auto-create for any partitions it touches. INSERT-from-FILES (where the hook fires before `StatementPlanner.plan()`) is unaffected and benefits in the same load.
+- **Pre-created partition leak on subsequent INSERT failure.** When pre-create succeeds and the triggering INSERT later fails for unrelated reasons (FILES schema mismatch, BE crash, load timeout, etc.), the empty pre-created partitions remain in the catalog. This matches the semantics of `ALTER TABLE ADD PARTITION`, which also leaves a partition behind on subsequent failure. Operators who care can drop the empty partitions manually with `ALTER TABLE ... DROP PARTITION`; in practice empty partitions are cheap and the next retry of the load will reuse them.
+
+#### Production deployment guidance
+
+Set `enable_execute_script_on_frontend = false` in production. Sample-Based Tablet Pre-Split exposes no SQL surface that depends on FE-side script execution; the production code paths sample through the connector + planner directly. Leaving `enable_execute_script_on_frontend = true` widens the FE attack surface without enabling any pre-split functionality, so the safe default for production clusters is to keep it off.

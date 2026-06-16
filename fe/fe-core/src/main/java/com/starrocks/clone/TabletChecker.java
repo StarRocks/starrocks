@@ -61,6 +61,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.YieldableLock;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -338,13 +339,9 @@ public class TabletChecker extends LeaderDaemon {
         LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         List<Long> aliveBeIdsInCluster;
 
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-        boolean locked = true;
-        long lockStartTime = 0L;
+        YieldableLock lock = YieldableLock.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        lockStat.lockAcquireCount++;
         try {
-            lockStat.lockAcquireCount++;
-            lockStartTime = System.currentTimeMillis();
             aliveBeIdsInCluster = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
 
             if (metastore.getTableIncludeRecycleBin(db, table.getId()) == null) {
@@ -398,7 +395,7 @@ public class TabletChecker extends LeaderDaemon {
 
                 TabletCheckerStat partitionTabletCheckerStat =
                         doCheckOnePartition(db, olapTbl, physicalPartition, replicaNum, aliveBeIdsInCluster,
-                                isPartitionUrgent);
+                                isPartitionUrgent, lock);
                 totStat.accumulateStat(partitionTabletCheckerStat);
 
                 if (totStat.isUrgentPartitionHealthy && isPartitionUrgent) {
@@ -409,19 +406,13 @@ public class TabletChecker extends LeaderDaemon {
                     removeFromUrgentTable(new RepairTabletInfo(db.getId(),
                             olapTbl.getId(), Lists.newArrayList(physicalPartition.getId())));
                 }
-                long lockElapsedTime = System.currentTimeMillis() - lockStartTime;
-                if (lockElapsedTime >= maxLockHoldTimeMs) {
-                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-                    locked = false;
+                if (lock.getCurrentHoldTimeMs() >= maxLockHoldTimeMs) {
+                    LOG.debug("lock time for one cycle reached the limit {}, release lock.", maxLockHoldTimeMs);
                     lockStat.proactiveReleaseCount++;
 
-                    LOG.debug("lock time for one cycle reached the limit {}, release lock.", maxLockHoldTimeMs);
-                    lockStat.lockHoldTotalTime += lockElapsedTime;
-
-                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-                    locked = true;
+                    // Step aside so that queued metadata operations can cut in.
+                    lock.refresh();
                     lockStat.lockAcquireCount++;
-                    lockStartTime = System.currentTimeMillis();
                     if (metastore.getTableIncludeRecycleBin(db, table.getId()) == null) {
                         // Get the table by tableId again, ensure it still exists under the lock.
                         return;
@@ -432,10 +423,10 @@ public class TabletChecker extends LeaderDaemon {
                 }
             }
         } finally {
-            if (locked) {
-                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-                lockStat.lockHoldTotalTime += System.currentTimeMillis() - lockStartTime;
-            }
+            lock.close();
+            // The scope tracks actually-held time, so yielded windows (proactive releases
+            // and blocking-add waits) and failed re-acquisitions are not counted.
+            lockStat.lockHoldTotalTime += lock.getHeldTimeMs();
         }
     }
 
@@ -461,7 +452,7 @@ public class TabletChecker extends LeaderDaemon {
 
     private TabletCheckerStat doCheckOnePartition(Database db, OlapTable olapTbl, PhysicalPartition physicalPartition,
                                                   int replicaNum, List<Long> aliveBeIdsInCluster,
-                                                  boolean isPartitionUrgent) {
+                                                  boolean isPartitionUrgent, YieldableLock heldLock) {
         TabletCheckerStat partitionTabletCheckerStat = new TabletCheckerStat();
         Multimap<String, String> locations = olapTbl.getLocation();
         boolean isLabelLocationTable = locations != null;
@@ -549,8 +540,8 @@ public class TabletChecker extends LeaderDaemon {
                     }
 
                     Pair<Boolean, Long> result =
-                            tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletSchedCtx,
-                                    isPartitionUrgent);
+                            tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtx, isPartitionUrgent,
+                                    heldLock);
                     partitionTabletCheckerStat.waitTotalTime += result.second;
                     if (result.first) {
                         partitionTabletCheckerStat.addToSchedulerTabletNum++;
@@ -1211,6 +1202,26 @@ public class TabletChecker extends LeaderDaemon {
         try (CloseableLock ignored = CloseableLock.lock(localTablet.getReadLock())) {
             return getColocateTabletHealthStatusUnlocked(localTablet, visibleVersion, replicationNum, backendsSet);
         }
+    }
+
+    /**
+     * Defensive aliveness check for callers that cannot trust {@code backendsSet} contains only
+     * live BEs — used when {@code tablet_sched_disable_colocate_balance} is on, because the
+     * colocate balance step that maintains the bucket assignment is gated off and dead BEs can
+     * persist. Reuses ColocateTableBalancer's own availability predicate so the BEs we would have
+     * balanced away from (had balance been running) are exactly the BEs we now report as missing —
+     * including the {@code tablet_sched_colocate_be_down_tolerate_time_s} grace window and
+     * decommission handling.
+     */
+    static boolean hasEnoughAliveBackendsInBucketSeq(Set<Long> backendsSet, int replicationNum,
+                                                     SystemInfoService systemInfoService) {
+        int aliveInBucketSeq = 0;
+        for (Long beId : backendsSet) {
+            if (ColocateTableBalancer.checkBackendAvailable(beId, systemInfoService)) {
+                aliveInBucketSeq++;
+            }
+        }
+        return aliveInBucketSeq >= replicationNum;
     }
 
     /**

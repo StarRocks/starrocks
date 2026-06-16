@@ -38,7 +38,7 @@ public:
         config::merge_commit_trace_log_enable = true;
         _exec_env = ExecEnv::GetInstance();
         std::unique_ptr<ThreadPool> thread_pool;
-        ASSERT_OK(ThreadPoolBuilder("IsomorphicBatchWriteTest")
+        ASSERT_OK(ThreadPoolBuilder("IsoBatchWrTest")
                           .set_min_threads(0)
                           .set_max_threads(1)
                           .set_max_queue_size(2048)

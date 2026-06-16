@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Rejected records"
 keywords: ['rejected', 'records', 'max_filter_ratio', 'replay']
+description: "How StarRocks persists filtered rows into _statistics_.rejected_records when max_filter_ratio > 0, and how to query and replay rejected records."
 ---
 
 # Rejected records

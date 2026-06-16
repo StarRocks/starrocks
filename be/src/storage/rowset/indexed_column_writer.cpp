@@ -43,7 +43,7 @@
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "storage/key_coder.h"
+#include "storage/primitive/key_coder.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"

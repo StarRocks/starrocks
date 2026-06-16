@@ -257,6 +257,9 @@ public class FunctionSet {
     public static final String SPACE = "space";
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
+    public static final String TRIM_STRING = "trim_string";
+    public static final String LTRIM_STRING = "ltrim_string";
+    public static final String RTRIM_STRING = "rtrim_string";
     public static final String UPPER = "upper";
     public static final String INITCAP = "initcap";
     public static final String SUBSTRING_INDEX = "substring_index";
@@ -300,6 +303,7 @@ public class FunctionSet {
     // Utility functions:
     public static final String CURRENT_VERSION = "current_version";
     public static final String LAST_QUERY_ID = "last_query_id";
+    public static final String QUERY_ID = "query_id";
     public static final String UUID = "uuid";
     public static final String UUID_NUMERIC = "uuid_numeric";
     public static final String UUID_V7 = "uuid_v7";
@@ -455,6 +459,8 @@ public class FunctionSet {
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
     public static final String CRC32_HASH = "crc32_hash";
+    public static final String XX_HASH32 = "xx_hash32";
+    public static final String XX_HASH64 = "xx_hash64";
     public static final String XX_HASH3_64 = "xx_hash3_64";
     public static final String XX_HASH3_128 = "xx_hash3_128";
 
@@ -792,6 +798,7 @@ public class FunctionSet {
                     .add(UUID_NUMERIC)
                     .add(UUID_V7)
                     .add(UUID_V7_NUMERIC)
+                    .add(QUERY_ID)
                     .add(SLEEP)
                     .add(HTTP_REQUEST)
                     .build();

@@ -694,7 +694,8 @@ struct SortKeyColumnSpec {
 };
 
 static TabletMetadataPtr make_empty_metadata_with_sort_key(const SortKeyColumnSpec& col_spec,
-                                                           const TabletRangePB& parent_range) {
+                                                           const TabletRangePB& parent_range,
+                                                           bool set_sort_key_idxes = true) {
     auto m = std::make_shared<TabletMetadataPB>();
     m->set_id(1);
     m->set_version(1);
@@ -711,7 +712,9 @@ static TabletMetadataPtr make_empty_metadata_with_sort_key(const SortKeyColumnSp
     if (col_spec.precision > 0) col->set_precision(col_spec.precision);
     if (col_spec.scale > 0) col->set_frac(col_spec.scale); // ColumnPB.frac is the scale field
     if (col_spec.length > 0) col->set_length(col_spec.length);
-    schema->add_sort_key_idxes(0);
+    if (set_sort_key_idxes) {
+        schema->add_sort_key_idxes(0);
+    }
 
     *m->mutable_range() = parent_range;
     return m;
@@ -720,6 +723,15 @@ static TabletMetadataPtr make_empty_metadata_with_sort_key(const SortKeyColumnSp
 static TabletMetadataPtr make_empty_metadata_bigint_key(std::optional<int64_t> parent_lower,
                                                         std::optional<int64_t> parent_upper) {
     return make_empty_metadata_with_sort_key({.type = TYPE_BIGINT}, make_bigint_range_pb(parent_lower, parent_upper));
+}
+
+// Like make_empty_metadata_bigint_key but with an empty sort_key_idxes -- the schema
+// shape of a range-distributed DUPLICATE table created without an explicit ORDER BY.
+// The external-boundaries path must fall back to the key columns instead of rejecting.
+static TabletMetadataPtr make_empty_metadata_bigint_key_no_sort_key_idxes(std::optional<int64_t> parent_lower,
+                                                                          std::optional<int64_t> parent_upper) {
+    return make_empty_metadata_with_sort_key({.type = TYPE_BIGINT}, make_bigint_range_pb(parent_lower, parent_upper),
+                                             /*set_sort_key_idxes=*/false);
 }
 
 static TabletMetadataPtr make_empty_metadata_decimal64_key(int precision, int scale) {
@@ -862,6 +874,30 @@ TEST(TabletSplitterTest, colocate_aware_split_keeps_stats_consistent_across_pref
     EXPECT_GT(left_it->second.second, 0);
 }
 
+// Regression for the DATA-DRIVEN colocate split rejecting tables whose sort key is implicit.
+// A PRIMARY KEY (or DUPLICATE KEY without an explicit ORDER BY) table leaves sort_key_idxes empty
+// in the raw TabletSchemaPB. get_tablet_split_ranges_impl must resolve the arity from the
+// materialized schema (empty sort_key_idxes => key columns) before validating colocate_column_count;
+// reading the raw PB saw arity 0 and rejected every colocate split, silently falling back to an
+// identical tablet so an oversized colocate tablet never split.
+TEST(TabletSplitterTest, data_driven_colocate_split_resolves_empty_sort_key_idxes) {
+    auto m = make_empty_metadata_bigint_key_no_sort_key_idxes(0, 100);
+    ASSERT_TRUE(m->schema().sort_key_idxes().empty());
+
+    // colocate_column_count == 1 (the single key column) must pass the arity gate now that it is
+    // resolved against the materialized schema. The empty tablet then fails later at segment
+    // loading -- proving the gate was passed (pre-fix it failed with "Invalid colocate_column_count").
+    std::vector<TabletRangeInfo> split_ranges;
+    auto s = get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &split_ranges,
+                                     /*colocate_column_count=*/1);
+    ASSERT_FALSE(s.ok());
+    const std::string msg = s.to_string();
+    EXPECT_EQ(std::string::npos, msg.find("Invalid colocate_column_count"))
+            << "arity gate must resolve empty sort_key_idxes to key columns; actual: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("No segments"))
+            << "empty tablet must fail at segment loading, not the arity gate; actual: " << msg;
+}
+
 // -----------------------------------------------------------------------------
 // Happy path: empty tablet, K=2 well-formed ranges covering parent.
 // -----------------------------------------------------------------------------
@@ -874,6 +910,21 @@ TEST(TabletSplitterExternalBoundariesTest, empty_tablet_happy_path_k2) {
     ASSERT_EQ(2, out.size());
     EXPECT_TRUE(out[0].rowset_stats.empty());
     EXPECT_TRUE(out[1].rowset_stats.empty());
+}
+
+// -----------------------------------------------------------------------------
+// Empty sort_key_idxes (table created without an explicit ORDER BY): the sort key
+// falls back to the key columns, so the split must succeed -- not be rejected and
+// degraded to an identical (un-split) tablet.
+// -----------------------------------------------------------------------------
+TEST(TabletSplitterExternalBoundariesTest, empty_sort_key_idxes_falls_back_to_key_columns) {
+    auto m = make_empty_metadata_bigint_key_no_sort_key_idxes(0, 100);
+    ASSERT_TRUE(m->schema().sort_key_idxes().empty());
+    auto ranges = make_ranges({make_bigint_range_pb(0, 50), make_bigint_range_pb(50, 100)});
+    std::vector<TabletRangeInfo> out;
+    auto status = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, m, ranges, &out);
+    ASSERT_TRUE(status.ok()) << status;
+    ASSERT_EQ(2, out.size());
 }
 
 // -----------------------------------------------------------------------------
@@ -1024,9 +1075,9 @@ static TabletMetadataPtr make_dup_keys_metadata_with_rowsets(
         r->set_num_rows(num_rows);
         r->set_data_size(data_size);
         r->set_num_dels(0); // explicit to skip the PK delvec fallback in build_rowset_anchor.
-        r->add_segments("seg" + std::to_string(id));
-        r->add_segment_size(data_size);
         auto* sm = r->add_segment_metas();
+        sm->set_filename("seg" + std::to_string(id));
+        sm->set_size(data_size);
         sm->set_num_rows(num_rows);
         *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
         *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
@@ -1148,6 +1199,221 @@ TEST(TabletSplitterParityTest, external_boundaries_matches_data_driven_when_fed_
         EXPECT_EQ(100, sum_rows) << "rowset " << rowset_id << ": Σ children num_rows must equal parent";
         EXPECT_EQ(1000, sum_size) << "rowset " << rowset_id << ": Σ children data_size must equal parent";
     }
+}
+
+// -----------------------------------------------------------------------------
+// Phase-1 per-segment shared ownership helpers.
+// -----------------------------------------------------------------------------
+
+namespace {
+// Append a segment with bigint [mn, mx] sort-key bounds.
+static void add_bigint_seg(RowsetMetadataPB* rs, int64_t mn, int64_t mx, const std::string& name) {
+    auto* m = rs->add_segment_metas();
+    m->set_filename(name);
+    *m->mutable_sort_key_min() = make_bigint_tuple_pb(mn);
+    *m->mutable_sort_key_max() = make_bigint_tuple_pb(mx);
+}
+} // namespace
+
+TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
+    auto make_pruneable = []() {
+        RowsetMetadataPB rs;
+        add_bigint_seg(&rs, 0, 1, "s0");
+        return rs;
+    };
+    EXPECT_TRUE(can_prune_rowset_segments(make_pruneable()));
+
+    {
+        auto rs = make_pruneable();
+        rs.mutable_segment_metas(0)->set_bundle_file_offset(0); // bundled segment is pruneable
+        EXPECT_TRUE(can_prune_rowset_segments(rs));
+    } // (a) ok
+    {
+        auto rs = make_pruneable();
+        rs.set_next_compaction_offset(1);
+        EXPECT_FALSE(can_prune_rowset_segments(rs));
+    } // (b)
+    {
+        auto rs = make_pruneable();
+        rs.add_segment_metas(); // extra segment lacking sort-key bounds
+        EXPECT_FALSE(can_prune_rowset_segments(rs));
+    } // (c) missing bound on extra segment
+    {
+        auto rs = make_pruneable();
+        rs.mutable_segment_metas(0)->clear_sort_key_max();
+        EXPECT_FALSE(can_prune_rowset_segments(rs));
+    } // (c) missing bound
+    {
+        auto rs = make_pruneable();
+        rs.mutable_segment_metas(0)->set_shared(true);
+        EXPECT_TRUE(can_prune_rowset_segments(rs));
+    } // (d) ok
+}
+
+TEST(TabletSplitterTest, ComputeOwnership_exclusive_segment_becomes_private) {
+    // Tiled ranges [0,11) and [11,21); segment [1,5] strictly inside range 0.
+    std::vector<TabletRangePB> ranges{make_bigint_range_pb(0, 11), make_bigint_range_pb(11, 21)};
+    RowsetMetadataPB rs;
+    add_bigint_seg(&rs, 1, 5, "s0");
+    auto own = compute_rowset_segment_ownership(rs, ranges);
+    ASSERT_TRUE(own.ok());
+    EXPECT_TRUE(own->segments[0].keep[0]);
+    EXPECT_FALSE(own->segments[0].keep[1]);
+    EXPECT_FALSE(own->segments[0].shared[0]); // exclusive + contained -> private
+}
+
+TEST(TabletSplitterTest, ComputeOwnership_spanning_segment_stays_shared) {
+    std::vector<TabletRangePB> ranges{make_bigint_range_pb(0, 11), make_bigint_range_pb(11, 21)};
+    RowsetMetadataPB rs;
+    add_bigint_seg(&rs, 5, 15, "s0"); // spans both
+    auto own = compute_rowset_segment_ownership(rs, ranges);
+    ASSERT_TRUE(own.ok());
+    EXPECT_TRUE(own->segments[0].keep[0]);
+    EXPECT_TRUE(own->segments[0].keep[1]);
+    EXPECT_TRUE(own->segments[0].shared[0]); // overlap_count>=2 -> shared
+    EXPECT_TRUE(own->segments[0].shared[1]);
+}
+
+TEST(TabletSplitterTest, ComputeOwnership_old_shared_stays_shared) {
+    std::vector<TabletRangePB> ranges{make_bigint_range_pb(0, 11), make_bigint_range_pb(11, 21)};
+    RowsetMetadataPB rs;
+    add_bigint_seg(&rs, 1, 5, "s0");
+    rs.mutable_segment_metas(0)->set_shared(true); // inherited shared (multi-level)
+    auto own = compute_rowset_segment_ownership(rs, ranges);
+    ASSERT_TRUE(own.ok());
+    EXPECT_TRUE(own->segments[0].shared[0]); // old_shared -> stays shared even though exclusive
+}
+
+TEST(TabletSplitterTest, ComputeOwnership_failclosed_when_not_contained) {
+    // Single range [0,11) does not cover the segment's max (15). overlap_count==1,
+    // old_shared=false, but seg_max=15 not contained -> must stay shared (fail-closed).
+    std::vector<TabletRangePB> ranges{make_bigint_range_pb(0, 11)};
+    RowsetMetadataPB rs;
+    add_bigint_seg(&rs, 5, 15, "s0");
+    auto own = compute_rowset_segment_ownership(rs, ranges);
+    ASSERT_TRUE(own.ok());
+    EXPECT_TRUE(own->segments[0].keep[0]);
+    EXPECT_TRUE(own->segments[0].shared[0]); // fail-closed (not provably contained)
+}
+
+TEST(TabletSplitterTest, ApplyOwnership_prunes_and_rebuilds_shared) {
+    RowsetMetadataPB source_rowset;
+    add_bigint_seg(&source_rowset, 0, 1, "s0");
+    add_bigint_seg(&source_rowset, 5, 15, "s1");
+    add_bigint_seg(&source_rowset, 18, 19, "s2");
+    source_rowset.mutable_segment_metas(0)->set_size(10);
+    source_rowset.mutable_segment_metas(1)->set_size(20);
+    source_rowset.mutable_segment_metas(2)->set_size(30);
+
+    RowsetOwnership ownership;
+    ownership.segments.resize(3);
+    ownership.segments[0] = {{true, false}, {false, false}};
+    ownership.segments[1] = {{true, true}, {true, true}};
+    ownership.segments[2] = {{false, true}, {false, false}};
+
+    RowsetMetadataPB rowset_for_tablet0 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet0, ownership, 0));
+    ASSERT_EQ(2, rowset_for_tablet0.segment_metas_size());
+    EXPECT_EQ("s0", rowset_for_tablet0.segment_metas(0).filename());
+    EXPECT_EQ("s1", rowset_for_tablet0.segment_metas(1).filename());
+    EXPECT_FALSE(rowset_for_tablet0.segment_metas(0).shared());
+    EXPECT_TRUE(rowset_for_tablet0.segment_metas(1).shared());
+    EXPECT_EQ(0u, rowset_for_tablet0.segment_metas(0).segment_idx()); // synthesized to original positional index
+    EXPECT_EQ(1u, rowset_for_tablet0.segment_metas(1).segment_idx());
+
+    RowsetMetadataPB rowset_for_tablet1 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet1, ownership, 1));
+    ASSERT_EQ(2, rowset_for_tablet1.segment_metas_size());
+    EXPECT_EQ("s1", rowset_for_tablet1.segment_metas(0).filename());
+    EXPECT_EQ("s2", rowset_for_tablet1.segment_metas(1).filename());
+    EXPECT_TRUE(rowset_for_tablet1.segment_metas(0).shared());
+    EXPECT_FALSE(rowset_for_tablet1.segment_metas(1).shared());
+    EXPECT_EQ(1u, rowset_for_tablet1.segment_metas(0).segment_idx());
+    EXPECT_EQ(2u, rowset_for_tablet1.segment_metas(1).segment_idx());
+}
+
+// encryption_meta travels inside each SegmentMetadataPB, so it must prune in lockstep
+// with the segment it describes; a misaligned/dropped entry is load-time corruption.
+TEST(TabletSplitterTest, ApplyOwnership_prunes_segment_encryption_metas) {
+    RowsetMetadataPB source_rowset;
+    add_bigint_seg(&source_rowset, 0, 1, "s0");
+    add_bigint_seg(&source_rowset, 5, 15, "s1");
+    add_bigint_seg(&source_rowset, 18, 19, "s2");
+    source_rowset.mutable_segment_metas(0)->set_size(10);
+    source_rowset.mutable_segment_metas(1)->set_size(20);
+    source_rowset.mutable_segment_metas(2)->set_size(30);
+    source_rowset.mutable_segment_metas(0)->set_encryption_meta("enc0");
+    source_rowset.mutable_segment_metas(1)->set_encryption_meta("enc1");
+    source_rowset.mutable_segment_metas(2)->set_encryption_meta("enc2");
+
+    RowsetOwnership ownership;
+    ownership.segments.resize(3);
+    ownership.segments[0] = {{true, false}, {false, false}};
+    ownership.segments[1] = {{true, true}, {true, true}};
+    ownership.segments[2] = {{false, true}, {false, false}};
+
+    // tablet0 keeps segments 0,1 -> encryption metas align to enc0,enc1.
+    RowsetMetadataPB rowset_for_tablet0 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet0, ownership, 0));
+    ASSERT_EQ(2, rowset_for_tablet0.segment_metas_size());
+    EXPECT_EQ("enc0", rowset_for_tablet0.segment_metas(0).encryption_meta());
+    EXPECT_EQ("enc1", rowset_for_tablet0.segment_metas(1).encryption_meta());
+
+    // tablet1 keeps segments 1,2 -> enc1,enc2.
+    RowsetMetadataPB rowset_for_tablet1 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet1, ownership, 1));
+    ASSERT_EQ(2, rowset_for_tablet1.segment_metas_size());
+    EXPECT_EQ("enc1", rowset_for_tablet1.segment_metas(0).encryption_meta());
+    EXPECT_EQ("enc2", rowset_for_tablet1.segment_metas(1).encryption_meta());
+}
+
+// bundle_file_offset is an absolute byte offset into one shared physical file carried
+// inside each SegmentMetadataPB; it must prune in lockstep with the segment. The offsets
+// are positional (not derived from neighbors), so pruning a middle segment must not shift
+// survivors.
+TEST(TabletSplitterTest, ApplyOwnership_prunes_bundle_file_offsets) {
+    RowsetMetadataPB source_rowset;
+    add_bigint_seg(&source_rowset, 0, 1, "bundle.dat");
+    add_bigint_seg(&source_rowset, 5, 15, "bundle.dat");
+    add_bigint_seg(&source_rowset, 18, 19, "bundle.dat");
+    source_rowset.mutable_segment_metas(0)->set_size(10);
+    source_rowset.mutable_segment_metas(1)->set_size(20);
+    source_rowset.mutable_segment_metas(2)->set_size(30);
+    source_rowset.mutable_segment_metas(0)->set_bundle_file_offset(0);
+    source_rowset.mutable_segment_metas(1)->set_bundle_file_offset(10);
+    source_rowset.mutable_segment_metas(2)->set_bundle_file_offset(30);
+
+    RowsetOwnership ownership;
+    ownership.segments.resize(3);
+    ownership.segments[0] = {{true, false}, {false, false}};
+    ownership.segments[1] = {{true, true}, {true, true}};
+    ownership.segments[2] = {{false, true}, {false, false}};
+
+    // tablet0 keeps segments 0,1 -> offsets 0,10.
+    RowsetMetadataPB rowset_for_tablet0 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet0, ownership, 0));
+    ASSERT_EQ(2, rowset_for_tablet0.segment_metas_size());
+    EXPECT_EQ(0, rowset_for_tablet0.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(10, rowset_for_tablet0.segment_metas(1).bundle_file_offset());
+
+    // tablet1 keeps segments 1,2 -> offsets 10,30 (pruned middle does not shift them).
+    RowsetMetadataPB rowset_for_tablet1 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet1, ownership, 1));
+    ASSERT_EQ(2, rowset_for_tablet1.segment_metas_size());
+    EXPECT_EQ(10, rowset_for_tablet1.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(30, rowset_for_tablet1.segment_metas(1).bundle_file_offset());
+}
+
+TEST(TabletSplitterTest, ApplyOwnership_step0_shape_mismatch_aborts_unmodified) {
+    RowsetMetadataPB source_rowset;
+    add_bigint_seg(&source_rowset, 0, 1, "s0");
+    add_bigint_seg(&source_rowset, 2, 3, "s1");
+    RowsetOwnership ownership;
+    ownership.segments.resize(1); // size != segment_metas_size() (2)
+    ownership.segments[0] = {{true}, {false}};
+    auto status = apply_segment_ownership_to_new_tablet_rowset(&source_rowset, ownership, 0);
+    EXPECT_FALSE(status.ok());
+    EXPECT_EQ(2, source_rowset.segment_metas_size()); // unmodified
 }
 
 } // namespace starrocks::lake

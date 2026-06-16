@@ -25,8 +25,10 @@
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -36,7 +38,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {

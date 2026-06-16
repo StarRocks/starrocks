@@ -76,6 +76,9 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
     // Set on pinned-PCT batches only; value is the pinning job's START_TASK_RUN_ID.
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
+    // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
+    public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
+    public static final String SUBMIT_USER_SYSTEM = "system";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
@@ -212,8 +215,13 @@ public class TaskRun implements Comparable<TaskRun> {
         int defaultTimeoutS = Config.task_runs_timeout_second;
         if (properties != null) {
             for (Map.Entry<String, String> entry : properties.entrySet()) {
-                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
-                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                String key = entry.getKey();
+                // session variables are stored with a "session." prefix; strip it before matching
+                if (key.startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                }
+                if (key.equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || key.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
                     try {
                         int timeout = Integer.parseInt(entry.getValue());
                         if (timeout > 0) {
@@ -558,6 +566,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setCreateTime(created);
         status.setUser(task.getCreateUser());
         status.setUserIdentity(task.getUserIdentity());
+        status.setSubmitUser(resolveSubmitUser());
         status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
@@ -575,6 +584,23 @@ public class TaskRun implements Comparable<TaskRun> {
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
         this.status = status;
         return status;
+    }
+
+    // Batch follow-up runs inherit the leader's submitter through ExecuteOption (internal-only, unspoofable).
+    // Only a manual submission attributes to the session user: automatic refreshes (scheduled, or
+    // on-base-table-change which runs on the triggering DML's thread with a live ConnectContext) are the
+    // scheduler, so they must record "system" rather than the incidental session user.
+    private String resolveSubmitUser() {
+        if (executeOption != null && !Strings.isNullOrEmpty(executeOption.getSubmitUser())) {
+            return executeOption.getSubmitUser();
+        }
+        if (executeOption != null && executeOption.isManual()) {
+            ConnectContext context = ConnectContext.get();
+            if (context != null && !Strings.isNullOrEmpty(context.getQualifiedUser())) {
+                return context.getQualifiedUser();
+            }
+        }
+        return SUBMIT_USER_SYSTEM;
     }
 
     @Override

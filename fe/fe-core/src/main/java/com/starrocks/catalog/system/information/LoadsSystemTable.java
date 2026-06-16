@@ -205,16 +205,10 @@ public class LoadsSystemTable {
         if (value == null || value < 0) {
             return true;
         }
-        // Truncate the full-ms job timestamp to second so this prefilter
-        // matches BE's second-precision materialized column. Otherwise a job
-        // at e.g. ...:08.789 with a `<= ...:08` upper bound is dropped here
-        // but kept by BE's post-filter on the rendered column. To enable ms
-        // support, drop the truncation (the wire carries full ms).
-        long secondAlignedValue = (value / 1000) * 1000;
-        if (lowerBound != null && secondAlignedValue < lowerBound) {
+        if (lowerBound != null && value < lowerBound) {
             return false;
         }
-        return upperBound == null || secondAlignedValue <= upperBound;
+        return upperBound == null || value <= upperBound;
     }
 
     @VisibleForTesting
@@ -253,9 +247,9 @@ public class LoadsSystemTable {
             // Prefer the new UTC epoch-ms fields when the BE sets them - those are
             // already comparable to LoadJob.finishTimestamp (System.currentTimeMillis).
             // Fall back to parsing the legacy wall-clock string fields only when an
-            // older BE hasn't been upgraded yet; that path keeps the historical
-            // (buggy on non-Asia/Shanghai sessions) semantics rather than introducing
-            // a third interpretation.
+            // older BE hasn't been upgraded yet; parse those in the fixed cluster
+            // storage zone (+08:00) to match how the legacy BE produced them,
+            // regardless of the current session time_zone.
             filter.loadStartTimeFrom = pickTime(
                     request.isSetLoad_start_time_from_ms() ? request.getLoad_start_time_from_ms() : null,
                     request.isSetLoad_start_time_from() ? request.getLoad_start_time_from() : null);
@@ -285,7 +279,7 @@ public class LoadsSystemTable {
             if (legacyStringField == null) {
                 return null;
             }
-            long ts = TimeUtils.timeStringToLong(legacyStringField);
+            long ts = TimeUtils.timeStringToLongInStorageZone(legacyStringField);
             return ts >= 0 ? ts : null;
         }
     }

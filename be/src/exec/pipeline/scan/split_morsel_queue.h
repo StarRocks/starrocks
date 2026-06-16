@@ -20,7 +20,7 @@
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -35,7 +35,7 @@ public:
             : OlapMorselQueue(std::move(morsels)),
               _degree_of_parallelism(degree_of_parallelism),
               _splitted_scan_rows(splitted_scan_rows) {}
-    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
     bool could_attch_ticket_checker() const override { return true; }
@@ -59,7 +59,7 @@ protected:
     const int64_t _splitted_scan_rows;
 
     std::atomic<size_t> _tablet_idx = 0;
-    query_cache::TicketCheckerPtr _ticket_checker;
+    SplitMorselTicketCheckerPtr _ticket_checker;
 };
 
 class PhysicalSplitMorselQueue final : public SplitMorselQueue {

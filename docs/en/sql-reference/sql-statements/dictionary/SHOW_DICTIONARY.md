@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Shows information about dictionary objects."
 ---
 
 # SHOW DICTIONARY

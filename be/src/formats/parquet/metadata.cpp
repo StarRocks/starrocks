@@ -21,6 +21,7 @@
 #include <string_view>
 #include <utility>
 
+#include "cache/mem_cache/page_cache.h"
 #include "common/util/thrift_util.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/schema.h"
@@ -527,7 +528,7 @@ Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int
 
         *file_metadata_ptr = std::make_shared<FileMetaData>();
         FileMetaData* file_metadata = file_metadata_ptr->get();
-        RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+        RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->options.case_sensitive));
         *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
     }
 #if defined(BE_TEST) || defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)

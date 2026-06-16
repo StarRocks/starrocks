@@ -313,22 +313,18 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven
 
-      - name: Install Apache Thrift 0.13
-        id: install_thrift_0_13
+      - name: Install Apache Thrift
+        id: install_thrift
         if: steps.cache_maven_packages.outcome == 'success'
         run: |
-          mkdir -p ./.setup-thrift/oras
-          mkdir -p ./.setup-thrift/thrift
-          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
-          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
-          ln -sf $(pwd)/oras /usr/local/bin/oras
-          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
-          tar zxf ./thrift.v0.13.0.tar.gz -C .
-          ln -sf $(pwd)/thrift /usr/local/bin/thrift
+          curl -fsSL --retry 3 --retry-delay 2 https://cdn-thirdparty.starrocks.com/thrift-binaries/latest/thrift.xz -o ./thrift.xz
+          xz -d ./thrift.xz
+          chmod +x ./thrift
+          mv -f ./thrift /usr/local/bin/thrift
 
       - name: Analyze FE
         id: analyze_fe
-        if: steps.install_thrift_0_13.outcome == 'success'
+        if: steps.install_thrift.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -396,7 +392,12 @@ jobs:
 
       - name: Merge BE Total Coverage
         id: merge
-        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success' && env.SKIP_COV != 'true'
+        if: >
+          steps.download-ut-xml.outputs.size != '0'
+          && steps.download-ut-xml.outcome == 'success'
+          && env.SKIP_COV != 'true'
+          && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
+          && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
@@ -415,7 +416,12 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: always() && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
+        if: >
+          always()
+          && steps.download-ut-xml.outputs.size != '0'
+          && steps.download-ut-xml.outcome == 'success'
+          && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
+          && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         env:
           be_path: ${{ github.workspace }}/be
           merge_outcome: ${{ steps.merge.outcome }}
@@ -424,7 +430,10 @@ jobs:
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          if [[ "${{ github.repository }}" != "StarRocks/starrocks" ]] || [[ "${merge_outcome}" == "failure" ]]; then
+          # Fallback to raw BE UT coverage only when merge actually failed or was skipped.
+          # Previous code keyed on repository name; now both repos run merge by default,
+          # so the only signal is merge_outcome.
+          if [[ "${merge_outcome}" == "failure" || "${merge_outcome}" == "skipped" ]]; then
               total_xml=${be_path}/be_ut_coverage.xml
           fi
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \

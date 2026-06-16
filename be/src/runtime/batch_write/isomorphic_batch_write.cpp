@@ -25,14 +25,14 @@
 #include "common/config_merge_commit_fwd.h"
 #include "common/system/master_info.h"
 #include "common/util/bthreads/executor.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "runtime/thrift_rpc_helper.h"
 
 namespace starrocks {
 

@@ -53,8 +53,14 @@ public class HealthAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/health", new HealthAction(controller));
     }
 
+    // Liveness probe; intentionally unauthenticated.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         if (GracefulExitFlag.isGracefulExit()) {
             sendResult(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         } else {

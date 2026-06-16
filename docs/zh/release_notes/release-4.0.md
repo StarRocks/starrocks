@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.0 版本发布说明：DECIMAL256 类型、文件捆绑、多表写入事务、Iceberg 压缩、隐藏分区。"
 ---
 
 # StarRocks version 4.0
@@ -22,6 +23,76 @@ displayed_sidebar: docs
   ```
 
 :::
+
+## 4.0.11
+
+发布日期：2026 年 6 月 5 日
+
+### 行为变更
+
+- 在 `ALLOW_THROW_EXCEPTION` 模式下，当 `get_json_string` 及其他 `get_json_*` 函数隐式将 VARCHAR 解析为 JSON 失败时，现在返回 JSON 解析错误，而非 NULL。该模式关闭时仍保持返回 NULL 的默认行为。[#73199](https://github.com/StarRocks/starrocks/pull/73199)
+- 配置项 `pipeline_enable_large_column_checker` 现在默认开启。[#72798](https://github.com/StarRocks/starrocks/pull/72798)
+
+### 功能优化
+
+- 存算分离写入路径的 Load Spill 文件改为扁平的单层目录布局，并将事务 ID 写入文件名，由基于事务 ID 的 Vacuum 流程回收。该优化将批量删除移出写入热路径，并支持 Vacuum 清理因 BE 崩溃而泄漏的 Spill 文件。[#73064](https://github.com/StarRocks/starrocks/pull/73064)
+- 显式事务内现在允许执行 SHOW 语句（如 `SHOW GRANTS`、`SHOW WAREHOUSES`），自动发起 SHOW 的 BI/JDBC 客户端不再中断事务流程。[#72954](https://github.com/StarRocks/starrocks/pull/72954)
+- Java UDAF 和 UDTF 现在支持 STRUCT 类型的参数和返回值。[#72911](https://github.com/StarRocks/starrocks/pull/72911)
+- 标量 Java UDF 现在支持 STRUCT 类型参数。[#72620](https://github.com/StarRocks/starrocks/pull/72620)
+- Java UDF 现在支持 DATE 和 DATETIME 类型。[#72337](https://github.com/StarRocks/starrocks/pull/72337)
+- Java UDF 现在支持嵌套的 ARRAY/MAP 类型。[#72283](https://github.com/StarRocks/starrocks/pull/72283)
+- 新增 FE 配置项 `deploy_serialization_min_thread_pool_size`。[#72274](https://github.com/StarRocks/starrocks/pull/72274)
+- 在 `add_partition_value` 去重命中时跳过冗余的分区键表达式构建。[#73156](https://github.com/StarRocks/starrocks/pull/73156)
+- 避免 `PaimonMetadata#getTableVersionRange` 中冗余的 `latestSnapshot()` 调用。[#72892](https://github.com/StarRocks/starrocks/pull/72892)
+- 在标量算子的公共子表达式消除中对可交换的 AND/OR 表达式进行去重。[#72823](https://github.com/StarRocks/starrocks/pull/72823)
+
+### 问题修复
+
+修复了以下问题：
+
+- UDAF 缓存引入的内存泄漏。[#74025](https://github.com/StarRocks/starrocks/pull/74025)
+- 聚合组合函数中的实现错误。[#74169](https://github.com/StarRocks/starrocks/pull/74169)
+- 存算分离 combined txn log 模式下，每个 Sender 打开时未重新记录分区级协调者认领，可能导致事务日志丢失。[#73962](https://github.com/StarRocks/starrocks/pull/73962)
+- 使用自定义 `LocationProvider` 的 Iceberg 表读取失败的问题，通过在 `SerializableTable` 中延迟初始化 `LocationProvider` 修复。[#73482](https://github.com/StarRocks/starrocks/pull/73482)
+- 由 `de.javakaffee` `UnmodifiableCollectionsSerializer` 导致的序列化失败，已替换为兼容 Java 17 的版本。[#73458](https://github.com/StarRocks/starrocks/pull/73458)
+- `HdfsFsManager` 拷贝错误信息现在包含底层原因。[#73414](https://github.com/StarRocks/starrocks/pull/73414)
+- `DeltaWriter::commit()` 中并发的 `SegmentFlushTask` 竞争。[#73371](https://github.com/StarRocks/starrocks/pull/73371)
+- 排序归并 Provider 的错误现在会传播到 Fragment 上下文，而不再被丢弃。[#73337](https://github.com/StarRocks/starrocks/pull/73337)
+- Hive 视图上的 Ranger 行过滤/数据脱敏策略被跳过，导致视图或其基表上的策略未生效的问题。[#73265](https://github.com/StarRocks/starrocks/pull/73265)
+- 升级 libthrift 至 0.23.0 以修复安全漏洞（CVE）。[#73243](https://github.com/StarRocks/starrocks/pull/73243)
+- 通过复用 `HttpClient` 实例修复 FE 文件描述符泄漏。[#73239](https://github.com/StarRocks/starrocks/pull/73239)
+- Parquet broker load 错误信息现在包含文件/列/行的上下文。[#73236](https://github.com/StarRocks/starrocks/pull/73236)
+- Spark connector 外部扫描中，`col_name` 为空的输出 Slot 查找失败的问题。[#73225](https://github.com/StarRocks/starrocks/pull/73225)
+- 优雅退出时 `SinkBuffer` 崩溃的问题。[#73202](https://github.com/StarRocks/starrocks/pull/73202)
+- Query Cache 与 Local Shuffle 聚合的冲突。[#73194](https://github.com/StarRocks/starrocks/pull/73194)
+- Fragment 销毁过程中 Hive 分区描述符的释放后使用（UAF）。[#73176](https://github.com/StarRocks/starrocks/pull/73176)
+- Lake Vacuum 中的线程安全问题，通过使用 `localtime_r` 修复。[#73088](https://github.com/StarRocks/starrocks/pull/73088)
+- 查询上下文销毁期间，`PipelineTimerTask` 的 `doRun` 与取消调度之间的竞争条件。[#73082](https://github.com/StarRocks/starrocks/pull/73082)
+- 只读查询引擎路径上的锁竞争，通过放宽 DB 锁缓解。[#73067](https://github.com/StarRocks/starrocks/pull/73067)
+- JDBC Catalog 中 SQL Server 表的物化视图刷新失败。[#72962](https://github.com/StarRocks/starrocks/pull/72962)
+- `JDBCScanner::_init_jdbc_scanner` 中的 JNI 本地引用泄漏。[#72913](https://github.com/StarRocks/starrocks/pull/72913)
+- 分区 TopN 可能丢失子节点输出列的问题。[#72848](https://github.com/StarRocks/starrocks/pull/72848)
+- INSERT OVERWRITE 重新规划前未清除 `LambdaArgument.transformedOp` 导致的错误执行计划。[#72832](https://github.com/StarRocks/starrocks/pull/72832)
+- 外部资源清理期间持有协调者锁的问题。[#72830](https://github.com/StarRocks/starrocks/pull/72830)
+- `Locker` 回滚现在具备异常安全，并修复了解锁顺序。[#72789](https://github.com/StarRocks/starrocks/pull/72789)
+- `ColumnDict.merge` 中的字节序错误，现使用无符号字节序。[#72778](https://github.com/StarRocks/starrocks/pull/72778)
+- 格式化写入临时 `std::string` 时的栈缓冲区溢出。[#72728](https://github.com/StarRocks/starrocks/pull/72728)
+- 在小 LIMIT 上禁用聚合落盘时现在会检查 HAVING 子句。[#72705](https://github.com/StarRocks/starrocks/pull/72705)
+- 排空 runtime_filter worker 时因等待已转发的 RPC 而导致的挂起。[#72626](https://github.com/StarRocks/starrocks/pull/72626)
+- 物化视图基于 Outer Join 时，延迟物化 Slot 可空性不正确的问题。[#72621](https://github.com/StarRocks/starrocks/pull/72621)
+- 应用普通 Rowset 提交时未保留 `merge_condition`。[#72542](https://github.com/StarRocks/starrocks/pull/72542)
+- Clone 期间 `TabletScheduler` / `TabletSchedCtx` 热路径上的锁竞争，通过放宽 DB 锁缓解。[#72475](https://github.com/StarRocks/starrocks/pull/72475)
+- `Locker` 未回滚部分获取的密集锁。[#72423](https://github.com/StarRocks/starrocks/pull/72423)
+- 可落盘 Hash Join Probe 的崩溃。[#72397](https://github.com/StarRocks/starrocks/pull/72397)
+- JOIN USING 转换器现在将 COALESCE 子节点转换为公共类型。[#72338](https://github.com/StarRocks/starrocks/pull/72338)
+- 单表 proc 目录持有的 DB READ 锁范围过大，现放宽为按表加锁。[#72334](https://github.com/StarRocks/starrocks/pull/72334)
+- 缓存物化视图计划上下文时的内存泄漏。[#72300](https://github.com/StarRocks/starrocks/pull/72300)
+- 存算分离有序 Schema Change 时 FSE-v2 未设置 Schema 的问题。[#72235](https://github.com/StarRocks/starrocks/pull/72235)
+- `ConsistencyChecker` 在周期性扫描中持有的 DB READ 锁范围过大，现放宽为按表 READ。[#72218](https://github.com/StarRocks/starrocks/pull/72218)
+- 查询 `information_schema.warehouse_queries` 时 BE 崩溃。[#72019](https://github.com/StarRocks/starrocks/pull/72019)
+- CRLF 格式的 CSV 输入在闭合 enclose 前未去除末尾的 `\r`。[#71866](https://github.com/StarRocks/starrocks/pull/71866)
+- 查询外部 Catalog 时 Paimon 主键列被错误标记为非空的问题。[#71660](https://github.com/StarRocks/starrocks/pull/71660)
+- 当 URI 已以斜杠结尾时构造 JDBC URL 会产生多余的双斜杠，导致 ClickHouse 等严格驱动报错。[#70992](https://github.com/StarRocks/starrocks/pull/70992)
 
 ## 4.0.10
 
@@ -340,7 +411,7 @@ displayed_sidebar: docs
 - 为 Iceberg 表的 Sink 引入主机级排序功能，通过系统变量 `connector_sink_sort_scope` 控制（默认值：FILE），以优化数据布局并提升读取性能。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
 - 改进了 Iceberg 分区转换函数（例如 `bucket`、`truncate`）在参数数量错误时的错误提示信息。[#68349](https://github.com/StarRocks/starrocks/pull/68349)
 - 重构了表属性处理逻辑，以增强对 Iceberg 表不同文件格式（ORC/Parquet）和压缩编码的支持。[#68588](https://github.com/StarRocks/starrocks/pull/68588)
-- 新增表级查询超时配置 `table_query_timeout`，支持更细粒度的控制（优先级：Session &gt; Table &gt; Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- 新增表级查询超时配置 `table_query_timeout`，支持更细粒度的控制（优先级：Session `>` Table `>` Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
 - 支持使用 `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` 语句查看自动快照的状态和调度信息。[#68455](https://github.com/StarRocks/starrocks/pull/68455)
 - 在 `SHOW CREATE VIEW` 中支持显示包含注释的原始用户自定义 SQL。[#68040](https://github.com/StarRocks/starrocks/pull/68040)
 - 在 `information_schema.loads` 中暴露启用 Merge Commit 的 Stream Load 任务，以增强可观测性。[#67879](https://github.com/StarRocks/starrocks/pull/67879)

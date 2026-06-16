@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CHAR(M) 是定长字符串类型，M 的范围为 [1, 255] 字节。"
 ---
 
 # CHAR

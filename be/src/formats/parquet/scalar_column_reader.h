@@ -34,7 +34,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override {}
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {}
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
@@ -82,7 +82,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
     const tparquet::ColumnChunk* get_chunk_metadata() const override { return _chunk_metadata; }
@@ -126,12 +126,24 @@ protected:
                                            CompoundNodeType pred_relation, const TypeDescriptor& col_type,
                                            const uint64_t rg_first_row, const uint64_t rg_num_rows) const;
 
+    // If `column` still refers to one of this reader's internal temporary columns, a previous
+    // fill_dst_column() was skipped (e.g. the whole range was filtered out and
+    // GroupReader::get_next() continued without filling). Restore the caller-visible column to the
+    // original destination column so that no temporary column can leak out of the reader.
+    Status _restore_tmp_column(ColumnPtr& column);
+    // Whether `column` is one of this reader's internal temporary columns. Overridden by readers
+    // that swap in a temporary column (dict-code / intermediate / low-rows string) during read.
+    virtual bool _is_tmp_column(const ColumnPtr& column) const { return false; }
+
     const ColumnReaderOptions& _opts;
 
     std::unique_ptr<StoredColumnReader> _reader;
 
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
+    // Original destination column saved when a temporary column is swapped in during read_range();
+    // restored by _restore_tmp_column()/fill_dst_column() once the temporary column is consumed.
+    ColumnPtr _ori_column = nullptr;
 };
 
 class ScalarColumnReader final : public RawColumnReader {
@@ -202,7 +214,7 @@ public:
         return _row_group_bloom_filter(predicates, pred_relation, *_col_type, rg_first_row, rg_num_rows);
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
@@ -215,6 +227,12 @@ private:
 
     Status _dict_decode(ColumnPtr& dst, ColumnPtr& src);
 
+    bool _is_dict_code_column(const ColumnPtr& column) const;
+    bool _is_intermediate_column(const ColumnPtr& column) const;
+    bool _is_tmp_column(const ColumnPtr& column) const override {
+        return _is_dict_code_column(column) || _is_intermediate_column(column);
+    }
+
     std::unique_ptr<ColumnConverter> _converter;
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
@@ -225,11 +243,9 @@ private:
     bool _can_lazy_convert = false;
     // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;
-    bool _need_lazy_decode = false;
     // dict code
     ColumnPtr _tmp_code_column = nullptr;
     ColumnPtr _tmp_intermediate_column = nullptr;
-    ColumnPtr _ori_column = nullptr;
 };
 
 class LowCardColumnReader final : public RawColumnReader {
@@ -277,11 +293,13 @@ public:
                                        rg_first_row, rg_num_rows);
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
     Status _check_current_dict();
+    bool _is_dict_code_column(const ColumnPtr& column) const;
+    bool _is_tmp_column(const ColumnPtr& column) const override { return _is_dict_code_column(column); }
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
 
@@ -291,7 +309,6 @@ private:
     std::optional<std::vector<int16_t>> _code_convert_map;
 
     ColumnPtr _dict_code = nullptr;
-    ColumnPtr _ori_column = nullptr;
 };
 
 class LowRowsColumnReader final : public RawColumnReader {
@@ -317,15 +334,16 @@ public:
                                            TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
     }
 
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
+    bool _is_tmp_column(const ColumnPtr& column) const override;
+
     const GlobalDictMap* _dict = nullptr;
     const SlotId _slot_id;
 
     ColumnPtr _tmp_column = nullptr;
-    ColumnPtr _ori_column = nullptr;
 };
 
 } // namespace starrocks::parquet

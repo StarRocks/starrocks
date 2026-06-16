@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
 keywords: ['Canshu']
 ---
@@ -90,6 +91,85 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
+
+### enable_lake_pk_compaction_score_gate
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下主键表 Size-tiered Compaction「评分门控」的总开关。默认开启时，会跳过低价值的稀疏中间层 Compaction：当被选中的层的 Compaction 评分低于 `lake_pk_compaction_min_level_score`，且未触发下述任一豁免条件时，该层不会被 Compaction，从而避免为极小的文件数收益而重写大量基线数据。设置为 `false` 可一键关闭整个门控；此时每个被选中的层都会无条件执行 Compaction（即门控引入前的行为），下述阈值参数也将不再生效。
+- 引入版本：v4.2
+
+### lake_pk_compaction_min_level_score
+
+- 默认值：2.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的评分阈值（参见 `enable_lake_pk_compaction_score_gate`）。当 Size-tiered 选层器选中的层的总评分低于该值，且未触发任何豁免条件时，跳过本次 Compaction。每个 Rowset 的评分为 `io_count * 1MB / read_bytes`，并按层求和：包含大量小 Rowset 或重叠 Rowset 的层评分高（值得 Compaction），而少量大的非重叠 Rowset 评分低（近乎纯粹的基线重写）。设置为 `0` 可使门控失效，因为层的评分恒大于等于 `0`。
+- 引入版本：v4.2
+
+### lake_pk_compaction_min_benefit_cost_ratio
+
+- 默认值：0.005
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的一个豁免条件。指低于阈值的层仍被 Compaction 所需的最小收益/成本比（每重写 1 MB 节省的 Segment 数）。该收益还会计入删除向量（delvec）的清理压力（参见 `lake_pk_compaction_delvec_benefit_weight`）。设置为 `0` 可禁用该豁免，此时仅 `lake_pk_compaction_min_level_score` 生效。
+- 引入版本：v4.2
+
+### lake_pk_compaction_emergency_score
+
+- 默认值：50.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的一个豁免条件。当 Tablet 整体的读取压力评分（所有 Rowset 评分之和）达到该值时，即使被选中的层低于 `lake_pk_compaction_min_level_score`，也会执行 Compaction，从而避免读放大严重的热点 Tablet 长期得不到 Compaction。设置为 `0` 可禁用该豁免。
+- 引入版本：v4.2
+
+### lake_pk_compaction_delvec_benefit_weight
+
+- 默认值：12.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：在 `lake_pk_compaction_min_benefit_cost_ratio` 使用的收益/成本比中，将层的删除压力换算为等效 Segment 收益单位的权重，计算公式为 `benefit = real_benefit_segments + delete_ratio * input_segments * weight`。值越大，Compaction 越积极地清理删除向量；值越小，越倾向于降低写放大。设置为 `0` 可去除删除项的贡献，此时该比值仅反映 Segment 数收益。
+- 引入版本：v4.2
+
+### lake_pk_compaction_size_overflow_ratio
+
+- 默认值：2.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
+- 引入版本：v4.2
+
+### lake_put_txn_log_timeout_guard_ms
+
+- 默认值：-1
+- 类型：Int64
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算分离集群下，向对象存储写入事务日志（`put_txn_log` 和 `put_combined_txn_log` 路径）的超时守护阈值。如果写入一条事务日志的耗时超过该值，StarRocks 会将慢线程的堆栈打印到 BE 日志，以便诊断对象存储写入慢的问题。默认关闭（小于或等于 `0` 表示关闭该守护）；如需开启，可将其设置为正值，例如 `4000`（4 秒）。
+- 引入版本：-
+
+### lake_rows_mapper_read_parallelism
+
+- 默认值：32
+- 类型：Int
+- 单位：sub-chunk 个数
+- 是否动态：是
+- 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 读取 `.lcrm`（lake compaction rows-mapper）文件时，允许同时 in-flight 的 sub-chunk 读取数量上限。每个 sub-chunk 大小由 `lake_rows_mapper_sub_chunk_bytes` 控制，且不跨 segment 边界。迭代器最多向 PK index 执行线程池提交该数量的并发读取请求，让远端读取与调用方的 per-segment 处理流水化进行。内存上限为 `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`。设为 `1` 可关闭流水化，回退到顺序读取。
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- 默认值：4194304
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
 ### loop_count_wait_fragments_finish
 
@@ -380,6 +460,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，是否允许 Vertical Compaction 任务在执行时缓存数据到本地磁盘上。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v3.1.7, v3.2.3
+
+### lake_replication_read_buffer_size
+
+- 默认值：16777216
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake replication）下载 segment 文件时使用的读缓冲区大小。该值决定每次读取远程文件的分配大小，实际使用时取此设置与 1 MB 的较大值。较大的值减少读取调用次数，可提高吞吐，但增加每个并发下载的内存占用；较小的值降低内存使用但增加 I/O 调用次数。请根据网络带宽、存储 I/O 特性和并行复制线程数量进行调优。
+- 引入版本：v4.1.2
+
+### lake_replication_max_file_copy_retry
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中非 segment 文件（`.sst`、`.delvec`、`.del`、`.cols`）拷贝的最大重试次数。每次尝试会校验已拷贝文件大小是否与源文件一致，以检测因对象存储瞬时问题导致的截断拷贝。如果在不稳定的存储上复制时频繁出现文件损坏，可增大此值。
+- 引入版本：v4.1.2
+
+### lake_replication_file_copy_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的独立线程池大小。`0` 表示 `cpu_cores * 4`（与 `replication_threads` 默认语义一致）；负值表示 `-value * cpu_cores`。该线程池与 agent 任务的 `replicate_snapshot` 线程池刻意区分，目的是让外层任务可以安全地通过 `ThreadPoolToken::wait()` 等待逐文件拷贝子任务，而不触发线程池自死锁保护。该线程池在启动时一次性创建，无运行时 resize 入口，调整大小需重启 CN。
+- 引入版本：v4.1.2
 
 ### lake_service_max_concurrency
 

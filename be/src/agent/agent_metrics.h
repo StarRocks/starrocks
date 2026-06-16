@@ -64,6 +64,14 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(schema_change_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(schema_change_requests_failed, MetricUnit::REQUESTS);
+    // Lake-only ADD/DROP INDEX fast path (Index Delta Group). Total counts the
+    // entries into do_process_add_index_only / do_process_drop_index_only.
+    // lake_idg_files_written_total counts every .idx file successfully written
+    // by AddIndexSchemaChange::build_idg_for_segment (one per base segment).
+    METRIC_DEFINE_INT_COUNTER(lake_add_index_requests_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(lake_add_index_requests_failed, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(lake_drop_index_requests_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(lake_idg_files_written_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(clone_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(clone_requests_failed, MetricUnit::REQUESTS);
 
@@ -82,6 +90,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(drop);
     METRICS_DEFINE_THREAD_POOL(create_tablet);
     METRICS_DEFINE_THREAD_POOL(alter_tablet);
+    METRICS_DEFINE_THREAD_POOL(lake_schema_change);
     METRICS_DEFINE_THREAD_POOL(clear_transaction);
     METRICS_DEFINE_THREAD_POOL(storage_medium_migrate);
     METRICS_DEFINE_THREAD_POOL(check_consistency);
@@ -98,6 +107,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(clone);
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
+    METRICS_DEFINE_THREAD_POOL(replicate_file);
 
 private:
     struct PendingThreadPoolMetrics {

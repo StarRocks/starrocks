@@ -114,6 +114,12 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --without-connector-benchmark
+                        build Backend without the benchgen-backed benchmark connector
+     --without-connector-elasticsearch
+                        build Backend without the Elasticsearch connector
+     --without-connector-mysql
+                        build Backend without the MySQL connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
@@ -169,6 +175,9 @@ OPTS=$(${GETOPT_BIN} \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
+  -l 'without-connector-benchmark' \
+  -l 'without-connector-elasticsearch' \
+  -l 'without-connector-mysql' \
   -l 'with-dynamic' \
   -l 'module' \
   -l 'with-clang-tidy' \
@@ -206,6 +215,9 @@ BUILD_HIVE_UDF=
 CLEAN=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
+WITH_CONNECTOR_BENCHMARK=ON
+WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_MYSQL=ON
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
 THIN_ARCHIVE=OFF
@@ -287,10 +299,6 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
-    ENABLE_QUERY_DEBUG_TRACE=OFF
-fi
-
 if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
     ENABLE_FAULT_INJECTION=OFF
 fi
@@ -332,6 +340,9 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
+            --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+            --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
@@ -395,6 +406,9 @@ echo "Get params:
     CLEAN                       -- $CLEAN
     WITH_GCOV                   -- $WITH_GCOV
     WITH_BENCH                  -- $WITH_BENCH
+    WITH_CONNECTOR_BENCHMARK    -- $WITH_CONNECTOR_BENCHMARK
+    WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
+    WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
@@ -406,7 +420,6 @@ echo "Get params:
     USE_SSE4_2                  -- $USE_SSE4_2
     USE_BMI_2                   -- $USE_BMI_2
     PARALLEL                    -- $PARALLEL
-    ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
     ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
@@ -543,8 +556,10 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
-                  -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
+                  -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+                  -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \

@@ -18,7 +18,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <fstream>
+#include <thread>
 
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
@@ -29,8 +31,10 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "platform/store_path.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -41,7 +45,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_define.h"
-#include "storage/options.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -93,7 +96,18 @@ public:
     void TearDown() override {
         auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
         EXPECT_TRUE(status.ok()) << status;
-        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        // For primary key tablets, `rowset_commit` schedules an async ApplyCommitTask that holds a
+        // reference to the tablet. `drop_tablet` only waits until the apply logic finishes
+        // (_apply_running == false), not until the task object is destroyed, so there is a short
+        // window where the tablet's use_count is still > 1 and delete_shutdown_tablet() returns
+        // ResourceBusy. The extra reference is transient, so retry until the task is reclaimed.
+        for (int i = 0; i < 100; ++i) {
+            status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+            if (!status.is_resource_busy()) {
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
         EXPECT_TRUE(status.ok()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
@@ -750,12 +764,12 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_rowset_meta_col
     EXPECT_TRUE(status.ok()) << status;
 
     // Verify segments are properly converted
-    EXPECT_EQ(2, op_write.rowset().segments_size());
+    EXPECT_EQ(2, op_write.rowset().segment_metas_size());
     EXPECT_EQ(2, filename_map.size());
 
     // Verify all segment files are .dat files
-    for (const auto& segment : op_write.rowset().segments()) {
-        EXPECT_TRUE(lake::is_segment(segment));
+    for (const auto& segment : op_write.rowset().segment_metas()) {
+        EXPECT_TRUE(lake::is_segment(segment.filename()));
     }
 }
 
@@ -783,6 +797,201 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_h
     EXPECT_TRUE(lake::is_segment(new_segment));
     EXPECT_TRUE(lake::is_del(old_del));
     EXPECT_TRUE(lake::is_del(new_del));
+}
+
+namespace {
+
+// Build a TabletMetadataPB suitable for prepare_del_transcode_context tests.
+//   keys_type=PRIMARY_KEYS, single (or composite) PK columns with the given types,
+//   set primary_key_encoding_type to the requested value.
+TabletMetadataPB make_pk_tablet_metadata(int64_t id, PrimaryKeyEncodingTypePB encoding,
+                                         const std::vector<std::string>& pk_type_names) {
+    TabletMetadataPB meta;
+    meta.set_id(id);
+    auto* schema = meta.mutable_schema();
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_primary_key_encoding_type(encoding);
+    for (size_t i = 0; i < pk_type_names.size(); ++i) {
+        auto* col = schema->add_column();
+        col->set_unique_id(static_cast<uint32_t>(i));
+        col->set_name("c" + std::to_string(i));
+        col->set_type(pk_type_names[i]);
+        if (pk_type_names[i] == "VARCHAR") {
+            col->set_length(32);
+        }
+        col->set_is_key(true);
+        col->set_is_nullable(false);
+    }
+    return meta;
+}
+
+// Build a duplicate-keys (non-PK) TabletMetadataPB.
+TabletMetadataPB make_non_pk_tablet_metadata(int64_t id) {
+    TabletMetadataPB meta;
+    meta.set_id(id);
+    auto* schema = meta.mutable_schema();
+    schema->set_keys_type(DUP_KEYS);
+    auto* col = schema->add_column();
+    col->set_unique_id(0);
+    col->set_name("c0");
+    col->set_type("INT");
+    col->set_is_key(true);
+    col->set_is_nullable(false);
+    return meta;
+}
+
+} // namespace
+
+// prepare_del_transcode_context: non-PK target returns empty context.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_non_pk) {
+    auto target = make_non_pk_tablet_metadata(1);
+    auto source = make_non_pk_tablet_metadata(2);
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    EXPECT_EQ(nullptr, ctx_or.value().pkey_schema);
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE, ctx_or.value().source_encoding);
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE, ctx_or.value().target_encoding);
+}
+
+// prepare_del_transcode_context: V1 source + V2 target on single INT PK builds a valid context
+// with the expected encodings + pkey_schema.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_v1_to_v2_success) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, ctx_or.value().source_encoding);
+    EXPECT_EQ(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2, ctx_or.value().target_encoding);
+    ASSERT_NE(nullptr, ctx_or.value().pkey_schema);
+    EXPECT_EQ(1, ctx_or.value().pkey_schema->num_fields());
+}
+
+// prepare_del_transcode_context: source has 2 PK columns, target has 1 -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_pk_count_mismatch) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT", "INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_FALSE(ctx_or.ok());
+    EXPECT_TRUE(ctx_or.status().is_not_supported()) << ctx_or.status();
+}
+
+// prepare_del_transcode_context: source PK column type differs from target -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_pk_type_mismatch) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"BIGINT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_FALSE(ctx_or.ok());
+    EXPECT_TRUE(ctx_or.status().is_not_supported()) << ctx_or.status();
+}
+
+// prepare_del_transcode_context: V2 source -> V1 target on single non-string fixed PK -> NotSupported.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_v2_to_v1_rejected) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_FALSE(ctx_or.ok());
+    EXPECT_TRUE(ctx_or.status().is_not_supported()) << ctx_or.status();
+}
+
+// prepare_del_transcode_context: V1<->V2 on VARCHAR PK (byte-compatible) is allowed.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_prepare_del_transcode_context_varchar_pk_compatible) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"VARCHAR"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"VARCHAR"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+}
+
+// build_file_converters: V1→V2 on single INT PK produces DelFileStreamConverter for .del files,
+// plain FileStreamConverter for .dat files, and returns nullptr for unknown files.
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_del_transcode_v1_to_v2) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    auto& ctx = ctx_or.value();
+    ASSERT_NE(nullptr, ctx.pkey_schema);
+
+    // Set up minimal environment for build_file_converters
+    std::string test_dir = config::storage_root_path + "/build_file_converters_test";
+    auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
+    ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
+    auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, mem_tracker.get());
+    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
+
+    TReplicateSnapshotRequest request;
+    request.tablet_id = 1;
+    request.transaction_id = 100;
+    request.src_visible_version = 2;
+
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    filename_map["src_0.del"] = {lake::gen_del_filename(100), FileEncryptionPair()};
+    filename_map["src_0.dat"] = {lake::gen_segment_filename(100), FileEncryptionPair()};
+
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    std::vector<std::string> files_to_delete;
+
+    auto converters = lake::ReplicationTxnManager::build_file_converters(
+            tablet_manager.get(), request, filename_map, column_unique_id_map, files_to_delete, ctx.pkey_schema,
+            ctx.source_encoding, ctx.target_encoding);
+
+    // .del file should produce a DelFileStreamConverter
+    auto del_converter_or = converters("src_0.del", 100);
+    ASSERT_TRUE(del_converter_or.ok()) << del_converter_or.status();
+    ASSERT_NE(nullptr, del_converter_or.value());
+    EXPECT_NE(nullptr, dynamic_cast<DelFileStreamConverter*>(del_converter_or.value().get()));
+
+    // .dat file (no column_unique_id_map) should produce a plain FileStreamConverter
+    auto seg_converter_or = converters("src_0.dat", 200);
+    ASSERT_TRUE(seg_converter_or.ok()) << seg_converter_or.status();
+    ASSERT_NE(nullptr, seg_converter_or.value());
+    EXPECT_EQ(nullptr, dynamic_cast<DelFileStreamConverter*>(seg_converter_or.value().get()));
+
+    // Unknown file should return nullptr
+    auto unknown_or = converters("unknown.sst", 50);
+    ASSERT_TRUE(unknown_or.ok());
+    EXPECT_EQ(nullptr, unknown_or.value());
+
+    (void)fs::remove_all(test_dir);
+}
+
+// build_file_converters: same encoding produces plain FileStreamConverter for .del files (no transcode).
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_del_no_transcode_same_encoding) {
+    auto target = make_pk_tablet_metadata(1, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto source = make_pk_tablet_metadata(2, PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, {"INT"});
+    auto ctx_or = lake::ReplicationTxnManager::prepare_del_transcode_context(target, source.schema());
+    ASSERT_TRUE(ctx_or.ok()) << ctx_or.status();
+    auto& ctx = ctx_or.value();
+
+    std::string test_dir = config::storage_root_path + "/build_file_converters_test2";
+    auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
+    ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
+    auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, mem_tracker.get());
+    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
+
+    TReplicateSnapshotRequest request;
+    request.tablet_id = 1;
+    request.transaction_id = 100;
+    request.src_visible_version = 2;
+
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    filename_map["src_0.del"] = {lake::gen_del_filename(100), FileEncryptionPair()};
+
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    std::vector<std::string> files_to_delete;
+
+    auto converters = lake::ReplicationTxnManager::build_file_converters(
+            tablet_manager.get(), request, filename_map, column_unique_id_map, files_to_delete, ctx.pkey_schema,
+            ctx.source_encoding, ctx.target_encoding);
+
+    // Same encoding: .del file should produce a plain FileStreamConverter, not DelFileStreamConverter
+    auto del_converter_or = converters("src_0.del", 100);
+    ASSERT_TRUE(del_converter_or.ok()) << del_converter_or.status();
+    ASSERT_NE(nullptr, del_converter_or.value());
+    EXPECT_EQ(nullptr, dynamic_cast<DelFileStreamConverter*>(del_converter_or.value().get()));
+
+    (void)fs::remove_all(test_dir);
 }
 
 // Test convert_dcg_meta_for_pk: converts DeltaColumnGroupList from snapshot into DeltaColumnGroupMetadataPB
@@ -917,8 +1126,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_p
     rowset->set_id(5); // source rowset seg id
     rowset->set_num_rows(100);
     rowset->set_data_size(4096);
-    rowset->add_segments("seg1.dat");
-    rowset->add_segments("seg2.dat");
+    rowset->add_segment_metas()->set_filename("seg1.dat");
+    rowset->add_segment_metas()->set_filename("seg2.dat");
 
     // Add DCG metadata - segment 5 has DCG with version 3
     auto* dcg_meta = op_replication.mutable_dcg_meta();
@@ -969,8 +1178,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_n
     rowset1->set_id(3);
     rowset1->set_num_rows(50);
     rowset1->set_data_size(2048);
-    rowset1->add_segments("seg1.dat");
-    rowset1->add_segments("seg2.dat");
+    rowset1->add_segment_metas()->set_filename("seg1.dat");
+    rowset1->add_segment_metas()->set_filename("seg2.dat");
 
     // Rowset 2: source id=10, 1 segment
     auto* op_write2 = op_replication.add_op_writes();
@@ -978,7 +1187,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_n
     rowset2->set_id(10);
     rowset2->set_num_rows(30);
     rowset2->set_data_size(1024);
-    rowset2->add_segments("seg3.dat");
+    rowset2->add_segment_metas()->set_filename("seg3.dat");
 
     // DCG on segment (source rssid=4, which is rowset1.id + segment_index 1)
     auto* dcg_meta = op_replication.mutable_dcg_meta();
@@ -996,7 +1205,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_n
     for (const auto& ow : op_replication.op_writes()) {
         if (ow.has_rowset()) {
             uint32_t source_id = ow.rowset().id();
-            uint32_t num_segments = ow.rowset().segments_size();
+            uint32_t num_segments = ow.rowset().segment_metas_size();
             for (uint32_t i = 0; i < num_segments; i++) {
                 rssid_remap[source_id + i] = current_next_id + i;
             }
@@ -1426,8 +1635,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_p
     rowset1->set_id(3);
     rowset1->set_num_rows(50);
     rowset1->set_data_size(2048);
-    rowset1->add_segments("seg1.dat");
-    rowset1->add_segments("seg2.dat");
+    rowset1->add_segment_metas()->set_filename("seg1.dat");
+    rowset1->add_segment_metas()->set_filename("seg2.dat");
 
     // Rowset 2: source id=8, 1 segment, 30 rows
     auto* op_write2 = op_replication.add_op_writes();
@@ -1435,7 +1644,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_p
     rowset2->set_id(8);
     rowset2->set_num_rows(30);
     rowset2->set_data_size(1024);
-    rowset2->add_segments("seg3.dat");
+    rowset2->add_segment_metas()->set_filename("seg3.dat");
 
     // DCG on source segment 4 (rowset1.id=3, segment index 1)
     auto* dcg_meta_pb = op_replication.mutable_dcg_meta();
@@ -1451,9 +1660,9 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_p
     {
         uint32_t target_id = metadata.next_rowset_id(); // 20
         for (const auto& ow : op_replication.op_writes()) {
-            if (ow.dels_size() > 0 || ow.rowset().num_rows() > 0 || ow.rowset().has_delete_predicate()) {
+            if (ow.dels_meta_size() > 0 || ow.rowset().num_rows() > 0 || ow.rowset().has_delete_predicate()) {
                 uint32_t source_id = ow.rowset().id();
-                uint32_t step = std::max<uint32_t>(1, ow.rowset().segments_size());
+                uint32_t step = std::max<uint32_t>(1, ow.rowset().segment_metas_size());
                 for (uint32_t i = 0; i < step; i++) {
                     rssid_remap[source_id + i] = target_id + i;
                 }
@@ -1506,9 +1715,9 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_n
     rowset->set_id(5);
     rowset->set_num_rows(100);
     rowset->set_data_size(4096);
-    rowset->add_segments("s1.dat");
-    rowset->add_segments("s2.dat");
-    rowset->add_segments("s3.dat");
+    rowset->add_segment_metas()->set_filename("s1.dat");
+    rowset->add_segment_metas()->set_filename("s2.dat");
+    rowset->add_segment_metas()->set_filename("s3.dat");
 
     // DCG on source segment 6 (rowset.id=5, segment index 1)
     auto* dcg_meta_pb = op_replication.mutable_dcg_meta();
@@ -1525,7 +1734,7 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_n
         for (const auto& ow : op_replication.op_writes()) {
             if (ow.has_rowset() && (ow.rowset().num_rows() > 0 || ow.rowset().has_delete_predicate())) {
                 uint32_t source_id = ow.rowset().id();
-                uint32_t step = std::max<uint32_t>(1, ow.rowset().segments_size());
+                uint32_t step = std::max<uint32_t>(1, ow.rowset().segment_metas_size());
                 for (uint32_t i = 0; i < step; i++) {
                     rssid_remap[source_id + i] = target_id + i;
                 }

@@ -97,10 +97,10 @@ OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
 OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
-THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.22.0/thrift-0.22.0.tar.gz"
-THRIFT_NAME=thrift-0.22.0.tar.gz
-THRIFT_SOURCE=thrift-0.22.0
-THRIFT_MD5SUM="29f4ef82e6ebc336c69ef4f26fb4d2a1"
+THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.23.0/thrift-0.23.0.tar.gz"
+THRIFT_NAME=thrift-0.23.0.tar.gz
+THRIFT_SOURCE=thrift-0.23.0
+THRIFT_MD5SUM="7b62f4258ded41e233a638fe8b9fcf64"
 
 # protobuf
 PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
@@ -210,8 +210,8 @@ SASL_NAME=cyrus-sasl-2.1.28.tar.gz
 SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
-# kerberos MIT
-KRB5_DOWNLOAD="https://kerberos.org/dist/krb5/1.19/krb5-1.19.4.tar.gz"
+# MIT Kerberos publishes release archives from web.mit.edu/kerberos/dist.
+KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz"
 KRB5_NAME=krb5-1.19.4.tar.gz
 KRB5_SOURCE=krb5-1.19.4
 KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
@@ -404,10 +404,10 @@ LIBDEFLATE_SOURCE="libdeflate-1.18"
 LIBDEFLATE_MD5SUM="1ec42dfe7d777929ade295281560d750"
 
 # llvm
-LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz"
-LLVM_NAME="llvm-project-16.0.6.src.tar.xz"
-LLVM_SOURCE="llvm-project-16.0.6.src"
-LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
+LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/llvm-project-18.1.8.src.tar.xz"
+LLVM_NAME="llvm-project-18.1.8.src.tar.xz"
+LLVM_SOURCE="llvm-project-18.1.8.src"
+LLVM_MD5SUM="81cd0be5ae6f1ad8961746116d426a96"
 
 #clucene
 CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz"

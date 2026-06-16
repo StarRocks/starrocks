@@ -18,12 +18,14 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "compute_env/sorting/merge_path.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/sort_exec_exprs.h"
-#include "exec/sorting/merge_path.h"
+#include "exprs/sort_exec_exprs.h"
 
 namespace starrocks::pipeline {
+class ScanMorsel;
+using Morsel = ScanMorsel;
 class SortContext;
 
 // +---------------------------+               +--------------------------------------+

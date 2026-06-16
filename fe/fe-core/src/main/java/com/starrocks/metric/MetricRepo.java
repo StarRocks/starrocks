@@ -328,6 +328,37 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
 
+    // Sample-Based Tablet Pre-Split metrics. The coordinator wires the eligibility-skip,
+    // post-submit hard-cap, load-abort counters and the two wait-time histograms. The
+    // sampler/tier/boundaries counters are wired by the production PreSplitPipeline
+    // implementation that ships with the load-integration commits.
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL;
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_PRE_CREATE =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric("tablet_pre_split_pre_create",
+                            MetricUnit.REQUESTS,
+                            "total multi-partition pre-create attempts by result "
+                                    + "(succeeded|failed|already_exists)"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("tablet_pre_split_sampler_failed",
+                            MetricUnit.REQUESTS, "total sampler failures by reason"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_TIER_USED =
+            new MetricWithLabelGroup<>("tier",
+                    () -> new LongCounterMetric("tablet_pre_split_tier_used",
+                            MetricUnit.REQUESTS, "total Sample-Based Tablet Pre-Split invocations by tier"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("tablet_pre_split_eligibility_skipped",
+                            MetricUnit.REQUESTS, "total eligibility-gate skips by reason"));
+    public static Histogram HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+
     public static Histogram HISTO_QUERY_LATENCY;
 
     // Per-catalog-type query latency histograms
@@ -553,6 +584,53 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
+
+        GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
+                "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,
+                "epoch millis of the last finished automated cluster snapshot, 0 if none") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getLastSuccessTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotLastSuccessTime);
+
+        GaugeMetric<Long> snapshotConsecutiveFailures = new GaugeMetric<Long>(
+                "cluster_snapshot_consecutive_failures", MetricUnit.NOUNIT,
+                "consecutive failed automated cluster snapshot jobs since the last success") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getConsecutiveFailureCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotConsecutiveFailures);
+
+        GaugeMetric<Long> recycleBinPartitionNum = new GaugeMetric<Long>(
+                "recycle_bin_partition_num", MetricUnit.NOUNIT, "number of partitions in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinPartitionNum);
+
+        GaugeMetric<Long> recycleBinTableNum = new GaugeMetric<Long>(
+                "recycle_bin_table_num", MetricUnit.NOUNIT, "number of tables in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinTableNum);
+
+        GaugeMetric<Long> recycleBinDatabaseNum = new GaugeMetric<Long>(
+                "recycle_bin_database_num", MetricUnit.NOUNIT, "number of databases in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleDatabaseNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinDatabaseNum);
 
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
@@ -914,6 +992,33 @@ public final class MetricRepo {
         COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.addLabel(new MetricLabel("type", "merge"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED);
 
+        COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = new LongCounterMetric(
+                "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS,
+                "total Sample-Based Tablet Pre-Split post-submit hard-cap events (load transaction aborted)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP);
+
+        COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT = new LongCounterMetric(
+                "tablet_pre_split_load_abort", MetricUnit.REQUESTS,
+                "total load transactions aborted because of Sample-Based Tablet Pre-Split");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT);
+
+        COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = new LongCounterMetric(
+                "tablet_pre_split_sampler_invocations", MetricUnit.REQUESTS,
+                "total sampler invocations driven by Sample-Based Tablet Pre-Split");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS);
+
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED = new LongCounterMetric(
+                "tablet_pre_split_partitions_capped", MetricUnit.REQUESTS,
+                "total predicted partitions dropped by the Sample-Based Tablet Pre-Split per-load cap "
+                        + "(tablet_pre_split_max_partitions_per_load)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED);
+
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = new LongCounterMetric(
+                "tablet_pre_split_partitions_total", MetricUnit.REQUESTS,
+                "total target partitions counted by the Sample-Based Tablet Pre-Split "
+                        + "multi-partition coordinator (one increment per PartitionSamples entry)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL);
+
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
         HISTO_EDIT_LOG_WRITE_LATENCY =
@@ -929,6 +1034,12 @@ public final class MetricRepo {
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
         HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_reshard_job", "duration", "ms"));
+        HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "pre_submit_wait", "ms"));
+        HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
+        HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
 
         // init system metrics
         initSystemMetrics();

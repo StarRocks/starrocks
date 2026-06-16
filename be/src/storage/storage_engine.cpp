@@ -59,15 +59,15 @@
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/util/bthreads/executor.h"
+#include "common/util/thrift_client_cache.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -170,10 +170,13 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
-        threads.emplace_back([data_dir] { (void)data_dir->load(); });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        threads.emplace_back([data_dir] {
+            Thread::set_thread_name(pthread_self(), "load_data_dir");
+            data_dir->load();
+        });
 
         threads.emplace_back([data_dir] {
+            Thread::set_thread_name(pthread_self(), "cmpt_data_dir");
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -194,7 +197,6 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                 }
             }
         });
-        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         DCHECK(thread.joinable());
@@ -529,7 +531,6 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     }
 
     // randomize the preferential paths to balance number of tablets each disk has
-    std::srand(std::random_device()());
     std::shuffle(stores.begin(), stores.begin() + last_candidate_idx, std::mt19937(std::random_device()()));
     return stores;
 }
@@ -836,14 +837,16 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
         LOG(ERROR) << "manual compaction failed, tablet not primary key tablet found: " << t.tablet_id;
         return;
     }
-    auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
+    auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
+                                                    "Compaction-" + std::to_string(tablet->tablet_id()),
+                                                    GlobalEnv::GetInstance()->compaction_mem_tracker());
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();
         LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.message();
         return;
     }
-    st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
+    st = tablet->updates()->compaction(mem_tracker.get(), t.input_rowset_ids);
     t.status = st.to_string();
     if (!st.ok()) {
         LOG(WARNING) << "manual compaction failed: " << st.message() << " tablet:" << t.tablet_id;
@@ -912,8 +915,9 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
+            MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(best_tablet->tablet_id()),
+            _options.compaction_mem_tracker);
     CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -953,8 +957,9 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
+            MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(best_tablet->tablet_id()),
+            _options.compaction_mem_tracker);
     BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
@@ -1018,8 +1023,9 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         StorageMetrics::instance()->running_update_compaction_task_num.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
 
-        std::unique_ptr<MemTracker> mem_tracker =
-                std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
+        std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
+                MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(best_tablet->tablet_id()),
+                _options.compaction_mem_tracker);
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StorageMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);

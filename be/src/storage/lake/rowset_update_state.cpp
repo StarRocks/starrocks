@@ -20,125 +20,28 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/raw_data_visitor.h"
-#include "common/config_primary_key_fwd.h"
 #include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
-
-Status SegmentPKIterator::_load() {
-    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, 4096));
-    auto chunk_container = _pk_column_chunk->clone_empty();
-    if (_iter != nullptr) {
-        while (true) {
-            chunk_container->reset();
-            auto st = Status::OK();
-            {
-                TRACE_COUNTER_SCOPE_LATENCY_US("segment_get_next_us");
-                st = _iter->get_next(chunk_container.get());
-            }
-            if (st.is_end_of_file()) {
-                break;
-            } else if (!st.ok()) {
-                return st;
-            } else {
-                TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
-                if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                                   _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
-                    break;
-                }
-            }
-        }
-    }
-    if (!_lazy_load && _standalone_pk_column == nullptr) {
-        // In some place, like partial update handler, we need to get standalone pk column,
-        // so we can't use lazy load mode.
-        ASSIGN_OR_RETURN(_standalone_pk_column, encoded_pk_column(_pk_column_chunk.get()));
-    }
-    if (_pk_column_chunk->num_rows() == 0) {
-        return Status::OK();
-    }
-    _current_rows += _pk_column_chunk->num_rows();
-    _begin_rowid_offsets.push_back(_current_rows);
-    return Status::OK();
-}
-
-Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                               PrimaryKeyEncodingType encoding_type, bool defer_data_load) {
-    _iter = iter;
-    _pkey_schema = pkey_schema;
-    _lazy_load = lazy_load;
-    _defer_data_load = defer_data_load;
-    _begin_rowid_offsets.push_back(0);
-    RETURN_IF(encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
-              Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
-    _encoding_type = encoding_type;
-    if (!_defer_data_load) {
-        _status = _load();
-        if (_status.ok()) {
-            _memory_usage = _pk_column_chunk->memory_usage() +
-                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
-        }
-    }
-    return _status;
-}
-
-bool SegmentPKIterator::done() {
-    // Deferred first load: trigger on first done() call
-    if (_defer_data_load) {
-        _defer_data_load = false;
-        _status = _load();
-        if (_status.ok() && _pk_column_chunk != nullptr) {
-            _memory_usage = _pk_column_chunk->memory_usage() +
-                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
-        }
-    }
-    return (_pk_column_chunk == nullptr || _pk_column_chunk->is_empty()) || !_status.ok();
-}
-
-Status SegmentPKIterator::status() {
-    return _status;
-}
-
-void SegmentPKIterator::next() {
-    _status = _load();
-    if (_status.ok()) {
-        _current_pk_column_idx++;
-    }
-}
-
-std::pair<ChunkPtr, size_t> SegmentPKIterator::current() {
-    return std::pair<ChunkPtr, size_t>(std::move(_pk_column_chunk), _begin_rowid_offsets[_current_pk_column_idx]);
-}
-
-StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chunk) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("pk_encode_us");
-    MutableColumnPtr pk_column;
-    RETURN_IF(_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
-              Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column, _encoding_type));
-    TRY_CATCH_BAD_ALLOC(
-            PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), _encoding_type));
-    return std::move(pk_column);
-}
-
-void SegmentPKIterator::close() {
-    _iter->close();
-}
 
 RowsetUpdateState::RowsetUpdateState() = default;
 
@@ -355,6 +258,41 @@ static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
     return unmodified_column_ids;
 }
 
+// Resolve the rewrite-path vector index options for the dest segment, mirroring the normal lake
+// writer (reset_segment_writer): location-provider-resolved .vi paths keyed on |dest_path| — also
+// filled in async mode, where they only feed id recording — plus the schema's index_build_mode
+// and deferred-build threshold.
+static StatusOr<RewriteVectorIndexOptions> resolve_rewrite_vector_index_options(const RowsetUpdateStateParams& params,
+                                                                                const std::string& dest_path) {
+    RewriteVectorIndexOptions vi_opts;
+    SegmentWriterOptions opts;
+    RETURN_IF_ERROR(fill_vector_index_file_paths(params.tablet_schema, params.tablet->id(), dest_path,
+                                                 params.tablet->tablet_mgr(), /*location_provider=*/nullptr,
+                                                 /*fs=*/nullptr, opts));
+    vi_opts.file_paths = std::move(opts.vector_index_file_paths);
+    vi_opts.defer_build = has_async_vector_index(params.tablet_schema);
+    vi_opts.build_threshold = get_vector_index_build_threshold(params.tablet_schema);
+    return vi_opts;
+}
+
+// A partial update whose update set includes a vector-indexed column raw-copies that column's
+// data into the dest segment (rewrite_partial_update creates no column writer for it), so a sync
+// .vi built inline for the src partial segment is still valid for the dest — the rewrite keeps
+// the row order. Carry it over to the dest segment name and record the id; the src ids in the
+// op_write metadata list exactly the indexes whose .vi was built on the updated columns. Async
+// mode has no src .vi to carry: the dest ids recorded by the rewrite already cover all indexes.
+static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& params,
+                                               const SegmentMetadataPB& src_seg_meta, const std::string& src_path,
+                                               const std::string& dest_path, FileInfo* file_info) {
+    for (int64_t index_id : src_seg_meta.vector_index_ids()) {
+        auto src_vi = params.tablet->segment_location(gen_vector_index_filename(src_path, index_id));
+        auto dest_vi = params.tablet->segment_location(gen_vector_index_filename(dest_path, index_id));
+        RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
+        file_info->vector_index_ids.push_back(index_id);
+    }
+    return Status::OK();
+}
+
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
                                                                         const RowsetUpdateStateParams& params,
                                                                         bool need_lock) {
@@ -538,11 +476,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
+    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
         rowset_meta.num_rows() == 0) {
         return Status::OK();
     }
-    RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_size() == rowset_meta.segments_size());
+    RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
     // currently assume it's a partial update
     const auto& txn_meta = params.op_write.txn_meta();
     std::vector<ColumnId> unmodified_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
@@ -565,25 +503,31 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     }
 
     bool need_rename = true;
-    const auto& src_path = rowset_meta.segments(segment_id);
+    const auto& src_seg_meta = rowset_meta.segment_metas(segment_id);
+    const auto& src_path = src_seg_meta.filename();
     const auto& dest_path = gen_segment_filename(txn_id);
     DCHECK(src_path != dest_path);
 
-    FileInfo src{.path = params.tablet->segment_location(src_path), .size = rowset_meta.segment_size(segment_id)};
-    auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
-    if (segment_encryption_metas_size > 0) {
-        if (segment_id >= segment_encryption_metas_size) {
-            string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}",
-                                     params.tablet->tablet_id(), params.op_write.rowset().id(), segment_id,
-                                     segment_encryption_metas_size);
-            LOG(ERROR) << msg;
-            return Status::Corruption(msg);
-        }
-        src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    if (src_seg_meta.has_size()) {
+        src.size = src_seg_meta.size();
     }
-    if (rowset_meta.bundle_file_offsets_size() > 0) {
-        src.bundle_file_offset = rowset_meta.bundle_file_offsets(segment_id);
+    if (src_seg_meta.has_encryption_meta()) {
+        src.encryption_meta = src_seg_meta.encryption_meta();
     }
+    if (src_seg_meta.has_bundle_file_offset()) {
+        src.bundle_file_offset = src_seg_meta.bundle_file_offset();
+    }
+
+    // The dest segment is a full rewrite, so mirror the normal lake writer's vector-index
+    // handling: sync indexes are built inline at the reader-visible location-provider path;
+    // async builds are deferred to the FE-scheduled VectorIndexBuildTask; and the dest segment's
+    // vector_index_ids are persisted via the replace FileInfo. Without this the SegmentWriter
+    // would fall back to the IndexDescriptor path (unreachable in shared-data, since reads/builds
+    // key off the segment-name path) and the dest segment would carry no vector_index_ids,
+    // silently dropping the index after publish.
+    ASSIGN_OR_RETURN(auto vector_index_opts, resolve_rewrite_vector_index_options(params, dest_path));
+    const bool defer_vector_index_build = vector_index_opts.defer_build;
 
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
@@ -593,16 +537,33 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids,
                 has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
-                params.tablet));
+                params.tablet, std::move(vector_index_opts)));
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
     } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
+
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                 src, &file_info, params.tablet_schema, unmodified_column_ids,
-                _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
+                _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer,
+                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts)));
         file_info.path = dest_path;
+
+        // Sync indexes on the *updated* columns are not rebuilt by the rewrite (their data is
+        // raw-copied without a column writer); carry the src partial segment's .vi over to the
+        // dest segment name instead. Async mode normally needs no carry — the rewrite records the
+        // scheduled ids itself — except on the copy-only fast path (no unmodified columns left,
+        // reachable when a schema change lands between the partial write and its publish): there
+        // the rewrite never sees a SegmentWriter, so carry the src's scheduled ids (async has no
+        // .vi file to copy) lest the metadata refresh wipe them.
+        if (!defer_vector_index_build) {
+            RETURN_IF_ERROR(carry_src_segment_vector_indexes(params, src_seg_meta, src_path, dest_path, &file_info));
+        } else if (unmodified_column_ids.empty()) {
+            for (int64_t index_id : src_seg_meta.vector_index_ids()) {
+                file_info.vector_index_ids.push_back(index_id);
+            }
+        }
         (*replace_segments)[segment_id] = file_info;
     } else {
         need_rename = false;
@@ -617,11 +578,21 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     if (need_rename) {
         // after rename, add old segment to orphan files, for gc later.
         FileMetaPB file_meta;
-        file_meta.set_name(rowset_meta.segments(segment_id));
-        if (rowset_meta.shared_segments_size() > 0) {
-            file_meta.set_shared(rowset_meta.shared_segments(segment_id));
+        file_meta.set_name(src_seg_meta.filename());
+        if (src_seg_meta.has_shared()) {
+            file_meta.set_shared(src_seg_meta.shared());
         }
         orphan_files->push_back(std::move(file_meta));
+        // A sync .vi built for the replaced src segment is keyed on the src segment name and
+        // unreachable after the replace (the dest segment has its own copy); orphan it too. In
+        // async mode the src ids only marked a scheduled build — no .vi file ever existed.
+        if (!defer_vector_index_build) {
+            for (int64_t index_id : src_seg_meta.vector_index_ids()) {
+                FileMetaPB vi_meta;
+                vi_meta.set_name(gen_vector_index_filename(src_seg_meta.filename(), index_id));
+                orphan_files->push_back(std::move(vi_meta));
+            }
+        }
     }
     TRACE("end rewrite segment");
     return Status::OK();
@@ -639,7 +610,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     _base_versions[segment_id] = base_version;
     TRACE_COUNTER_SCOPE_LATENCY_US("resolve_conflict_latency_us");
     // skip resolve conflict when not partial update happen.
-    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segments_size() == 0) {
+    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segment_metas_size() == 0) {
         return Status::OK();
     }
 
@@ -879,7 +850,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     CHECK_MEM_LIMIT("RowsetUpdateState::load_delete");
     // always one file for now.
     TRACE_COUNTER_SCOPE_LATENCY_US("load_delete_us");
-    _deletes.resize(params.op_write.dels_size());
+    _deletes.resize(params.op_write.dels_meta_size());
     if (_deletes[del_id] != nullptr) {
         // Already load.
         return Status::OK();
@@ -896,11 +867,12 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
 
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
-    const std::string& path = params.op_write.dels(del_id);
+    const auto& del_meta = params.op_write.dels_meta(del_id);
+    const std::string& path = del_meta.name();
     RandomAccessFileOptions opts;
-    if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {
-        // When upgrade from old version, `del_encryption_metas` could be empty.
-        auto& meta = params.op_write.del_encryption_metas(del_id);
+    if (del_meta.has_encryption_meta()) {
+        // When upgrade from old version, `encryption_meta` could be empty.
+        auto& meta = del_meta.encryption_meta();
         if (!meta.empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
             opts.encryption_info = std::move(info);

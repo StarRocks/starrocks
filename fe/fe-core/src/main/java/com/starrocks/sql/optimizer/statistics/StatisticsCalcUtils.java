@@ -44,6 +44,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -321,16 +322,18 @@ public class StatisticsCalcUtils {
             if (olapScanOperator.getSelectedPartitionId() == null) {
                 selectedPartitions = Lists.newArrayList(olapScanOperator.getTable().getPartitions());
             } else {
+                // filter out null partitions that may have been dropped concurrently
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                        olapTable::getPartition).filter(Objects::nonNull).collect(Collectors.toList());
             }
         } else {
             PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
             if (olapScanOperator.getSelectedPartitionId() == null) {
                 selectedPartitions = Lists.newArrayList(olapScanOperator.getTable().getPartitions());
             } else {
+                // filter out null partitions that may have been dropped concurrently
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                        olapTable::getPartition).filter(Objects::nonNull).collect(Collectors.toList());
             }
         }
         return selectedPartitions;

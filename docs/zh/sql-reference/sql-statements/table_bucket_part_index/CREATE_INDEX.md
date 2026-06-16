@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "创建 Bitmap、N-Gram bloom filter、全文倒排和向量索引。"
 keywords: ['suoyin']
 ---
 

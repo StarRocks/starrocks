@@ -17,7 +17,6 @@
 
 #include "util/json_flattener.h"
 
-#include <storage/flat_json_config.h>
 #include <sys/types.h>
 #include <velocypack/StringRef.h>
 
@@ -52,6 +51,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
+#include "storage/primitive/flat_json_config.h"
 #include "storage/rowset/column_reader.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"

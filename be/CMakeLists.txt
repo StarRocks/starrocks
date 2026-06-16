@@ -192,6 +192,9 @@ option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEF
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
+option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
+option(WITH_CONNECTOR_MYSQL "Build the MySQL connector" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
@@ -309,6 +312,12 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unknown-warning-option")
+    # GCC 15's libstdc++ annotates __find_if (used by std::find_if/any_of/all_of/remove_if) with
+    # "#pragma GCC unroll 4". clang treats that as an explicit unroll request and emits
+    # -Wpass-failed=transform-warning when the predicate is not trivially unrollable, which -Werror
+    # turns into a build failure. These are missed-optimization diagnostics, not correctness issues,
+    # so keep the warning but do not let it fail the build.
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=pass-failed")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
@@ -409,11 +418,6 @@ endif()
 if (WITH_COMPRESS)
     # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
-endif()
-
-if (ENABLE_QUERY_DEBUG_TRACE)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
-    message(STATUS "enable query debug trace")
 endif()
 
 if (ENABLE_FAULT_INJECTION)
@@ -540,22 +544,32 @@ set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
     Connector
+    # Legacy connector registration pulls concrete connector objects that
+    # depend on Exec symbols, so keep it in the static library group.
+    ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    IO
     Storage
     Rowset
     Runtime
     Udf
     Util
     Script
-    orc
     ${WL_END_GROUP}
+    FormatAvro
+    FormatCsv
+    FormatJson
+    FormatOrc
+    FormatCore
+    ExecRuntime
+    ComputeEnv
+    ExecPrimitive
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     Serde
     $<TARGET_FILE:Cache>
+    RuntimeEnv
     RuntimeCore
     Platform
     $<TARGET_FILE:HttpCore>
@@ -563,7 +577,7 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:Types>
     $<TARGET_FILE:FSCore>
-    $<TARGET_FILE:IOCore>
+    $<TARGET_FILE:IO>
     StarOSIntegration
     Geo
     $<TARGET_FILE:Common>
@@ -631,7 +645,6 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
-    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
@@ -863,6 +876,8 @@ endif()
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+    ConnectorBuiltinRegistry
+    ConnectorBootstrap
     TestUtil
     ${WL_START_GROUP}
     gmock
@@ -967,6 +982,7 @@ add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/platform)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/compute_env)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)

@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -1458,6 +1459,16 @@ public class DDLStmtExecutor {
                                                                                ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotInterval(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt stmt,
+                                                                          ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getGlobalTransactionMgr()
+                        .markCommittedTransactionAsNoOpPublish(stmt.getTxnId(), stmt.getReason());
             });
             return null;
         }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "値の平方根を計算します。"
 ---
 
 # sqrt, dsqrt

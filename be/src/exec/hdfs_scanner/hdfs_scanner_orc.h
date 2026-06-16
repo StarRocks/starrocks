@@ -33,9 +33,16 @@ public:
     Status do_open(RuntimeState* runtime_state) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    void do_update_counter(HdfsScanProfile* profile) override;
+    Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
+    void do_update_counter(HdfsScannerProfile* profile) override;
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
+    // ORC handles single-slot predicates internally via lazy materialisation and
+    // per-column reader pushdown; the base class must not apply them a second time.
+    bool scanner_handles_predicate_by_slot_internally() const override { return true; }
+    // ORC evaluates multi-slot predicates at the end of do_get_next() after all
+    // columns (including lazy-loaded ones) are present in the chunk.  The search
+    // argument used during open() is an approximate stripe-level skip only.
+    bool scanner_handles_multi_slot_conjuncts_internally() const override { return true; }
 
 private:
     StatusOr<size_t> _do_get_next(ChunkPtr* chunk);

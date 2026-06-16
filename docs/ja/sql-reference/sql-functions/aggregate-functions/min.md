@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "expr 式の最小値を返します。"
 ---
 
 # min

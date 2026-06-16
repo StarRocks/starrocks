@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "軽量データ交換形式で階層的で柔軟な半構造化データ型。"
 ---
 
 # JSON

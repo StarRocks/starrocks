@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "column/column_access_path.h"
-#include "runtime/global_dict/types.h"
+#include "column/global_dict/types.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"

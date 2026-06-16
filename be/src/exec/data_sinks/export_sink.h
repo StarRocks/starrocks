@@ -39,8 +39,8 @@
 #include "common/runtime_profile.h"
 #include "exec/data_sink.h"
 #include "formats/csv/converter.h"
+#include "formats/io/formatted_output_stream_file.h"
 #include "fs/fs.h"
-#include "io/formatted_output_stream_file.h"
 
 namespace starrocks {
 

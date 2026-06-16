@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
+description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -93,6 +94,85 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
+
+### enable_lake_pk_compaction_score_gate
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for the Primary Key size-tiered compaction score gate in a shared-data cluster. When enabled (the default), low-value sparse mid-tier compaction picks are skipped: a picked level whose compaction score is below `lake_pk_compaction_min_level_score`, and which trips none of the override conditions, is left uncompacted to avoid rewriting large amounts of base data for a negligible reduction in file count. Set to `false` to turn off the whole gate in one step; every picked level then compacts unconditionally (the behavior before the gate existed), and the threshold parameters below have no effect.
+- Introduced in: v4.2
+
+### lake_pk_compaction_min_level_score
+
+- Default: 2.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Score threshold of the Primary Key compaction score gate (see `enable_lake_pk_compaction_score_gate`). When the size-tiered selector picks a level whose total compaction score is below this value and no override condition fires, the compaction is skipped. The per-rowset score is `io_count * 1MB / read_bytes` summed across the level: levels with many small or overlapped rowsets score high (useful compaction), while a few large non-overlapped rowsets score low (a near-pure base rewrite). Set to `0` to make the gate a no-op, because a level's score is always greater than or equal to `0`.
+- Introduced in: v4.2
+
+### lake_pk_compaction_min_benefit_cost_ratio
+
+- Default: 0.005
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. The minimum benefit/cost ratio (segments saved per MB rewritten) at which a below-threshold level is still compacted. The benefit folds in delete-vector cleanup pressure (see `lake_pk_compaction_delvec_benefit_weight`). Set to `0` to disable this override so that only `lake_pk_compaction_min_level_score` applies.
+- Introduced in: v4.2
+
+### lake_pk_compaction_emergency_score
+
+- Default: 50.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. When the tablet-wide read-pressure score (the sum of all rowset scores) reaches this value, compaction proceeds even if the picked level is below `lake_pk_compaction_min_level_score`, so that hot tablets with heavy read amplification are not starved. Set to `0` to disable this override.
+- Introduced in: v4.2
+
+### lake_pk_compaction_delvec_benefit_weight
+
+- Default: 12.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The weight that converts a level's delete pressure into segment-equivalent benefit units in the benefit/cost ratio used by `lake_pk_compaction_min_benefit_cost_ratio`, computed as `benefit = real_benefit_segments + delete_ratio * input_segments * weight`. A higher value makes compaction more aggressive at cleaning up delete vectors; a lower value favors reducing write amplification. Set to `0` to drop the delete contribution so that the ratio reflects segment-count benefit only.
+- Introduced in: v4.2
+
+### lake_pk_compaction_size_overflow_ratio
+
+- Default: 2.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
+- Introduced in: v4.2
+
+### lake_put_txn_log_timeout_guard_ms
+
+- Default: -1
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout guard for writing a transaction log to object storage in a shared-data cluster (the `put_txn_log` and `put_combined_txn_log` paths). If writing a transaction log takes longer than this value, StarRocks dumps the stack trace of the slow thread to the BE log to help diagnose slow object-storage writes. Disabled by default (a value less than or equal to `0` disables the guard); set it to a positive value such as `4000` (4 seconds) to enable.
+- Introduced in: -
+
+### lake_rows_mapper_read_parallelism
+
+- Default: 32
+- Type: Int
+- Unit: sub-chunks
+- Is mutable: Yes
+- Description: Maximum number of in-flight `.lcrm` (lake compaction rows-mapper) sub-chunk reads kept by `RowsMapperIterator` during light Primary Key compaction publish in a shared-data cluster. Each sub-chunk is `lake_rows_mapper_sub_chunk_bytes` in size and never crosses a segment boundary; the iterator submits up to this many reads to the PK index execution thread pool and pipelines them against the caller's per-segment processing. Memory bound is `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`. Set to `1` to disable pipelining and fall back to sequential reads.
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- Default: 4194304
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
 ### loop_count_wait_fragments_finish
 
@@ -391,7 +471,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The read buffer size used when downloading lake segment files during lake replication. This value determines the per-read allocation for reading remote files; the implementation uses the larger of this setting and a 1 MB minimum. A larger value reduces the number of read calls and can improve throughput but increases memory used per concurrent download; a smaller value lowers memory usage at the cost of more I/O calls. Tune according to network bandwidth, storage I/O characteristics, and the number of parallel replication threads.
-- Introduced in: -
+- Introduced in: v4.1.2
 
 ### lake_replication_max_file_copy_retry
 
@@ -400,7 +480,16 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of retry attempts for non-segment file copy (`.sst`, `.delvec`, `.del`, `.cols`) during lake-to-lake (shared-data) cross-cluster replication. Each attempt verifies the copied file size matches the source to detect truncated copies caused by transient object storage issues. Increase this value if experiencing intermittent file corruption during replication over unreliable storage.
-- Introduced in: -
+- Introduced in: v4.1.2
+
+### lake_replication_file_copy_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of threads in the dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. `0` means `cpu_cores * 4` (the same default semantics as `replication_threads`); negative values mean `-value * cpu_cores`. This pool is intentionally separate from the agent-task `replicate_snapshot` pool so that per-file copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock guard. The pool is built once at startup and has no runtime resize hook, so CN restart is required to change its size.
+- Introduced in: v4.1.2
 
 ### lake_service_max_concurrency
 

@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"
@@ -38,7 +39,7 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
-        _exec_env->metrics()->set_collect_hook_enabled(true);
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
 
         _create_runtime_state();
         _pool = _runtime_state->obj_pool();

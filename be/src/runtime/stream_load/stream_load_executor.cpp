@@ -46,15 +46,16 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
+#include "gutil/walltime.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/non_retryable_load_errors.h"
 
 namespace starrocks {
@@ -228,11 +229,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
-    if (ctx->timeout_second != -1) {
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
-    }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
 
     // set attachment if has
@@ -302,7 +299,7 @@ StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::str
     auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->getLoadTxnStatus(result, request); },
-            config::txn_commit_rpc_timeout_ms);
+            config::stream_load_thrift_rpc_timeout_ms);
     if (!st.ok()) {
         return st;
     } else {
@@ -345,11 +342,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
-    if (ctx->timeout_second != -1) {
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
-    }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     if (ctx->prepared_timeout_second != -1) {
         request.__set_prepared_timeout_second(ctx->prepared_timeout_second);

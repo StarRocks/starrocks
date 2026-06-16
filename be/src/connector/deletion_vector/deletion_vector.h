@@ -26,8 +26,8 @@ struct DeletionVectorBuildStats {
 
 class DeletionVector {
 public:
-    DeletionVector(const HdfsScannerParams& scanner_params)
-            : _deletion_vector_descriptor(scanner_params.deletion_vector_descriptor), _params(scanner_params) {}
+    DeletionVector(const HdfsScannerContext& ctx)
+            : _deletion_vector_descriptor(ctx.table_specific.deletion_vector_descriptor), _ctx(ctx) {}
 
     Status fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx);
     Status deserialized_inline_dv(std::string& encoded_bitmap_data, const SkipRowsContextPtr& skip_rows_ctx);
@@ -46,9 +46,9 @@ public:
 
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
-            const std::string& file_path, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
-            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<io::CacheInputStream>& cache_input_stream) const;
+            const std::string& file_path, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,
+            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     Status deserialized_deletion_vector(uint32_t magic_number, std::vector<char>& serialized_dv,
                                         int64_t serialized_bitmap_length, const SkipRowsContextPtr& skip_rows_ctx);
@@ -56,15 +56,15 @@ private:
     std::string assemble_deletion_vector_path(const std::string& table_location, std::string&& uuid,
                                               std::string& prefix) const;
 
-    void update_dv_file_io_counter(RuntimeProfile* parent_profile, const HdfsScanStats& app_stats,
-                                   const HdfsScanStats& fs_stats,
-                                   const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
-                                   const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
+    void update_dv_file_io_counter(RuntimeProfile* parent_profile, const HdfsScannerStats& app_stats,
+                                   const HdfsScannerStats& fs_stats,
+                                   const std::shared_ptr<CacheInputStream>& cache_input_stream,
+                                   const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream);
 
     void update_dv_build_counter(RuntimeProfile* parent_profile, const DeletionVectorBuildStats& build_stats);
 
     const std::shared_ptr<TDeletionVectorDescriptor> _deletion_vector_descriptor;
-    const HdfsScannerParams& _params;
+    const HdfsScannerContext& _ctx;
     DeletionVectorBuildStats _build_stats;
 };
 } // namespace starrocks

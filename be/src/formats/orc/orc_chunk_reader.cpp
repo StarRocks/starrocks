@@ -28,6 +28,9 @@
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/stack_util.h"
+#include "compute_env/load_path/load_path_state_helper.h"
+#include "compute_env/load_path/rejected_record_writer.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/orc_mapping.h"
@@ -36,10 +39,8 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "orc_schema_builder.h"
-#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -567,7 +568,7 @@ void OrcChunkReader::capture_rejected_rows_before_filter(Chunk* chunk) {
     if (!_state->enable_log_rejected_record()) {
         return;
     }
-    auto* writer = RuntimeStateHelper::rejected_record_writer(_state);
+    auto* writer = LoadPathStateHelper::rejected_record_writer(_state);
     if (writer == nullptr) {
         return;
     }
@@ -1352,7 +1353,7 @@ void OrcChunkReader::report_error_message(const std::string& error_msg) {
     if (_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
-    RuntimeStateHelper::append_error_msg_to_file(_state, "", error_msg);
+    LoadPathStateHelper::append_error_msg_to_file(_state, "", error_msg);
 }
 
 const orc::Type* OrcChunkReader::get_orc_type_by_slot_id(const SlotId& slot_id) const {

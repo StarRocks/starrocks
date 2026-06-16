@@ -28,6 +28,7 @@
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
@@ -247,7 +248,7 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     _is_finishing = true;
-    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+    if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "
@@ -423,7 +424,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
                                 print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
-            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
+            cancel_fragment_context(_fragment_ctx, Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         };
 
@@ -443,7 +444,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
             if (!status.ok()) {
                 _is_finishing = true;
-                _fragment_ctx->cancel(status);
+                cancel_fragment_context(_fragment_ctx, status);
 
                 const auto& dest_addr = context.dest_addrs;
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] [msg={}]",

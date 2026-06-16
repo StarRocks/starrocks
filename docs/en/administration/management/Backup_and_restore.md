@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks supports backing up data as snapshots into a remote storage system and restoring the data to any StarRocks clusters."
 ---
 
 # Back up and restore data

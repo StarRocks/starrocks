@@ -19,12 +19,13 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/sort_cursor.h"
+#include "compute_env/sorting/sorting.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_cursor.h"
-#include "exec/sorting/sorting.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -125,7 +126,7 @@ Status SortContext::_init_merger() {
             // Without this, a spiller restore failure leaves the merger cursor in a
             // not-eos / no-data limbo and the source operator hangs.
             if (!st.ok() && !st.is_end_of_file()) {
-                _state->fragment_ctx()->cancel(st);
+                cancel_fragment_context(_state->fragment_ctx(), st);
                 *eos = true;
             }
             if (!st.ok() || *eos || chunk == nullptr) {

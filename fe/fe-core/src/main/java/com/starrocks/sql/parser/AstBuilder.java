@@ -79,6 +79,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
@@ -247,7 +248,12 @@ import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.MergeTabletClause;
+import com.starrocks.sql.ast.MergeWhenClause;
+import com.starrocks.sql.ast.MergeWhenMatchedDeleteClause;
+import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
+import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -340,6 +346,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
@@ -1840,7 +1847,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             alterJobIdList = context.INTEGER_VALUE()
                     .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
         }
-        return new CancelAlterTableStmt(alterType, tableRef, alterJobIdList, createPos(context));
+        boolean force = context.FORCE() != null;
+        return new CancelAlterTableStmt(alterType, tableRef, alterJobIdList, force, createPos(context));
     }
 
     @Override
@@ -2706,6 +2714,71 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return ret;
     }
 
+    @Override
+    public ParseNode visitMergeIntoStatement(
+            com.starrocks.sql.parser.StarRocksParser.MergeIntoStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, createPos(context));
+        String targetAlias = context.targetAlias != null ? getIdentifierName(context.targetAlias) : null;
+        Relation sourceRelation = (Relation) visit(context.relation());
+        String sourceAlias = context.sourceAlias != null ? getIdentifierName(context.sourceAlias) : null;
+        if (sourceAlias != null && sourceRelation.getAlias() == null) {
+            sourceRelation.setAlias(new TableName(null, sourceAlias));
+        }
+        Expr mergeCondition = (Expr) visit(context.mergeCondition);
+        List<MergeWhenClause> whenClauses = visit(context.mergeWhenClause(), MergeWhenClause.class);
+        MergeIntoStmt ret = new MergeIntoStmt(tableRef, targetAlias, sourceRelation, sourceAlias,
+                mergeCondition, whenClauses, createPos(context));
+        if (context.explainDesc() != null) {
+            ret.setIsExplain(true, getExplainType(context.explainDesc()));
+            if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
+            }
+        }
+        ret.setHintNodes(hintMap.get(context));
+        return ret;
+    }
+
+    @Override
+    public ParseNode visitMergeWhenMatched(
+            com.starrocks.sql.parser.StarRocksParser.MergeWhenMatchedContext context) {
+        Expr condition = context.matchedCondition != null ? (Expr) visit(context.matchedCondition) : null;
+        var action = context.mergeMatchedAction();
+        if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeMatchedUpdateContext updateCtx) {
+            List<ColumnAssignment> assignments =
+                    visit(updateCtx.assignmentList().assignment(), ColumnAssignment.class);
+            return new MergeWhenMatchedUpdateClause(condition, assignments, createPos(context));
+        } else if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeMatchedDeleteContext) {
+            return new MergeWhenMatchedDeleteClause(condition, createPos(context));
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp(
+                    "merge matched action: " + action.getClass().getSimpleName()));
+        }
+    }
+
+    @Override
+    public ParseNode visitMergeWhenNotMatched(
+            com.starrocks.sql.parser.StarRocksParser.MergeWhenNotMatchedContext context) {
+        Expr condition = context.notMatchedCondition != null ? (Expr) visit(context.notMatchedCondition) : null;
+        var action = context.mergeNotMatchedAction();
+        if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertStarContext) {
+            return new MergeWhenNotMatchedInsertClause(condition, null, null, true, createPos(context));
+        } else if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertValuesContext valuesCtx) {
+            List<String> cols = null;
+            if (valuesCtx.cols != null && !valuesCtx.cols.isEmpty()) {
+                cols = new ArrayList<>();
+                for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext idCtx : valuesCtx.cols) {
+                    cols.add(getIdentifierName(idCtx));
+                }
+            }
+            List<Expr> values = visit(valuesCtx.expressionList().expression(), Expr.class);
+            return new MergeWhenNotMatchedInsertClause(condition, cols, values, false, createPos(context));
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp(
+                    "merge not matched action: " + action.getClass().getSimpleName()));
+        }
+    }
+
     // ------------------------------------------- Routine Statement ---------------------------------------------------
 
     @Override
@@ -3060,6 +3133,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.AdminAlterAutomatedSnapshotIntervalStatementContext context) {
         IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
         return new AdminAlterAutomatedSnapshotIntervalStmt(intervalLiteral, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminSkipCommittedTransactionStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminSkipCommittedTransactionStatementContext context) {
+        long txnId = Long.parseLong(context.txnId.getText());
+        String reason = "";
+        if (context.reason != null) {
+            reason = ((StringLiteral) visit(context.reason)).getValue();
+        }
+        return new AdminSkipCommittedTransactionStmt(txnId, reason, createPos(context));
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
@@ -4722,13 +4806,26 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitExecuteScriptStatement(com.starrocks.sql.parser.StarRocksParser.ExecuteScriptStatementContext context) {
-        long beId = -1;
-        if (context.INTEGER_VALUE() != null) {
-            beId = Long.parseLong(context.INTEGER_VALUE().getText());
-        }
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         String script = stringLiteral.getStringValue();
-        return new ExecuteScriptStmt(beId, script, createPos(context));
+        com.starrocks.sql.parser.StarRocksParser.ExecuteScriptTargetContext target = context.executeScriptTarget();
+
+        ExecuteScriptStmt.TargetType targetType;
+        java.util.List<Long> nodeIds = java.util.Collections.emptyList();
+        if (target.FRONTEND() != null) {
+            targetType = ExecuteScriptStmt.TargetType.FRONTEND;
+        } else if (target.ALL() != null && target.BACKENDS() != null) {
+            targetType = ExecuteScriptStmt.TargetType.ALL_BACKENDS;
+        } else if (target.ALL() != null && target.COMPUTE() != null) {
+            targetType = ExecuteScriptStmt.TargetType.ALL_COMPUTE_NODES;
+        } else {
+            targetType = ExecuteScriptStmt.TargetType.NODES;
+            nodeIds = new java.util.ArrayList<>(target.INTEGER_VALUE().size());
+            for (org.antlr.v4.runtime.tree.TerminalNode node : target.INTEGER_VALUE()) {
+                nodeIds.add(Long.parseLong(node.getText()));
+            }
+        }
+        return new ExecuteScriptStmt(targetType, nodeIds, script, createPos(context));
     }
 
     // ---------------------------------------- Storage Volume Statement ----------------------------------------------
@@ -6903,6 +7000,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitShowCreateFunctionStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowCreateFunctionStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        boolean isGlobal = context.GLOBAL() != null;
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, createPos(context), isGlobal);
+        if (isGlobal && !Strings.isNullOrEmpty(functionRef.getDbName())) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
+        }
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        return new ShowCreateFunctionStmt(functionRef, argsDef, createPos(context));
+    }
+
+    @Override
     public ParseNode visitCreateUdfFunctionStmt(com.starrocks.sql.parser.StarRocksParser.CreateUdfFunctionStmtContext context) {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
@@ -8445,6 +8555,31 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitTrimFunction(com.starrocks.sql.parser.StarRocksParser.TrimFunctionContext context) {
+        NodePosition pos = createPos(context);
+        Expr strExpr = (Expr) visit(context.str);
+        boolean leading = context.LEADING() != null;
+        boolean trailing = context.TRAILING() != null;
+
+        if (context.remstr != null) {
+            // MySQL substring semantics: route to the substring-trim builtins.
+            Expr remstr = (Expr) visit(context.remstr);
+            String fnName = leading ? FunctionSet.LTRIM_STRING
+                    : trailing ? FunctionSet.RTRIM_STRING
+                    : FunctionSet.TRIM_STRING;
+            return new FunctionCallExpr(fnName,
+                    new FunctionParams(false, Lists.newArrayList(strExpr, remstr)), pos);
+        } else {
+            // No remstr -> whitespace trim, reuse existing optimized builtins.
+            String fnName = leading ? FunctionSet.LTRIM
+                    : trailing ? FunctionSet.RTRIM
+                    : FunctionSet.TRIM;
+            return new FunctionCallExpr(fnName,
+                    new FunctionParams(false, Lists.newArrayList(strExpr)), pos);
+        }
+    }
+
+    @Override
     public ParseNode visitCast(com.starrocks.sql.parser.StarRocksParser.CastContext context) {
         return new CastExpr(new TypeDef(TypeParser.getType(context.type())), (Expr) visit(context.expression()),
                 createPos(context));
@@ -8454,6 +8589,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitConvert(com.starrocks.sql.parser.StarRocksParser.ConvertContext context) {
         return new CastExpr(new TypeDef(TypeParser.getType(context.type())), (Expr) visit(context.expression()),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTypeCast(com.starrocks.sql.parser.StarRocksParser.TypeCastContext context) {
+        return new CastExpr(new TypeDef(TypeParser.getType(context.type())),
+                (Expr) visit(context.primaryExpression()), createPos(context));
     }
 
     @Override

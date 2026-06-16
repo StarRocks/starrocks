@@ -25,6 +25,7 @@
 #include "column/runtime_type_traits.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/dictmapping_expr.h"
@@ -36,7 +37,6 @@
 #include "exprs/is_null_predicate.h"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_placeholder_predicate.h"
@@ -190,6 +190,16 @@ Status prune_scan_ranges_by_partition_conjuncts(RuntimeState* state, const Tuple
 // ------------------------------------------------------------------------------------
 // Util methods.
 // ------------------------------------------------------------------------------------
+
+static constexpr std::string_view kNotPushDownPredicateStatus = "not push down predicate";
+
+static Status not_push_down_predicate_status() {
+    return Status::NotSupported(kNotPushDownPredicateStatus);
+}
+
+static bool is_not_push_down_predicate_status(const Status& status) {
+    return status.is_not_supported() && status.message() == kNotPushDownPredicateStatus;
+}
 
 static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
     if (slot.type().is_date_type() && expr.type().is_date_type()) {
@@ -491,7 +501,14 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::_normalize_compound_predicate(con
     auto process = [&]<CompoundNodeType ChildType>() -> StatusOr<bool> {
         ChunkPredicateBuilder<BoxedExpr, ChildType> child_builder(
                 _opts, build_raw_expr_containers(root_expr->children()), false);
-        ASSIGN_OR_RETURN(const bool normalized, child_builder.parse_conjuncts());
+        auto normalized_result = child_builder.parse_conjuncts();
+        if (!normalized_result.ok()) {
+            if (is_not_push_down_predicate_status(normalized_result.status())) {
+                return false;
+            }
+            return normalized_result.status();
+        }
+        const bool normalized = normalized_result.value();
         if (normalized) {
             _child_builders.emplace_back(std::move(child_builder));
         }
@@ -1278,6 +1295,9 @@ Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
             const bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
             if (empty_range) {
                 if constexpr (!Negative) {
+                    if (!_is_root_builder) {
+                        return not_push_down_predicate_status();
+                    }
                     return Status::EndOfFile("EOF, Filter by always false condition");
                 } else {
                     auto not_null_filter = std::visit(
@@ -1290,6 +1310,9 @@ Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
             const bool full_range = std::visit([](auto&& range) { return range.is_full_value_range(); }, iter.second);
             if (full_range) {
                 if constexpr (Negative) {
+                    if (!_is_root_builder) {
+                        return not_push_down_predicate_status();
+                    }
                     return Status::EndOfFile("EOF, Filter by always false condition");
                 } else {
                     auto not_null_filter = std::visit(

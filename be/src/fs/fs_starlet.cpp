@@ -39,17 +39,17 @@
 #endif
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
-#include "io/core/input_stream.h"
-#include "io/core/io_profiler.h"
-#include "io/core/output_stream.h"
-#include "io/core/seekable_input_stream.h"
-#include "io/core/throttled_output_stream.h"
-#include "io/core/throttled_seekable_input_stream.h"
+#include "io/input_stream.h"
+#include "io/io_profiler.h"
+#include "io/output_stream.h"
+#include "io/seekable_input_stream.h"
+#include "io/throttled_output_stream.h"
+#include "io/throttled_seekable_input_stream.h"
 #include "staros_integration/staros_status.h"
 #include "staros_integration/staros_worker.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
-#include "storage/olap_common.h"
+#include "storage/primitive/storage_stats.h"
 
 namespace starrocks {
 
@@ -576,7 +576,16 @@ public:
     }
 
     StatusOr<uint64_t> get_file_size(const std::string& path) override {
-        return Status::NotSupported("StarletFileSystem::get_file_size");
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto fst = (*fs_st)->stat(pair.first);
+        if (!fst.ok()) {
+            return to_status(fst.status());
+        }
+        return fst->size;
     }
 
     StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
@@ -651,6 +660,16 @@ private:
         if (_shard_fs != nullptr) {
             return _shard_fs;
         }
+#ifdef BE_TEST
+        // Mirrors the hook in `new_fs_starlet(shard_id, ...)` at the bottom of this file.
+        // Tests can inject either a mock filesystem or a failure status here without
+        // having to stand up a real StarOS worker / starlet runtime.
+        absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
+        TEST_SYNC_POINT_CALLBACK("StarletFileSystem::get_shard_filesystem", &fs_st);
+        if (!absl::IsUnimplemented(fs_st.status())) {
+            return fs_st;
+        }
+#endif
         return get_staros_worker()->get_shard_filesystem(shard_id, _conf);
     }
 

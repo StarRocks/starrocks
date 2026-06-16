@@ -50,8 +50,10 @@ public:
     void TearDown() override {}
 
 protected:
+    HdfsScannerContext _scanner_ctx;
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
+
         ctx->lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
 
         std::vector<parquet::Utils::SlotDesc> slot_descs;
@@ -68,7 +70,7 @@ protected:
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = _create_scan_range(_file_path, file_size);
         ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &_hdfs_scan_stats;
+        ctx->stats = &_hdfs_stats;
 
         return ctx;
     }
@@ -117,7 +119,7 @@ protected:
                                                                 std::vector<bool> nullable = {},
                                                                 std::vector<std::string> column_names = {});
 
-    HdfsScanStats _hdfs_scan_stats;
+    HdfsScannerStats _hdfs_stats;
     MemoryFileSystem _fs;
     std::string _file_path{"/dummy_file.parquet"};
     std::unique_ptr<parquet::ParquetOutputStream> _output_stream;

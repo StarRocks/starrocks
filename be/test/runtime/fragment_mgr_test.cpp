@@ -45,7 +45,6 @@
 #include "common/config_runtime_fwd.h"
 #include "common/util/thrift_util.h"
 #include "exec/data_sink.h"
-#include "exec/pipeline/query_context.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -55,7 +54,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/profile_report_worker.h"
 
 namespace starrocks {
 
@@ -143,7 +141,7 @@ protected:
 };
 
 TEST_F(FragmentMgrTest, Normal) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -154,7 +152,7 @@ TEST_F(FragmentMgrTest, Normal) {
 }
 
 TEST_F(FragmentMgrTest, AddNormal) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     for (int i = 0; i < 8; ++i) {
         TExecPlanFragmentParams params;
         params.params.fragment_instance_id = TUniqueId();
@@ -165,7 +163,7 @@ TEST_F(FragmentMgrTest, AddNormal) {
 }
 
 TEST_F(FragmentMgrTest, CancelNormal) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -176,7 +174,7 @@ TEST_F(FragmentMgrTest, CancelNormal) {
 }
 
 TEST_F(FragmentMgrTest, CloseNornaml) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -199,7 +197,7 @@ TEST_F(FragmentMgrTest, CloseNornaml) {
 }
 
 TEST_F(FragmentMgrTest, CancelWithoutAdd) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -208,7 +206,7 @@ TEST_F(FragmentMgrTest, CancelWithoutAdd) {
 }
 
 TEST_F(FragmentMgrTest, RejectLegacyStreamPipeline) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(101);
@@ -218,27 +216,6 @@ TEST_F(FragmentMgrTest, RejectLegacyStreamPipeline) {
     Status st = mgr.exec_plan_fragment(params);
     ASSERT_TRUE(st.is_not_supported()) << st;
     ASSERT_NE(st.message().find("Legacy incremental MV maintenance is no longer supported"), std::string::npos);
-}
-
-TEST_F(FragmentMgrTest, ProfileReportWorkerUsesInjectedServices) {
-    FragmentMgr mgr(ExecEnv::GetInstance());
-    pipeline::QueryContextManager query_context_manager(1);
-    ASSERT_OK(query_context_manager.init());
-
-    TUniqueId query_id;
-    query_id.__set_hi(300);
-    query_id.__set_lo(400);
-
-    TUniqueId fragment_instance_id;
-    fragment_instance_id.__set_hi(500);
-    fragment_instance_id.__set_lo(600);
-
-    ProfileReportWorker worker(&mgr, &query_context_manager);
-    ASSERT_TRUE(worker.register_non_pipeline_load(fragment_instance_id).ok());
-    ASSERT_TRUE(worker.register_pipeline_load(query_id, fragment_instance_id).ok());
-    worker.unregister_pipeline_load(query_id, fragment_instance_id);
-    worker.unregister_non_pipeline_load(fragment_instance_id);
-    worker.close();
 }
 
 // Reproduces the scenario where an output slot has an empty col_name (e.g. the
@@ -303,7 +280,7 @@ TEST_F(FragmentMgrTest, ExecExternalPlanFragmentLooksUpSlotWithEmptyColName) {
     fragment_instance_id.__set_hi(3);
     fragment_instance_id.__set_lo(4);
 
-    FragmentMgr mgr(ExecEnv::GetInstance());
+    FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);
     std::vector<TScanColumnDesc> selected_columns;
     TUniqueId out_query_id;
     Status st = mgr.exec_external_plan_fragment(open_params, fragment_instance_id, &selected_columns, &out_query_id);

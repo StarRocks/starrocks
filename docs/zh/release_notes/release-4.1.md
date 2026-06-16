@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.1 版本发布说明：多租户范围分片自动拆分、超大容量 tablet、Fast Schema Evolution V2。"
 ---
 
 # StarRocks version 4.1
@@ -21,6 +22,137 @@ displayed_sidebar: docs
   由于 v4.1 引入了数据布局的内部变更（与 Tablet 分割和数据分布机制相关），升级至 v4.1 的集群生成的元数据和存储结构可能与早期版本不完全兼容。因此，从 v4.1 降级仅支持降至 v4.0.6 或更高版本。不支持降级至 v4.0.6 之前的版本。此限制源于早期版本在解析 Tablet 布局和分布元数据时的向后兼容性约束。
 
 :::
+
+## 4.1.1
+
+发布日期：2026 年 5 月 29 日
+
+### 行为变更
+
+- Hive Connector 现在默认使用原生 C++ Avro Scanner，替代原有的 JNI Avro Scanner。[#73237](https://github.com/StarRocks/starrocks/pull/73237) [#73569](https://github.com/StarRocks/starrocks/pull/73569)
+- 现在禁止对 INCREMENTAL/AUTO 物化视图进行查询改写，并拒绝对 INCREMENTAL/AUTO 物化视图执行 FORCE 刷新和分区刷新。[#72890](https://github.com/StarRocks/starrocks/pull/72890) [#72336](https://github.com/StarRocks/starrocks/pull/72336) [#71355](https://github.com/StarRocks/starrocks/pull/71355)
+
+### 功能优化
+
+- Java UDF/UDAF/UDTF 支持更多类型：UDAF/UDTF 支持 STRUCT 类型的参数和返回值，支持嵌套 ARRAY/MAP 类型、DATE/DATETIME、DECIMAL 以及可变参数（varargs）。[#72911](https://github.com/StarRocks/starrocks/pull/72911) [#72283](https://github.com/StarRocks/starrocks/pull/72283) [#72337](https://github.com/StarRocks/starrocks/pull/72337) [#72208](https://github.com/StarRocks/starrocks/pull/72208) [#68596](https://github.com/StarRocks/starrocks/pull/68596)
+- 标量 UDF 支持 STRUCT 类型参数。[#72620](https://github.com/StarRocks/starrocks/pull/72620)
+- Python UDF 支持嵌套 ARRAY/MAP 类型。[#72210](https://github.com/StarRocks/starrocks/pull/72210)
+- UDAF 现在仅加载和初始化一次并在多个查询间复用，降低了每次查询的开销。[#72038](https://github.com/StarRocks/starrocks/pull/72038)
+- 为 Hive Connector 使用原生 C++ Scanner 替代 JNI Avro Scanner，支持直接二进制解码，并支持 `avro.schema.literal` 和 `avro.schema.url`。[#73237](https://github.com/StarRocks/starrocks/pull/73237) [#73283](https://github.com/StarRocks/starrocks/pull/73283) [#73257](https://github.com/StarRocks/starrocks/pull/73257) [#73569](https://github.com/StarRocks/starrocks/pull/73569)
+- 支持 CTAS 语句中的 Trino `WITH` 子句。[#71960](https://github.com/StarRocks/starrocks/pull/71960)
+- 完善了 Sink 路径上对 Iceberg `timestamptz` 分区转换的支持。[#73397](https://github.com/StarRocks/starrocks/pull/73397)
+- 为 Iceberg 表聚合启用 TopN Runtime Filter 下推。[#72332](https://github.com/StarRocks/starrocks/pull/72332)
+- 支持 Iceberg datetime min/max 优化。[#71870](https://github.com/StarRocks/starrocks/pull/71870)
+- 允许在 Catalog 和 BE 中透传 HDFS HA 配置，以支持访问多个 HDFS 集群。[#71521](https://github.com/StarRocks/starrocks/pull/71521)
+- 为外部表查询新增分区扫描数量限制。[#68480](https://github.com/StarRocks/starrocks/pull/68480)
+- 对不支持的 Iceberg V3 特性进行快速失败处理。[#70242](https://github.com/StarRocks/starrocks/pull/70242)
+- 通过 INSERT INTO FILES 导出 CSV 时支持 `csv.enclose` 和 `csv.escape`。[#71589](https://github.com/StarRocks/starrocks/pull/71589)
+- 新增 INSERT 属性 `enable_push_down_schema`，支持将完整 Schema 下推到 `files()`。[#70978](https://github.com/StarRocks/starrocks/pull/70978)
+- Routine Load 作业在遇到不可重试错误（例如主键大小超限）时会暂停。[#71161](https://github.com/StarRocks/starrocks/pull/71161)
+- 支持对来自两个子节点的复杂表达式进行 Join Reorder。[#71615](https://github.com/StarRocks/starrocks/pull/71615)
+- 改进 CBO 统计估算，包括对 `date_trunc`、`array_map`、CASE WHEN、IS NULL、UNION 及常量的 MCV/NULL 比例传播。[#72233](https://github.com/StarRocks/starrocks/pull/72233) [#70372](https://github.com/StarRocks/starrocks/pull/70372) [#70221](https://github.com/StarRocks/starrocks/pull/70221) [#70865](https://github.com/StarRocks/starrocks/pull/70865) [#70989](https://github.com/StarRocks/starrocks/pull/70989) [#71000](https://github.com/StarRocks/starrocks/pull/71000)
+- 改进数据倾斜 Join 检测：仅当所有 Join Key 都倾斜时才判定为倾斜，并新增 `force_group_by_skew_eliminate_when_skewed` 开关以强制应用倾斜规则。[#72753](https://github.com/StarRocks/starrocks/pull/72753) [#71382](https://github.com/StarRocks/starrocks/pull/71382)
+- 在 FE 端支持 `regexp_replace` 的常量折叠。[#70804](https://github.com/StarRocks/starrocks/pull/70804)
+- 优化了带常量分区值的日期分区列上的 MIN/MAX。[#69880](https://github.com/StarRocks/starrocks/pull/69880)
+- 引入 `SCHEDULE` 关键字作为物化视图刷新中 `ASYNC` 的同义词。[#72329](https://github.com/StarRocks/starrocks/pull/72329)
+- 支持存算分离模式下 Lake 表的 Tablet 创建重试。[#71068](https://github.com/StarRocks/starrocks/pull/71068)
+- 支持 Lake 列模式部分更新的条件更新。[#71961](https://github.com/StarRocks/starrocks/pull/71961)
+- 并行化部分更新 Publish、持久化索引初始化以及 SSTable 打开，提升导入吞吐。[#71652](https://github.com/StarRocks/starrocks/pull/71652) [#71217](https://github.com/StarRocks/starrocks/pull/71217) [#72112](https://github.com/StarRocks/starrocks/pull/72112) [#71145](https://github.com/StarRocks/starrocks/pull/71145) [#72986](https://github.com/StarRocks/starrocks/pull/72986)
+- 支持存算一体到存算分离复制过程中的 DCG 文件同步。[#69339](https://github.com/StarRocks/starrocks/pull/69339)
+- 支持对 Key 列和非 Key 列加宽 VARCHAR 长度的 Schema Evolution。[#70747](https://github.com/StarRocks/starrocks/pull/70747)
+- 新增 `snapshot_meta.json` 标记，用于集群快照完整性检查。[#71209](https://github.com/StarRocks/starrocks/pull/71209)
+- 支持通过 DN 模式进行 LDAP 直接绑定（Direct Bind）认证。[#71559](https://github.com/StarRocks/starrocks/pull/71559)
+- 新增 `get_query_dump_from_query_id` 元函数，便于查询问题排查。[#72875](https://github.com/StarRocks/starrocks/pull/72875)
+- 支持在审计日志中审计查询所涉及的关系（relation）。[#71596](https://github.com/StarRocks/starrocks/pull/71596)
+- 新增用于 MySQL 二进制结果编码的会话变量。[#71415](https://github.com/StarRocks/starrocks/pull/71415)
+- 新增多个指标以增强可观测性，包括存算分离集群的 `tablet_num`、`MemtableIOSpeed`、`staros_shard_count` 以及 Iceberg 元数据表查询指标。[#71444](https://github.com/StarRocks/starrocks/pull/71444) [#69842](https://github.com/StarRocks/starrocks/pull/69842) [#73096](https://github.com/StarRocks/starrocks/pull/73096) [#70825](https://github.com/StarRocks/starrocks/pull/70825)
+- 新增 FE 配置项 `deploy_serialization_min_thread_pool_size`。[#72274](https://github.com/StarRocks/starrocks/pull/72274)
+- 新增配置项 `tablet_reshard_enable_tablet_merge`，用于禁用 MergeTabletJob 的创建。[#70906](https://github.com/StarRocks/starrocks/pull/70906)
+- 通过 `SO_REUSEPORT` 消除 HTTP Server accept 的惊群效应。[#72956](https://github.com/StarRocks/starrocks/pull/72956)
+
+### 安全
+
+- [CVE] 将 Netty 升级至 4.1.133.Final。[#72905](https://github.com/StarRocks/starrocks/pull/72905)
+- [CVE-2026-42198] [CVE-2026-5598] 将 pgjdbc 升级至 42.7.11（修复因 SCRAM PBKDF2 迭代次数无上限导致的客户端 DoS），将 BouncyCastle 升级至 1.84（修复 FrodoKEM 私钥泄露）。[#72797](https://github.com/StarRocks/starrocks/pull/72797)
+- [CVE-2026-32280] [CVE-2026-32282] 使用 go1.25.9 构建 pprof 以消除 Golang CVE。[#71944](https://github.com/StarRocks/starrocks/pull/71944) [#73545](https://github.com/StarRocks/starrocks/pull/73545)
+- 将 jetty-http 升级至 9.4.58.v20250814。[#71762](https://github.com/StarRocks/starrocks/pull/71762)
+- 清理 Broker 依赖中的 CVE 并移除 `wildfly-openssl`。[#72184](https://github.com/StarRocks/starrocks/pull/72184) [#71908](https://github.com/StarRocks/starrocks/pull/71908)
+- 在 INSERT INTO FILES 的错误信息中对凭证进行脱敏。[#71245](https://github.com/StarRocks/starrocks/pull/71245)
+
+### 错误修复
+
+修复了如下问题：
+
+- 由 `hash_util` 静态初始化顺序导致的 CN 启动 Segfault。[#71825](https://github.com/StarRocks/starrocks/pull/71825)
+- 启用物理分裂时扫描空 Tablet 导致的 CN 崩溃。[#70281](https://github.com/StarRocks/starrocks/pull/70281)
+- 查询 `information_schema.warehouse_queries` 时的 BE 崩溃。[#72019](https://github.com/StarRocks/starrocks/pull/72019)
+- Lake Compaction 中 rowset `num_rows` 为零时的 SIGFPE。[#71742](https://github.com/StarRocks/starrocks/pull/71742)
+- ExecutionDAG Fragment 连接中的除零问题。[#67918](https://github.com/StarRocks/starrocks/pull/67918)
+- SinkBuffer 中的优雅退出崩溃。[#73202](https://github.com/StarRocks/starrocks/pull/73202)
+- Spillable Hash Join Probe 崩溃。[#72397](https://github.com/StarRocks/starrocks/pull/72397)
+- 向临时 `std::string` 格式化时的栈缓冲区溢出。[#72728](https://github.com/StarRocks/starrocks/pull/72728)
+- `reverse(DecimalV3)` 崩溃。[#71834](https://github.com/StarRocks/starrocks/pull/71834)
+- `LoadChannel::get_load_replica_status` 中因临时 `shared_ptr` 析构导致的 Use-after-free。[#71843](https://github.com/StarRocks/starrocks/pull/71843)
+- 线程创建失败时 `ThreadPool::do_submit` 中的 Use-after-free。[#71276](https://github.com/StarRocks/starrocks/pull/71276)
+- Fragment 销毁过程中 Hive 分区描述符的 Use-after-free。[#73176](https://github.com/StarRocks/starrocks/pull/73176)
+- Information Schema Sink 的 Use-after-free。[#71513](https://github.com/StarRocks/starrocks/pull/71513)
+- FE 文件描述符泄漏。[#73239](https://github.com/StarRocks/starrocks/pull/73239)
+- `JDBCScanner::_init_jdbc_scanner` 中的 JNI 本地引用泄漏。[#72913](https://github.com/StarRocks/starrocks/pull/72913)
+- 缓存物化视图计划上下文时的内存泄漏。[#72300](https://github.com/StarRocks/starrocks/pull/72300)
+- Local Exchange 中的异常内存占用。[#72262](https://github.com/StarRocks/starrocks/pull/72262)
+- Lake `publish_version` 中 `response->tablet_metas` 上的竞态。[#73274](https://github.com/StarRocks/starrocks/pull/73274)
+- `DeltaWriter::commit()` 中并发 `SegmentFlushTask` 的竞态。[#73371](https://github.com/StarRocks/starrocks/pull/73371)
+- 序列化过程中 `RuntimeProfile` min/max 的竞态。[#72904](https://github.com/StarRocks/starrocks/pull/72904)
+- 查询上下文销毁期间 `PipelineTimerTask` 的竞态。[#73082](https://github.com/StarRocks/starrocks/pull/73082)
+- `_all_global_rf_ready_or_timeout` 中的竞态。[#70920](https://github.com/StarRocks/starrocks/pull/70920)
+- `map_apply` 和 `array_length` 中共享 `NullColumn` 的问题。[#71258](https://github.com/StarRocks/starrocks/pull/71258)
+- 由分区版本间隙导致的批量 Publish 死锁。[#71483](https://github.com/StarRocks/starrocks/pull/71483)
+- 存算一体模式下预热 Rowset 元数据 LRU 缓存时的死锁。[#71459](https://github.com/StarRocks/starrocks/pull/71459)
+- `Locker` 回滚不具备异常安全性以及不正确的解锁顺序。[#72789](https://github.com/StarRocks/starrocks/pull/72789)
+- 多个只读和元数据路径上的 DB 锁与 DDL、StarOS RPC 之间的锁争用。[#73067](https://github.com/StarRocks/starrocks/pull/73067) [#72475](https://github.com/StarRocks/starrocks/pull/72475) [#72108](https://github.com/StarRocks/starrocks/pull/72108) [#72218](https://github.com/StarRocks/starrocks/pull/72218) [#72178](https://github.com/StarRocks/starrocks/pull/72178)
+- 因缺少 Project 节点导致的错误 Shuffle 分布。[#71075](https://github.com/StarRocks/starrocks/pull/71075)
+- AGG TopN Runtime Filter `exprOrder` 不匹配导致的崩溃和错误结果。[#71479](https://github.com/StarRocks/starrocks/pull/71479)
+- dict-merge GROUP BY 的错误结果。[#70866](https://github.com/StarRocks/starrocks/pull/70866)
+- Query Cache 与 Local Shuffle 聚合的冲突。[#73194](https://github.com/StarRocks/starrocks/pull/73194)
+- Flat JSON 中全局字典生成不一致的问题。[#72953](https://github.com/StarRocks/starrocks/pull/72953)
+- Flat JSON Merge 空值不一致的问题。[#72973](https://github.com/StarRocks/starrocks/pull/72973)
+- 显式声明 Key/Value 类型时 Map 字面量的类型不匹配。[#71316](https://github.com/StarRocks/starrocks/pull/71316)
+- 在 JOIN USING 转换器中 COALESCE 子节点未被转换为公共类型。[#72338](https://github.com/StarRocks/starrocks/pull/72338)
+- 带全局变量的 reduce-cast 后 VARCHAR 长度未保留的问题。[#70269](https://github.com/StarRocks/starrocks/pull/70269)
+- MySQL 结果集中嵌套类型内 VARBINARY 编码错误的问题。[#71346](https://github.com/StarRocks/starrocks/pull/71346)
+- 小 LIMIT 下禁用聚合溢出时的 HAVING 子句检查问题。[#72705](https://github.com/StarRocks/starrocks/pull/72705)
+- 在日期解析前引号未被去除，以及一个 PostgreSQL 日期/时间问题。[#48517](https://github.com/StarRocks/starrocks/pull/48517) [#71016](https://github.com/StarRocks/starrocks/pull/71016)
+- Tablet 分裂后的数据丢失。[#71135](https://github.com/StarRocks/starrocks/pull/71135)
+- 数据文件共享标记丢失，导致 Vacuum 删除仍被兄弟分裂 Tablet 引用的文件的问题。[#71585](https://github.com/StarRocks/starrocks/pull/71585)
+- split→compaction→merge 序列下的 Tablet Merge 正确性问题。[#72350](https://github.com/StarRocks/starrocks/pull/72350)
+- Tablet 分裂期间 cross-published txn log 的 num_rows/data_size 膨胀问题。[#71144](https://github.com/StarRocks/starrocks/pull/71144)
+- 同一 Publish 批次中 write-before-compaction 导致的 delvec 孤儿条目。[#71001](https://github.com/StarRocks/starrocks/pull/71001)
+- Follower FE 上 "no queryable replica" 的问题。[#71263](https://github.com/StarRocks/starrocks/pull/71263)
+- 在应用普通 rowset commit 时 `merge_condition` 未被保留。[#72542](https://github.com/StarRocks/starrocks/pull/72542)
+- Iceberg DELETE 冲突检测使用错误 Snapshot ID 和 Filter 的问题。[#73354](https://github.com/StarRocks/starrocks/pull/73354)
+- 无效 Iceberg Transform 参数导致的 NPE。[#71917](https://github.com/StarRocks/starrocks/pull/71917)
+- 因 Planner 注入额外列导致 Iceberg min/max 优化被跳过的问题。[#71863](https://github.com/StarRocks/starrocks/pull/71863)
+- 基于 Iceberg 基表的 aggregate-join-pushdown 物化视图改写问题。[#71856](https://github.com/StarRocks/starrocks/pull/71856)
+- 在 INSERT OVERWRITE commit 前未创建缺失的 Hive 分区目录。[#71810](https://github.com/StarRocks/starrocks/pull/71810)
+- JNI Scanner 未应用 AWS assume-role 的问题。[#71422](https://github.com/StarRocks/starrocks/pull/71422)
+- 针对剪枝子节点和嵌套可空 Schema 的 Avro 复杂类型解码问题。[#73474](https://github.com/StarRocks/starrocks/pull/73474)
+- Parquet Broker Load 错误信息未包含文件/列/行上下文信息。[#73236](https://github.com/StarRocks/starrocks/pull/73236)
+- Parquet Scanner 未支持 Arrow Dictionary 值。[#71855](https://github.com/StarRocks/starrocks/pull/71855)
+- 在 SHOW CREATE 和 DESC 返回中中缺少 Paimon 表的主键。[#70535](https://github.com/StarRocks/starrocks/pull/70535)
+- PostgreSQL/Oracle JDBC 类型兼容性以及带末尾斜杠的 JDBC URL 构造问题。[#70626](https://github.com/StarRocks/starrocks/pull/70626) [#70992](https://github.com/StarRocks/starrocks/pull/70992)
+- JDBC Catalog 中 SQL Server 表的物化视图刷新问题。[#72962](https://github.com/StarRocks/starrocks/pull/72962)
+- 物化视图 over Outer Join 的延迟物化 Slot 可空性问题。[#72621](https://github.com/StarRocks/starrocks/pull/72621)
+- AUTO 和 INCREMENTAL 物化视图的分区刷新问题。[#71355](https://github.com/StarRocks/starrocks/pull/71355)
+- 物化视图变为 inactive 后物化视图调度器未被停止。[#71265](https://github.com/StarRocks/starrocks/pull/71265)
+- 由于未支持 `SHOW GRANTS FOR CURRENT_USER()` 导致的 MySQL 客户端兼容性问题。[#71959](https://github.com/StarRocks/starrocks/pull/71959)
+- 在显式事务中不允许执行 SHOW 语句。[#72954](https://github.com/StarRocks/starrocks/pull/72954)
+- 空结果集时 Arrow Flight 返回列名为 `r` 的问题。[#71534](https://github.com/StarRocks/starrocks/pull/71534)
+- Java UDF 代码中缺少 JNI 异常处理检查。[#71734](https://github.com/StarRocks/starrocks/pull/71734)
+- `ai_query` 函数注册问题。[#72103](https://github.com/StarRocks/starrocks/pull/72103)
+- 使用 `enable_load_profile` 时的 Stream Load Profile 采集问题。[#71952](https://github.com/StarRocks/starrocks/pull/71952)
+- Profile 的 START_TIME/END_TIME 未根据会话时区显示。[#71429](https://github.com/StarRocks/starrocks/pull/71429)
+- `star_mgr_meta_sync_interval_sec` 不可在运行时动态修改。[#71675](https://github.com/StarRocks/starrocks/pull/71675)
+- `information_schema.tables` 在等值谓词中未转义特殊字符的问题。[#71273](https://github.com/StarRocks/starrocks/pull/71273)
 
 ## 4.1.0
 
@@ -54,7 +186,6 @@ displayed_sidebar: docs
 - 支持 MemTable 刷写和合并的管道执行，提高存算分离集群中云原生表的摄取吞吐量。[#67878](https://github.com/StarRocks/starrocks/pull/67878)
 - 支持 `dry_run` 模式修复云原生表，允许用户在执行前预览修复操作。[#68494](https://github.com/StarRocks/starrocks/pull/68494)
 - 在存算一体集群中为发布事务添加了线程池，提高了发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
-- 支持动态修改云原生表的 `datacache.enable` 属性。[#69011](https://github.com/StarRocks/starrocks/pull/69011)
 
 ### 数据湖分析
 

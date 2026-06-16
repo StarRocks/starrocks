@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "task_runs provides information about the execution of asynchronous tasks."
 ---
 
 # task_runs
@@ -26,6 +27,7 @@ The following fields are provided in `task_runs`:
 | PROPERTIES    | Properties of the task.                                      |
 | JOB_ID        | Job ID of the task.                                          |
 | PROCESS_TIME  | Process time of the task.                                    |
+| TASK_SOURCE   | Source that submitted the task. Valid values: `CTAS`, `MV`, `INSERT`, `PIPE`, and `DATACACHE_SELECT`. `UNKNOWN` is returned for legacy records whose source was not recorded. |
 
 A task run record is produced by either [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) or [CREATE MATRIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 

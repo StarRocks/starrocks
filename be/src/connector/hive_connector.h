@@ -19,9 +19,9 @@
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "connector/hive_chunk_sink.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "hive_chunk_sink.h"
 
 namespace starrocks {
 class HiveTableDescriptor;
@@ -36,7 +36,7 @@ public:
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
-    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
+    ConnectorChunkSinkProviderPtr create_data_sink_provider() const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
 };
@@ -53,7 +53,7 @@ public:
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
-    void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    void prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
 
     friend class HiveDataSource;
@@ -63,7 +63,7 @@ protected:
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
-    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
+    mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 
 class HiveDataSource final : public DataSource {
@@ -77,9 +77,6 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
-    std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
-        return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
-    }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
     int32_t extended_column_index(SlotId id) const;
 
@@ -102,105 +99,35 @@ private:
     Status _init_conjunct_ctxs(RuntimeState* state);
     void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
-    Status _setup_all_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
-    void _init_rf_counters();
+    void _init_runtime_filter_counters();
     void _init_global_late_materialization_context(RuntimeState* state);
 
     Status _init_partition_values();
     Status _init_extended_values();
-    Status _init_global_dicts(HdfsScannerParams* params);
+    Status _init_global_dicts(HdfsScannerContext* ctx);
     Status _init_scanner(RuntimeState* state);
     Status _check_all_slots_nullable();
 
-    const std::string OPENXJSON_SERDE_LIB = "org.openx.data.jsonserde.JsonSerDe";
-
     // =====================================
+    // _scanner_ctx must outlive _pool: pooled JNI scanners may dereference
+    // _scanner_ctx during destruction (JniScanner::~JniScanner → close()).
+    HdfsScannerContext _scanner_ctx;
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
+
     HdfsScanner* _scanner = nullptr;
-    DataCacheOptions _datacache_options{};
-    bool _use_file_metacache = false;
-    bool _use_file_pagecache = false;
-    bool _enable_dynamic_prune_scan_range = true;
-    bool _enable_split_tasks = false;
 
-    // ============ conjuncts =================
-    std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    // Partition-level predicate evaluation — not passed to scanners.
+    struct PartitionFilter {
+        std::vector<ExprContext*> conjunct_ctxs;
+        bool has_conjuncts = false;
+        bool filter_by_eval = false;
+    };
+    PartitionFilter _partition_filter;
 
-    // contains whole conjuncts, used to generate PredicateTree
-    std::vector<ExprContext*> _all_conjunct_ctxs{};
-    // complex conjuncts, such as contains multi slot, are evaled in scanner.
-    std::vector<ExprContext*> _scanner_conjunct_ctxs;
-    // conjuncts that contains only one slot.
-    // 1. conjuncts that column is not exist in file, are used to filter file in file reader.
-    // 2. conjuncts that column is materialized, are evaled in group reader.
-    std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    std::unordered_set<SlotId> _slots_in_conjunct;
-
-    // used for reader to decide decode or not
-    // if only used by filter(not output) and only used in conjunct_ctx_by_slot
-    // there is no need to decode.
-    std::unordered_set<SlotId> _slots_of_multi_field_conjunct;
-
-    // partition conjuncts of each partition slot.
-    std::vector<ExprContext*> _partition_conjunct_ctxs;
-    std::vector<ExprContext*> _partition_values;
-
-    bool _has_partition_conjuncts = false;
-    bool _filter_by_eval_partition_conjuncts = false;
-    bool _no_data = false;
-
-    int _min_max_tuple_id = 0;
-    const TupleDescriptor* _min_max_tuple_desc = nullptr;
-
-    // materialized columns.
-    std::vector<SlotDescriptor*> _materialize_slots;
-    std::vector<int> _materialize_index_in_chunk;
-    // default values for materialize_slots that have default value defined.
-    // used when the slot doesn't exist in the data file during scanning.
-    std::unordered_map<SlotId, std::string> _materialize_slot_default_values;
-
-    // partition columns.
-    std::vector<SlotDescriptor*> _partition_slots;
-
-    std::vector<ExprContext*> _extended_column_values;
-    // extended columns.
-    std::vector<SlotDescriptor*> _extended_slots;
-    // extended column index in `tuple_desc`
-    std::vector<int> _extended_index_in_chunk;
-    // index in extended columns
-    std::vector<int> _index_in_extended_column;
-    bool _has_extended_columns = false;
-
-    // partition column index in `tuple_desc`
-    std::vector<int> _partition_index_in_chunk;
-    // partition index in hdfs partition columns
-    std::vector<int> _partition_index_in_hdfs_partition_columns;
-    bool _has_partition_columns = false;
-
-    std::vector<std::string> _hive_column_names;
-    bool _case_sensitive = false;
-    bool _use_min_max_opt = false;
-    // Mirrors THdfsScanNode.can_use_any_column: set when PruneHDFSScanColumnRule
-    // injected a placeholder materialized column because every queried column was
-    // a partition column.  Used together with _use_min_max_opt to avoid reading
-    // that placeholder column from the data file.
-    bool _can_use_any_column = false;
-    bool _use_count_opt = false;
-    const HiveTableDescriptor* _hive_table = nullptr;
-
-    bool _has_scan_range_indicate_const_column = false;
-    bool _use_partition_column_value_only = false;
-    // only used in global late materialization
-    int32_t _scan_range_id = -1;
-    std::vector<ColumnAccessPathPtr> _column_access_paths;
-    bool _disable_column_access_path_hints = false;
-
-    // ======================================
-    // The following are profile metrics
-    HdfsScanProfile _profile;
+    bool _no_more_chunks = false;
 };
 
 } // namespace starrocks::connector

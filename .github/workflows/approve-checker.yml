@@ -71,7 +71,7 @@ jobs:
           echo "title<<EOF" >> $GITHUB_OUTPUT
           echo "${title}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-                    
+
           cat $GITHUB_OUTPUT
 
   meta-review:
@@ -124,6 +124,7 @@ jobs:
     if: >
       github.event_name == 'pull_request_review' &&
       needs.info.outputs.BASE_REF == 'main' &&
+      contains(needs.info.outputs.LABELS, 'GLOBAL-REVIEW') &&
       !contains(needs.info.outputs.LABELS, 'sync') &&
       !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
     name: GLOBAL REVIEW

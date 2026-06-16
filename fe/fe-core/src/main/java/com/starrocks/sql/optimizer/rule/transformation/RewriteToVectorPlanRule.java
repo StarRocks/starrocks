@@ -105,6 +105,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                             info.vectorQuery, dim));
         }
 
+        // Refine only matters for a quantized index (its index distance is lossy); for a non-quantized
+        // index the distance is already exact, so refine would be wasted work and is skipped.
+        boolean doRefine = context.getSessionVariable().isEnableVectorIndexRefine() && isQuantizedIndex(info.index);
+
         ScalarOperator predicate = scanOp.getPredicate();
         if (predicate != null) {
             Optional<Double> value = extractVectorRange(predicate, info);
@@ -112,21 +116,27 @@ public class RewriteToVectorPlanRule extends TransformationRule {
             if (value.isEmpty()) {
                 return List.of();
             }
-            // All the predicates are parsed to vector range, so remove predicates from scan operator.
-            predicate = null;
             opts.setPredicateRange(value.get());
+            // Trust path: drop the predicate -- the bound is enforced by the ANN range_search on the
+            // index distance, which the trust path accepts as-is (lossy for a quantized index). Refine
+            // path: keep it as a Filter re-applied on the recomputed exact distance above the scan -- a
+            // precision recheck that drops false positives the lossy range_search/over-fetch let through,
+            // and that also bounds segments whose .vi is still missing (scanned in full, recomputed above).
+            if (!doRefine) {
+                predicate = null;
+            }
         }
 
         opts.setEnableUseANN(true);
-        String indexType = info.index.getProperties().get(VectorIndexParams.CommonIndexParamKey.INDEX_TYPE.name().toLowerCase());
-        opts.setUseIVFPQ(VectorIndexParams.VectorIndexType.IVFPQ.name().equalsIgnoreCase(indexType));
+        opts.setRefineDistance(doRefine);
         opts.setLimitK(topNOp.getLimit());
         opts.setResultOrder(info.isAscending);
         opts.setDistanceColumnName("__vector_" + info.outColumnRef.getName());
         opts.setQueryVector(info.vectorQuery);
 
-        if (opts.isUseIVFPQ()) {
-            // Skip rewrite because IVFPQ is inaccurate and requires a brute force search after the ANN index search
+        if (doRefine) {
+            // Refine path: keep the distance function so the TopN above the scan recomputes the exact
+            // distance on the full-precision vectors and re-ranks; the index only generates candidates.
             LogicalOlapScanOperator newScanOp = LogicalOlapScanOperator.builder()
                     .withOperator(scanOp)
                     .setPredicate(predicate)
@@ -137,16 +147,37 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         return List.of(rewriteOptByDistanceColumn(topNOp, scanOp, context, predicate, info, opts));
     }
 
+    // A vector index is quantized when it stores compressed codes whose distances are approximate:
+    // IVFPQ (always), or HNSW with a non-flat quantizer (sq4/sq8/pq).
+    private boolean isQuantizedIndex(Index index) {
+        String indexType =
+                index.getProperties().get(VectorIndexParams.CommonIndexParamKey.INDEX_TYPE.name().toLowerCase());
+        if (VectorIndexParams.VectorIndexType.IVFPQ.name().equalsIgnoreCase(indexType)) {
+            return true;
+        }
+        if (VectorIndexParams.VectorIndexType.HNSW.name().equalsIgnoreCase(indexType)) {
+            String quantizer =
+                    index.getProperties().get(VectorIndexParams.IndexParamsKey.QUANTIZER.name().toLowerCase());
+            return quantizer != null && !VectorIndexParams.QuantizerType.FLAT.name().equalsIgnoreCase(quantizer);
+        }
+        return false;
+    }
+
     private OptExpression rewriteOptByDistanceColumn(LogicalTopNOperator topNOp,
                                                      LogicalOlapScanOperator scanOp,
                                                      OptimizerContext context,
                                                      ScalarOperator newPredicate,
                                                      VectorFuncInfo info,
                                                      VectorSearchOptions opts) {
-        // Add index distanceColumn to the scan operator, including table, colRefToColumnMetaMap, and columnMetaToColRefMap.
+        // The distance column is per-query synthetic state: it only needs to live in the scan operator's
+        // colRef maps below (PlanFragmentBuilder builds the scan slot's Column from colRefToColumnMetaMap).
+        // It must NOT be added to the shared catalog table's fullSchema. Table.addColumn appends to
+        // fullSchema (a List that does not dedup) while only nameToColumn dedups, so adding it here
+        // appended a duplicate "__vector_*" column on every vector query that planned on the live table
+        // (the whole-phase-lock path). Once two duplicates accumulated, building the Column-keyed map in
+        // RelationTransformer threw "Multiple entries with same key" for any later statement on the table.
         String distanceColumnName = scanOp.getVectorSearchOptions().getDistanceColumnName();
         Column distanceColumn = new Column(distanceColumnName, FloatType.FLOAT);
-        scanOp.getTable().addColumn(distanceColumn);
 
         ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, FloatType.FLOAT, false);
         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap = new HashMap<>(scanOp.getColRefToColumnMetaMap());
@@ -360,7 +391,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
     /**
      * Whether the scalar operator is a constant array of float, which is represented as
      * `ArrayOperator(type=ArrayType(float))` or
-     * `CastOperator(child=ArrayOperator(type=ArrayType(numeric_type)), type=ArrayType(float))`.
+     * `CastOperator(child=ArrayOperator(type=ArrayType(numeric_type)), type=ArrayType(float))` or
+     * `CastOperator(child=ConstantOperator(VARCHAR, "[...]"), type=ArrayType(float))`
+     * (the last form is used by prepared statements that send the array as a string parameter,
+     * via `CAST(? AS ARRAY<FLOAT>)`).
      */
     private boolean isConstantArrayFloat(ScalarOperator scalarOperator) {
         if (!scalarOperator.isConstant()) {
@@ -375,6 +409,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
             if (!arrayType.getItemType().isFloatingPointType()) {
                 return false;
             }
+            // Prepared-statement form: CAST(StringLiteral AS ARRAY<FLOAT>).
+            if (isCastStringToArrayFloat(scalarOperator)) {
+                return true;
+            }
 
             return scalarOperator.getChildren().stream().allMatch(this::isConstantArrayFloat);
         } else if (scalarOperator instanceof ArrayOperator) {
@@ -388,8 +426,35 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         }
     }
 
+    /**
+     * True iff {@code op} is {@code CastOperator(ConstantOperator(VARCHAR/CHAR, "[..]"), ARRAY<FLOAT>)}.
+     */
+    private static boolean isCastStringToArrayFloat(ScalarOperator op) {
+        if (!(op instanceof CastOperator) || !op.getType().isArrayType()) {
+            return false;
+        }
+        ArrayType arrayType = (ArrayType) op.getType();
+        if (!arrayType.getItemType().isFloatingPointType()) {
+            return false;
+        }
+        if (op.getChildren().size() != 1) {
+            return false;
+        }
+        ScalarOperator child = op.getChild(0);
+        return child instanceof ConstantOperator && child.getType() != null && child.getType().isStringType();
+    }
+
     private void extractValuesFromConstantArray(ScalarOperator scalarOperator, List<String> vectorQuery) {
         if (scalarOperator instanceof ColumnRefOperator) {
+            return;
+        }
+
+        // CAST(StringLiteral AS ARRAY<FLOAT>) form: parse the string as a comma-separated
+        // float list and append each value. Used by prepared-statement vector queries.
+        if (isCastStringToArrayFloat(scalarOperator)) {
+            ConstantOperator stringConst = (ConstantOperator) scalarOperator.getChild(0);
+            String literal = String.valueOf(stringConst.getValue());
+            parseStringAsFloatList(literal, vectorQuery);
             return;
         }
 
@@ -400,6 +465,61 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
         for (ScalarOperator child : scalarOperator.getChildren()) {
             extractValuesFromConstantArray(child, vectorQuery);
+        }
+    }
+
+    /** Parse {@code "[f1, f2, ..., fN]"} into N decimal-string tokens appended to {@code out}. */
+    private static void parseStringAsFloatList(String literal, List<String> out) {
+        if (literal == null) {
+            throw new SemanticException("Vector array literal cannot be null");
+        }
+        String trimmed = literal.trim();
+        int open = trimmed.indexOf('[');
+        int close = trimmed.lastIndexOf(']');
+        if (open < 0 || close <= open) {
+            throw new SemanticException("Vector array literal must be enclosed in [..]: " + literal);
+        }
+        String body = trimmed.substring(open + 1, close);
+        int n = body.length();
+        int i = 0;
+        boolean expectAnother = false;
+        while (i < n) {
+            while (i < n && Character.isWhitespace(body.charAt(i))) {
+                i++;
+            }
+            if (i >= n) {
+                break;
+            }
+            int tokStart = i;
+            while (i < n && body.charAt(i) != ',') {
+                i++;
+            }
+            String tok = body.substring(tokStart, i).trim();
+            if (tok.isEmpty()) {
+                throw new SemanticException("Empty element in vector array literal: " + literal);
+            }
+            double parsed;
+            try {
+                parsed = Double.parseDouble(tok);
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Invalid float in vector array literal: '" + tok + "'");
+            }
+            // BE cast_expr rejects NaN/Inf when casting string to float; mirror that here so
+            // `CAST(? AS ARRAY<FLOAT>)` has identical semantics regardless of whether the
+            // rewrite rule fires (cf. be/src/exprs/cast_expr.cpp string -> float).
+            if (!Double.isFinite(parsed)) {
+                throw new SemanticException("Non-finite float in vector array literal: '" + tok + "'");
+            }
+            out.add(tok);
+            if (i < n && body.charAt(i) == ',') {
+                i++;
+                expectAnother = true;
+            } else {
+                expectAnother = false;
+            }
+        }
+        if (expectAnother) {
+            throw new SemanticException("Trailing comma in vector array literal: " + literal);
         }
     }
 

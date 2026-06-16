@@ -20,11 +20,15 @@
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
@@ -35,6 +39,8 @@ namespace starrocks::pipeline {
 TEST(ExportSinkOperatorTest, test_set_finishing) {
     using namespace std::chrono_literals;
     TExecPlanFragmentParams _request;
+    _request.params.query_id = generate_uuid();
+    _request.params.fragment_instance_id = generate_uuid();
 
     const auto& params = _request.params;
     const auto& query_id = params.query_id;
@@ -47,24 +53,26 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
 
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
     _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
     _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+    ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
-    _runtime_state->set_query_ctx(_query_ctx);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _query_ctx->attach_to_runtime_state(_runtime_state);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     TExportSink t_sink;
@@ -82,7 +90,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     int timeout_us = 5 * 1000 * 1000; // 5s
 
     Awaitility await;
-    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _fragment_ctx->is_canceled(); }));
+    EXPECT_TRUE(await.timeout(timeout_us).until([&] { return _runtime_state->is_cancelled(); }));
 
     // now cancel the operator
     export_op->set_finishing(_runtime_state);
@@ -92,7 +100,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _query_ctx->count_down_fragments();
+    _query_ctx->count_down_fragment();
 }
 
 // Test export with header option
@@ -104,6 +112,8 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     std::filesystem::create_directories(test_dir);
 
     TExecPlanFragmentParams _request;
+    _request.params.query_id = generate_uuid();
+    _request.params.fragment_instance_id = generate_uuid();
 
     const auto& params = _request.params;
     const auto& query_id = params.query_id;
@@ -116,24 +126,26 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_delivery_expire_seconds(60);
-    _query_ctx->set_query_expire_seconds(60);
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    _query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    _query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    _query_ctx->query_runtime_state().extend_delivery_lifetime();
+    _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
 
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
     _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
     _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+    ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
-    _runtime_state->set_query_ctx(_query_ctx);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _query_ctx->attach_to_runtime_state(_runtime_state);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     // Configure export sink with header options
@@ -174,7 +186,7 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     EXPECT_TRUE(await2.timeout(timeout_us).until([&] { return !export_op->pending_finish(); }));
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _query_ctx->count_down_fragments();
+    _query_ctx->count_down_fragment();
 
     // Clean up test directory
     std::filesystem::remove_all(test_dir);

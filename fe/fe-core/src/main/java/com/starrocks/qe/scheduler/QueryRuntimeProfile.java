@@ -86,6 +86,7 @@ public class QueryRuntimeProfile {
     private static final Long MARKED_COUNT_DOWN_VALUE = -1L;
 
     public static final String LOAD_CHANNEL_PROFILE_NAME = "LoadChannel";
+    public static final String PER_TABLE_SCAN_STATS_PROFILE_NAME = "PerTableScanStats";
 
     private final JobSpec jobSpec;
 
@@ -414,6 +415,10 @@ public class QueryRuntimeProfile {
         newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
         newQueryProfile.copyAllCountersFrom(queryProfile);
 
+        // Build a per-(table, host) scan summary from the un-merged fragment profiles
+        // before the isomorphic merge collapses host-level information.
+        Optional<RuntimeProfile> perTableScanStats = buildScanStatsByTableAndHost();
+
         Map<String, Long> peakMemoryEachBE = Maps.newHashMap();
         long sumQueryCumulativeCpuTime = 0;
         long sumQuerySpillBytes = 0;
@@ -620,7 +625,107 @@ public class QueryRuntimeProfile {
         Optional<RuntimeProfile> mergedLoadChannelProfile = mergeLoadChannelProfile();
         mergedLoadChannelProfile.ifPresent(newQueryProfile::addChild);
 
+        perTableScanStats.ifPresent(newQueryProfile::addChild);
+
         return newQueryProfile;
+    }
+
+    // Aggregate scan rows/bytes per (qualified table, host) by walking the original instance-level
+    // profile tree. Each scan operator's UniqueMetrics carries "Table" (and, when emitted by the BE,
+    // "Database") InfoStrings, and each instance profile carries an "Address" InfoString. The
+    // database is included in the key so that same-named tables in different databases (e.g.
+    // db1.orders vs db2.orders) are not collapsed into a single bucket.
+    Optional<RuntimeProfile> buildScanStatsByTableAndHost() {
+        // qualifiedTable -> host -> [rowsRead, bytesRead, rawRowsRead]
+        Map<String, Map<String, long[]>> tableHostStats = Maps.newTreeMap();
+
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            for (Pair<RuntimeProfile, Boolean> instancePair : fragmentProfile.getChildList()) {
+                RuntimeProfile instanceProfile = instancePair.first;
+                String host = instanceProfile.getInfoString("Address");
+                if (host == null) {
+                    continue;
+                }
+                for (Pair<RuntimeProfile, Boolean> pipelinePair : instanceProfile.getChildList()) {
+                    RuntimeProfile pipelineProfile = pipelinePair.first;
+                    for (Pair<RuntimeProfile, Boolean> operatorPair : pipelineProfile.getChildList()) {
+                        RuntimeProfile operatorProfile = operatorPair.first;
+                        RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
+                        if (uniqueMetrics == null) {
+                            continue;
+                        }
+                        String table = uniqueMetrics.getInfoString("Table");
+                        if (table == null) {
+                            continue;
+                        }
+                        String qualifiedTable = qualifyTableName(uniqueMetrics.getInfoString("Database"), table);
+                        long[] agg = tableHostStats
+                                .computeIfAbsent(qualifiedTable, k -> Maps.newTreeMap())
+                                .computeIfAbsent(host, k -> new long[3]);
+                        agg[0] += counterValueOrZero(uniqueMetrics, "RowsRead");
+                        agg[1] += counterValueOrZero(uniqueMetrics, "BytesRead");
+                        agg[2] += counterValueOrZero(uniqueMetrics, "RawRowsRead");
+                    }
+                }
+            }
+        }
+
+        if (tableHostStats.isEmpty()) {
+            return Optional.empty();
+        }
+
+        RuntimeProfile perTableProfile = new RuntimeProfile(PER_TABLE_SCAN_STATS_PROFILE_NAME);
+        long queryTotalRows = 0;
+        long queryTotalBytes = 0;
+        long queryTotalRawRows = 0;
+        for (Map.Entry<String, Map<String, long[]>> tableEntry : tableHostStats.entrySet()) {
+            String qualifiedTable = tableEntry.getKey();
+            Map<String, long[]> hostStats = tableEntry.getValue();
+            RuntimeProfile tableProfile = new RuntimeProfile("Table: " + qualifiedTable);
+            long tableRows = 0;
+            long tableBytes = 0;
+            long tableRawRows = 0;
+            for (Map.Entry<String, long[]> hostEntry : hostStats.entrySet()) {
+                String host = hostEntry.getKey();
+                long[] vals = hostEntry.getValue();
+                tableRows += vals[0];
+                tableBytes += vals[1];
+                tableRawRows += vals[2];
+
+                RuntimeProfile hostProfile = new RuntimeProfile("Host: " + host);
+                hostProfile.addCounter("ScanRows", TUnit.UNIT, null).setValue(vals[0]);
+                hostProfile.addCounter("ScanBytes", TUnit.BYTES, null).setValue(vals[1]);
+                hostProfile.addCounter("RawScanRows", TUnit.UNIT, null).setValue(vals[2]);
+                tableProfile.addChild(hostProfile);
+            }
+            tableProfile.addInfoString("HostNum", String.valueOf(hostStats.size()));
+            tableProfile.addCounter("ScanRows", TUnit.UNIT, null).setValue(tableRows);
+            tableProfile.addCounter("ScanBytes", TUnit.BYTES, null).setValue(tableBytes);
+            tableProfile.addCounter("RawScanRows", TUnit.UNIT, null).setValue(tableRawRows);
+            perTableProfile.addChild(tableProfile);
+
+            queryTotalRows += tableRows;
+            queryTotalBytes += tableBytes;
+            queryTotalRawRows += tableRawRows;
+        }
+        perTableProfile.addInfoString("TableNum", String.valueOf(tableHostStats.size()));
+        perTableProfile.addCounter("ScanRows", TUnit.UNIT, null).setValue(queryTotalRows);
+        perTableProfile.addCounter("ScanBytes", TUnit.BYTES, null).setValue(queryTotalBytes);
+        perTableProfile.addCounter("RawScanRows", TUnit.UNIT, null).setValue(queryTotalRawRows);
+
+        return Optional.of(perTableProfile);
+    }
+
+    private static String qualifyTableName(String database, String table) {
+        if (database == null || database.isEmpty()) {
+            return table;
+        }
+        return database + "." + table;
+    }
+
+    private static long counterValueOrZero(RuntimeProfile profile, String name) {
+        Counter counter = profile.getCounter(name);
+        return counter == null ? 0L : counter.getValue();
     }
 
     RuntimeProfile mergeNonPipelineProfile() {

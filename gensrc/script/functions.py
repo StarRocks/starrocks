@@ -340,6 +340,14 @@ vectorized_functions = [
     [30191, 'rtrim', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
      'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
 
+    # MySQL TRIM(... FROM ...) substring semantics: remstr removed as a whole unit, repeatedly.
+    [30172, 'trim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30182, 'ltrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30192, 'rtrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+
     [30200, 'ascii', True, False, 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', True, False, 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -839,7 +847,8 @@ vectorized_functions = [
     [90500, 'bitmap_to_array', False, False, 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array'],
     [90600, 'bitmap_max', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max'],
     [90700, 'bitmap_min', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min'],
-    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap'],
+    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap',
+     'BitmapFunctions::base64_to_bitmap_prepare', 'BitmapFunctions::base64_to_bitmap_close'],
     [90801, 'bitmap_to_base64', False, True, 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64'],
     [90900, 'array_to_bitmap', False, False, 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap'],
     [91000, 'sub_bitmap', False, False, 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap'],
@@ -852,6 +861,8 @@ vectorized_functions = [
 
     # hash function
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
+    [100028, 'xx_hash32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::xx_hash32'],
+    [100029, 'xx_hash64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash64'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
     [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
@@ -871,6 +882,7 @@ vectorized_functions = [
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
     [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
     [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
+    [100027, 'query_id', True, False, 'VARCHAR', [], "UtilityFunctions::query_id"],
 
     # materialize: identity function that acts as an optimization barrier.
     # Returns the input unchanged but is opaque to the FE optimizer,

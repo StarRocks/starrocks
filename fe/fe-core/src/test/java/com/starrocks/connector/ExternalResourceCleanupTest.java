@@ -510,12 +510,12 @@ public class ExternalResourceCleanupTest {
         IcebergTable table = Mockito.mock(IcebergTable.class);
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class);
+                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
         m.setAccessible(true);
         org.apache.iceberg.io.CloseableIterator<FileScanTask> iter =
                 (org.apache.iceberg.io.CloseableIterator<FileScanTask>) m.invoke(
                         metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                        TvrTableSnapshot.empty(), null, false);
+                        TvrTableSnapshot.empty(), null, false, null);
         Assertions.assertFalse(iter.hasNext());
         iter.close();
     }
@@ -540,11 +540,11 @@ public class ExternalResourceCleanupTest {
 
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class);
+                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
         m.setAccessible(true);
         Assertions.assertThrows(java.lang.reflect.InvocationTargetException.class, () -> m.invoke(
                 metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                TvrTableSnapshot.of(Optional.of(1L)), null, false));
+                TvrTableSnapshot.of(Optional.of(1L)), null, false, null));
     }
 
     @Test
@@ -581,12 +581,12 @@ public class ExternalResourceCleanupTest {
 
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class);
+                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
         m.setAccessible(true);
         org.apache.iceberg.io.CloseableIterator<FileScanTask> iter =
                 (org.apache.iceberg.io.CloseableIterator<FileScanTask>) m.invoke(
                         metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                        TvrTableDelta.of(Optional.of(1L), Optional.of(2L)), null, true);
+                        TvrTableDelta.of(Optional.of(1L), Optional.of(2L)), null, true, null);
         // iterator should be created and be consumable without exception
         iter.hasNext();
         iter.close();

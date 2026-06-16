@@ -45,7 +45,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -880,9 +880,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
-            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
-                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
-            }
             if (rowsets_to_change.back() == nullptr) {
                 std::vector<Version> base_tablet_versions;
                 base_tablet->list_versions(&base_tablet_versions);
@@ -896,6 +893,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
                     ss << ver << ",";
                 }
                 return Status::InternalError(fmt::format("fail to get rowset by version: {}", ss.str()));
+            }
+            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
+                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
             }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =

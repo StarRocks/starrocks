@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "等幅ヒストグラムのバケットを計算します。"
 ---
 
 # equiwidth_bucket

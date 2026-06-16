@@ -27,7 +27,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
@@ -88,6 +87,13 @@ public class MetaRecoveryDaemon extends LeaderDaemon {
                 continue;
             }
 
+            // Deliberate full-DB READ (not the table-scoped intensive path): this walk iterates
+            // every table and reads per-table internal state (partitions -> indices -> tablets ->
+            // replica versions) over the unbounded table set, which is the case the lock rubric
+            // assigns to plain lockDatabase(READ). It also only runs under
+            // Config.metadata_enable_recovery_mode, where a coherent DB-wide view of partition
+            // versions is wanted and concurrent DDL should not race the repair; the IX-blocking
+            // that READ imposes is acceptable (and desirable) in that mode.
             Locker locker = new Locker();
             locker.lockDatabase(database.getId(), LockType.READ);
             try {
@@ -300,10 +306,11 @@ public class MetaRecoveryDaemon extends LeaderDaemon {
 
     protected boolean checkTabletReportCacheUp(long timeMs) {
         for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
-            if (TimeUtils.timeStringToLong(backend.getBackendStatus().lastSuccessReportTabletsTime)
-                    < timeMs) {
+            Backend.BackendStatus status = backend.getBackendStatus();
+            if (status.lastSuccessReportTabletsTimeMs < timeMs) {
                 LOG.warn("last tablet report time of backend {}:{} is {}, should wait it to report tablets",
-                        backend.getHost(), backend.getHeartbeatPort(), backend.getBackendStatus().lastSuccessReportTabletsTime);
+                        backend.getHost(), backend.getHeartbeatPort(),
+                        status.getLastSuccessReportTabletsTimeStr());
                 return false;
             }
         }

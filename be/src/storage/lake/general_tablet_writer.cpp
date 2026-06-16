@@ -35,11 +35,11 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/vector_index_utils.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
-namespace {
 // async/sync is a table-level setting (every vector index on a given schema shares the
 // same index_build_mode). Returning bool from "any vector index has async mode" is
 // equivalent to "the table is in async mode" for this purpose.
@@ -136,7 +136,6 @@ Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tab
     }
     return Status::OK();
 }
-} // namespace
 
 void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer) {
     if (segment_writer == nullptr) {
@@ -243,6 +242,13 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() c
                                                             _flush_pool, _bundle_file_context, _global_dicts);
     RETURN_IF_ERROR(writer->open());
     writer->set_auto_flush(auto_flush());
+    // Propagate the force-inline flag: spilled sorted schema changes merge through cloned writers
+    // (LoadSpillPipelineMergeIterator). Without this, clones default to false and defer .vi building
+    // even though the schema-change job stamped the shadow tablets' vibv as already built, so the
+    // existing rows would publish without inline-built vector files and never get rescheduled.
+    if (_force_build_vector_index_inline) {
+        writer->force_set_build_vector_index_inline();
+    }
     return writer;
 }
 
@@ -261,7 +267,9 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
 
     opts.global_dicts = _global_dicts;
 
-    opts.defer_vector_index_build = has_async_vector_index(_schema);
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
@@ -299,6 +307,28 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     return Status::OK();
 }
 
+void HorizontalGeneralTabletWriter::record_segment_vector_index_ids(SegmentFileInfo& segment_file_info,
+                                                                    SegmentWriter* seg_writer) const {
+    // Record which vector indexes need a .vi file for this segment. Shared by the duplicate-key
+    // flush path and the primary-key override (HorizontalPkTabletWriter) so the two cannot
+    // silently diverge: the PK override previously omitted this, dropping vector index builds
+    // for shared-data primary-key tables.
+    if (seg_writer->defer_vector_index_build()) {
+        // Async: skip bundle-file segments (.vi doesn't support the bundle format yet, so the
+        // index is rebuilt after compaction) and segments below the deferred-build threshold.
+        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
+        if (is_bundled || segment_file_info.num_rows < seg_writer->vector_index_build_threshold()) {
+            return;
+        }
+    } else if (!seg_writer->has_vector_index_written()) {
+        // Sync: record only when .vi files were actually produced inline.
+        return;
+    }
+    for (const auto& [index_id, _] : seg_writer->vector_index_file_paths()) {
+        segment_file_info.vector_index_ids.push_back(index_id);
+    }
+}
+
 Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
     if (_seg_writer != nullptr) {
         uint64_t segment_size = 0;
@@ -316,34 +346,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
-        // Record which vector indexes need .vi files
-        // Skip bundled segments: .vi files don't support bundle format yet
-        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
-        if (_seg_writer->defer_vector_index_build()) {
-            if (is_bundled) {
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " SKIPPED (bundled segment)";
-            } else if (segment_file_info.num_rows >= _seg_writer->vector_index_build_threshold()) {
-                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-                    segment_file_info.vector_index_ids.push_back(index_id);
-                }
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " num_rows=" << segment_file_info.num_rows
-                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " recorded "
-                        << segment_file_info.vector_index_ids.size() << " index_ids";
-            } else {
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " num_rows=" << segment_file_info.num_rows
-                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " SKIPPED (below threshold)";
-            }
-        } else {
-            // Sync mode: record vector index IDs only when .vi files were actually produced.
-            if (_seg_writer->has_vector_index_written()) {
-                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-                    segment_file_info.vector_index_ids.push_back(index_id);
-                }
-            }
-        }
+        record_segment_vector_index_ids(segment_file_info, _seg_writer.get());
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
@@ -580,7 +583,9 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
 
     RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
                                                  _fs.get(), opts));
-    opts.defer_vector_index_build = has_async_vector_index(_schema);
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));

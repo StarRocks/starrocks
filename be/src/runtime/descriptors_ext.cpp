@@ -469,22 +469,6 @@ std::string EsTableDescriptor::debug_string() const {
     return out.str();
 }
 
-MySQLTableDescriptor::MySQLTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
-        : TableDescriptor(tdesc, mr),
-          _mysql_db(tdesc.mysqlTable.db, mr),
-          _mysql_table(tdesc.mysqlTable.table, mr),
-          _host(tdesc.mysqlTable.host, mr),
-          _port(tdesc.mysqlTable.port, mr),
-          _user(tdesc.mysqlTable.user, mr),
-          _passwd(tdesc.mysqlTable.passwd, mr) {}
-
-std::string MySQLTableDescriptor::debug_string() const {
-    std::stringstream out;
-    out << "MySQLTable(" << TableDescriptor::debug_string() << " _db" << _mysql_db << " table=" << _mysql_table
-        << " host=" << _host << " port=" << _port << " user=" << _user << " passwd=" << _passwd;
-    return out.str();
-}
-
 JDBCTableDescriptor::JDBCTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
         : TableDescriptor(tdesc, mr),
           _jdbc_driver_name(tdesc.jdbcTable.jdbc_driver_name, mr),

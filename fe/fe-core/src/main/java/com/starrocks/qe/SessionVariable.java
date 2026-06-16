@@ -562,6 +562,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT = "skew_join_max_other_side_overlap_row_count";
     public static final String SKEW_JOIN_MCV_SINGLE_THRESHOLD = "skew_join_mcv_single_threshold";
     public static final String SKEW_JOIN_MCV_MIN_INPUT_ROWS = "skew_join_mcv_min_input_rows";
+    public static final String ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS = "enable_skew_detect_with_inaccurate_stats";
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
@@ -612,6 +613,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
     public static final String ENABLE_RANGE_DISTRIBUTION = "enable_range_distribution";
+
+    public static final String ENABLE_TABLET_PRE_SPLIT = "enable_tablet_pre_split";
 
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
@@ -1080,6 +1083,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PQ_REFINE_FACTOR = "pq_refine_factor";
 
     public static final String K_FACTOR = "k_factor";
+
+    public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
 
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
@@ -2027,6 +2032,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION, flag = VariableMgr.INVISIBLE)
     private boolean enableRangeDistribution = false;
+
+    // Per-session opt-out for Sample-Based Tablet Pre-Split. Defaults to true so the FE-side
+    // Config gates (enable_tablet_pre_split_for_*) are the primary on/off switch; users with
+    // session-specific reasons (e.g. a one-off load they want to leave undisturbed) can flip
+    // this to false. Both the Config and the session var must be true for pre-split to run.
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_PRE_SPLIT)
+    private boolean enableTabletPreSplit = true;
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
@@ -3157,6 +3169,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = K_FACTOR)
     private double kFactor = 1;
 
+    // When on, a quantized vector index (IVFPQ, or HNSW with a non-flat quantizer) refines its ANN
+    // result by recomputing the exact distance on the full-precision vectors. Off = trust the (lossy)
+    // index distance. No effect on a non-quantized index, whose distance is already exact.
+    @VarAttr(name = ENABLE_VECTOR_INDEX_REFINE)
+    private boolean enableVectorIndexRefine = false;
+
+    public boolean isEnableVectorIndexRefine() {
+        return enableVectorIndexRefine;
+    }
+
+    public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {
+        this.enableVectorIndexRefine = enableVectorIndexRefine;
+    }
+
     public int getPrepareMetadataPoolSize() {
         return prepareMetadataPoolSize;
     }
@@ -3224,7 +3250,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePaimonColumnStatistics = false;
 
     @VarAttr(name = PLAN_MODE)
-    private String planMode = PlanMode.AUTO.modeName();
+    private String planMode = PlanMode.LOCAL.modeName();
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
@@ -3251,6 +3277,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Minimal input rows (estimated) to enable MCV-based skew join elimination rewrite.
     @VarAttr(name = SKEW_JOIN_MCV_MIN_INPUT_ROWS, flag = VariableMgr.INVISIBLE)
     private long skewJoinMcvMinInputRows = 10000000;
+
+    // When enabled, skew detection proceeds even when table row count is marked as potentially inaccurate (isTableRowCountMayInaccurate).
+    // This allows rules consuming skew info (joins, aggregations, window functions) to fire based on
+    // histogram/MCV data regardless of row count reliability.
+    @VarAttr(name = ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS, flag = VariableMgr.INVISIBLE)
+    private boolean enableSkewDetectWithInaccurateStats = false;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -4671,7 +4703,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
-        ConnectorSinkShuffleMode mode = ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+        return ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+    }
+
+    public ConnectorSinkShuffleMode getIcebergConnectorSinkShuffleMode() {
+        ConnectorSinkShuffleMode mode = getConnectorSinkShuffleMode();
         // Backward compatibility: legacy iceberg-only boolean implies FORCE when new mode stays at default AUTO.
         if (mode == ConnectorSinkShuffleMode.AUTO && enableIcebergSinkGlobalShuffle) {
             return ConnectorSinkShuffleMode.FORCE;
@@ -4930,6 +4966,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRangeDistribution(boolean enableRangeDistribution) {
         this.enableRangeDistribution = enableRangeDistribution;
+    }
+
+    public boolean isEnableTabletPreSplit() {
+        return enableTabletPreSplit;
+    }
+
+    public void setEnableTabletPreSplit(boolean enableTabletPreSplit) {
+        this.enableTabletPreSplit = enableTabletPreSplit;
     }
 
     public void setAllowDefaultPartition(boolean allowDefaultPartition) {
@@ -5812,6 +5856,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableStatsToOptimizeSkewJoin(boolean enableStatsToOptimizeSkewJoin) {
         this.enableStatsToOptimizeSkewJoin = enableStatsToOptimizeSkewJoin;
+    }
+
+    public boolean isEnableSkewDetectWithInaccurateStats() {
+        return enableSkewDetectWithInaccurateStats;
+    }
+
+    public void setEnableSkewDetectWithInaccurateStats(boolean enableSkewDetectWithInaccurateStats) {
+        this.enableSkewDetectWithInaccurateStats = enableSkewDetectWithInaccurateStats;
     }
 
     public int getSkewJoinOptimizeUseMCVCount() {

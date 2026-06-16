@@ -20,13 +20,14 @@
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/exec_factory.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
@@ -41,7 +42,7 @@ public:
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();
-        _exec_env->metrics()->set_collect_hook_enabled(true);
+        _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
     }
     void TearDown() override {}
 
@@ -402,6 +403,21 @@ TEST_F(ConnectorScanNodeTest, test_stream_load_thread_pool) {
     ASSERT_EQ(1, tuple.get(0).get_int32());
     ASSERT_EQ("test", tuple.get(1).get_slice());
     ASSERT_TRUE(scan_node->use_stream_load_thread_pool());
+}
+
+TEST_F(ConnectorScanNodeTest, missing_connector_returns_unknown_error) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = create_tplan_node_hive();
+    tnode->connector_scan_node.connector_name = "__missing_connector__";
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+
+    auto status = scan_node->init(*tnode, runtime_state.get());
+    ASSERT_TRUE(status.is_unknown()) << status;
+    ASSERT_NE(status.message().find("Unknown connector: __missing_connector__"), std::string::npos);
 }
 
 // When FE sets catalog_type explicitly, use it.

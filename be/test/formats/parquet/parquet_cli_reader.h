@@ -30,10 +30,10 @@ public:
             : _filepath(filepath),
               _file(_create_file(filepath)),
               _scanner_ctx(std::make_shared<HdfsScannerContext>()),
-              _scan_stats(std::make_shared<HdfsScanStats>()) {
+              _scan_stats(std::make_shared<HdfsScannerStats>()) {
+        _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         _scanner_ctx->timezone = "Asia/Shanghai";
         _scanner_ctx->stats = _scan_stats.get();
-        _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     }
     ~ParquetCLIReader() {
         _file_reader = nullptr;
@@ -53,7 +53,7 @@ public:
         // create temporary reader to load schema.
         const FileMetaData* file_metadata = nullptr;
         HdfsScannerContext ctx;
-        HdfsScanStats stats;
+        HdfsScannerStats stats;
         ctx.stats = &stats;
         ctx.scan_range = scan_range;
         ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
@@ -253,7 +253,7 @@ private:
     std::shared_ptr<FileReader> _file_reader;
     std::unique_ptr<RandomAccessFile> _file;
     std::shared_ptr<HdfsScannerContext> _scanner_ctx;
-    std::shared_ptr<HdfsScanStats> _scan_stats;
+    std::shared_ptr<HdfsScannerStats> _scan_stats;
     ChunkPtr _chunk;
     ObjectPool _pool;
 };

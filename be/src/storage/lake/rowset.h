@@ -23,7 +23,7 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/seek_range.h"
 
@@ -95,9 +95,14 @@ public:
     // |rowid_range_per_segment|: if non-null, rowid_range_per_segment[i] specifies the row range
     // to scan for the i-th segment. If the pointer at index i is null, the entire segment is scanned.
     // The vector size must equal num_segments() if provided.
+    // |per_segment_stats|: if non-null, the i-th segment iterator is created with per_segment_stats[i]
+    // as its OlapReaderStatistics, so callers that later scan different segments concurrently do not
+    // race on one shared stats object; else all segments share |stats|. Size must equal the segment
+    // count if provided.
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
             const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
-            const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr);
+            const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr,
+            const std::vector<OlapReaderStatistics*>* per_segment_stats = nullptr);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
@@ -107,7 +112,7 @@ public:
         if (_segment_range_end > 0) {
             return _segment_range_end - _segment_range_start;
         }
-        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segments_size();
+        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segment_metas_size();
     }
 
     // only used in compaction

@@ -14,9 +14,13 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <vector>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "connector/connector.h"
@@ -140,7 +144,8 @@ private:
 private:
     // pipeline fields and methods.
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
-    connector::ConnectorType _connector_type;
+    Status _connector_status = Status::OK();
+    connector::ConnectorType _connector_type = connector::ConnectorType::HIVE;
     std::string _catalog_type;
     void _estimate_scan_row_bytes();
     void _estimate_data_source_mem_bytes();

@@ -23,6 +23,7 @@
 #include "base/brpc/brpc.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -85,7 +86,7 @@ ThreadPool* vacuum_thread_pool(ExecEnv* env) {
 }
 
 ThreadPool* vector_index_build_thread_pool(ExecEnv* env) {
-    return env ? env->lake_vector_index_build_thread_pool() : nullptr;
+    return env ? env->lake_services().lake_vector_index_build_thread_pool : nullptr;
 }
 
 int get_num_publish_queued_tasks(void*) {
@@ -219,12 +220,43 @@ LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) 
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
+// Runtime-toggleable failpoint to pin lake publish_version RPC failing.
+// Available only in builds compiled with ENABLE_FAULT_INJECTION=ON (e.g.
+// ASAN-with-FIU). In default Release builds this expands to a no-op.
+//
+// Used by integration tests to park alter / load txns at FINISHED_REWRITING
+// so the CANCEL ALTER TABLE ... FORCE escape hatch can be exercised on a
+// real cluster. Enable via brpc HTTP on each CN's brpc port (shared-data):
+//   curl -X POST -d '{"fail_point_name":"lake_publish_version_rpc_fail",
+//     "trigger_mode":{"mode":1}}' http://<cn-host>:<brpc-port>/PInternalService/update_fail_point_status
+//
+// IMPORTANT: this failpoint deliberately lets requests with at least one
+// TxnInfoPB.no_op_publish=true through. The FORCE-cancel path sends exactly
+// such a request (to advance the partition version past the cancelled
+// alter), and if the failpoint blocked it too, the test would not be able
+// to verify the cancel-then-resume-loads behaviour. This also more
+// accurately models production stuck-publish: the failure typically lives
+// in the txn-log apply path (OSS read of txn_log, broken segment, ...),
+// which no_op_publish=true bypasses entirely (transactions.cpp:320).
+DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
+
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
                                       ::starrocks::PublishVersionResponse* response,
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
+    bool any_no_op = false;
+    for (int i = 0; i < request->txn_infos_size(); i++) {
+        if (request->txn_infos(i).no_op_publish()) {
+            any_no_op = true;
+            break;
+        }
+    }
+    if (!any_no_op) {
+        FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail,
+                                  cntl->SetFailed("inject lake_publish_version_rpc_fail"));
+    }
     // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
     // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
     // cntl can be nullptr in unit tests, so guard the access.
@@ -407,28 +439,33 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
                             }
                         }
-                        // Report tablet for async VI build only on async-mode tables
-                        // whose new rowset(s) have vector_index_ids. Sync-mode tables
-                        // build VI inline on write/compaction, so FE dispatch is unneeded.
-                        bool new_rowset_has_vi = false;
-                        if (is_async_vector_index_table(*metadata)) {
+                        // Report tablet for async VI build-frontier tracking on async-mode
+                        // tables. We report whenever this publish advanced the tablet version,
+                        // even when the new rowset carries no vector_index_ids (bundle /
+                        // below-threshold segments skip the inline .vi). build_needed lets the
+                        // FE tell the two apart:
+                        //   true  -> a new segment needs a real .vi build; FE dispatches to CN.
+                        //   false -> nothing to build this version; FE advances built_version
+                        //            directly (no CN round-trip), so observability isn't stuck.
+                        // Sync-mode tables build VI inline, so no FE dispatch is needed.
+                        if (is_async_vector_index_table(*metadata) && metadata->version() > base_version) {
+                            bool new_rowset_has_vi = false;
                             for (const auto& rowset : metadata->rowsets()) {
                                 int64_t rv = rowset.has_version() ? rowset.version() : 0;
                                 if (rv <= base_version) continue; // existing rowset, not from this publish
-                                for (int i = 0; i < rowset.segment_metas_size(); i++) {
-                                    if (rowset.segment_metas(i).vector_index_ids_size() > 0) {
+                                for (const auto& segment_meta : rowset.segment_metas()) {
+                                    if (segment_meta.vector_index_ids_size() > 0) {
                                         new_rowset_has_vi = true;
                                         break;
                                     }
                                 }
                                 if (new_rowset_has_vi) break;
                             }
-                        }
-                        if (new_rowset_has_vi) {
                             std::lock_guard l(response_mtx);
                             auto* info = response->add_vector_index_build_infos();
                             info->set_tablet_id(metadata->id());
                             info->set_version(metadata->version());
+                            info->set_build_needed(new_rowset_has_vi);
                         }
                     } else {
                         if (res.status().is_resource_busy()) {
@@ -653,7 +690,7 @@ struct AggregatePublishContext {
 
     void put_aggregate_metadata(ExecEnv* env) {
         if (!has_failure) {
-            auto thread_pool = env->put_aggregate_metadata_thread_pool();
+            auto thread_pool = env->lake_services().put_aggregate_metadata_thread_pool;
             if (UNLIKELY(thread_pool == nullptr)) {
                 publish_status = Status::InternalError("can not find put_aggregate_metadata thread pool");
             } else {
@@ -1177,7 +1214,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    auto thread_pool = _env->lake_services().lake_metadata_fetch_thread_pool;
     TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("lake metadata fetch thread pool is null");
@@ -1464,7 +1501,7 @@ struct AggregateCompactContext {
     void write_combined_txn_log(ExecEnv* env) {
         if (final_status.ok()) {
             VLOG(2) << "Write combined txn log. pb=" << combined_txn_log.ShortDebugString();
-            auto thread_pool = env->put_combined_txn_log_thread_pool();
+            auto thread_pool = env->execution_services().put_combined_txn_log_thread_pool;
             if (UNLIKELY(thread_pool == nullptr)) {
                 final_status = Status::InternalError("can not find put_combined_txn_log thread pool");
             } else {
@@ -1687,11 +1724,22 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
 
     TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
 
+    // Anchor the deadline at the time the request is received: the FE caller waits at most
+    // |timeout_ms| from now, so once the deadline passes (whether the task waited in the
+    // thread pool queue or is in the middle of vacuuming) the task aborts itself instead of
+    // keeping a vacuum worker occupied for a response nobody reads. Requests without the
+    // field (older FE versions) carry no deadline and run to completion as before, and
+    // setting |lake_vacuum_enable_task_timeout| to false disables the deadline entirely.
+    int64_t deadline_ms = 0;
+    if (config::lake_vacuum_enable_task_timeout && request->has_timeout_ms() && request->timeout_ms() > 0) {
+        deadline_ms = butil::gettimeofday_ms() + request->timeout_ms();
+    }
+
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
                 DeferOp defer([&] { latch.count_down(); });
-                lake::vacuum(_tablet_mgr, *request, response);
+                lake::vacuum(_tablet_mgr, *request, response, deadline_ms);
             },
             [&] {
                 Status st = Status::Cancelled("vacuum task has been cancelled");
@@ -1774,7 +1822,8 @@ static Status check_missing_files(const TabletMetadata& metadata, const lake::Ta
 
     // segment
     for (const auto& rowset : metadata.rowsets()) {
-        for (const auto& seg_name : rowset.segments()) {
+        for (const auto& segment_metadata : rowset.segment_metas()) {
+            const auto& seg_name = segment_metadata.filename();
             RETURN_IF_ERROR(check_file(tablet_mgr->segment_location(tablet_id, seg_name), seg_name));
         }
     }
@@ -1832,7 +1881,7 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         Status::InvalidArgument("max_version should be >= min_version").to_protobuf(response->mutable_status());
         return;
     }
-    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    auto thread_pool = _env->lake_services().lake_metadata_fetch_thread_pool;
     TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_metadatas:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
         Status::ServiceUnavailable("lake metadata fetch thread pool is null").to_protobuf(response->mutable_status());

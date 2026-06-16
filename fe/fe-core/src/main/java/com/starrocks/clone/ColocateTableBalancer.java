@@ -57,7 +57,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.YieldableLock;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -737,26 +737,24 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                  ColocateTableIndex colocateIndex,
                                  TabletScheduler tabletScheduler) {
         long checkStartTime = System.currentTimeMillis();
-        long lockTotalTime = 0;
-        long waitTotalTimeMs = 0;
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
         Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
         if (db == null) {
-            return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
+            return new ColocateMatchResult(0, Status.UNKNOWN);
         }
 
         List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
         if (backendBucketsSeq.isEmpty()) {
-            return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
+            return new ColocateMatchResult(0, Status.UNKNOWN);
         }
 
         boolean isGroupStable = true;
         // set the config to a local variable to avoid config params changed.
         int partitionBatchNum = Config.tablet_checker_partition_batch_num;
+        boolean disableColocateBalance = Config.tablet_sched_disable_colocate_balance;
+        SystemInfoService infoService = globalStateMgr.getNodeMgr().getClusterInfo();
         int partitionChecked = 0;
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        long lockStart = System.nanoTime();
+        YieldableLock lock = YieldableLock.lockDatabase(db.getId(), LockType.READ);
         try {
             TABLE:
             for (Long tableId : tableIds) {
@@ -780,13 +778,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
                     }
 
                     if (partitionChecked % partitionBatchNum == 0) {
-                        lockTotalTime += System.nanoTime() - lockStart;
                         // release lock, so that lock can be acquired by other threads.
-                        locker.unLockDatabase(db.getId(), LockType.READ);
-                        locker.lockDatabase(db.getId(), LockType.READ);
-                        lockStart = System.nanoTime();
+                        lock.refresh();
                         if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
-                            return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
+                            return new ColocateMatchResult(lock.getHeldTimeNs(), Status.UNKNOWN);
                         }
                         if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
@@ -821,6 +816,15 @@ public class ColocateTableBalancer extends LeaderDaemon {
                             // check tablet colocate status
                             TabletHealthStatus st = TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion,
                                     replicationNum, bucketSeq);
+                            // When balance is gated off, the bucket assignment can retain dead BEs that
+                            // the inner verdict trusts. Mark the group unstable directly so the dead-BE
+                            // fact surfaces via 'show proc "/colocation_group"', without producing a
+                            // repair task that has no valid clone target.
+                            if (disableColocateBalance && st == TabletHealthStatus.HEALTHY
+                                    && !TabletChecker.hasEnoughAliveBackendsInBucketSeq(
+                                            bucketSeq, replicationNum, infoService)) {
+                                isGroupStable = false;
+                            }
                             if (st == TabletHealthStatus.COLOCATE_MISMATCH && balanceStat.isBalanced()) {
                                 balanceStat =
                                         BalanceStat.createColocationGroupBalanceStat(tabletId, tablet.getBackendIds(), bucketSeq);
@@ -864,15 +868,15 @@ public class ColocateTableBalancer extends LeaderDaemon {
 
                                         // For bad replica, we ignore the size limit of scheduler queue
                                         Pair<Boolean, Long> result =
-                                                tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx,
+                                                tabletScheduler.blockingAddTabletCtxToScheduler(tabletCtx,
                                                         needToForceRepair(st, tablet,
-                                                                bucketSeq) || isPartitionUrgent /* forcefully add or not */);
+                                                                bucketSeq) || isPartitionUrgent /* forcefully add or not */,
+                                                        lock);
                                         if (LOG.isDebugEnabled() && result.first &&
                                                 st == TabletHealthStatus.COLOCATE_MISMATCH) {
                                             logDebugInfoForColocateMismatch(bucketSeq, tablet);
                                         }
 
-                                        waitTotalTimeMs += result.second;
                                         if (result.first && tabletCtx.isRelocationForRepair()) {
                                             LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
                                                             "bucket sequence before: {}, bucket sequence now: {}",
@@ -908,11 +912,12 @@ public class ColocateTableBalancer extends LeaderDaemon {
             } // end for tables
 
         } finally {
-            lockTotalTime += System.nanoTime() - lockStart;
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            lock.close();
         }
 
-        return new ColocateMatchResult(lockTotalTime - waitTotalTimeMs * 1000000,
+        // The scope tracks actually-held time, so the blocking-add wait windows are
+        // already excluded.
+        return new ColocateMatchResult(lock.getHeldTimeNs(),
                 isGroupStable ? Status.STABLE : Status.UNSTABLE);
     }
 
@@ -1265,7 +1270,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
      * check backend available
      * backend stopped for a short period of time is still considered available
      */
-    private boolean checkBackendAvailable(Long backendId, SystemInfoService infoService) {
+    static boolean checkBackendAvailable(Long backendId, SystemInfoService infoService) {
         long currTime = System.currentTimeMillis();
         Backend be = infoService.getBackend(backendId);
         if (be == null) {

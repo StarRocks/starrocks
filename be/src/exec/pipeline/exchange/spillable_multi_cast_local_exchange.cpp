@@ -22,16 +22,15 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/spill/block_manager.h"
+#include "compute_env/spill/data_stream.h"
+#include "compute_env/spill/dir_manager.h"
+#include "compute_env/spill/mem_table.h"
+#include "compute_env/spill/options.h"
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/block_manager.h"
-#include "exec/spill/data_stream.h"
-#include "exec/spill/dir_manager.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/mem_table.h"
-#include "exec/spill/options.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -51,7 +50,7 @@ SpillableMultiCastLocalExchanger::SpillableMultiCastLocalExchanger(RuntimeState*
         opts.memory_limit = std::numeric_limits<size_t>::max();
     }
     opts.plan_node_id = plan_node_id;
-    opts.block_manager = runtime_state->query_ctx()->spill_manager()->block_manager();
+    opts.block_manager = runtime_state->query_runtime_state()->query_spill_manager()->block_manager();
     opts.encode_level = runtime_state->spill_encode_level();
 
     _queue = std::make_shared<MemLimitedChunkQueue>(runtime_state, consumer_number, opts);

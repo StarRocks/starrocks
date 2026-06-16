@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/schedule/pipeline_timer.h"
+#include "compute_env/pipeline/pipeline_timer.h"
 
 #include <atomic>
 #include <chrono>
@@ -27,7 +27,10 @@
 #include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "common/brpc/brpc_stub_cache.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "gtest/gtest.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -68,6 +71,27 @@ class LightProbe final : public LightTimerTask {
 public:
     void Run() override { ran.store(true, std::memory_order_release); }
     std::atomic<bool> ran{false};
+};
+
+class CountingObserver final : public PipelineObserver {
+public:
+    void source_trigger() override {
+        source_count.fetch_add(1, std::memory_order_acq_rel);
+        source_signal.release();
+    }
+    void sink_trigger() override {}
+    void cancel_trigger() override {}
+    void all_trigger() override {}
+    void runtime_filter_timeout_trigger() override {
+        runtime_filter_timeout_count.fetch_add(1, std::memory_order_acq_rel);
+        runtime_filter_timeout_signal.release();
+    }
+    std::string debug_string() const override { return "CountingObserver"; }
+
+    std::atomic<int> source_count{0};
+    std::atomic<int> runtime_filter_timeout_count{0};
+    std::counting_semaphore<> source_signal{0};
+    std::counting_semaphore<> runtime_filter_timeout_signal{0};
 };
 
 } // namespace
@@ -258,6 +282,25 @@ TEST_F(PipelineTimerTaskTest, batched_tasks_all_unblock_eventually) {
     }
     EXPECT_EQ(finished.load(std::memory_order_acquire), kTasks);
     EXPECT_TRUE(tasks[0]->ran.load(std::memory_order_acquire));
+}
+
+TEST_F(PipelineTimerTaskTest, pipeline_timer_context_submits_batched_rf_timeout_observers) {
+    RuntimeState state;
+    state.set_enable_event_scheduler(true);
+    PipelineTimerContext context(&timer);
+    CountingObserver observer1;
+    CountingObserver observer2;
+
+    context.add_rf_timeout_observer(&state, &observer1, 0);
+    context.add_rf_timeout_observer(&state, &observer2, 0);
+    ASSERT_OK(context.submit_rf_timeout_tasks());
+
+    observer1.source_signal.acquire();
+    observer2.source_signal.acquire();
+    EXPECT_EQ(observer1.source_count.load(std::memory_order_acquire), 1);
+    EXPECT_EQ(observer2.source_count.load(std::memory_order_acquire), 1);
+
+    context.clear_rf_timeout_tasks();
 }
 
 // LightTimerTask goes through a separate schedule/unschedule pair and lacks the

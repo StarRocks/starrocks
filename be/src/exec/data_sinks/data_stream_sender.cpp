@@ -55,15 +55,15 @@
 #include "common/logging.h"
 #include "common/system/backend_options.h"
 #include "common/util/thrift_client.h"
+#include "common/util/thrift_client_cache.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -462,7 +462,6 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
     _channel_indices.resize(_channels.size());
     std::iota(_channel_indices.begin(), _channel_indices.end(), 0);
-    srand(reinterpret_cast<uint64_t>(this));
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);

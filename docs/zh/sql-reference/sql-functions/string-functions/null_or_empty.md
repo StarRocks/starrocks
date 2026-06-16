@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如果字符串为NULL或空字符串则返回true，否则返回false。"
 ---
 
 # null_or_empty

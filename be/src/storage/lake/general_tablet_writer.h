@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
@@ -82,6 +82,13 @@ public:
 protected:
     virtual Status reset_segment_writer(bool eos);
     virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
+
+    // Record into |segment_file_info| the vector indexes that need a .vi file, honoring the
+    // segment writer's sync/async build mode. Shared by this duplicate-key flush path and the
+    // primary-key override (HorizontalPkTabletWriter::flush_segment_writer) so the two cannot
+    // silently diverge: the PK override previously omitted this block, which dropped vector
+    // index builds for shared-data primary-key tables.
+    void record_segment_vector_index_ids(SegmentFileInfo& segment_file_info, SegmentWriter* seg_writer) const;
 
     std::unique_ptr<SegmentWriter> _seg_writer;
     BundleWritableFileContext* _bundle_file_context = nullptr;
