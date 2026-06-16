@@ -67,8 +67,8 @@ TabletMetadataPB make_metadata() {
 
 // How a damaged buffer looks after the exact parse load() performs.
 struct Outcome {
-    bool parses = false;       // ParseFromString succeeded == load() returns OK
-    int rowsets = 0;           // rowset list size
+    bool parses = false;           // ParseFromString succeeded == load() returns OK
+    int rowsets = 0;               // rowset list size
     bool has_compact_page = false; // delvec_meta still carries rowset 2263372's page
     int delvecs = 0;
 };
@@ -120,9 +120,9 @@ TEST_F(LakeMetadataCorruptionTest, in_place_byte_corruption_silently_drops_delve
     ASSERT_TRUE(is_dangerous(classify(clean)) == false); // sanity: clean copy is fine
     ASSERT_TRUE(classify(clean).has_compact_page);
 
-    int parse_fail = 0;     // protobuf itself rejected it (would still NOT be a checksum, but rejected)
-    int parse_ok_same = 0;  // parsed, delvec page still present
-    int dangerous = 0;      // parsed, rowsets intact, delvec page lost  <-- the incident shape
+    int parse_fail = 0;    // protobuf itself rejected it (would still NOT be a checksum, but rejected)
+    int parse_ok_same = 0; // parsed, delvec page still present
+    int dangerous = 0;     // parsed, rowsets intact, delvec page lost  <-- the incident shape
     std::vector<size_t> dangerous_offsets;
 
     // Try a few mutations per byte so we exercise tag/length/value damage.
@@ -146,8 +146,8 @@ TEST_F(LakeMetadataCorruptionTest, in_place_byte_corruption_silently_drops_delve
     }
 
     std::cerr << "[corruption sweep] file_size=" << clean.size() << " parse_fail=" << parse_fail
-              << " parse_ok_other=" << parse_ok_same << " dangerous(parse_ok+rowsets_intact+page_lost)="
-              << dangerous << std::endl;
+              << " parse_ok_other=" << parse_ok_same << " dangerous(parse_ok+rowsets_intact+page_lost)=" << dangerous
+              << std::endl;
 
     // The point: such silent-loss corruptions DO exist on this format.
     ASSERT_GT(dangerous, 0) << "expected at least one byte corruption that parses cleanly yet loses "
@@ -182,8 +182,7 @@ TEST_F(LakeMetadataCorruptionTest, in_place_byte_corruption_silently_drops_delve
     EXPECT_EQ(2, loaded.rowsets_size()) << "rowset list should survive the corruption";
     EXPECT_FALSE(loaded.delvec_meta().delvecs().contains(kRowsetCompact))
             << "rowset 2263372's delvec page should be silently gone";
-    std::cerr << "[end-to-end] corrupted byte at offset " << off
-              << " -> load() OK, rowsets=" << loaded.rowsets_size()
+    std::cerr << "[end-to-end] corrupted byte at offset " << off << " -> load() OK, rowsets=" << loaded.rowsets_size()
               << ", delvecs=" << loaded.delvec_meta().delvecs().size() << std::endl;
 }
 
