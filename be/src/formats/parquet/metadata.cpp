@@ -454,8 +454,8 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     }
 
     PageCacheHandle cache_handle;
-    std::string metacache_key = ParquetUtils::get_file_cache_key(CacheType::META, _file->filename(),
-                                                                 _datacache_options->modification_time, _file_size);
+    std::string metacache_key =
+            get_file_cache_key(CacheType::META, _file->filename(), _datacache_options->modification_time, _file_size);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
         bool ret = _cache->lookup(metacache_key, &cache_handle);
@@ -479,11 +479,10 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
             capture.release();
-            return file_metadata;
         } else {
             _scanner_ctx->stats->footer_cache_write_fail_count += 1;
-            return file_metadata;
         }
+        return file_metadata;
     } else {
         return Status::InternalError(
                 fmt::format("Parsing unexpected parquet file metadata size {}", file_metadata_size));

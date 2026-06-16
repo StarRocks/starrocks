@@ -207,6 +207,10 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scanner_ctx.datacache_options.enable_datacache = false;
     }
 
+    // File metacache (ORC/Parquet footer cache) keys on mtime independently of scan datacache,
+    // so always populate it; otherwise a same-sized replacement file may reuse a stale footer.
+    _scanner_ctx.datacache_options.modification_time = _scan_range.modification_time;
+
     // Only support file metacache in starcache engine
 #ifdef WITH_STARCACHE
     if (state->query_options().__isset.enable_file_metacache) {

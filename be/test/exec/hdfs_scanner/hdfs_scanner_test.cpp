@@ -24,6 +24,7 @@
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "cache/mem_cache/lrucache_engine.h"
 #include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
@@ -67,6 +68,7 @@ protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
     HdfsScannerContext* _create_ctx(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
+    DataCacheOptions _mock_datacache_options();
     void build_hive_column_names(HdfsScannerContext* ctx, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
 
@@ -151,6 +153,18 @@ HdfsScannerContext* HdfsScannerTest::_create_ctx(const std::string& file, THdfsS
     ctx->partition_slots = part_slots;
     ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     return ctx;
+}
+
+DataCacheOptions HdfsScannerTest::_mock_datacache_options() {
+    return DataCacheOptions{.enable_datacache = false, // skip data cache, only validate footer cache
+                            .enable_cache_select = false,
+                            .enable_populate_datacache = true,
+                            .enable_datacache_async_populate_mode = true,
+                            .enable_datacache_io_adaptor = true,
+                            .modification_time = 100000,
+                            .datacache_evict_probability = 100,
+                            .datacache_priority = 0,
+                            .datacache_ttl_seconds = 0};
 }
 
 void HdfsScannerTest::build_hive_column_names(HdfsScannerContext* ctx, const TupleDescriptor* tuple_desc,
@@ -3359,6 +3373,90 @@ TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 100000);
     scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestOrcFooterCache) {
+#ifdef WITH_STARCACHE
+    // Initialize a local cache similar to Parquet test
+    MemCacheOptions options{.mem_space_size = 100 * MB};
+    auto local_cache = std::make_shared<LRUCacheEngine>();
+    ASSERT_OK(local_cache->init(options));
+    auto cache = std::make_shared<StoragePageCache>(local_cache.get());
+
+    auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
+    // partition values for [PART_x, PART_y]
+    std::vector<int64_t> values = {10, 20};
+    std::vector<ExprContext*> part_ctxs;
+    extend_partition_values(&_pool, ctx, &part_ctxs, values);
+
+    ASSERT_OK(ExprExecutor::prepare(part_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(part_ctxs, _runtime_state));
+
+    ctx->partition_expr_ctxs = std::move(part_ctxs);
+    ctx->datacache_options = _mock_datacache_options();
+    ctx->options.use_file_metacache = true;
+
+    // first scanner, populate footer cache
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    Status st = scanner->init(_runtime_state, ctx);
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_write_count);
+    scanner->_cache = cache.get();
+
+    // first open should write cache
+    st = scanner->open(_runtime_state);
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(1, scanner->_app_stats.footer_cache_write_count);
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_write_fail_count);
+    ASSERT_LT(0, scanner->_app_stats.footer_cache_write_bytes);
+    scanner->close();
+
+    // second scanner, read footer cache
+    auto new_scanner = std::make_shared<HdfsOrcScanner>();
+    st = new_scanner->init(_runtime_state, ctx);
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_count);
+    new_scanner->_cache = cache.get();
+
+    st = new_scanner->open(_runtime_state);
+    EXPECT_TRUE(st.ok());
+    // second open should read cache
+    ASSERT_EQ(1, new_scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_count);
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_fail_count);
+
+    // footer cache counters should be reported into the runtime profile
+    HdfsScannerProfile profile;
+    profile.runtime_profile = _runtime_profile;
+    new_scanner->do_update_counter(&profile);
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("OrcFooterCacheReadCount"));
+    ASSERT_EQ(1, _runtime_profile->get_counter("OrcFooterCacheReadCount")->value());
+    ASSERT_NE(nullptr, _runtime_profile->get_counter("OrcFooterCacheWriteCount"));
+    new_scanner->close();
+#endif
+}
+
+TEST_F(HdfsScannerTest, TestOrcAndParquetFooterCacheKeyDiffer) {
+    const std::string filename = "hdfs://some/path/to/file.data";
+    const int64_t mtime = 1234567890;
+    const uint64_t file_size = 4096;
+
+    // same path + mtime, different format -> keys must differ
+    EXPECT_NE(get_file_cache_key(CacheType::META, filename, mtime, file_size),
+              get_file_cache_key(CacheType::ORC_META, filename, mtime, file_size));
+
+    // also differ when modification time is unsupported and only file size is used
+    EXPECT_NE(get_file_cache_key(CacheType::META, filename, 0, file_size),
+              get_file_cache_key(CacheType::ORC_META, filename, 0, file_size));
+
+    // each cache type is still deterministic for identical inputs
+    EXPECT_EQ(get_file_cache_key(CacheType::ORC_META, filename, mtime, file_size),
+              get_file_cache_key(CacheType::ORC_META, filename, mtime, file_size));
 }
 
 } // namespace starrocks
