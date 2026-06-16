@@ -834,6 +834,7 @@
         "lake_vacuum_retry_pattern",
         "lake_vacuum_retry_max_attempts",
         "lake_vacuum_retry_min_delay_ms",
+        "lake_vacuum_enable_task_timeout",
         "lake_max_garbage_version_distance",
         "enable_strict_delvec_crc_check",
         "lake_clear_corrupted_cache_meta",
