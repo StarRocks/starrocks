@@ -52,6 +52,10 @@ interface InsertPreSplitSource {
      * predicate gates, and builds the {@link PreSplitFlow.Prepared} bundle the
      * shared flow submits.
      *
+     * <p>Precondition: {@link #matches} returned {@code true} for the same
+     * {@code (insertStmt, selectRelation)} — implementations may cast the FROM
+     * relation to their expected type.
+     *
      * @return the prepared bundle, or {@code null} when any gate rejects (caller
      *         no-ops; pre-split is skipped).
      */
