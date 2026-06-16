@@ -374,6 +374,7 @@ set(EXEC_NON_PIPELINE_FILES
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
     hdfs_scanner/hdfs_scanner_avro.cpp
+    hdfs_scanner/hdfs_scanner_context.cpp
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
     file_scanner/avro_cpp_scanner.cpp

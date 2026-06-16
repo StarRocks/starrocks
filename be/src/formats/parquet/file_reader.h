@@ -25,6 +25,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
@@ -41,6 +42,7 @@ namespace starrocks {
 class RandomAccessFile;
 struct HdfsScannerContext;
 class BlockCache;
+class StoragePageCache;
 class SlotDescriptor;
 
 namespace parquet {

@@ -14,13 +14,17 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <orc/OrcFile.hh>
+#include <string>
+#include <vector>
 
 #include "cache/scan/shared_buffered_input_stream.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 namespace starrocks {
 
 class RandomAccessFile;
+struct HdfsScannerStats;
 
 class ORCHdfsFileStream : public orc::InputStream {
 public:

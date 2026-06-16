@@ -30,6 +30,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/column_reader_factory.h"
