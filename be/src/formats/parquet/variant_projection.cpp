@@ -767,8 +767,8 @@ std::unordered_set<SlotId> VariantProjectionHandler::referenced_variant_virtual_
 }
 
 Status VariantProjectionHandler::fetch_and_project_virtual_slots(const std::unordered_set<SlotId>& virtual_slot_ids,
-                                                                   const Range<uint64_t>& range, ChunkPtr& active_chunk,
-                                                                   const cctz::time_zone& zone) {
+                                                                 const Range<uint64_t>& range, ChunkPtr& active_chunk,
+                                                                 const cctz::time_zone& zone) {
     // 1. Collect hidden source slots that are needed but not yet fetched.
     for (SlotId virtual_slot_id : virtual_slot_ids) {
         auto proj_it = _projections.find(virtual_slot_id);
@@ -781,8 +781,7 @@ Status VariantProjectionHandler::fetch_and_project_virtual_slots(const std::unor
         if (source_slot_id < 0 && !_fetched_hidden_slots.count(source_slot_id)) {
             auto it = _hidden_slot_index.find(source_slot_id);
             if (it == _hidden_slot_index.end()) {
-                return Status::InternalError(
-                        fmt::format("hidden source slot {} not found in index", source_slot_id));
+                return Status::InternalError(fmt::format("hidden source slot {} not found in index", source_slot_id));
             }
             // Read into the pre-created column (from init_read_chunk_slots) if it
             // exists; otherwise create a new one.

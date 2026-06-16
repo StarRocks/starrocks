@@ -268,11 +268,11 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         std::unordered_set<SlotId> early_projected_slots;
         if (!_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
             if (!_variant->empty()) {
-                early_projected_slots = _variant->referenced_variant_virtual_slot_ids(
-                        _param.scanner_ctx->conjuncts.scanner_ctxs);
+                early_projected_slots =
+                        _variant->referenced_variant_virtual_slot_ids(_param.scanner_ctx->conjuncts.scanner_ctxs);
                 if (!early_projected_slots.empty()) {
-                    RETURN_IF_ERROR(_variant->fetch_and_project_virtual_slots(
-                            early_projected_slots, r, active_chunk, _variant->projection_timezone()));
+                    RETURN_IF_ERROR(_variant->fetch_and_project_virtual_slots(early_projected_slots, r, active_chunk,
+                                                                              _variant->projection_timezone()));
                 }
             }
 
