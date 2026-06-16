@@ -209,11 +209,8 @@ set(EXEC_FILES
         ./exprs/string_fn_trim_test.cpp
         ./exprs/string_fn_money_format_decimal_test.cpp
         ./exprs/string_fn_url_extract_parameter_test.cpp
-<<<<<<< HEAD
-        ./exprs/struct_functions_test.cpp
-=======
         ./exprs/string_fn_ngram_test.cpp
->>>>>>> 0f90e1d232 ([Enhancement] ngram_search with non-constant needle (#74675))
+        ./exprs/struct_functions_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/es_functions_test.cpp
         ./exprs/utility_functions_test.cpp
