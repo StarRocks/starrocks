@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -42,6 +43,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class VectorIndexTest extends PlanTestBase {
 
@@ -576,6 +578,58 @@ public class VectorIndexTest extends PlanTestBase {
         String sql8 = "select c1, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score"
                 + " from test.test_cosine having score >= cast(0.8 as float) order by score desc limit 10";
         assertPlanContains(sql8, "VECTORINDEX: ON");
+    }
+
+    // Regression guard for the vector distance-column schema pollution bug.
+    //
+    // RewriteToVectorPlanRule used to call scanOp.getTable().addColumn(distanceColumn) on the scan's
+    // table. On the whole-phase-lock planning path that table is the shared catalog OlapTable, and
+    // Table.addColumn appends to fullSchema (a List that does not dedup). So every vector ANN query
+    // that planned on the live table appended another "__vector_*" column; once two accumulated, the
+    // Column-keyed ImmutableMap in RelationTransformer.visitTable threw "Multiple entries with same
+    // key" for any later statement touching the table (and the failure was intermittent because
+    // analyze-phase column pruning sometimes dropped the synthetic columns).
+    //
+    // The fix keeps the synthetic column only in the scan operator's colRef maps and never mutates
+    // the table schema. This test forces the lock path (cbo_use_lock_db) and plans the same vector
+    // query repeatedly; the shared schema must stay clean and planning must keep succeeding.
+    @Test
+    public void testRewriteDoesNotPolluteSharedCatalogSchema() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.test_vi_no_pollution ("
+                + " c0 INT,"
+                + " c1 array<float> NOT NULL,"
+                + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', "
+                + "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim'='5') "
+                + ") DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1');");
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "test_vi_no_pollution");
+        String distanceColumn = "__vector_approx_cosine_similarity";
+        // No WHERE clause so the rewrite reaches the distance-column code path (a scalar predicate
+        // would disable the vector index and never get there).
+        String vectorSql = "select c1 from test.test_vi_no_pollution "
+                + "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
+
+        boolean originalLock = connectContext.getSessionVariable().isCboUseDBLock();
+        // Force the whole-phase-lock path so the rewrite plans on the live shared table, not a copy.
+        connectContext.getSessionVariable().setCboUseDBLock(true);
+        try {
+            assertEquals(0, countColumns(table, distanceColumn));
+            for (int i = 0; i < 5; i++) {
+                String plan = getVerboseExplain(vectorSql);
+                assertContains(plan, "VECTORINDEX: ON");
+                assertEquals(0, countColumns(table, distanceColumn),
+                        "the rewrite must not add the distance column to the shared catalog schema");
+            }
+        } finally {
+            connectContext.getSessionVariable().setCboUseDBLock(originalLock);
+        }
+    }
+
+    private static long countColumns(OlapTable table, String columnName) {
+        return table.getFullSchema().stream()
+                .filter(c -> c.getName().equalsIgnoreCase(columnName))
+                .count();
     }
 
 }
