@@ -496,6 +496,15 @@ std::unordered_set<SlotId> VariantProjectionHandler::deferred_conjunct_physical_
             result.insert(src);
         }
     }
+    // Also force physical sources of virtual slots referenced in compound (multi-slot) conjuncts.
+    if (_param.scanner_ctx != nullptr) {
+        for (SlotId vsid : referenced_variant_virtual_slot_ids(_param.scanner_ctx->conjuncts.scanner_ctxs)) {
+            auto proj_it = _projections.find(vsid);
+            if (proj_it != _projections.end() && proj_it->second.source_slot_id >= 0) {
+                result.insert(proj_it->second.source_slot_id);
+            }
+        }
+    }
     return result;
 }
 

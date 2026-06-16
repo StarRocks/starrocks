@@ -707,7 +707,6 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
             // handled in min max column
             continue;
         }
-        if (ck->is_slot_exist(slot_desc->id())) continue;
 
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
