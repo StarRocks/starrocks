@@ -1656,8 +1656,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The interval of create partition batch, to avoid too frequent")
     public static long mv_create_partition_batch_interval_ms = 1000;
 
-    @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length varchar column " +
-            "in materialized view creation/ctas")
+    @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length char/varchar column " +
+            "in materialized view creation")
     public static boolean transform_type_prefer_string_for_varchar = true;
 
     @ConfField(mutable = true, comment = "Whether to enable automatic repairing of materialized views " +

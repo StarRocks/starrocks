@@ -15,8 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -479,6 +482,44 @@ public class CTASAnalyzerTest {
             Assertions.assertFalse(col1.isNullable());
             starRocksAssert.dropTable("emps");
         }
+    }
+
+    @Test
+    public void testCTASPreservesDeclaredVarcharLength() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        boolean savedFlag = Config.transform_type_prefer_string_for_varchar;
+        try {
+            Config.transform_type_prefer_string_for_varchar = true;
+
+            String fromColumnSql = "create table test_varchar_from_column as select c1 from test;";
+            CreateTableAsSelectStmt fromColumnStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(fromColumnSql, ctx);
+            List<ColumnDef> fromColumnDefs = fromColumnStmt.getCreateTableStmt().getColumnDefs();
+            Assertions.assertEquals(1, fromColumnDefs.size());
+            assertVarcharLength(fromColumnDefs.get(0).getTypeDef(), 10);
+
+            String castSql = "create table test_varchar_from_cast as select cast('abc' as varchar(64)) as c;";
+            CreateTableAsSelectStmt castStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(castSql, ctx);
+            List<ColumnDef> castColumnDefs = castStmt.getCreateTableStmt().getColumnDefs();
+            Assertions.assertEquals(1, castColumnDefs.size());
+            assertVarcharLength(castColumnDefs.get(0).getTypeDef(), 64);
+
+            String stringSql = "create table test_varchar_from_string as select cast(c1 as string) as c from test;";
+            CreateTableAsSelectStmt stringStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(stringSql, ctx);
+            List<ColumnDef> stringColumnDefs = stringStmt.getCreateTableStmt().getColumnDefs();
+            Assertions.assertEquals(1, stringColumnDefs.size());
+            assertVarcharLength(stringColumnDefs.get(0).getTypeDef(), ScalarType.DEFAULT_STRING_LENGTH);
+        } finally {
+            Config.transform_type_prefer_string_for_varchar = savedFlag;
+        }
+    }
+
+    private static void assertVarcharLength(TypeDef typeDef, int expectedLength) {
+        ScalarType scalarType = (ScalarType) typeDef.getType();
+        Assertions.assertEquals(PrimitiveType.VARCHAR, scalarType.getPrimitiveType());
+        Assertions.assertEquals(expectedLength, scalarType.getLength());
     }
 
     @Test

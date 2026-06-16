@@ -19,8 +19,10 @@ import com.google.common.base.Joiner;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -81,15 +83,17 @@ public class SysFeLocks {
         }
 
         // authorize
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
         try {
             if (authenticate) {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {
-            throw new TException(e.getMessage(), e);
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
 
         TFeLocksRes response = new TFeLocksRes();

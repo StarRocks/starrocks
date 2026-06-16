@@ -15,7 +15,9 @@
 package com.starrocks.catalog.system.sys;
 
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -58,13 +60,15 @@ public class SysFeMemoryUsage {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
         }
 
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
         try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
-            throw new TException(e.getMessage(), e);
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
 
         TFeMemoryRes response = new TFeMemoryRes();
