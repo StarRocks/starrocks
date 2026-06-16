@@ -1098,7 +1098,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assertions.assertEquals("p2", message.getMvPartitionsToRefreshString());
-                        Assertions.assertEquals(Map.of("s2", "p2"), message.getPlanBuilderMessage());
+                        Assertions.assertEquals(Map.of("test.s2", "p2"), message.getPlanBuilderMessage());
                         assertRefreshScopeMatchesExtraMessage(mvTaskRunContext, message);
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
                         Assertions.assertNotEquals(null, execPlan);
