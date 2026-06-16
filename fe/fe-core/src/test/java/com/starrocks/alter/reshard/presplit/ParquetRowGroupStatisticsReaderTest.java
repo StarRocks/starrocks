@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 
@@ -569,18 +570,34 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void binaryBackedDecimalFallsBackToDataTier() throws Exception {
-        // BINARY-backed decimal: same unsigned-byte-order trap as FIXED_LEN → reject (the BINARY
-        // arm only admits the UTF8 string annotation). DECIMAL128(20,2) exactly matches precision/scale.
+    void readsBinaryBackedDecimalStatistics() throws Exception {
+        // BINARY-backed DECIMAL128(20,2) spanning negative→positive: a negative value and a 20-digit
+        // unscaled value (> 64-bit) exercise the variable-length signed decode, the 128-bit path, and
+        // signed (not unsigned) ordering. parquet-mr's column_orders=TypeDefinedOrder makes the
+        // byte-array min/max signed; a decimal stat must NOT be marked truncated (reserved for strings).
+        BigInteger negative = BigInteger.valueOf(-100L);             // -1.00
+        BigInteger large = new BigInteger("99999999999999999999");   // 20-digit unscaled
         Path parquetPath = writeParquet(
                 "message schema { required binary d (DECIMAL(20,2)); }",
-                /*rowCount=*/ 1,
-                (group, rowIndex) -> group.append("d", Binary.fromConstantByteArray(new byte[] {0})));
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", binaryDecimal(rowIndex == 0 ? negative : large)));
 
-        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
-                ParquetRowGroupStatisticsReader.read(
-                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2))));
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        // min is the negative value (proves signed order); max asserted by VALUE (unscaled `large`).
+        Assertions.assertEquals("-1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals(0, new BigDecimal(large, 2).compareTo(
+                new BigDecimal(stats.get(0).getMaxTuple().getValues().get(0).getStringValue())));
+    }
+
+    /** Encode {@code unscaled} as a minimal big-endian two's-complement byte array (variable-length
+     * BINARY DECIMAL layout). parquet-mr computes the footer min/max with its signed comparator. */
+    private static Binary binaryDecimal(BigInteger unscaled) {
+        return Binary.fromConstantByteArray(unscaled.toByteArray());
     }
 
     @Test

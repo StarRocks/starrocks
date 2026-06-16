@@ -217,8 +217,16 @@ public final class ParquetRowGroupStatisticsReader {
                         && decimalMatchesExactly(decimalAnnotation, sortKeyColumn);
             }
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
-            case BINARY -> logicalAnnotation instanceof StringLogicalTypeAnnotation
-                    && (starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR);
+            case BINARY -> {
+                if (logicalAnnotation instanceof StringLogicalTypeAnnotation) {
+                    yield starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR;
+                }
+                // BINARY-backed DECIMAL is big-endian two's-complement; accept only with an exact
+                // precision/scale match AND a footer-declared TypeDefinedOrder (signed min/max).
+                yield logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
+                        && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
+                        && signedByteArrayOrder;
+            }
             case FIXED_LEN_BYTE_ARRAY -> logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
                     && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
                     && signedByteArrayOrder;
@@ -270,7 +278,11 @@ public final class ParquetRowGroupStatisticsReader {
         // truncated unconditionally so the pipeline falls back to data tier for string
         // sort keys until column-index exactness flags are read explicitly. Numeric
         // and boolean stats are always exact and stay false.
-        boolean truncated = location.parquetTypeName == PrimitiveTypeName.BINARY;
+        // Only string-annotated BINARY is truncation-prone (parquet-mr truncates long binary
+        // min/max at 64 bytes). Numeric stats — including BINARY-backed and FLBA-backed DECIMAL —
+        // are exact; marking a decimal truncated would force a needless data-tier fallback.
+        boolean truncated = location.parquetTypeName == PrimitiveTypeName.BINARY
+                && location.logicalAnnotation instanceof StringLogicalTypeAnnotation;
         return new RowGroupStatistics(
                 new Tuple(List.of(minVariant)),
                 new Tuple(List.of(maxVariant)),
