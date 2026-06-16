@@ -280,11 +280,17 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     @VisibleForTesting
     static ConnectContext configureSampleContext(
             ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds) {
+        // setCurrentWarehouseId delegates to setCurrentWarehouse, which REPLACES the session-variable
+        // object with a fresh warehouse-defaulted one (re-applying only tracked SET variables). The
+        // pre-submit-budget query_timeout is applied via a direct setter (not a tracked SET), so it
+        // would be dropped if set before the switch — apply it AFTER, on the final session variable,
+        // or an over-budget sample runs to the warehouse/default timeout and blocks the load past the
+        // pre-submit budget instead of failing fast and falling back.
+        context.setCurrentWarehouseId(computeResource.getWarehouseId());
+        context.setCurrentComputeResource(computeResource);
         if (queryTimeoutSeconds > 0) {
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
         }
-        context.setCurrentWarehouseId(computeResource.getWarehouseId());
-        context.setCurrentComputeResource(computeResource);
         context.setNeedQueued(false);
         context.setStartTime();
         return context;
