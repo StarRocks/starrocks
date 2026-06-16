@@ -2861,31 +2861,29 @@ StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starroc
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(blake3Impl, str) {
     const Slice& input_str = str;
-    std::stringstream result;
-
-    const unsigned char* message = (unsigned char*)input_str.data;
+    const auto* message = reinterpret_cast<const unsigned char*>(input_str.data);
     size_t message_len = input_str.size;
-    if (message_len > 0) {
-        uint8_t output[Blake3Hash::BLAKE3_HASH_BYTES];
-
-        Blake3Hash::blake3_compute(message, message_len, output);
-        result << std::hex << std::setfill('0');
-
-        // first 4 bytes
-        for (int i = 0; i < 4; ++i) {
-            result << std::setw(2) << (output[i] & 0xFF);
-        }
-
-        // remaining bytes with space separator every 4 bytes
-        for (int i = 4; i < Blake3Hash::BLAKE3_HASH_BYTES; ++i) {
-            if ((i % 4) == 0) {
-                result << " ";
-            }
-            result << std::setw(2) << (output[i] & 0xFF);
-        }
+    if (message_len == 0) {
+        return std::string();
     }
 
-    return result.str();
+    uint8_t output[Blake3Hash::BLAKE3_HASH_BYTES];
+    Blake3Hash::blake3_compute(message, message_len, output);
+
+    // Format as lowercase hex, with a single space separating every 4-byte group.
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string result;
+    result.resize(Blake3Hash::BLAKE3_HASH_BYTES * 2 + (Blake3Hash::BLAKE3_HASH_BYTES / 4 - 1));
+    size_t pos = 0;
+    for (int i = 0; i < Blake3Hash::BLAKE3_HASH_BYTES; ++i) {
+        if (i != 0 && (i % 4) == 0) {
+            result[pos++] = ' ';
+        }
+        result[pos++] = kHex[(output[i] >> 4) & 0xF];
+        result[pos++] = kHex[output[i] & 0xF];
+    }
+
+    return result;
 }
 
 StatusOr<ColumnPtr> StringFunctions::blake3(FunctionContext* context, const starrocks::Columns& columns) {

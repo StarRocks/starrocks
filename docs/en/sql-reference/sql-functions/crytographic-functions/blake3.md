@@ -20,7 +20,7 @@ BLAKE3(str);
 
 ## Return value
 
-Returns a value of the VARCHAR type. If the input is NULL, NULL is returned. If the input is empty, an error is returned.
+Returns a value of the VARCHAR type. If the input is NULL, NULL is returned. If the input is empty, an empty string is returned.
 
 This function accepts only one string. More than one input string causes an error.
 

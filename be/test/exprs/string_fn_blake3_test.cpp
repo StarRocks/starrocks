@@ -83,7 +83,7 @@ TEST_F(StringFunctionBlake3Test, abcNull1Test) {
     for (int j = 0; j < 20; ++j) {
         if (j % 2 != 0) {
             std::string s = "6437b3ac 38465133 ffb63b75 273a8db5 48c55846 5d79db03 fd359c6c d5bd9d85";
-            ASSERT_EQ(s, data_column->get_slice(0).to_string());
+            ASSERT_EQ(s, data_column->get_slice(j).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));
         }
@@ -108,7 +108,7 @@ TEST_F(StringFunctionBlake3Test, abcNullLiteralTest) {
     for (int j = 0; j < 20; ++j) {
         if (j % 2 != 0) {
             std::string s = "";
-            ASSERT_EQ(s, data_column->get_slice(0).to_string());
+            ASSERT_EQ(s, data_column->get_slice(j).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));
         }
