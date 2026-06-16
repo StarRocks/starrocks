@@ -15,7 +15,7 @@
 #pragma once
 
 #include "formats/parquet/group_reader.h"
-#include "storage/predicate_tree/predicate_tree.h"
+#include "storage/primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks::parquet {
 

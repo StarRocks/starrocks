@@ -28,6 +28,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/key_coder.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/predicate_tree/predicate_tree.cpp
     primitive/storage_ids.cpp
     primitive/union_iterator.cpp
 )
@@ -181,7 +182,6 @@ set(STORAGE_FILES
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
     runtime_filter_predicate.cpp
-    predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
     disjunctive_predicates.cpp

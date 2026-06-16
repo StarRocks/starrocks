@@ -43,7 +43,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/rowid_types.h"
 #include "storage/rowset/bitmap_index_reader.h"
