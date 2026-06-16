@@ -1603,6 +1603,9 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
+// Route the spillable hash-join build/probe operators onto the pipeline event scheduler instead of the busy-poller.
+CONF_mBool(enable_spill_join_events, "false");
+
 // The max number of threads for exec_state_report thread pool.
 CONF_mInt32(exec_state_report_max_threads, "2");
 // The max number of threads for priority_exec_state_report thread pool.

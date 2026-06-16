@@ -1,0 +1,66 @@
+-- name: test_spill_join_events @sequential
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 40960));
+-- result:
+-- !result
+set spill_operator_max_bytes=0;
+-- result:
+-- !result
+set spill_mem_table_size=1024;
+-- result:
+-- !result
+select count(*), sum(l.c0), sum(r.c0) from t0 l join [shuffle] t0 r on l.c1 = r.c1;
+-- result:
+40960	838881280	838881280
+-- !result
+admin enable failpoint 'spill_restore_sleep';
+-- result:
+-- !result
+[UC]submit task etl_${uuid0}
+PROPERTIES (
+    "session.pipeline_dop"= "1",
+    "session.enable_spill"="true",
+    "session.spill_mode"="force",
+    "session.spill_operator_max_bytes"="0",
+    "session.spill_mem_table_size"="1024"
+)
+as CREATE table tmp as select count(*), sum(l.c0), sum(r.c0) from t0 l join [shuffle] t0 r on l.c1 = r.c1;
+-- result:
+etl_1e34dc9dff5f48549e22d40cb2922cf3	SUBMITTED
+-- !result
+shell: sleep 1
+-- result:
+0
+
+-- !result
+drop task etl_${uuid0};
+-- result:
+-- !result
+function: wait_util_no_queries()
+-- result:
+
+-- !result
+admin disable failpoint 'spill_restore_sleep';
+-- result:
+-- !result
+select count(*), sum(l.c0), sum(r.c0) from t0 l join [shuffle] t0 r on l.c1 = r.c1;
+-- result:
+40960	838881280	838881280
+-- !result
+CLEANUP {
+  admin disable failpoint 'spill_restore_sleep';
+} END CLEANUP
