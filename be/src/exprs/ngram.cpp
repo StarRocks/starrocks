@@ -86,7 +86,7 @@ public:
         }
 
         // needle is too small so we can not get even single Ngram, so they are not similar at all
-        if (needle.get_size() < gram_num) {
+        if (needle.get_size() < (size_t)gram_num) {
             return ColumnHelper::create_const_column<TYPE_DOUBLE>(0, haystack_column->size());
         }
 

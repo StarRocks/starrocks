@@ -158,7 +158,7 @@ public class FunctionAnalyzer {
 
         if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName)) {
             if (!functionCallExpr.getChild(0).getType().isStringType() ||
-                    !functionCallExpr.getChild(0).getType().isStringType()) {
+                    !functionCallExpr.getChild(1).getType().isStringType()) {
                 throw new SemanticException(
                         fnName + " function 's first parameter and second parameter must be string type",
                         functionCallExpr.getPos());
