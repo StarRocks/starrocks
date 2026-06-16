@@ -317,6 +317,11 @@ public class TypeManager {
             return DateType.DATETIME;
         }
 
+        if ((type1.isDateType() && type2.isIntegerType()) ||
+                (type2.isDateType() && type1.isIntegerType())) {
+            return type1.isDateType() ? type1 : type2;
+        }
+
         // number type
         if (type1.isFixedPointType() && type2.isFixedPointType()) {
             return type1.getTypeSize() > type2.getTypeSize() ? type1 : type2;
