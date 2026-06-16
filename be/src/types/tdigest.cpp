@@ -61,13 +61,27 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "base/orlp/pdqsort.h"
 #include "common/logging.h"
+
+// On-disk layout invariants. Centroid is two raw floats; we memcpy it as a
+// fixed 8-byte unit in serialize/deserialize, so any padding or layout change
+// would silently corrupt the blob. The endianness check rules out big-endian
+// hosts; StarRocks only targets x86_64 and arm64.
+static_assert(sizeof(starrocks::Centroid) == 8, "Centroid must be 8 bytes (two floats) for the on-disk format");
+static_assert(std::is_trivially_copyable_v<starrocks::Centroid>,
+              "Centroid must be trivially copyable for memcpy serialization");
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__)
+#error "TDigest on-disk and intermediate formats assume little-endian byte order"
+#endif
 
 namespace starrocks {
 
@@ -368,11 +382,21 @@ void TDigest::add(Value x) {
 }
 
 void TDigest::compress() {
-    process();
+    // Idempotent: process() rebuilds _processed from scratch, which is
+    // wasted work (and a hot-path regression for serialize_to_column) when
+    // the digest is already canonical. Skip when there is nothing to merge.
+    if (haveUnprocessed()) {
+        process();
+    }
 }
 
 bool TDigest::add(Value x, Weight w) {
-    if (std::isnan(x)) {
+    // Reject non-finite values (NaN, +Inf, -Inf) and non-positive weights:
+    // - NaN propagates through Centroid::add() to silently NaN mean.
+    // - Mixing +Inf and -Inf via Centroid::add() also yields NaN mean.
+    // - w <= 0 corrupts _unprocessed_weight (negative or zero total) and breaks
+    //   weightedAverageSorted() / quantile() with NaN.
+    if (!std::isfinite(x) || !(w > 0)) {
         return false;
     }
     _unprocessed.emplace_back(x, w);
@@ -391,11 +415,6 @@ void TDigest::add(std::vector<Centroid>::const_iterator iter, std::vector<Centro
             process();
         }
     }
-}
-
-uint64_t TDigest::serialize_size() const {
-    return sizeof(Value) * 5 + sizeof(Index) * 2 + sizeof(size_t) * 3 + _processed.size() * sizeof(Centroid) +
-           _unprocessed.size() * sizeof(Centroid) + _cumulative.size() * sizeof(Weight);
 }
 
 size_t TDigest::serialize(uint8_t* writer) const {
@@ -441,45 +460,125 @@ size_t TDigest::serialize(uint8_t* writer) const {
     return serialize_size();
 }
 
+bool TDigest::deserialize(const char* data, size_t size) {
+    auto reset_to_empty = [this]() {
+        _compression = 1000;
+        _min = std::numeric_limits<Value>::max();
+        _max = std::numeric_limits<Value>::lowest();
+        _max_processed = processedSize(0, _compression);
+        _max_unprocessed = unprocessedSize(0, _compression);
+        _processed_weight = 0;
+        _unprocessed_weight = 0;
+        _processed.clear();
+        _unprocessed.clear();
+        _cumulative.clear();
+    };
+
+    // The fixed preamble is five Value fields followed by two Index fields.
+    // Three uint32_t centroid counts are interleaved with their arrays later,
+    // so the minimum legal blob is preamble + 3 * sizeof(uint32_t).
+    constexpr size_t kPreambleSize = sizeof(Value) * 5 + sizeof(Index) * 2;
+    constexpr size_t kMinBlobSize = kPreambleSize + sizeof(uint32_t) * 3;
+    if (size < kMinBlobSize) {
+        LOG(WARNING) << "TDigest::deserialize: blob too small, size=" << size;
+        reset_to_empty();
+        return false;
+    }
+
+    // Track remaining bytes as a counter rather than computing a past-the-end
+    // pointer. The legacy wrapper passes SIZE_MAX, and `data + SIZE_MAX` would
+    // be undefined behavior even if the value were never dereferenced.
+    const char* reader = data;
+    size_t remaining = size;
+
+    memcpy(&_compression, reader, sizeof(Value));
+    reader += sizeof(Value);
+    memcpy(&_min, reader, sizeof(Value));
+    reader += sizeof(Value);
+    memcpy(&_max, reader, sizeof(Value));
+    reader += sizeof(Value);
+    memcpy(&_max_processed, reader, sizeof(Index));
+    reader += sizeof(Index);
+    memcpy(&_max_unprocessed, reader, sizeof(Index));
+    reader += sizeof(Index);
+    memcpy(&_processed_weight, reader, sizeof(Value));
+    reader += sizeof(Value);
+    memcpy(&_unprocessed_weight, reader, sizeof(Value));
+    reader += sizeof(Value);
+    remaining -= kPreambleSize;
+
+    auto read_centroid_array = [&](std::vector<Centroid>& dst, const char* label) -> bool {
+        if (remaining < sizeof(uint32_t)) {
+            LOG(WARNING) << "TDigest::deserialize: truncated before " << label << " count";
+            return false;
+        }
+        uint32_t count;
+        memcpy(&count, reader, sizeof(uint32_t));
+        reader += sizeof(uint32_t);
+        remaining -= sizeof(uint32_t);
+        if (count > kMaxCentroidsDeserialize) {
+            LOG(WARNING) << "TDigest::deserialize: " << label << " count " << count << " exceeds limit "
+                         << kMaxCentroidsDeserialize;
+            return false;
+        }
+        const size_t bytes = static_cast<size_t>(count) * sizeof(Centroid);
+        if (remaining < bytes) {
+            LOG(WARNING) << "TDigest::deserialize: truncated " << label << " centroid array";
+            return false;
+        }
+        dst.resize(count);
+        if (count > 0) {
+            memcpy(dst.data(), reader, bytes);
+            reader += bytes;
+            remaining -= bytes;
+        }
+        return true;
+    };
+
+    if (!read_centroid_array(_processed, "processed")) {
+        reset_to_empty();
+        return false;
+    }
+    if (!read_centroid_array(_unprocessed, "unprocessed")) {
+        reset_to_empty();
+        return false;
+    }
+
+    if (remaining < sizeof(uint32_t)) {
+        LOG(WARNING) << "TDigest::deserialize: truncated before cumulative count";
+        reset_to_empty();
+        return false;
+    }
+    uint32_t cumulative_count;
+    memcpy(&cumulative_count, reader, sizeof(uint32_t));
+    reader += sizeof(uint32_t);
+    remaining -= sizeof(uint32_t);
+    if (cumulative_count > kMaxCentroidsDeserialize) {
+        LOG(WARNING) << "TDigest::deserialize: cumulative count " << cumulative_count << " exceeds limit "
+                     << kMaxCentroidsDeserialize;
+        reset_to_empty();
+        return false;
+    }
+    const size_t cumulative_bytes = static_cast<size_t>(cumulative_count) * sizeof(Weight);
+    if (remaining < cumulative_bytes) {
+        LOG(WARNING) << "TDigest::deserialize: truncated cumulative array";
+        reset_to_empty();
+        return false;
+    }
+    _cumulative.resize(cumulative_count);
+    if (cumulative_count > 0) {
+        memcpy(_cumulative.data(), reader, cumulative_bytes);
+    }
+    return true;
+}
+
 void TDigest::deserialize(const char* type_reader) {
-    memcpy(&_compression, type_reader, sizeof(Value));
-    type_reader += sizeof(Value);
-    memcpy(&_min, type_reader, sizeof(Value));
-    type_reader += sizeof(Value);
-    memcpy(&_max, type_reader, sizeof(Value));
-    type_reader += sizeof(Value);
-
-    memcpy(&_max_processed, type_reader, sizeof(Index));
-    type_reader += sizeof(Index);
-    memcpy(&_max_unprocessed, type_reader, sizeof(Index));
-    type_reader += sizeof(Index);
-    memcpy(&_processed_weight, type_reader, sizeof(Value));
-    type_reader += sizeof(Value);
-    memcpy(&_unprocessed_weight, type_reader, sizeof(Value));
-    type_reader += sizeof(Value);
-
-    uint32_t size;
-    memcpy(&size, type_reader, sizeof(uint32_t));
-    type_reader += sizeof(uint32_t);
-    _processed.resize(size);
-    for (int i = 0; i < size; i++) {
-        memcpy(&_processed[i], type_reader, sizeof(Centroid));
-        type_reader += sizeof(Centroid);
-    }
-    memcpy(&size, type_reader, sizeof(uint32_t));
-    type_reader += sizeof(uint32_t);
-    _unprocessed.resize(size);
-    for (int i = 0; i < size; i++) {
-        memcpy(&_unprocessed[i], type_reader, sizeof(Centroid));
-        type_reader += sizeof(Centroid);
-    }
-    memcpy(&size, type_reader, sizeof(uint32_t));
-    type_reader += sizeof(uint32_t);
-    _cumulative.resize(size);
-    for (int i = 0; i < size; i++) {
-        memcpy(&_cumulative[i], type_reader, sizeof(Weight));
-        type_reader += sizeof(Weight);
-    }
+    // Legacy unsafe entry point retained for ctors that lack the blob length;
+    // delegates with SIZE_MAX. The bounded path uses a remaining-bytes
+    // counter (not a past-the-end pointer) so SIZE_MAX never participates in
+    // pointer arithmetic. Callers that have a Slice should prefer the
+    // (data, size) overload.
+    (void)deserialize(type_reader, std::numeric_limits<size_t>::max());
 }
 
 Value TDigest::mean(int i) const noexcept {
