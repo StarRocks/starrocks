@@ -752,28 +752,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
-<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
-=======
-    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
-    if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.column_access_paths.empty()) {
-        bool failed = false;
-        auto path_resolver = make_column_access_path_resolver(state, &_pool);
-        for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
-            auto st = ColumnAccessPath::create(thrift_path, path_resolver);
-            if (LIKELY(st.ok())) {
-                _scanner_ctx.column_access_paths.emplace_back(std::move(st.value()));
-            } else {
-                LOG(WARNING) << "Failed to create column access path: " << st.status();
-                failed = true;
-                break;
-            }
-        }
-        if (failed) {
-            _scanner_ctx.column_access_paths.clear();
-        }
-    }
->>>>>>> 9f95b67b1b ([BugFix] Fix heap-use-after-free in HiveDataSource destructor caused by predicates outliving _pool (#74818))
     RETURN_IF_ERROR(_init_global_dicts(&_scanner_ctx));
     _scanner_ctx.runtime_filter_collector = _runtime_filters;
     _scanner_ctx.tuple_desc = _tuple_desc;
