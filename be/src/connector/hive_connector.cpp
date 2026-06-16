@@ -946,24 +946,16 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
-<<<<<<< HEAD
-    Expr::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
-    Expr::close(_partition_filter.conjunct_ctxs, state);
-    Expr::close(_scanner_ctx.partition_expr_ctxs, state);
-    Expr::close(_scanner_ctx.extended_col_expr_ctxs, state);
-    Expr::close(_scanner_ctx.conjuncts.scanner_ctxs, state);
-=======
     // ColumnExprPredicate destructors call ExprContext::close() on cloned
     // ExprContexts whose root() Expr* lives in HiveDataSource::_pool
     // (ExprContext::clone() shares _root, it does NOT deep-copy the tree).
     // Release predicates here while _pool is still alive.
     _scanner_ctx.predicates = {};
-    ExprExecutor::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
-    ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
-    ExprExecutor::close(_scanner_ctx.partition_expr_ctxs, state);
-    ExprExecutor::close(_scanner_ctx.extended_col_expr_ctxs, state);
-    ExprExecutor::close(_scanner_ctx.conjuncts.scanner_ctxs, state);
->>>>>>> 9f95b67b1b ([BugFix] Fix heap-use-after-free in HiveDataSource destructor caused by predicates outliving _pool (#74818))
+    Expr::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
+    Expr::close(_partition_filter.conjunct_ctxs, state);
+    Expr::close(_scanner_ctx.partition_expr_ctxs, state);
+    Expr::close(_scanner_ctx.extended_col_expr_ctxs, state);
+    Expr::close(_scanner_ctx.conjuncts.scanner_ctxs, state);
     for (auto& it : _scanner_ctx.conjuncts.by_slot) {
         Expr::close(it.second, state);
     }
