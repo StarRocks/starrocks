@@ -449,13 +449,13 @@ All transaction metrics share the following labels:
 
 - Unit: ms
 - Type: Histogram
-- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on both production paths — the INSERT-from-FILES hook (called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn) and the Broker Load hook (called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`) — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on all production load kinds — INSERT-from-FILES and INSERT-from-table (both via `InsertPreSplitHook`, called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn) and Broker Load (via `BrokerLoadPreSplitHook`, called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`), all sync-awaiting through the shared `PreSplitFlow` — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - Unit: Count
 - Type: Cumulative
-- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on the INSERT-from-FILES production path on timeout (the INSERT then proceeds without abort against the currently visible tablet layout — still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait. `tablet_pre_split_load_abort` is NOT incremented because the INSERT itself is not aborted) and on the `runPreSplit` synchronous-await wrapper. The Broker Load production path does not await and so does not update this counter.
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on every production load kind on timeout — INSERT-from-FILES, INSERT-from-table, and Broker Load (all sync-await through the shared `PreSplitFlow`) — as well as the `runPreSplit` synchronous-await wrapper. The load then proceeds without abort against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); `tablet_pre_split_load_abort` is NOT incremented because the load itself is not aborted.
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
