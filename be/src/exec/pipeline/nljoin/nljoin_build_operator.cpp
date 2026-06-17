@@ -56,6 +56,14 @@ Status NLJoinBuildOperator::set_finishing(RuntimeState* state) {
 }
 
 Status NLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    // The permute path on the probe side copies build columns through `Column::append`, which
+    // `down_cast` to the concrete column type and cannot handle a `ConstColumn`. Materialize const
+    // columns here so the build chunks kept in the cross-join context never carry one (otherwise the
+    // probe operator type-confuses a `ConstColumn` as the destination column type and crashes in release
+    // builds where `down_cast` is an unchecked `static_cast`).
+    if (chunk != nullptr && !chunk->is_empty()) {
+        chunk->unpack_and_duplicate_const_columns();
+    }
     return _cross_join_context->append_build_chunk(_driver_sequence, chunk);
 }
 

@@ -776,6 +776,14 @@ void NLJoinProbeOperator::_init_build_match() const {
 
 Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _probe_chunk = chunk;
+    // The permute path (`_permute_probe_row`/`_permute_left_join`) copies probe columns through
+    // `Column::append`/`append_value_multiple_times`, which `down_cast` to the concrete column type and
+    // cannot handle a `ConstColumn`. Materialize const columns up front so the permute code never
+    // type-confuses a `ConstColumn` as the destination column type (which crashes in release builds where
+    // `down_cast` is an unchecked `static_cast`).
+    if (_probe_chunk != nullptr && !_probe_chunk->is_empty()) {
+        _probe_chunk->unpack_and_duplicate_const_columns();
+    }
     _probe_row_start = 0;
     _probe_row_current = 0;
     _probe_row_matched = false;
