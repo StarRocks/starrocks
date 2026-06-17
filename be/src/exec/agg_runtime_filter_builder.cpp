@@ -274,6 +274,13 @@ void AggTopNRuntimeFilterBuilder::update(const Columns& group_by_columns, const 
     if (_heap_builder == nullptr || _runtime_filter == nullptr) {
         return;
     }
+    // A constant build column carries a single value and cannot meaningfully narrow the min/max topn
+    // runtime filter; skipping it keeps the filter conservative (correct). It also avoids feeding a
+    // ConstColumn to the updater, which reads the raw typed column via an unchecked down_cast (e.g.
+    // to BinaryColumn) and would misinterpret a ConstColumn and crash.
+    if (group_by_columns[_build_desc->build_expr_order()]->is_constant()) {
+        return;
+    }
     type_dispatch_predicate<void>(_type, false, AggTopNRuntimeFilterUpdaterImpl(), _heap_builder, _runtime_filter,
                                   group_by_columns, selection, _build_desc->build_expr_order(), _build_desc->limit(),
                                   _build_desc->is_asc(), _build_desc->is_nulls_first());
