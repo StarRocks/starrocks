@@ -1203,8 +1203,8 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
         // reserve the chosen rowsets, so this task and any concurrent autonomous
         // task on the same tablet never select overlapping inputs (which would
         // produce duplicate CompactionResultPB / a broken merged TxnLog).
-        ASSIGN_OR_RETURN(input_rowsets, LakeCompactionManager::instance()->pick_and_reserve_inputs(
-                                                context, compaction_policy.get()));
+        ASSIGN_OR_RETURN(input_rowsets,
+                         LakeCompactionManager::instance()->pick_and_reserve_inputs(context, compaction_policy.get()));
         if (input_rowsets.empty()) {
             // Nothing eligible this round (all candidates are in-flight or pending
             // publish). Signal a benign no-op; do_compaction maps this to success.

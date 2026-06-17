@@ -144,7 +144,7 @@ std::unordered_set<uint32_t> LakeCompactionManager::running_inputs(int64_t table
 }
 
 StatusOr<std::vector<RowsetPtr>> LakeCompactionManager::pick_and_reserve_inputs(CompactionTaskContext* context,
-                                                                               CompactionPolicy* policy) {
+                                                                                CompactionPolicy* policy) {
     const int64_t tablet_id = context->tablet_id;
 
     // Let the policy choose its natural input set. pick_rowsets() returns a
