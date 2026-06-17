@@ -237,7 +237,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [5: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: (1: p IS NULL) OR (1: p != 1)");
+        assertContains(plan, "([1: p, INT, true] IS NULL) OR ([1: p, INT, true] != 1)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -298,7 +298,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "Predicates: [5: p, INT, true] = 999");
 
         // Check unskewed branch predicate. It must include null values.
-        assertContains(plan, "Predicates: (1: p IS NULL) OR (((1: p != 999) AND (1: p != 998)) AND (1: p != 997))");
+        assertContains(plan, "Predicates: ([1: p, INT, true] IS NULL) OR ((([1: p, INT, true] != 999) AND ([1: p, INT, true] != 998)) AND ([1: p, INT, true] != 997))");
 
     }
 
@@ -330,14 +330,14 @@ class WindowSkewTest extends PlanTestBase {
                         "  |  pass-through-operands: all");
 
         // Check the skewed branch predicates
-        assertContains(plan, "Predicates: 5: p IS NULL");
-        assertContains(plan, "Predicates: [17: p, INT, true] = 997");
-        assertContains(plan, "Predicates: [13: p, INT, true] = 998");
-        assertContains(plan, "Predicates: [9: p, INT, true] = 999");
+        assertContains(plan, "Predicates: [17: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: [13: p, INT, true] = 997");
+        assertContains(plan, "Predicates: [9: p, INT, true] = 998");
+        assertContains(plan, "Predicates: [5: p, INT, true] = 999");
 
         // Check unskewed branch predicate. It must *not* include null values.
         assertContains(plan,
-                "Predicates: 1: p IS NOT NULL, [1: p, INT, true] != 999, [1: p, INT, true] != 998, [1: p, INT, true] != 997");
+                "Predicates: [1: p, INT, true] != 999, [1: p, INT, true] != 998, [1: p, INT, true] != 997, [1: p, INT, true] IS NOT NULL");
     }
 
     @Test
@@ -351,8 +351,8 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: avg(3: x) | 5: rank()");
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: 1: p IS NOT NULL");
-        assertContains(plan, "Predicates: 6: p IS NULL");
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: [6: p, INT, true] IS NULL");
     }
 
     @Test
@@ -426,17 +426,13 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertNullSplit(plan);
 
-        assertContains(plan,
-                "ANALYTIC\n" +
-                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
-                        "result nullable: true], ]\n" +
-                        "  |  order by: [2: s, INT, true] ASC");
+        assertContains(plan, "ANALYTIC\n" +
+                "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
+                "  |  order by: [6: s, INT, true] ASC");
 
-        assertContains(plan,
-                "ANALYTIC\n" +
-                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
-                        " result nullable: true], ]\n" +
-                        "  |  partition by: [5: p, INT, true]");
+        assertContains(plan, "ANALYTIC\n" +
+                "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: p, INT, true]");
     }
 
     @Test
@@ -449,7 +445,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
 
         assertContains(plan, "Predicates: [5: p, INT, true] = 1");
-        assertContains(plan, "Predicates: (1: p IS NULL) OR (1: p != 1)");
+        assertContains(plan, "([1: p, INT, true] IS NULL) OR ([1: p, INT, true] != 1)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -490,7 +486,7 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [5: p, VARCHAR, true] = 'abc'");
-        assertContains(plan, "Predicates: (1: p IS NULL) OR (1: p != 'abc')");
+        assertContains(plan, "([1: p, VARCHAR, true] IS NULL) OR ([1: p, VARCHAR, true] != 'abc')");
     }
 
     @Test
