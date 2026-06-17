@@ -22,7 +22,7 @@
 #include "column/datum_convert.h"
 #include "column/runtime_type_traits.h"
 #include "exprs/chunk_predicate_evaluator.h"
-#include "storage/type_info_allocator_adapter.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/timestamp_value.h"
 

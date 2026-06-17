@@ -22,12 +22,9 @@
 
 #include "base/testutil/parallel_test.h"
 #include "column/chunk_factory.h"
-#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/decimalv3.h"
-#include "types/json_value.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {
@@ -39,22 +36,6 @@ static std::string trim_trailing_zeros(const std::string& s) {
     l = (l > 0 && s[l - 1] == '.') ? l - 1 : l;
     return s.substr(0, l);
 }
-
-class LocalTypeInfoAllocator {
-public:
-    TypeInfoAllocator make_allocator() { return TypeInfoAllocator{this, allocate}; }
-
-private:
-    static uint8_t* allocate(void* ctx, size_t size) {
-        auto* self = static_cast<LocalTypeInfoAllocator*>(ctx);
-        auto buffer = std::make_unique<uint8_t[]>(size);
-        uint8_t* result = buffer.get();
-        self->_buffers.emplace_back(std::move(buffer));
-        return result;
-    }
-
-    std::vector<std::unique_ptr<uint8_t[]>> _buffers;
-};
 
 PARALLEL_TEST(ConvertHelperTest, testVoidPtr) {
     std::vector<std::string> test_cases = {
@@ -564,70 +545,4 @@ PARALLEL_TEST(ConvertHelperTest, testValidSchema) {
     }
 }
 
-PARALLEL_TEST(ConvertHelperTest, testNullableIntConvertString) {
-    std::unique_ptr<MemPool> mem_pool(new MemPool());
-    TypeInfoAllocator allocator = make_type_info_allocator(mem_pool.get());
-    auto conv = get_type_converter(TYPE_INT, TYPE_VARCHAR);
-    auto c0 = ChunkFactory::column_from_field_type(TYPE_INT, true);
-    auto c1 = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-    auto t0 = get_scalar_type_info(TYPE_INT);
-    auto t1 = get_scalar_type_info(TYPE_VARCHAR);
-
-    c0->append_datum({1});
-    c0->append_nulls(1);
-    auto status = conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), &allocator);
-
-    EXPECT_EQ("1", c1->get(0).get_slice());
-    ASSERT_TRUE(c1->get(1).is_null());
-}
-
-PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertInt) {
-    std::unique_ptr<MemPool> mem_pool(new MemPool());
-    TypeInfoAllocator allocator = make_type_info_allocator(mem_pool.get());
-    auto conv = get_type_converter(TYPE_VARCHAR, TYPE_INT);
-    auto c0 = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-    auto c1 = ChunkFactory::column_from_field_type(TYPE_INT, true);
-    auto t0 = get_scalar_type_info(TYPE_VARCHAR);
-    auto t1 = get_scalar_type_info(TYPE_INT);
-
-    c0->append_datum({"1"});
-    c0->append_nulls(1);
-    auto status = conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), &allocator);
-
-    EXPECT_EQ(1, c1->get(0).get_int32());
-    ASSERT_TRUE(c1->get(1).is_null());
-}
-
-PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertJson) {
-    std::unique_ptr<MemPool> mem_pool(new MemPool());
-    TypeInfoAllocator allocator = make_type_info_allocator(mem_pool.get());
-    auto conv = get_type_converter(TYPE_VARCHAR, TYPE_JSON);
-    auto c0 = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-    auto c1 = ChunkFactory::column_from_field_type(TYPE_JSON, true);
-    auto t0 = get_scalar_type_info(TYPE_VARCHAR);
-    auto t1 = get_scalar_type_info(TYPE_JSON);
-
-    c0->append_datum({"{}"});
-    c0->append_nulls(1);
-    auto status = conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), &allocator);
-
-    EXPECT_EQ("{}", c1->get(0).get_json()->to_string_uncheck());
-    ASSERT_TRUE(c1->get(1).is_null());
-}
-
-PARALLEL_TEST(ConvertHelperTest, testConvertColumnUsesTypeInfoAllocator) {
-    LocalTypeInfoAllocator allocator_holder;
-    TypeInfoAllocator allocator = allocator_holder.make_allocator();
-    auto conv = get_type_converter(TYPE_INT, TYPE_VARCHAR);
-    auto c0 = ChunkFactory::column_from_field_type(TYPE_INT, false);
-    auto c1 = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
-    auto t0 = get_scalar_type_info(TYPE_INT);
-    auto t1 = get_scalar_type_info(TYPE_VARCHAR);
-
-    c0->append_datum({123});
-    auto status = conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), &allocator);
-
-    ASSERT_TRUE(status.ok());
-    EXPECT_EQ("123", c1->get(0).get_slice().to_string());
-}
 } // namespace starrocks

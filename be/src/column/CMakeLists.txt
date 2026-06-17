@@ -24,6 +24,7 @@ ADD_BE_LIB(ColumnCore
         column_filter_range.cpp
         column_visitor.cpp
         column_visitor_mutable.cpp
+        type_converter.cpp
         mysql_row_buffer.cpp
         german_string.cpp
         global_dict/decoder.cpp
