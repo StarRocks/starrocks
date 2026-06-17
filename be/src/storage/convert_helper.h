@@ -22,6 +22,7 @@
 #include "storage/olap_common.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
+#include "types/type_info_allocator.h"
 
 namespace starrocks {
 class TabletSchema;
@@ -36,16 +37,16 @@ public:
     TypeConverter() = default;
     virtual ~TypeConverter() = default;
 
-    virtual Status convert(void* dest, const void* src, MemPool* memPool) const = 0;
+    virtual Status convert(void* dest, const void* src, const TypeInfoAllocator* allocator) const = 0;
 
     virtual Status convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
-                                  MemPool* mem_pool) const;
+                                  const TypeInfoAllocator* allocator) const;
 
 private:
     friend class SchemaChangeTest;
 
     virtual Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                                 MemPool* mem_pool) const = 0;
+                                 const TypeInfoAllocator* allocator) const = 0;
 };
 
 const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_type);
