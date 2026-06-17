@@ -14,11 +14,7 @@
 
 #pragma once
 
-<<<<<<< HEAD
-#include "column/column.h"
-=======
 #include "exprs/function_context.h"
->>>>>>> 71ab161b3f ([Enhancement] base64_to_bitmap constant optimization (#74684))
 #include "exprs/function_helper.h"
 
 namespace starrocks {
