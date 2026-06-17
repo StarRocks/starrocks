@@ -144,6 +144,7 @@ set(EXEC_FILES
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
         ./exprs/cast_expr_test.cpp
+        ./exprs/unary_function_test.cpp
         ./exprs/decimal_cast_expr_decimal_test.cpp
         ./exprs/decimal_cast_expr_integer_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
