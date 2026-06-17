@@ -39,7 +39,7 @@
 #include "formats/parquet/group_reader.h" // for GroupReaderParam
 #include "formats/parquet/scalar_column_reader.h"
 #include "runtime/mem_pool.h"
-#include "storage/type_info_allocator_adapter.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "types/type_info.h"
 
 namespace starrocks::parquet {
