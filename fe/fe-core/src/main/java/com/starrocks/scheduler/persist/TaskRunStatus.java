@@ -433,21 +433,6 @@ public class TaskRunStatus implements Writable {
         }
     }
 
-    public long calculateRefreshProcessDuration() {
-        if (finishTime > processStartTime) {
-            // NOTE:
-            // It's mostly because of tech debt, before this pr, the processStartTime can be persisted as 0 .
-            // In this case to avoid return a weird duration we choose the createTime as startTime
-            if (processStartTime > 0) {
-                return finishTime - processStartTime;
-            } else {
-                return finishTime - createTime;
-            }
-        } else {
-            return 0L;
-        }
-    }
-
     public boolean matchByTaskName(String dbName, Set<String> taskNames) {
         if (dbName != null && !dbName.equals(getDbName())) {
             return false;

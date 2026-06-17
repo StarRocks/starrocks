@@ -22,7 +22,7 @@ The following fields are provided in `materialized_views`:
 | TASK_NAME                            | Name of the task responsible for refreshing the materialized view. |
 | LAST_REFRESH_START_TIME              | Start time of the most recent refresh task.                  |
 | LAST_REFRESH_FINISHED_TIME           | End time of the most recent refresh task.                    |
-| LAST_REFRESH_DURATION                | Duration of the most recent refresh task.                    |
+| LAST_REFRESH_DURATION                | Wall-clock duration of the most recent refresh, in seconds (the last task run's finish time minus the first task run's process-start time). Matches `materialized_view_refresh_jobs.DURATION_TIME` for that job. |
 | LAST_REFRESH_STATE                   | State of the most recent refresh task.                       |
 | LAST_REFRESH_FORCE_REFRESH           | Indicates whether the most recent refresh task was a force refresh. |
 | LAST_REFRESH_START_PARTITION         | Starting partition for the most recent refresh task.         |
