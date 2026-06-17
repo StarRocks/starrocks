@@ -28,8 +28,8 @@
 #include "column/column_access_path.h"
 #include "column/global_dict/types.h"
 #include "common/runtime_profile.h"
+#include "compute_env/query/file_scan_split_context.h"
 #include "exec/olap_scan_prepare.h"
-#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -44,13 +44,6 @@ namespace starrocks {
 
 class HiveTableDescriptor;
 class RuntimeFilterProbeCollector;
-
-struct HdfsSplitContext : public pipeline::ScanSplitContext {
-    size_t split_start = 0;
-    size_t split_end = 0;
-    virtual std::unique_ptr<HdfsSplitContext> clone() = 0;
-};
-using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
 
 struct HdfsScannerProfile {
     RuntimeProfile* runtime_profile = nullptr;
@@ -132,7 +125,7 @@ struct HdfsScannerContext {
     int64_t file_size = -1;
     bool is_first_split = false;
     std::string table_location;
-    const HdfsSplitContext* split_context = nullptr;
+    const FileScanSplitContext* split_context = nullptr;
     DataCacheOptions datacache_options{};
     TableSpecificData table_specific;
 
@@ -225,7 +218,7 @@ struct HdfsScannerContext {
     // Since ctx is pointer-passed (never copied), unique_ptr members work naturally.
 
     struct SplitState {
-        std::vector<HdfsSplitContextPtr> split_tasks;
+        std::vector<FileScanSplitContextPtr> split_tasks;
         bool has_split_tasks = false;
         size_t estimated_mem_usage_per_split_task = 0;
     } split;

@@ -34,10 +34,10 @@
 
 namespace starrocks {
 
-struct SplitContext : public HdfsSplitContext {
+struct SplitContext : public FileScanSplitContext {
     std::shared_ptr<std::string> footer;
 
-    HdfsSplitContextPtr clone() override {
+    FileScanSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
         return ctx;
@@ -455,8 +455,8 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
-        ctx->split_start = info.offset();
-        ctx->split_end = info.offset() + info.length();
+        ctx->start_offset = info.offset();
+        ctx->end_offset = info.offset() + info.length();
         _scanner_ctx->split.split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx->merge_split_tasks();
