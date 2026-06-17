@@ -43,6 +43,7 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
@@ -468,9 +469,9 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     }
 
     @Override
-    public void generateNextTaskRunIfNeeded() {
+    public boolean generateNextTaskRunIfNeeded() {
         if (!hasNextTaskRun || mvContext.getTaskRun().isKilled()) {
-            return;
+            return false;
         }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Map<String, String> properties = mvContext.getProperties();
@@ -513,9 +514,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     .setExecuteOption(option)
                     .build();
             nextTaskRun = taskRun;
-        } else {
-            taskManager.executeTask(taskName, option);
+            return true;
         }
+        // Report the job as continued only if the successor run was accepted; a rejected submit (e.g. queue
+        // full) means no successor runs, so the current run stays the job's terminal run.
+        return taskManager.executeTask(taskName, option).getStatus() == SubmitResult.SubmitStatus.SUBMITTED;
     }
 
     private InsertStmt prepareRefreshPlan() throws AnalysisException, LockTimeoutException {

@@ -201,8 +201,9 @@ public abstract class MVRefreshProcessor {
 
     /**
      * Generate the next task run to be processed and set it to the nextTaskRun field.
+     * Returns true iff this call enqueued a successor task run, false otherwise.
      */
-    public abstract void generateNextTaskRunIfNeeded();
+    public abstract boolean generateNextTaskRunIfNeeded();
 
     /**
      * Update the version meta after the mv refresh is successful.
