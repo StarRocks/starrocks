@@ -226,10 +226,10 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, predicateBuilder);
         try {
             // An IVM MV's full rebuild must INSERT the rewritten query (hidden __ROW_ID__/__AGG_STATE
-            // columns), re-derived inside the lock. Gate on getRowIdStrategy()!=null (== has __ROW_ID__),
-            // not the refresh mode: an AUTO MV whose query isn't IVM-eligible has a plain PCT schema and
-            // must NOT re-derive.
-            if (mv.getRowIdStrategy() != null) {
+            // columns), re-derived inside the lock. Require BOTH an IVM mode AND the __ROW_ID__ schema:
+            // mode alone misfires on a non-IVM AUTO MV, __ROW_ID__ alone on a PCT MV that merely outputs a
+            // column named __ROW_ID__. Either misfire fails this terminal PCT refresh.
+            if (mv.getCurrentRefreshMode().isIncrementalOrAuto() && mv.getRowIdStrategy() != null) {
                 insertStmt = generateInsertAst(ctx, mvToRefreshedPartitions,
                         mv.getTaskDefinition(IvmRefreshDefinition.derive(ctx, mv)));
             }
