@@ -19,8 +19,8 @@
 #include "common/bloom_filter.h"
 #include "gutil/casts.h"
 #include "storage/column_predicate_factory.h"
-#include "storage/index/inverted/inverted_index_iterator.h"
-#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/primitive/bitmap_index_iterator.h"
+#include "storage/primitive/inverted_index_iterator.h"
 
 namespace starrocks {
 

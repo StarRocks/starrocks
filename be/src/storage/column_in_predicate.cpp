@@ -25,8 +25,8 @@
 #include "runtime/runtime_filter.h"
 #include "storage/column_predicate_factory.h"
 #include "storage/in_predicate_utils.h"
-#include "storage/index/inverted/inverted_index_iterator.h"
-#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/primitive/bitmap_index_iterator.h"
+#include "storage/primitive/inverted_index_iterator.h"
 #include "types/logical_type.h"
 #include "types/olap_type_infra.h"
 

@@ -16,7 +16,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate_factory.h"
-#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/primitive/inverted_index_common.h"
+#include "storage/primitive/inverted_index_iterator.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
