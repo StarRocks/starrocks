@@ -54,10 +54,10 @@
 
 #include <random>
 
-#include "util/numeric_types.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/unary_function.h"
+#include "util/numeric_types.h"
 
 namespace starrocks {
 
