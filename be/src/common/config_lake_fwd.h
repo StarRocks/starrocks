@@ -115,7 +115,7 @@ CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 
 // If the local pk index file is older than this threshold
 // it may be evicted if the disk is full
