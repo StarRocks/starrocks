@@ -420,6 +420,28 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(Constants.TaskRunState.RUNNING, task.getOptimizeTaskState());
         Assertions.assertNotNull(futureField.get(optimizeJob),
                 "completed future must be retained while deferring, so the rewrite INSERT is not re-run");
+
+        // Run a second scheduler round while still committed-not-visible: it must defer again and, crucially,
+        // must NOT resubmit the rewrite INSERT (the retained completed future short-circuits re-execution).
+        optimizeJob.runRunningJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, task.getOptimizeTaskState());
+        Assertions.assertNotNull(futureField.get(optimizeJob));
+
+        // The rewrite SQL is never (re-)executed across the deferred rounds: the injected future stands in for
+        // the completed INSERT, and the defer branch returns before any resubmission path.
+        Mockito.verify(optimizeJob, Mockito.never()).executeSql(Mockito.anyString());
+    }
+
+    @Test
+    public void testExistCommittedTxnsReturnsFalseForDroppedDb() {
+        // The visibility gate calls existCommittedTxns lock-free; if the database was dropped concurrently
+        // its DatabaseTransactionMgr is absent. That must yield "no committed txns" (safe to proceed) rather
+        // than throwing NPE inside the optimize scheduler loop.
+        long missingDbId = 987654321L;
+        boolean exists = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(missingDbId, 1L, 1L);
+        Assertions.assertFalse(exists, "existCommittedTxns must return false (not NPE) for an absent database");
     }
 
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {

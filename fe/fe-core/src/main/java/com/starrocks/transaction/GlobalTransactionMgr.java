@@ -657,7 +657,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             if (transactionState.getTableIdList().contains(tableId)) {
                 if (partitionId == null) {
                     return true;
-                } else if (transactionState.getTableCommitInfo(tableId).getPartitionCommitInfo(partitionId) != null) {
+                }
+                // getTableCommitInfo is @Nullable: a committed txn can list the table in its tableIdList
+                // before its TableCommitInfo is populated, so guard against NPE here (this method is called
+                // lock-free, e.g. by the online optimize visibility gate).
+                TableCommitInfo tableCommitInfo = transactionState.getTableCommitInfo(tableId);
+                if (tableCommitInfo != null && tableCommitInfo.getPartitionCommitInfo(partitionId) != null) {
                     return true;
                 }
             }

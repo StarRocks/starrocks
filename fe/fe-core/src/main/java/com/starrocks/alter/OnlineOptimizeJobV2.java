@@ -315,10 +315,12 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                     tbl.addDoubleWritePartition(p.getId(), temp.getId());
 
                     // Assign the watershed transaction id atomically with enabling the double-write mapping,
-                    // while still holding the table's write lock. This closes a race window: a load reads the
-                    // double-write mapping (OlapTableSink) under the table read lock, which conflicts with this
-                    // write lock, so any load that observed an *empty* mapping (and therefore only writes the
-                    // source partition) must have begun its transaction before this point and thus has a txn id
+                    // while still holding this database WRITE lock. This closes a race window: a load reads the
+                    // double-write mapping (OlapTableSink) after allocating its txn id at beginTransaction, and
+                    // reads it under a database INTENTION_SHARED + table READ lock that conflicts with this
+                    // database WRITE lock. So any load that observed an *empty* mapping (and therefore only
+                    // writes the source partition) must have read it before this critical section ran, hence
+                    // allocated its txn id before watershedTxnId (a single monotonic generator) -> txn id
                     // < watershedTxnId; isPreviousLoadFinished() below drains exactly those. Every load with a
                     // txn id >= watershedTxnId necessarily begins after the mapping is visible and will
                     // double-write into the temp partition. Previously the watershed was assigned after this
