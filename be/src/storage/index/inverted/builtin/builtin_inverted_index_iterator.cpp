@@ -32,9 +32,9 @@
 namespace starrocks {
 BuiltinInvertedIndexIterator::BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta,
                                                            InvertedReader* reader, OlapReaderStatistics* stats,
-                                                           std::unique_ptr<BitmapIndexIterator>& bitmap_itr,
+                                                           std::unique_ptr<SegmentBitmapIndexIterator>& bitmap_itr,
                                                            const size_t& segment_rows)
-        : InvertedIndexIterator(index_meta, reader, stats),
+        : SegmentInvertedIndexIterator(index_meta, reader, stats),
           _bitmap_itr(std::move(bitmap_itr)),
           _segment_rows(segment_rows) {
     if (_analyser_type == InvertedIndexParserType::PARSER_ENGLISH) {

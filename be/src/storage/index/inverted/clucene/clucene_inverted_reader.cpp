@@ -24,6 +24,7 @@
 #include "clucene_inverted_util.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/match_operator.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/options.h"
 #include "types/logical_type.h"
 
@@ -31,7 +32,7 @@ namespace starrocks {
 
 Status CLuceneInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> index_meta,
                                            InvertedIndexIterator** iterator, const IndexReadOptions& index_opt) {
-    *iterator = new InvertedIndexIterator(index_meta, this, index_opt.stats);
+    *iterator = new SegmentInvertedIndexIterator(index_meta, this, index_opt.stats);
     return Status::OK();
 }
 

@@ -23,11 +23,11 @@
 #include "common/bloom_filter.h"
 #include "common/object_pool.h"
 #include "storage/column_predicate_factory.h"
-#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/olap_common.h" // ColumnId
+#include "storage/primitive/bitmap_index_iterator.h"
+#include "storage/primitive/inverted_index_iterator.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/zone_map_detail.h"
-#include "storage/rowset/bitmap_index_reader.h"
 #include "storage/types.h"
 #include "types/datum.h"
 #include "types/olap_type_infra.h"
@@ -39,7 +39,6 @@ class ObjectPool;
 class ExprContext;
 class RuntimeState;
 class SlotDescriptor;
-class BitmapIndexIterator;
 class BloomFilter;
 } // namespace starrocks
 
