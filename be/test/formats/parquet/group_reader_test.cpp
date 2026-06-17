@@ -4480,7 +4480,8 @@ TEST_F(GroupReaderTest, ReadLazyColumnsSeparatesTriggeredFromUntriggered) {
     // Simulate: lazy_a was triggered during predicate eval → in slot_cache.
     // lazy_b was NOT triggered → not in slot_cache.
     group_reader->_column_materializer->reset_read_chunk();
-    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr,
+                                   active_chunk);
     ASSERT_OK(ctx.materialize_slot(lazy_a_slot->id()));
     EXPECT_NE(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_a_slot->id()));
     EXPECT_EQ(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_b_slot->id()));
@@ -4551,7 +4552,8 @@ TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
 
     // Trigger lazy_slot so it is in slot_cache with full_range data.
     group_reader->_column_materializer->reset_read_chunk();
-    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr,
+                                   active_chunk);
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
 
     // chunk_filter has 1s for all rows (row 0 and 1 survive).
@@ -4910,7 +4912,8 @@ TEST_F(GroupReaderTest, EmitPhysicalColumnsBypassesFillDstForLogicalSlots) {
     group_reader->_column_materializer->reset_read_chunk();
 
     // Compound predicate evaluation triggers on-demand lazy materialization.
-    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr,
+                                   active_chunk);
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
     EXPECT_TRUE(mock_lazy_ptr->_finalize_called)
             << "materialize_slot() must call finalize_lazy_state(), converting to LOGICAL";

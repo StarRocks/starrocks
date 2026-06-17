@@ -251,8 +251,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         {
             size_t saved_rows = (*chunk)->num_rows();
             if (saved_rows > 0) {
-                RETURN_IF_ERROR(
-                        _param.scanner_ctx->append_side_columns_to_chunk(chunk, saved_rows));
+                RETURN_IF_ERROR(_param.scanner_ctx->append_side_columns_to_chunk(chunk, saved_rows));
             }
         }
         break;
@@ -282,9 +281,8 @@ StatusOr<bool> GroupReader::_read_and_filter_active_columns(const Range<uint64_t
                                                             LazyMaterializationContext* lazy_ctx) {
     if (_column_materializer->has_predicate_filter()) {
         state.has_filter = true;
-        ASSIGN_OR_RETURN(size_t hit_count,
-                         _column_materializer->read_active_range_round_by_round(r, &state.chunk_filter,
-                                                                                &state.active_chunk, lazy_ctx));
+        ASSIGN_OR_RETURN(size_t hit_count, _column_materializer->read_active_range_round_by_round(
+                                                   r, &state.chunk_filter, &state.active_chunk, lazy_ctx));
         if (hit_count == 0) {
             _param.stats->late_materialize_skip_rows += state.row_count;
             return false;
@@ -313,15 +311,15 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
                 _variant->referenced_variant_virtual_slot_ids(_param.scanner_ctx->conjuncts.scanner_ctxs);
         if (!early_projected.empty()) {
             RETURN_IF_ERROR(_variant->fetch_and_project_virtual_slots(early_projected, r, state.active_chunk,
-                                                                       _variant->projection_timezone()));
+                                                                      _variant->projection_timezone()));
         }
     }
 
     // Append side columns to active_chunk so compound conjuncts referencing
     // partition / not-existed / extended slots can be evaluated correctly.
     if (state.active_chunk->num_rows() > 0) {
-        RETURN_IF_ERROR(_param.scanner_ctx->append_side_columns_to_chunk(&state.active_chunk,
-                                                                          state.active_chunk->num_rows()));
+        RETURN_IF_ERROR(
+                _param.scanner_ctx->append_side_columns_to_chunk(&state.active_chunk, state.active_chunk->num_rows()));
     }
 
     // Finalize all active columns to logical form before compound conjunct eval.
@@ -330,10 +328,9 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
         RETURN_IF_ERROR(_column_materializer->finalize_active_slot(slot_id, state.active_chunk));
     }
 
-    ASSIGN_OR_RETURN(size_t compound_hit,
-                     ChunkPredicateEvaluator::eval_conjuncts_into_filter(
-                             _param.scanner_ctx->conjuncts.scanner_ctxs, state.active_chunk.get(),
-                             &state.chunk_filter));
+    ASSIGN_OR_RETURN(size_t compound_hit, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
+                                                  _param.scanner_ctx->conjuncts.scanner_ctxs, state.active_chunk.get(),
+                                                  &state.chunk_filter));
     if (compound_hit == 0) {
         _param.stats->late_materialize_skip_rows += state.row_count;
         return false;
@@ -356,7 +353,7 @@ StatusOr<bool> GroupReader::_evaluate_variant_predicates(const Range<uint64_t>& 
     }
 
     ASSIGN_OR_RETURN(Filter vr, _variant->filter_subfields(state.active_chunk, state.row_count, _param.stats,
-                                                            _variant->projection_timezone()));
+                                                           _variant->projection_timezone()));
     if (!vr.empty()) {
         if (SIMD::count_nonzero(vr.data(), vr.size()) == 0) {
             return false;
@@ -386,7 +383,7 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
         post_filter_range = r.filter(&state.chunk_filter);
         DCHECK(post_filter_range.span_size() > 0);
         post_filter = {state.chunk_filter.begin() + post_filter_range.begin() - r.begin(),
-                        state.chunk_filter.begin() + post_filter_range.end() - r.begin()};
+                       state.chunk_filter.begin() + post_filter_range.end() - r.begin()};
     }
 
     bool has_any_lazy =
@@ -396,13 +393,12 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
     }
     if (!_column_materializer->lazy_column_indices().empty()) {
         RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter, state.chunk_filter,
-                                                                 state.has_filter, state.active_chunk));
+                                                                state.has_filter, state.active_chunk));
     }
 
-    RETURN_IF_ERROR(_variant->backfill_sources(r,
-                                                state.has_filter ? &post_filter_range : nullptr,
-                                                state.has_filter ? &post_filter : nullptr, state.has_filter,
-                                                state.active_chunk));
+    RETURN_IF_ERROR(_variant->backfill_sources(r, state.has_filter ? &post_filter_range : nullptr,
+                                               state.has_filter ? &post_filter : nullptr, state.has_filter,
+                                               state.active_chunk));
     return true;
 }
 
