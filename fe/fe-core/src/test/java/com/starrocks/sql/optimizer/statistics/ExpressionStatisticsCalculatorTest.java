@@ -2061,6 +2061,19 @@ public class ExpressionStatisticsCalculatorTest {
                 .build();
     }
 
+    // A NON-boolean (INT) column that looks boolean-ish: 0/1 valued with 0/1 MCV keys. It is a "non-suitable"
+    // sub-expression for the compound-predicate boolean MCV fast-path, which must be rejected by the type guard.
+    private static ColumnStatistic nonBooleanZeroOneColumnStatistic(Map<String, Long> mcv) {
+        return ColumnStatistic.builder()
+                .setMinValue(0)
+                .setMaxValue(1)
+                .setNullsFraction(0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(2)
+                .setHistogram(new Histogram(Collections.emptyList(), mcv))
+                .build();
+    }
+
     private static void assertBooleanDistribution(ColumnStatistic predicateStatistic, long expectedTrueRows,
                                                   long expectedFalseRows, double expectedNullsFraction) {
         Map<String, Long> mcvs = predicateStatistic.getHistogram().getMCV();
@@ -2326,6 +2339,109 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(1.0, stat.getMaxValue(), 0.001);
         Assertions.assertNotNull(stat.getHistogram());
         assertBooleanDistribution(stat, 750, 250, 0.0);
+    }
+    @Test
+    public void testNonBooleanZeroOneColumnDoesNotUseBooleanMcvFastPath() {
+        final var col = new ColumnRefOperator(0, IntegerType.INT, "flag", true);
+        final var hist = new Histogram(List.of(), Map.of("0", 300L, "1", 700L));
+        final var stats = Statistics.builder()
+                .setOutputRowCount(1_000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(1).setNullsFraction(0)
+                        .setAverageRowSize(4).setDistinctValuesCount(2)
+                        .setHistogram(hist).build())
+                .build();
+
+        final var notCol = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, col);
+
+        final var result = ExpressionStatisticCalculator.calculate(notCol, stats);
+
+        Assertions.assertNotNull(result.getHistogram());
+        Assertions.assertEquals(750L, result.getHistogram().getMCV().get("1"));
+    }
+
+    @Test
+    public void testBooleanColumnStillUsesMcvPath() {
+        final var col = new ColumnRefOperator(0, BooleanType.BOOLEAN, "b", true);
+        final var hist = new Histogram(List.of(), Map.of("0", 300L, "1", 700L));
+        final var stats = Statistics.builder()
+                .setOutputRowCount(1_000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(1).setNullsFraction(0)
+                        .setAverageRowSize(1).setDistinctValuesCount(2)
+                        .setHistogram(hist).build())
+                .build();
+
+        final var notCol = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, col);
+
+        final var result = ExpressionStatisticCalculator.calculate(notCol, stats);
+
+        Assertions.assertNotNull(result.getHistogram());
+        Assertions.assertEquals(300L, result.getHistogram().getMCV().get("1"));
+    }
+
+    @Test
+    public void testBinaryPredicateWithUnknownOperandReturnsBasicStatsWithoutMcv() {
+        final var col = new ColumnRefOperator(0, IntegerType.INT, "c", true);
+        final var stats = Statistics.builder()
+                .setOutputRowCount(1_000)
+                .addColumnStatistic(col, ColumnStatistic.unknown())
+                .build();
+
+        final var eq = new BinaryPredicateOperator(BinaryType.EQ, col, ConstantOperator.createInt(5));
+
+        final var result = ExpressionStatisticCalculator.calculate(eq, stats);
+
+        // Unknown operand => the true/false split would only be a default-selectivity guess, so we keep just the
+        // basic boolean shape and never materialize an MCV histogram.
+        Assertions.assertNull(result.getHistogram());
+        Assertions.assertEquals(2, result.getDistinctValuesCount(), 0.0);
+        Assertions.assertEquals(0, result.getMinValue(), 0.0);
+        Assertions.assertEquals(1, result.getMaxValue(), 0.0);
+    }
+
+
+    @Test
+    public void testCompoundPredicateOrIgnoresNonBooleanChildMcvs() {
+        ColumnRefOperator col1 = new ColumnRefOperator(0, IntegerType.INT, "flag1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(1, IntegerType.INT, "flag2", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1600)
+                .addColumnStatistic(col1, nonBooleanZeroOneColumnStatistic(Map.of("1", 1600L)))
+                .addColumnStatistic(col2, nonBooleanZeroOneColumnStatistic(Map.of("1", 1600L)))
+                .build();
+
+        CompoundPredicateOperator orOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, col1, col2);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(orOp, statistics);
+
+        // pTrue = 0.25 + 0.25 - 0.25*0.25 = 0.4375 (NOT 1.0 from the ignored MCVs) => 700 true / 900 false.
+        Assertions.assertNotNull(stat.getHistogram());
+        assertOnlyBooleanMcvs(stat, 1600);
+        assertBooleanDistribution(stat, 700L, 900L, 0.0);
+    }
+
+    @Test
+    public void testCompoundPredicateUsesBooleanChildMcvButIgnoresNonBooleanChildMcv() {
+        ColumnRefOperator boolCol = new ColumnRefOperator(0, BooleanType.BOOLEAN, "b", true);
+        ColumnRefOperator intCol = new ColumnRefOperator(1, IntegerType.INT, "flag", true);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(boolCol, booleanColumnStatistic(700, 300, 0))
+                .addColumnStatistic(intCol, nonBooleanZeroOneColumnStatistic(Map.of("1", 1000L)))
+                .build();
+
+        CompoundPredicateOperator andOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, boolCol, intCol);
+
+        ColumnStatistic stat = ExpressionStatisticCalculator.calculate(andOp, statistics);
+
+        Assertions.assertNotNull(stat.getHistogram());
+        assertOnlyBooleanMcvs(stat, 1000);
+        assertBooleanDistribution(stat, 175L, 825L, 0.0);
     }
 
 }

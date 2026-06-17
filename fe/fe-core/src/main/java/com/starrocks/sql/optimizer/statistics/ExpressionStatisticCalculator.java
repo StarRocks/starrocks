@@ -208,15 +208,14 @@ public class ExpressionStatisticCalculator {
             // boolean value distribution. The MCV's true/false counts are treated as the conditional distribution among
             // non-null rows and scaled by (1 - pNull), so pTrue + pFalse + pNull == 1 by construction (independent of how
             // the MCV counts relate to rowCount).
-            if (!childStat.isUnknown() && childStat.getHistogram() != null) {
+
+            if (!childStat.isUnknown() && childStat.getHistogram() != null && child.getType().isBoolean()) {
                 Map<String, Long> mcv = childStat.getHistogram().getMCV();
                 if (mcv != null && (!mcv.isEmpty())) {
                     String trueKey = booleanToMcvValue(true);
                     String falseKey = booleanToMcvValue(false);
-                    // although we expect child operators to be predicates, it might happen that a predicate has non-boolean MCVs
-                    // (e.g visitor is not implemented for child predicate and default visitor returns statistics of first child)
-                    boolean booleanOnly = mcv.keySet().stream().allMatch(k -> k.equals(trueKey) || k.equals(falseKey));
-                    if (booleanOnly && (mcv.containsKey(trueKey) || mcv.containsKey(falseKey))) {
+
+                    if (mcv.containsKey(trueKey) || mcv.containsKey(falseKey)) {
                         long trueCount = mcv.getOrDefault(trueKey, 0L);
                         long falseCount = mcv.getOrDefault(falseKey, 0L);
                         long mcvTotal = trueCount + falseCount;
@@ -291,27 +290,38 @@ public class ExpressionStatisticCalculator {
                 return ColumnStatistic.unknown();
             }
 
+            ColumnStatistic leftStat = operator.getChild(0).accept(this, context);
+            ColumnStatistic rightStat = operator.getChild(1).accept(this, context);
+
+            // For non-null-safe predicates (=, <, >, <=, >=, !=), if either operand is NULL
+            // the result is NULL (SQL three-valued logic). Only <=> is guaranteed non-null.
+            // An unknown operand is treated as contributing no nulls so a known operand's null mass survives.
+            double nullsFraction = 0.0;
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL) {
+                double leftNullFrac = leftStat.isUnknown() ? 0.0 : leftStat.getNullsFraction();
+                double rightNullFrac = rightStat.isUnknown() ? 0.0 : rightStat.getNullsFraction();
+                // Probability that at least one operand is NULL
+                nullsFraction = 1.0 - (1.0 - leftNullFrac) * (1.0 - rightNullFrac);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2);
+
+            if (leftStat.isUnknown() || rightStat.isUnknown()) {
+                return builder.build();
+            }
+
             Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(operator, inputStatistics);
             if (predicateStatistics == null || Double.isNaN(predicateStatistics.getOutputRowCount())) {
                 return ColumnStatistic.unknown();
             }
 
             long inputRows = Math.max(1L, Math.round(inputStatistics.getOutputRowCount()));
-
-            // For non-null-safe predicates (=, <, >, <=, >=, !=), if either operand is NULL
-            // the result is NULL (SQL three-valued logic). Only <=> is guaranteed non-null.
-            long nullRows = 0;
-            double nullsFraction = 0.0;
-            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL) {
-                ColumnStatistic leftStat = operator.getChild(0).accept(this, context);
-                ColumnStatistic rightStat = operator.getChild(1).accept(this, context);
-                double leftNullFrac = leftStat.isUnknown() ? 0.0 : leftStat.getNullsFraction();
-                double rightNullFrac = rightStat.isUnknown() ? 0.0 : rightStat.getNullsFraction();
-                // Probability that at least one operand is NULL
-                nullsFraction = 1.0 - (1.0 - leftNullFrac) * (1.0 - rightNullFrac);
-                nullRows = Math.round(inputRows * nullsFraction);
-            }
-
+            long nullRows = Math.round(inputRows * nullsFraction);
             long nonNullRows = Math.max(0L, inputRows - nullRows);
             long nonNullTrueRows = Math.min(inputRows, Math.round(predicateStatistics.getOutputRowCount()));
             long trueRows = Math.min(Math.max(0L, nonNullTrueRows), nonNullRows);
@@ -326,12 +336,6 @@ public class ExpressionStatisticCalculator {
                         .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
             }
 
-            ColumnStatistic.Builder builder = ColumnStatistic.builder()
-                    .setMinValue(0)
-                    .setMaxValue(1)
-                    .setNullsFraction(nullsFraction)
-                    .setAverageRowSize(operator.getType().getTypeSize())
-                    .setDistinctValuesCount(2);
 
             if (!mcvs.isEmpty()) {
                 builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
