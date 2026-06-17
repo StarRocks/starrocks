@@ -175,6 +175,13 @@ inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* ta
     if (response.failed_tablets_size() == 0) {
         return tablet_mgr->get_tablet_metadata(tablet_id, new_version);
     } else {
+        // Propagate the real publish error so callers can inspect the handler's
+        // actual status code and message (e.g. the missing-unique-id error raised
+        // when a PCU target column is dropped under schema drift), instead of
+        // masking it behind a generic message.
+        if (response.status().status_code() != 0) {
+            return Status(response.status());
+        }
         return Status::InternalError(fmt::format("failed to publish version. tablet_id={} txn_id={} new_version={}",
                                                  tablet_id, txn_id, new_version));
     }
