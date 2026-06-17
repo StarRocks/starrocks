@@ -35,7 +35,7 @@
 #pragma once
 
 #include "cache/mem_cache/page_cache.h"
-#include "storage/rowset/page_handle_fwd.h"
+#include "cache/mem_cache/page_handle_fwd.h"
 
 namespace starrocks {
 

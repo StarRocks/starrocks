@@ -16,12 +16,12 @@
 
 #include <string>
 
+#include "cache/mem_cache/page_handle_fwd.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "formats/parquet/schema.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/rowset/page_handle_fwd.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

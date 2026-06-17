@@ -40,6 +40,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/key_coder.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/predicate_parser.cpp
     primitive/predicate_tree/predicate_tree.cpp
     primitive/storage_ids.cpp
     primitive/union_iterator.cpp

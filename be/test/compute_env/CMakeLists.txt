@@ -61,6 +61,7 @@ add_executable(compute_env_test
         query_cache_test.cpp
         rejected_record_writer_test.cpp
         result_queue_mgr_test.cpp
+        runtime_range_pruner_test.cpp
         ${COMPUTE_ENV_WORKGROUP_TEST_FILES}
         ${COMPUTE_ENV_SPILL_TEST_FILES})
 set_target_properties(compute_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

@@ -29,6 +29,7 @@
 #include "common/object_pool.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
@@ -57,7 +58,6 @@
 #include "storage/primitive/projection_iterator.h"
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/short_key_range_option.h"
-#include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {

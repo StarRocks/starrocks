@@ -29,6 +29,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/utils.h"
@@ -36,7 +37,6 @@
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "storage/runtime_range_pruner.hpp"
 
 namespace starrocks::parquet {
 
