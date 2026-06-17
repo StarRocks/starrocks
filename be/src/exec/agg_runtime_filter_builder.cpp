@@ -70,9 +70,19 @@ MutableColumns extract_group_by_columns(Aggregator* aggregator) {
 struct AggInRuntimeFilterBuilderImpl {
     template <LogicalType ltype>
     RuntimeFilter* operator()(ObjectPool* pool, Aggregator* aggregator, size_t build_expr_order) {
-        auto runtime_filter = InRuntimeFilter<ltype>::create(pool);
         auto group_by_columns = extract_group_by_columns(aggregator);
-        runtime_filter->build(group_by_columns[build_expr_order].get());
+        Column* build_column = group_by_columns[build_expr_order].get();
+        // A constant build column carries a single value spread over column->size() logical rows but
+        // is backed by one physical row. InRuntimeFilter::build() down_casts to the typed/nullable
+        // column and iterates column->size() rows (its is_constant() check is only a DCHECK, compiled
+        // out in release builds), so a ConstColumn would be misinterpreted and overrun its backing
+        // storage. Returning nullptr leaves the merged filter always-true (conservative and correct),
+        // mirroring the ConstColumn handling in AggTopNRuntimeFilterBuilder::update().
+        if (build_column->is_constant()) {
+            return nullptr;
+        }
+        auto runtime_filter = InRuntimeFilter<ltype>::create(pool);
+        runtime_filter->build(build_column);
         return runtime_filter;
     }
 };
