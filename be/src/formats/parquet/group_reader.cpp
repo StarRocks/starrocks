@@ -246,13 +246,13 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         RETURN_IF_ERROR(_emit_output_columns(state, chunk, row_count));
 
         // 7. Append output side columns AFTER emit.
-        //    Use saved row count because emit_physical_columns swaps columns
-        //    out of active_chunk (active_chunk->num_rows() becomes 0).
-        {
-            size_t saved_rows = (*chunk)->num_rows();
-            if (saved_rows > 0) {
-                RETURN_IF_ERROR(_param.scanner_ctx->append_side_columns_to_chunk(chunk, saved_rows));
-            }
+        //    Use *row_count (captured before emit swaps columns out of
+        //    active_chunk) rather than (*chunk)->num_rows() — the latter
+        //    reads the first column's size, which can be 0 when the first
+        //    slot is a partition/not-existed/extended side column that
+        //    hasn't been populated yet.
+        if ((*row_count) > 0) {
+            RETURN_IF_ERROR(_param.scanner_ctx->append_side_columns_to_chunk(chunk, (*row_count)));
         }
         break;
     }
