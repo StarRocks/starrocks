@@ -99,6 +99,7 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
+  agg_state_function_call_expr.cpp
   binary_functions.cpp
   expr_factory_exprs_extension.cpp
   table_function/table_function_factory.cpp

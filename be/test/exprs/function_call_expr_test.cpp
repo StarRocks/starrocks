@@ -18,14 +18,19 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "exprs/agg_state_function_call_expr.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
@@ -48,6 +53,87 @@ public:
     RuntimeState _runtime_state;
     TExprNode expr_node;
 };
+
+namespace {
+
+TAggStateDesc make_sum_agg_state_desc() {
+    TAggStateDesc desc;
+    std::vector<TTypeDesc> arg_types = {gen_type_desc(TPrimitiveType::INT)};
+    desc.__set_agg_func_name("sum");
+    desc.__set_arg_types(arg_types);
+    desc.__set_ret_type(gen_type_desc(TPrimitiveType::BIGINT));
+    desc.__set_result_nullable(false);
+    desc.__set_func_version(1);
+    return desc;
+}
+
+TExprNode make_agg_state_function_node(const std::string& function_name, int num_children,
+                                       std::vector<TTypeDesc> arg_types) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::FUNCTION_CALL);
+    node.__set_num_children(num_children);
+    node.__set_type(gen_type_desc(TPrimitiveType::BIGINT));
+    node.__set_is_nullable(false);
+
+    TFunctionName functionName;
+    functionName.__set_db_name("db");
+    functionName.__set_function_name(function_name);
+
+    TFunction function;
+    function.__set_name(functionName);
+    function.__set_binary_type(TFunctionBinaryType::BUILTIN);
+    function.__set_arg_types(std::move(arg_types));
+    function.__set_ret_type(gen_type_desc(TPrimitiveType::BIGINT));
+    function.__set_has_var_args(false);
+    function.__set_agg_state_desc(make_sum_agg_state_desc());
+    node.__set_fn(function);
+    return node;
+}
+
+TExprNode make_int_literal_node(int64_t value) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::INT_LITERAL);
+    node.__set_num_children(0);
+    node.__set_type(gen_type_desc(TPrimitiveType::INT));
+    node.__set_is_nullable(false);
+
+    TIntLiteral int_literal;
+    int_literal.__set_value(value);
+    node.__set_int_literal(int_literal);
+    return node;
+}
+
+TExprNode make_pi_function_node() {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::FUNCTION_CALL);
+    node.__set_num_children(0);
+    node.__set_type(gen_type_desc(TPrimitiveType::DOUBLE));
+    node.__set_is_nullable(false);
+
+    TFunctionName functionName;
+    functionName.__set_db_name("db");
+    functionName.__set_function_name("pi");
+
+    TFunction function;
+    std::vector<TTypeDesc> arg_types;
+    function.__set_name(functionName);
+    function.__set_binary_type(TFunctionBinaryType::BUILTIN);
+    function.__set_arg_types(arg_types);
+    function.__set_ret_type(gen_type_desc(TPrimitiveType::DOUBLE));
+    function.__set_has_var_args(false);
+    function.__set_fid(10010);
+    node.__set_fn(function);
+    return node;
+}
+
+void assert_bigint_column_value(const ColumnPtr& column, int64_t expected) {
+    ASSERT_EQ(1, column->size());
+    ASSERT_FALSE(column->is_nullable());
+    auto values = ColumnHelper::cast_to<TYPE_BIGINT>(column);
+    ASSERT_EQ(expected, values->get_data()[0]);
+}
+
+} // namespace
 
 TEST_F(VectorizedFunctionCallExprTest, mathPiExprTest) {
     TFunction function;
@@ -306,6 +392,78 @@ TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
     ASSERT_TRUE(st.ok());
     st = expr_context.open(&_runtime_state);
     ASSERT_TRUE(st.ok());
+    expr_context.close(&_runtime_state);
+}
+
+TEST_F(VectorizedFunctionCallExprTest, aggStateFunctionCallDispatchesToDedicatedExpr) {
+    TExpr texpr;
+    texpr.nodes.emplace_back(make_agg_state_function_node("sum_state", 1, {gen_type_desc(TPrimitiveType::INT)}));
+    texpr.nodes.emplace_back(make_int_literal_node(7));
+
+    ObjectPool pool;
+    RuntimeState state;
+    Expr* root_expr = nullptr;
+    ASSERT_OK(ExprFactory::create_expr_tree(&pool, texpr, &root_expr, &state));
+    ASSERT_NE(nullptr, dynamic_cast<AggStateFunctionCallExpr*>(root_expr));
+}
+
+TEST_F(VectorizedFunctionCallExprTest, normalFunctionCallStillDispatchesToVectorizedFunctionCallExpr) {
+    TExpr texpr;
+    texpr.nodes.emplace_back(make_pi_function_node());
+
+    ObjectPool pool;
+    RuntimeState state;
+    Expr* root_expr = nullptr;
+    ASSERT_OK(ExprFactory::create_expr_tree(&pool, texpr, &root_expr, &state));
+    ASSERT_NE(nullptr, dynamic_cast<VectorizedFunctionCallExpr*>(root_expr));
+}
+
+TEST_F(VectorizedFunctionCallExprTest, aggStateFunctionCallEvaluatesStateAndMerge) {
+    AggStateFunctionCallExpr root_expr(
+            make_agg_state_function_node("sum_state_merge", 1, {gen_type_desc(TPrimitiveType::BIGINT)}));
+    AggStateFunctionCallExpr state_expr(
+            make_agg_state_function_node("sum_state", 1, {gen_type_desc(TPrimitiveType::INT)}));
+    MockVectorizedExpr<TYPE_INT> input_expr(make_int_literal_node(7), 1, 7);
+    state_expr.add_child(&input_expr);
+    root_expr.add_child(&state_expr);
+
+    ExprContext expr_context(&root_expr);
+    ASSERT_OK(expr_context.prepare(&_runtime_state));
+    ASSERT_OK(expr_context.open(&_runtime_state));
+
+    auto result_or = root_expr.evaluate_checked(&expr_context, nullptr);
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    assert_bigint_column_value(result_or.value(), 7);
+
+    expr_context.close(&_runtime_state);
+}
+
+TEST_F(VectorizedFunctionCallExprTest, aggStateFunctionCallEvaluatesStateUnionAndMerge) {
+    AggStateFunctionCallExpr root_expr(
+            make_agg_state_function_node("sum_state_merge", 1, {gen_type_desc(TPrimitiveType::BIGINT)}));
+    AggStateFunctionCallExpr union_expr(make_agg_state_function_node(
+            "sum_state_union", 2, {gen_type_desc(TPrimitiveType::BIGINT), gen_type_desc(TPrimitiveType::BIGINT)}));
+    AggStateFunctionCallExpr state_expr1(
+            make_agg_state_function_node("sum_state", 1, {gen_type_desc(TPrimitiveType::INT)}));
+    MockVectorizedExpr<TYPE_INT> input_expr1(make_int_literal_node(7), 1, 7);
+    AggStateFunctionCallExpr state_expr2(
+            make_agg_state_function_node("sum_state", 1, {gen_type_desc(TPrimitiveType::INT)}));
+    MockVectorizedExpr<TYPE_INT> input_expr2(make_int_literal_node(5), 1, 5);
+
+    state_expr1.add_child(&input_expr1);
+    state_expr2.add_child(&input_expr2);
+    union_expr.add_child(&state_expr1);
+    union_expr.add_child(&state_expr2);
+    root_expr.add_child(&union_expr);
+
+    ExprContext expr_context(&root_expr);
+    ASSERT_OK(expr_context.prepare(&_runtime_state));
+    ASSERT_OK(expr_context.open(&_runtime_state));
+
+    auto result_or = root_expr.evaluate_checked(&expr_context, nullptr);
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    assert_bigint_column_value(result_or.value(), 12);
+
     expr_context.close(&_runtime_state);
 }
 

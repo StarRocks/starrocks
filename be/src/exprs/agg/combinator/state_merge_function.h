@@ -115,7 +115,7 @@ public:
 
 private:
     // for nested function, the nested function's context is injected to the parent function's context.
-    FunctionContext* _nested_ctx;
+    FunctionContext* _nested_ctx = nullptr;
 };
 
 } // namespace starrocks

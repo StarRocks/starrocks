@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "common/object_pool.h"
+#include "exprs/agg_state_function_call_expr.h"
 #include "exprs/array_map_expr.h"
 #include "exprs/array_sort_lambda_expr.h"
 #include "exprs/arrow_function_call.h"
@@ -60,7 +61,9 @@ Status expr_factory_non_core_create_post_hook(ObjectPool* pool, const TExprNode&
     switch (texpr_node.node_type) {
     case TExprNodeType::FUNCTION_CALL:
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
-        if (texpr_node.fn.name.function_name == "array_map") {
+        if (texpr_node.__isset.fn && texpr_node.fn.__isset.agg_state_desc) {
+            *expr = pool->add(new AggStateFunctionCallExpr(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "array_map") {
             *expr = pool->add(new ArrayMapExpr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "array_sort_lambda") {
             *expr = pool->add(new ArraySortLambdaExpr(texpr_node));

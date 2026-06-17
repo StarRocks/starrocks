@@ -24,8 +24,6 @@
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/bloom_filter.h"
-#include "exprs/agg/combinator/agg_state_utils.h"
-#include "exprs/agg/combinator/state_function.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
@@ -55,51 +53,21 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const
     return BuiltinFunctions::find_builtin_function(fid);
 }
 
-const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function(const TFunction& fn,
-                                                                    const std::vector<TypeDescriptor>& arg_types,
-                                                                    const TypeDescriptor& return_type,
-                                                                    std::vector<bool> arg_nullables) {
-    if (fn.__isset.agg_state_desc) {
-        const auto& func_name = fn.name.function_name;
-        this->_agg_state_func = AggStateUtils::get_agg_state_function(fn.agg_state_desc, func_name, return_type,
-                                                                      std::move(arg_nullables));
-        if (_agg_state_func == nullptr) {
-            LOG(WARNING) << "VectorizedFunctionCallExpr::_get_function: "
-                         << "failed to create agg state combinator function: " << func_name;
-            return nullptr;
-        }
-        auto execute_func = std::bind(&StateCombinator::execute, _agg_state_func.get(), std::placeholders::_1,
-                                      std::placeholders::_2);
-        auto prepare_func = std::bind(&StateCombinator::prepare, _agg_state_func.get(), std::placeholders::_1,
-                                      std::placeholders::_2);
-        auto close_func =
-                std::bind(&StateCombinator::close, _agg_state_func.get(), std::placeholders::_1, std::placeholders::_2);
-        this->_agg_func_desc = std::make_shared<FunctionDescriptor>(func_name, arg_types.size(), execute_func,
-                                                                    prepare_func, close_func, true, false);
-        return _agg_func_desc.get();
-    } else {
-        return _get_function_by_fid(fn);
-    }
-}
-
 Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
     // parpare result type and arg types
     FunctionContext::TypeDesc return_type = _type;
-    if (!_fn.__isset.fid && !_fn.__isset.agg_state_desc) {
-        return Status::InternalError("Vectorized engine doesn't implement agg state function " +
-                                     _fn.name.function_name);
+    if (!_fn.__isset.fid) {
+        return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);
     }
     std::vector<FunctionContext::TypeDesc> args_types;
-    std::vector<bool> arg_nullblaes;
     for (Expr* child : _children) {
         args_types.push_back(child->type());
-        arg_nullblaes.emplace_back(child->is_nullable());
     }
 
     // initialize function descriptor
-    _fn_desc = _get_function(_fn, args_types, return_type, arg_nullblaes);
+    _fn_desc = _get_function_by_fid(_fn);
     if (_fn_desc == nullptr || _fn_desc->scalar_function == nullptr) {
         return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);
     }
