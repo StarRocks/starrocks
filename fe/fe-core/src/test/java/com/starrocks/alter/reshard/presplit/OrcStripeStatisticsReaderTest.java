@@ -366,10 +366,9 @@ class OrcStripeStatisticsReaderTest {
     @Test
     void readsTimestampStatisticsWithMicroseconds() throws Exception {
         // Sub-second precision must survive: BE keeps microseconds for a plain TIMESTAMP, so the
-        // boundary must too. 1.500123 s: time=1000 ms (second 1), nanos=500123000 (full sub-second).
-        // (Hive TimestampColumnVector contract: nanos[] is the full sub-second; if this ORC version
-        // instead treats nanos[] as the sub-millisecond remainder, write time=1500, nanos=123000 — the
-        // expected rendered value is the same; confirm by running.)
+        // boundary must too. 1.500123 s = time=1000 ms (second 1) + nanos=500123000: a Hive
+        // TimestampColumnVector adds nanos[] (the full sub-second, confirmed for orc-core 1.9.1) onto
+        // the whole second of time[].
         Path orcPath = writeOrc(
                 "struct<event_ts:timestamp>",
                 /*rowCount=*/ 1,

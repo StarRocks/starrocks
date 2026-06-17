@@ -318,6 +318,9 @@ public final class OrcStripeStatisticsReader {
             // wrong data or wrong results (and if a conversion ever yields min > max, the downstream
             // ParquetMetadataSampler treats the row group as fallback rather than emitting a boundary).
             // Modern writers (StarRocks unload, Spark, Hive, ORC >= 1.5) emit minimumUtc and are unaffected.
+            // rejectDateOutsideWindow throws a CHECKED MetaTierUnavailableException that propagates past the
+            // catch(RuntimeException) below (keeping its own message); getMinimumUTC/Variant.of
+            // RuntimeExceptions are wrapped as the data-tier fallback signal — mirroring convertDateStripe.
             LocalDateTime minDateTime = utcTimestampToDateTime(timestampStatistics.getMinimumUTC());
             LocalDateTime maxDateTime = utcTimestampToDateTime(timestampStatistics.getMaximumUTC());
             MetaTierTemporalWindow.rejectDateOutsideWindow(minDateTime.toLocalDate());
