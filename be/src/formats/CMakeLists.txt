@@ -27,6 +27,7 @@ ADD_BE_LIB(FormatCore
 
 target_link_libraries(FormatCore PUBLIC
         ComputeEnv
+        ExecPrimitive
         ExprCore
         RuntimeCore
         FSCore

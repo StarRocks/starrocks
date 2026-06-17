@@ -55,11 +55,11 @@ class ObjectCache;
 
 namespace starrocks::parquet {
 
-struct SplitContext : public HdfsSplitContext {
+struct SplitContext : public FileScanSplitContext {
     FileMetaDataPtr file_metadata;
     SkipRowsContextPtr skip_rows_ctx;
 
-    HdfsSplitContextPtr clone() override {
+    FileScanSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->file_metadata = file_metadata;
         ctx->skip_rows_ctx = skip_rows_ctx;

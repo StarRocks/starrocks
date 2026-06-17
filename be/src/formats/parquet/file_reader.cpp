@@ -142,8 +142,8 @@ Status FileReader::_build_split_tasks() {
         }
 #endif
         auto split_ctx = std::make_unique<SplitContext>();
-        split_ctx->split_start = start_offset;
-        split_ctx->split_end = end_offset;
+        split_ctx->start_offset = start_offset;
+        split_ctx->end_offset = end_offset;
         split_ctx->file_metadata = _file_metadata;
         split_ctx->skip_rows_ctx = _skip_rows_ctx;
         _scanner_ctx->split.split_tasks.emplace_back(std::move(split_ctx));
@@ -156,8 +156,8 @@ Status FileReader::_build_split_tasks() {
 
     if (VLOG_OPERATOR_IS_ON) {
         std::stringstream ss;
-        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->split.split_tasks) {
-            ss << "[" << ctx->split_start << "," << ctx->split_end << "]";
+        for (const FileScanSplitContextPtr& ctx : _scanner_ctx->split.split_tasks) {
+            ss << "[" << ctx->start_offset << "," << ctx->end_offset << "]";
         }
         VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
                       << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size() << ", range = " << ss.str();

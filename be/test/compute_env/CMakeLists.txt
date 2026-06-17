@@ -57,6 +57,7 @@ add_executable(compute_env_test
         load_path_state_helper_test.cpp
         load_path_mgr_test.cpp
         profile_report_worker_test.cpp
+        query/file_scan_split_context_test.cpp
         query/query_scan_helpers_test.cpp
         query_cache_test.cpp
         rejected_record_writer_test.cpp

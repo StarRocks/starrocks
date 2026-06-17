@@ -566,7 +566,7 @@ void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* s
     if (_scanner_ctx == nullptr) return;
     size_t max_split_size = 0;
     for (auto& t : _scanner_ctx->split.split_tasks) {
-        size_t size = (t->split_end - t->split_start);
+        size_t size = (t->end_offset - t->start_offset);
         max_split_size = std::max(max_split_size, size);
         split_tasks->emplace_back(std::move(t));
     }

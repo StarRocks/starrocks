@@ -117,9 +117,9 @@ std::string HiveDataSource::name() const {
 Status HiveDataSource::open(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (_split_context != nullptr) {
-        auto split_context = down_cast<HdfsSplitContext*>(_split_context);
-        _scan_range.offset = split_context->split_start;
-        _scan_range.length = split_context->split_end - split_context->split_start;
+        auto split_context = down_cast<FileScanSplitContext*>(_split_context);
+        _scan_range.offset = split_context->start_offset;
+        _scan_range.length = split_context->end_offset - split_context->start_offset;
     }
 
     if (_scan_range.file_length == 0) {
@@ -804,7 +804,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     _scanner_ctx.file_path = native_file_path;
     _scanner_ctx.file_size = _scan_range.file_length;
     _scanner_ctx.table_location = _scanner_ctx.hive_table->get_base_path();
-    _scanner_ctx.split_context = down_cast<HdfsSplitContext*>(_split_context);
+    _scanner_ctx.split_context = down_cast<FileScanSplitContext*>(_split_context);
 
     // Reset per-range table-specific state before populating.
     _scanner_ctx.table_specific = {};

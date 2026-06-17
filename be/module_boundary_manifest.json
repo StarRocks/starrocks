@@ -311,7 +311,7 @@
     {
       "id": "formatcore",
       "doc_label": "FormatCore",
-      "summary": "Format-oriented core primitives above ComputeEnv, ExprCore, RuntimeCore, FSCore, ChunkCore, ColumnCore, and Types.",
+      "summary": "Format-oriented core primitives above ComputeEnv, ExecPrimitive, ExprCore, RuntimeCore, FSCore, ChunkCore, ColumnCore, and Types.",
       "owned_targets": ["FormatCore"],
       "owned_globs": [
         "be/src/formats/column_evaluator.*",
@@ -342,6 +342,7 @@
       ],
       "allowed_target_deps": [
         "ComputeEnv",
+        "ExecPrimitive",
         "ExprCore",
         "RuntimeCore",
         "FSCore",

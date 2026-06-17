@@ -71,6 +71,7 @@ set(COMPUTE_ENV_QUERY_CACHE_FILES
 
 set(COMPUTE_ENV_QUERY_FILES
     query/connector_scan_mem_share_arbitrator.cpp
+    query/file_scan_split_context.cpp
     query/global_late_materialization_context.cpp
 )
 
