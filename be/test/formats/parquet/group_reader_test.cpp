@@ -5037,8 +5037,8 @@ TEST_F(GroupReaderTest, LateMaterializeSkipRowsCompoundConjunctFiltersAll) {
     // Scanner conjunct on col0: INT32 = 999999 → all rows filtered.
     RuntimeState runtime_state{TQueryGlobals()};
     std::vector<ExprContext*> scanner_ctxs;
-    ASSERT_OK(create_int_eq_conjunct_ctxs(&_pool, &runtime_state, param->read_cols[0].slot_id(), 999999,
-                                          &scanner_ctxs));
+    ASSERT_OK(
+            create_int_eq_conjunct_ctxs(&_pool, &runtime_state, param->read_cols[0].slot_id(), 999999, &scanner_ctxs));
     param->scanner_ctx->conjuncts.scanner_ctxs = scanner_ctxs;
 
     FileMetaData* file_meta;
