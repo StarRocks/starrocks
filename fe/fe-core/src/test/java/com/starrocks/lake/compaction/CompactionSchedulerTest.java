@@ -1094,7 +1094,12 @@ public class CompactionSchedulerTest {
     public void testSchedulePartitionPublishDrivesThroughStartPublishOnly() throws Exception {
         // Set thresholds so the trigger fires.
         int savedDelta = Config.lake_compaction_version_delta_threshold;
+        int savedMaxTasks = Config.lake_compaction_max_tasks;
         Config.lake_compaction_version_delta_threshold = 1;
+        // Give the per-warehouse concurrency budget (B3 gate) a positive limit
+        // independent of alive-node counts so schedulePartitionPublish proceeds to
+        // startPublishOnly instead of being skipped as "warehouse saturated".
+        Config.lake_compaction_max_tasks = 100;
         try {
             long dbId = 100L;
             long tableId = 200L;
@@ -1105,6 +1110,16 @@ public class CompactionSchedulerTest {
             // version=10, lastPublishVisibleVersion=0 → versionDelta=10 ≥ threshold=1 → trigger fires.
             compactionManager.handleLoadingFinished(partition, 10L, System.currentTimeMillis(),
                     new Quantiles(1.0, 2.0, 3.0));
+
+            // B3 budget gate resolves the partition's compute resource before
+            // startPublishOnly; make it return the default resource so the gate passes.
+            new Expectations() {
+                {
+                    warehouseManager.getCompactionComputeResource(anyLong);
+                    result = WarehouseManager.DEFAULT_RESOURCE;
+                    minTimes = 0;
+                }
+            };
 
             // Make startPublishOnly hit the db == null branch immediately.
             new MockUp<GlobalStateMgr>() {
@@ -1132,6 +1147,7 @@ public class CompactionSchedulerTest {
             Assertions.assertNull(compactionManager.getStatistics(partition));
         } finally {
             Config.lake_compaction_version_delta_threshold = savedDelta;
+            Config.lake_compaction_max_tasks = savedMaxTasks;
         }
     }
 
