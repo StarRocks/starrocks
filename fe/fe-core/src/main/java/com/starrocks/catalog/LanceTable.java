@@ -15,6 +15,10 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.thrift.TLanceTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
 
 import java.util.List;
 
@@ -40,5 +44,16 @@ public class LanceTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
+        TLanceTable tLanceTable = new TLanceTable();
+        tLanceTable.setLance_dataset_uri(uri);
+
+        TTableDescriptor tTableDescriptor =
+                new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, name, "");
+        tTableDescriptor.setLanceTable(tLanceTable);
+        return tTableDescriptor;
     }
 }

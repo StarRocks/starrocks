@@ -70,7 +70,9 @@ public class LancePlanTest extends PlanTestBase {
         assertContains(plan, "LanceScanNode");
         assertContains(plan, "TABLE: vectors_table");
 
-        // Verify Thrift scan range params (use_lance_jni_reader and lance_dataset_uri)
+        // Verify Thrift scan range params: JNI reader flag is set and per-split fragment
+        // metadata is carried as binary. The dataset URI now lives on TLanceTable in the
+        // table descriptor (see LanceTable.toThrift).
         com.starrocks.common.Pair<String, com.starrocks.qe.DefaultCoordinator> pair =
                 com.starrocks.utframe.UtFrameUtils.getPlanAndStartScheduling(connectContext, sql);
         java.util.List<com.starrocks.thrift.TScanRangeParams> tScanRangeLocationsList =
@@ -78,7 +80,8 @@ public class LancePlanTest extends PlanTestBase {
         org.junit.jupiter.api.Assertions.assertFalse(tScanRangeLocationsList.isEmpty());
         com.starrocks.thrift.THdfsScanRange hdfsScanRange = tScanRangeLocationsList.get(0).scan_range.hdfs_scan_range;
         org.junit.jupiter.api.Assertions.assertTrue(hdfsScanRange.isUse_lance_jni_reader());
-        org.junit.jupiter.api.Assertions.assertEquals("s3://bucket/vectors", hdfsScanRange.getLance_dataset_uri());
+        org.junit.jupiter.api.Assertions.assertTrue(hdfsScanRange.isSetLance_split_info());
+        org.junit.jupiter.api.Assertions.assertTrue(hdfsScanRange.getLance_split_info().length > 0);
     }
 
     @Test
