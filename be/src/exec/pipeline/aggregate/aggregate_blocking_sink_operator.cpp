@@ -150,6 +150,12 @@ void AggregateBlockingSinkOperator::_build_in_runtime_filters(RuntimeState* stat
         auto* runtime_filter = _aggregator->build_in_filters(state, build_runtime_filters[i]);
         auto* merger = factory()->in_filter_merger(build_runtime_filters[i]->filter_id());
         if (merger->merge(_driver_sequence, desc, runtime_filter)) {
+            // The merged IN filter may have degraded to always-true (e.g. a constant build key, or the
+            // merged set exceeding the pushdown limit). In that case it prunes nothing, so skip
+            // publishing and let the probe side simply apply no filter.
+            if (merger->always_true()) {
+                continue;
+            }
             desc->set_runtime_filter(merger->merged_runtime_filter());
             merged_runtime_filters.emplace_back(desc);
         }
