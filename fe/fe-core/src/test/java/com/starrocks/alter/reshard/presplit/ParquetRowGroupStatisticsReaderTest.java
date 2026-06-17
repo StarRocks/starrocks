@@ -23,6 +23,8 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.format.ColumnOrder;
+import org.apache.parquet.format.TypeDefinedOrder;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
@@ -33,6 +35,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 
 class ParquetRowGroupStatisticsReaderTest {
@@ -532,36 +536,126 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void fixedLenByteArrayDecimalFallsBackToDataTier() throws Exception {
-        // Even with an EXACT precision/scale match, a FIXED_LEN_BYTE_ARRAY-backed decimal is
-        // rejected: parquet-mr footer min/max for byte-array decimals can use unsigned byte
-        // ordering (wrong for negatives) unless a typed sort order was set — which we do not
-        // inspect. Conservative gate → data tier. (The gate rejects at schema inspection before
-        // any row group is read, so all-zero bytes are fine.)
+    void readsFixedLenByteArrayDecimalStatistics() throws Exception {
+        // FLBA(8)-backed DECIMAL(18,2) spanning negative→positive: -2.00, -1.00, 0.00, 1.00.
+        // parquet-mr writes column_orders=TypeDefinedOrder, so the byte-array min/max are ordered by
+        // the signed BINARY_AS_SIGNED_INTEGER_COMPARATOR — the gate accepts and decodes them. The
+        // negative span proves signed (not unsigned) ordering end-to-end, including the raw-footer read.
         Path parquetPath = writeParquet(
                 "message schema { required fixed_len_byte_array(8) d (DECIMAL(18,2)); }",
-                /*rowCount=*/ 1,
-                (group, rowIndex) -> group.append("d", Binary.fromConstantByteArray(new byte[8])));
+                /*rowCount=*/ 4,
+                (group, rowIndex) -> group.append("d", flbaDecimal(BigInteger.valueOf((rowIndex - 2) * 100L), 8)));
 
-        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
-                ParquetRowGroupStatisticsReader.read(
-                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2))));
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("-2.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("1.00", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    /**
+     * Encode {@code unscaled} as a fixed-length, big-endian two's-complement byte array of
+     * {@code byteLen} bytes (sign-extended) — the FIXED_LEN_BYTE_ARRAY layout parquet uses for
+     * DECIMAL. parquet-mr computes the footer min/max with its signed byte-array comparator.
+     */
+    private static Binary flbaDecimal(BigInteger unscaled, int byteLen) {
+        byte[] full = new byte[byteLen];
+        java.util.Arrays.fill(full, (byte) (unscaled.signum() < 0 ? 0xFF : 0x00));
+        byte[] minimal = unscaled.toByteArray();
+        System.arraycopy(minimal, 0, full, byteLen - minimal.length, minimal.length);
+        return Binary.fromConstantByteArray(full);
     }
 
     @Test
-    void binaryBackedDecimalFallsBackToDataTier() throws Exception {
-        // BINARY-backed decimal: same unsigned-byte-order trap as FIXED_LEN → reject (the BINARY
-        // arm only admits the UTF8 string annotation). DECIMAL128(20,2) exactly matches precision/scale.
+    void readsBinaryBackedDecimalStatistics() throws Exception {
+        // BINARY-backed DECIMAL128(20,2) spanning negative→positive: a negative value and a 20-digit
+        // unscaled value (> 64-bit) exercise the variable-length signed decode, the 128-bit path, and
+        // signed (not unsigned) ordering. parquet-mr's column_orders=TypeDefinedOrder makes the
+        // byte-array min/max signed; a decimal stat must NOT be marked truncated (reserved for strings).
+        BigInteger negative = BigInteger.valueOf(-100L);             // -1.00
+        BigInteger large = new BigInteger("99999999999999999999");   // 20-digit unscaled
         Path parquetPath = writeParquet(
                 "message schema { required binary d (DECIMAL(20,2)); }",
-                /*rowCount=*/ 1,
-                (group, rowIndex) -> group.append("d", Binary.fromConstantByteArray(new byte[] {0})));
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", binaryDecimal(rowIndex == 0 ? negative : large)));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        // min is the negative value (proves signed order); max asserted by VALUE (unscaled `large`).
+        Assertions.assertEquals("-1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals(0, new BigDecimal(large, 2).compareTo(
+                new BigDecimal(stats.get(0).getMaxTuple().getValues().get(0).getStringValue())));
+    }
+
+    /** Encode {@code unscaled} as a minimal big-endian two's-complement byte array (variable-length
+     * BINARY DECIMAL layout). parquet-mr computes the footer min/max with its signed comparator. */
+    private static Binary binaryDecimal(BigInteger unscaled) {
+        return Binary.fromConstantByteArray(unscaled.toByteArray());
+    }
+
+    @Test
+    void readsFixedLenByteArrayDecimal128Statistics() throws Exception {
+        // Mirrors StarRocks' own unload: BE encodes DECIMAL128 as FLBA(16). DECIMAL(38,2) with a
+        // 38-digit unscaled value exercises the full 16-byte signed decode — the case that fell to
+        // the data tier before this phase.
+        BigInteger small = BigInteger.valueOf(100L);                                       // 1.00
+        BigInteger large = new BigInteger("99999999999999999999999999999999999999");       // 38-digit unscaled
+        Path parquetPath = writeParquet(
+                "message schema { required fixed_len_byte_array(16) d (DECIMAL(38,2)); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", flbaDecimal(rowIndex == 0 ? small : large, 16)));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("1.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        // Assert the max by VALUE (the unscaled `large` at scale 2), not a hand-counted digit string.
+        Assertions.assertEquals(0, new BigDecimal(large, 2).compareTo(
+                new BigDecimal(stats.get(0).getMaxTuple().getValues().get(0).getStringValue())));
+    }
+
+    @Test
+    void fixedLenByteArrayDecimalScaleMismatchFallsBackToDataTier() throws Exception {
+        // A byte-array decimal still requires an EXACT precision/scale match, independent of the
+        // (TypeDefinedOrder) column order: source DECIMAL(18,2) into a StarRocks DECIMAL64(18,4).
+        Path parquetPath = writeParquet(
+                "message schema { required fixed_len_byte_array(8) d (DECIMAL(18,2)); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("d", flbaDecimal(BigInteger.valueOf((rowIndex + 1) * 100L), 8)));
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2))));
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))));
+    }
+
+    @Test
+    void declaresSignedByteArrayOrderRequiresTypeOrderEntry() {
+        // parquet-mr's high-level writer always emits column_orders, so the "no column_orders /
+        // unknown order → data tier" rejection is verified at the raw-footer-mapping predicate level.
+        ColumnOrder typeOrder = ColumnOrder.TYPE_ORDER(new TypeDefinedOrder());
+        // Footer positively declares TypeDefinedOrder for the leaf → signed order confirmed.
+        Assertions.assertTrue(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 0));
+        // Legacy file with no column_orders → not confirmed.
+        Assertions.assertFalse(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(null, 0));
+        // Entry present but no TypeDefinedOrder set (UNDEFINED order) → not confirmed.
+        Assertions.assertFalse(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(new ColumnOrder()), 0));
+        // Leaf index past the end of the list → not confirmed.
+        Assertions.assertFalse(
+                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 5));
     }
 
     private Path writeParquet(
