@@ -37,17 +37,17 @@ scrape_configs:
 ### mv_refresh_jobs
 
 - Type: Counter
-- Description: Total number of refresh jobs of the materialized view.
+- Description: Total number of refresh jobs triggered for the materialized view. A refresh job corresponds to one user-initiated or scheduled refresh; a single job may execute multiple task runs internally. Each job is counted once when it reaches a terminal state. MERGED task runs (sub-tasks merged into a later batch) are not counted.
 
 ### mv_refresh_total_success_jobs
 
 - Type: Counter
-- Description: Number of successful refresh jobs of the materialized view.
+- Description: Number of refresh jobs that completed successfully. Counted once per job.
 
 ### mv_refresh_total_failed_jobs
 
 - Type: Counter
-- Description: Number of failed refresh jobs of the materialized view.
+- Description: Number of refresh jobs that failed. Counted once per job.
 
 ### mv_refresh_total_empty_jobs
 
@@ -112,4 +112,4 @@ scrape_configs:
 ### mv_refresh_duration
 
 - Type: Histogram
-- Description: Duration of the successful materialized view refresh jobs.
+- Description: Wall-clock duration of refresh jobs, in milliseconds. For multi-batch jobs, measured from the first task run start to the final task run completion.

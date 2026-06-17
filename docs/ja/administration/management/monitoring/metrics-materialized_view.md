@@ -37,17 +37,17 @@ scrape_configs:
 ### mv_refresh_jobs
 
 - Type: Counter
-- Description: マテリアライズドビューのリフレッシュジョブの総数。
+- Description: マテリアライズドビューに対してトリガーされたリフレッシュジョブの総数。1つのリフレッシュジョブはユーザー起動またはスケジュールによる1回のリフレッシュに対応し、内部で複数の Task Run が実行される場合がある。各ジョブは終了状態に達した時点で1回カウントされる。MERGED 状態の Task Run（後のバッチにマージされたサブタスク）はカウントされない。
 
 ### mv_refresh_total_success_jobs
 
 - Type: Counter
-- Description: マテリアライズドビューの成功したリフレッシュジョブの数。
+- Description: 正常完了したリフレッシュジョブの数。ジョブ成功時に1回カウントされる。
 
 ### mv_refresh_total_failed_jobs
 
 - Type: Counter
-- Description: マテリアライズドビューの失敗したリフレッシュジョブの数。
+- Description: 失敗したリフレッシュジョブの数。ジョブ失敗時に1回カウントされる。
 
 ### mv_refresh_total_empty_jobs
 
@@ -112,4 +112,4 @@ scrape_configs:
 ### mv_refresh_duration
 
 - Type: Histogram
-- Description: 成功したマテリアライズドビューのリフレッシュジョブの期間。
+- Description: リフレッシュジョブの実時間（ミリ秒）。マルチバッチジョブの場合、最初の Task Run 開始から最後の Task Run 完了までを計測する。
