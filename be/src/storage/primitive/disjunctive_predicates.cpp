@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/disjunctive_predicates.h"
+#include "storage/primitive/disjunctive_predicates.h"
 
 #include "column/chunk.h"
 

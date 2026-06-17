@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/disjunctive_predicates.h"
+#include "storage/primitive/disjunctive_predicates.h"
 
 #include <gtest/gtest.h>
 
@@ -23,7 +23,7 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "types/logical_type.h"
 #include "types/value_generator.h"
 

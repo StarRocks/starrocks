@@ -29,8 +29,8 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/column_predicate_factory.h"
 #include "storage/primitive/column_or_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 
 namespace starrocks::parquet {
 

@@ -11,15 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#pragma once
-
-#include <cstring>
+#include <sstream>
 
 #include "column/column.h"
 #include "column/column_helper.h"
-#include "common/compiler_util.h"
 #include "common/statusor.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 
 namespace starrocks {
 

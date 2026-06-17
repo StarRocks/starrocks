@@ -14,7 +14,7 @@
 
 #include "storage/column_predicate_inverted_index_fallback.h"
 
-#include "storage/column_expr_predicate.h"
+#include "storage/primitive/column_expr_predicate.h"
 
 namespace starrocks {
 

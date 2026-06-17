@@ -19,7 +19,11 @@ endif()
 
 set(STORAGE_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    column_and_predicate_test.cpp
+    column_or_predicate_test.cpp
+    column_predicate_test.cpp
     column_value_range_test.cpp
+    disjunctive_predicates_test.cpp
     key_coder_test.cpp
     predicate_tree_test.cpp
     projection_iterator_test.cpp

@@ -29,7 +29,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 #include "types/type_descriptor.h"
 #include "types/type_info.h"

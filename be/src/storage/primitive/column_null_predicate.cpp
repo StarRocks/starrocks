@@ -18,8 +18,8 @@
 #include "column/nullable_column.h"
 #include "common/bloom_filter.h"
 #include "gutil/casts.h"
-#include "storage/column_predicate_factory.h"
 #include "storage/primitive/bitmap_index_iterator.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/inverted_index_iterator.h"
 
 namespace starrocks {

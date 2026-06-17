@@ -37,7 +37,7 @@
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "storage/column_expr_predicate.h"
+#include "storage/primitive/column_expr_predicate.h"
 #include "types/type_info.h"
 #include "types/variant_value.h"
 

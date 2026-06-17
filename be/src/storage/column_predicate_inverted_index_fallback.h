@@ -18,8 +18,8 @@
 #include <vector>
 
 #include "roaring/roaring.hh"
-#include "storage/column_predicate_factory.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/column_predicate_factory.h"
 
 namespace starrocks {
 

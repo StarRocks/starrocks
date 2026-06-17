@@ -16,8 +16,8 @@
 
 #include <vector>
 
-#include "storage/conjunctive_predicates.h"
-#include "storage/disjunctive_predicates.h"
+#include "storage/primitive/conjunctive_predicates.h"
+#include "storage/primitive/disjunctive_predicates.h"
 
 namespace starrocks {
 

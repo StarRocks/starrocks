@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/conjunctive_predicates.h"
+#include "storage/primitive/conjunctive_predicates.h"
 
 #include "base/failpoint/fail_point.h"
 #include "column/chunk.h"

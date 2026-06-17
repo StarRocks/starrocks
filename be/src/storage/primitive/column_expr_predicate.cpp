@@ -1,4 +1,4 @@
-#include "storage/column_expr_predicate.h"
+#include "storage/primitive/column_expr_predicate.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <utility>
@@ -11,12 +11,11 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/function_call_expr.h"
 #include "exprs/literal.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/inverted_index_common.h"
 #include "storage/primitive/inverted_index_iterator.h"
 #include "types/logical_type.h"
@@ -324,17 +323,15 @@ StatusOr<std::optional<roaring::Roaring>> ColumnExprPredicate::read_inverted_ind
 
     Expr* expr = with_not ? _expr_ctxs[0]->root()->get_child(0) : _expr_ctxs[0]->root();
 
-    auto* vectorized_function_call =
-            expr->node_type() == TExprNodeType::FUNCTION_CALL ? down_cast<VectorizedFunctionCallExpr*>(expr) : nullptr;
+    const bool is_function_call = expr->node_type() == TExprNodeType::FUNCTION_CALL;
 
     // check if satisfy valid LIKE format
-    valid_like = vectorized_function_call != nullptr &&
-                 LIKE_FN_NAME == boost::algorithm::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
+    valid_like = is_function_call && LIKE_FN_NAME == boost::to_lower_copy(expr->fn().name.function_name) &&
                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
     // check if satisfy valid MATCH format
-    valid_match = vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
+    valid_match = !is_function_call && expr->node_type() == TExprNodeType::MATCH_EXPR &&
                   expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
                   expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
