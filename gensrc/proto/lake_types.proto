@@ -337,6 +337,10 @@ message BundleTabletMetadataPB {
     map<int64, int64> tablet_to_schema = 1; // tablet id -> schema id
     map<int64, TabletSchemaPB> schemas = 2;
     map<int64, PagePointerPB> tablet_meta_pages = 3;
+    // Adler-32 checksum of each tablet's serialized metadata page, keyed by tablet id (same key
+    // as tablet_meta_pages). Written only when lake_enable_protobuf_file_checksum is enabled; absent
+    // for files written by older BEs, in which case readers skip the per-page integrity check.
+    map<int64, uint32> tablet_meta_page_checksum = 4;
 }
 
 message TxnLogPB {

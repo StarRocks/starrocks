@@ -1272,10 +1272,15 @@ TEST_P(LakePartialUpdateTest, test_partial_update_publish_retry) {
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
 
+        // The tablet metadata may be saved with the legacy headerless format or the checksummed
+        // header format depending on lake_enable_protobuf_file_checksum, so inject on both.
         SyncPoint::GetInstance()->SetCallBack("ProtobufFile::save:serialize", [](void* arg) { *(bool*)arg = false; });
+        SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::save:serialize",
+                                              [](void* arg) { *(bool*)arg = false; });
         SyncPoint::GetInstance()->EnableProcessing();
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id).status());
         SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::save:serialize");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::save:serialize");
         SyncPoint::GetInstance()->DisableProcessing();
     }
     // retry publish again

@@ -46,6 +46,29 @@ namespace starrocks {
 
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
+// Magic number for shared-data (lake) tablet metadata / txn log files that carry a
+// FixedFileHeader with an Adler-32 checksum. It is chosen so that its little-endian first
+// on-disk byte is 0xFE, which can never be the first byte of a serialized protobuf message.
+//
+// Rationale (independent of field ordering): every protobuf message begins with a field
+// tag varint, and the wire type is the low 3 bits of that varint, i.e. the low 3 bits of
+// the first byte. 0xFE has low 3 bits == 6, and wire type 6 is not a valid/emitted protobuf
+// wire type (only 0,1,2,3,4,5 exist; 3/4 are the deprecated groups). So no protobuf
+// serializer ever emits a message whose first byte is 0xFE, regardless of which field is
+// serialized first. Readers can therefore distinguish the new checksummed format from a
+// legacy headerless protobuf by inspecting the first byte, with zero false-positive risk.
+// The remaining bytes spell "LAKEMTA". Never reuse OLAP_FIX_HEADER_MAGIC_NUMBER (0) here.
+static const uint64_t LAKE_META_HEADER_MAGIC_NUMBER = 0x41544D454B414CFEULL;
+
+// Flag OR'ed into the high bit of the trailing 8-byte size field of a bundle tablet metadata file
+// to mark the checksummed footer layout, written when lake_enable_protobuf_file_checksum is on:
+//   [bundle_meta][crc32(bundle_meta)][size | LAKE_BUNDLE_META_CHECKSUM_FLAG]
+// versus the legacy footer [bundle_meta][size]. This is a *deterministic* discriminator with zero
+// collision risk: the bundle metadata size is bounded by protobuf's 2GB message limit and so is
+// always far below 2^63, meaning a legacy file can never have this bit set. Readers test the bit to
+// pick the layout and recover the real size by masking it off.
+static const uint64_t LAKE_BUNDLE_META_CHECKSUM_FLAG = 0x8000000000000000ULL;
+
 uint32_t get_olap_string_max_length();
 
 // the max bytes for stored string length

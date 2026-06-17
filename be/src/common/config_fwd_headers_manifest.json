@@ -854,6 +854,7 @@
         "lake_max_garbage_version_distance",
         "enable_strict_delvec_crc_check",
         "lake_clear_corrupted_cache_meta",
+        "lake_enable_protobuf_file_checksum",
         "experimental_enable_lake_capture_tablet_and_rowsets",
         "lake_vacuum_min_batch_delete_size",
         "lake_local_pk_index_unused_threshold_seconds",
