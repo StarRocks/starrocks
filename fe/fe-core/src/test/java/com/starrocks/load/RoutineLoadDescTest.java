@@ -61,4 +61,28 @@ public class RoutineLoadDescTest {
                         "WHERE `a` = 1",
                 desc.toSql());
     }
+
+    @Test
+    public void testToSqlBackquotesSpecialIdentifiers() throws Exception {
+        // Column and partition names containing a backtick must have the embedded backtick
+        // doubled (a`b -> `a``b`); otherwise toSql() produces malformed SQL that fails to
+        // re-parse when the persisted CREATE ROUTINE LOAD statement is deserialized on FE
+        // restart, which would silently drop the routine load description.
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " +
+                        "COLUMNS(`a``b`, `c`=1), " +
+                        "TEMPORARY PARTITION(`p``1`) " +
+                        "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                        "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+
+        String sql = originLoad.toSql();
+        Assertions.assertEquals("COLUMNS(`a``b`, `c` = 1), TEMPORARY PARTITION(`p``1`)", sql);
+
+        // The rendered SQL must round-trip through the parser without losing the description.
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " + sql +
+                        " PROPERTIES (\"desired_concurrent_number\"=\"3\")" +
+                        " FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+        Assertions.assertEquals(sql, reparsed.toSql());
+    }
 }

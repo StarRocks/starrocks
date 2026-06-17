@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -144,7 +145,7 @@ public class RoutineLoadDesc {
     }
 
     private String pack(String str) {
-        return "`" + str + "`";
+        return ParseUtil.backquote(str);
     }
 
     private void castSlotRef(Expr expr) {
