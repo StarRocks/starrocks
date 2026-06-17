@@ -137,6 +137,17 @@ void ScanOperator::close(RuntimeState* state) {
     COUNTER_SET(_tablets_counter,
                 static_cast<int64_t>(_source_factory()->morsel_queue_factory()->num_original_morsels()));
 
+    // TopN reorder (PriorityMorselQueue): how many morsels had a usable bound and how many had
+    // none. SKIP_ALL because all operators share one queue, so each reports the same totals.
+    if (const int64_t eligible = _morsel_queue->reorder_eligible_morsels(); eligible >= 0) {
+        auto* eligible_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TopnReorderEligibleMorsels", TUnit::UNIT,
+                                                        TCounterMergeType::SKIP_ALL);
+        COUNTER_SET(eligible_counter, eligible);
+        auto* no_bound_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TopnReorderNoBoundMorsels", TUnit::UNIT,
+                                                        TCounterMergeType::SKIP_ALL);
+        COUNTER_SET(no_bound_counter, _morsel_queue->reorder_no_bound_morsels());
+    }
+
     _merge_chunk_source_profiles(state);
 
     do_close(state);

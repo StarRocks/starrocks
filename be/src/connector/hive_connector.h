@@ -56,6 +56,16 @@ public:
     void prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
 
+    int32_t topn_reorder_slot_id() const override {
+        return _hdfs_scan_node.__isset.topn_reorder_slot_id ? _hdfs_scan_node.topn_reorder_slot_id : -1;
+    }
+    bool topn_reorder_desc() const override {
+        return _hdfs_scan_node.__isset.topn_reorder_desc && _hdfs_scan_node.topn_reorder_desc;
+    }
+    bool topn_reorder_nulls_first() const override {
+        return _hdfs_scan_node.__isset.topn_reorder_nulls_first && _hdfs_scan_node.topn_reorder_nulls_first;
+    }
+
     friend class HiveDataSource;
 
 protected:

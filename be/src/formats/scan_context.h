@@ -88,6 +88,10 @@ struct FormatScannerStats {
     int64_t total_row_groups = 0;
     int64_t filtered_row_groups = 0;
 
+    // TopN scan-range skip: data files dropped before the footer is read, because the reorder
+    // slot's min/max cannot beat the current TopN runtime filter.
+    int64_t topn_min_max_filtered_scan_ranges = 0;
+
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
 
@@ -146,6 +150,13 @@ struct FormatScannerOptions {
     bool enable_dynamic_prune_scan_range = true;
     bool use_partition_column_value_only = false;
     int64_t connector_max_split_size = 0;
+
+    // TopN scan reorder/skip (ORDER BY <col> [ASC|DESC] LIMIT k): slot id of the leading sort key
+    // used to reorder morsels and skip files by their min/max (-1 = off), plus its sort direction
+    // and null ordering. Filled by HiveDataSource from the provider.
+    int32_t topn_reorder_slot_id = -1;
+    bool topn_reorder_desc = false;
+    bool topn_reorder_nulls_first = false;
 };
 
 // All conjunct contexts and slot metadata derived from the scan plan node.

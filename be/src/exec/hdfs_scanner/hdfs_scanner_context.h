@@ -39,6 +39,7 @@
 #include "storage/column_predicate_factory.h"
 #include "storage/predicate_parser.h"
 #include "storage/primitive/predicate_tree/predicate_tree.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -275,6 +276,17 @@ struct HdfsScannerContext {
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
+
+    // Decode the raw Iceberg endpoints in |value| (date=days, timestamp=micros, int=raw) into the
+    // slot's internal Datum form. Returns false for types without a comparable bound (float/time/
+    // other), writing nothing. Decodes identically to create_min_max_value_column (the agg build).
+    static bool decode_min_max_endpoint(const TypeDescriptor& type, const TExprMinMaxValue& value, Datum* min_out,
+                                        Datum* max_out);
+
+    // TopN scan-range skip: true when this file's min/max on the reorder slot cannot beat the
+    // current TopN runtime filter, so the whole range is dropped before its footer is read. Uses a
+    // throwaway copy of the runtime-filter pruner; never mutates the scanner's own.
+    StatusOr<bool> should_skip_scan_range_by_topn_min_max();
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,

@@ -592,6 +592,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
     public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+    public static final String ENABLE_ICEBERG_TOPN_SCAN_PRUNING = "enable_iceberg_topn_scan_pruning";
     public static final String AGG_IN_FILTER_LIMIT = "agg_in_filter_limit";
     public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
     public static final String ENABLE_JOIN_RUNTIME_FILTER_PUSH_DOWN = "enable_join_runtime_filter_push_down";
@@ -1971,6 +1972,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_TOPN_RUNTIME_FILTER)
     private boolean enableTopNRuntimeFilter = true;
+
+    // Reorder lake (Iceberg) file morsels by per-file min/max of the leading ORDER BY column for
+    // TopN queries (ORDER BY col [ASC|DESC] LIMIT k), so the TopN runtime-filter threshold tightens
+    // early. Off by default.
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_TOPN_SCAN_PRUNING)
+    private boolean enableIcebergTopnScanPruning = false;
 
     @VariableMgr.VarAttr(name = AGG_IN_FILTER_LIMIT, flag = VariableMgr.INVISIBLE)
     private int aggInFilterLimit = 1024;
@@ -4562,6 +4569,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableTopNRuntimeFilter() {
         return enableTopNRuntimeFilter;
+    }
+
+    public boolean isEnableIcebergTopnScanPruning() {
+        return enableIcebergTopnScanPruning;
     }
 
     public int getAggInFilterLimit() {

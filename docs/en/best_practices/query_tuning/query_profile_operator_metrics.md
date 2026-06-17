@@ -260,6 +260,10 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | SubmitTaskTime | Time taken to submit tasks. | 
 | PeakIOTasks | Peak number of IO tasks. | 
 | PeakScanTaskQueueSize | Peak size of the IO task queue. | 
+| MorselQueueType | Type of the morsel queue: `priority_morsel_queue` when Iceberg TopN scan pruning is active for this scan, otherwise `dynamic_morsel_queue`. | 
+| TopnReorderEligibleMorsels | Iceberg TopN scan pruning: files that had a usable per-file min/max for the sort column. | 
+| TopnReorderNoBoundMorsels | Iceberg TopN scan pruning: files without a usable min/max, read normally. | 
+| TopnMinMaxFilteredScanRanges | Iceberg TopN scan pruning: files skipped before their footer was read because their min/max cannot reach the top-k. | 
 
 ### Exchange Operator
 

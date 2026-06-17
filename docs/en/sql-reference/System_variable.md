@@ -701,6 +701,11 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
+### enable_iceberg_topn_scan_pruning
+
+* **Description**: Whether to prune Iceberg data files in `ORDER BY <column> LIMIT <k>` queries by their per-file min/max statistics. When enabled, the scan orders files by the sort column's min/max so the TopN runtime filter tightens earlier, and skips files whose min/max cannot reach the top-k before reading their footer, so fewer files are read. Results are unchanged. Requires `enable_topn_runtime_filter`; the leading sort column must be an integer, date, or datetime type.
+* **Default**: false
+
 ### enable_incremental_mv
 
 * **Description**: Session flag that controls whether the server will plan and keep an in-memory plan for materialized views that use incremental refresh. When enabled, `MaterializedViewAnalyzer.planMVQuery` will proceed for create-MV statements whose refresh scheme is an `IncrementalRefreshSchemeDesc`: it builds the logical and physical plan for the view query and sets the session `enableMVPlanner` flag (`setMVPlanner(true)`). When disabled, planning for incremental-refresh MVs is skipped. Accessible via `isEnableIncrementalRefreshMV()` and `setEnableIncrementalRefreshMv(boolean)` in `SessionVariable`.

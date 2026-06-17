@@ -275,6 +275,16 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_scanner_ctx->can_use_count_optimization() || _scanner_ctx->can_use_min_max_optimization()) {
         return Status::OK();
     }
+    // TopN scan-range skip: the pruner is built above but the footer is not read yet, so drop the
+    // whole file here if its min/max on the reorder slot cannot beat the current runtime filter.
+    {
+        ASSIGN_OR_RETURN(const bool topn_skip, _scanner_ctx->should_skip_scan_range_by_topn_min_max());
+        if (topn_skip) {
+            _scanner_ctx->no_more_chunks = true;
+            _app_stats.topn_min_max_filtered_scan_ranges += 1;
+            return Status::OK();
+        }
+    }
     RETURN_IF_ERROR(do_open(runtime_state));
     VLOG_FILE << "open file success: " << _scanner_ctx->file_path << ", scan range = ["
               << _scanner_ctx->scan_range->offset << ","
@@ -496,6 +506,12 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->expr_filter_timer, _app_stats.expr_filter_ns);
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);
+
+    // TopN scan-range skip: data files dropped pre-footer by the reorder min/max vs RF.
+    if (_app_stats.topn_min_max_filtered_scan_ranges > 0) {
+        auto* topn_skip_counter = ADD_COUNTER(profile->runtime_profile, "TopnMinMaxFilteredScanRanges", TUnit::UNIT);
+        COUNTER_UPDATE(topn_skip_counter, _app_stats.topn_min_max_filtered_scan_ranges);
+    }
 
     DataCacheHitRateCounter::instance()->update_page_cache_stat(_app_stats.page_cache_read_counter,
                                                                 _app_stats.page_read_counter);

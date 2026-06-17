@@ -14,11 +14,20 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+
 public class ScanOptimizeOption {
     private boolean canUseAnyColumn;
     private boolean canUseMinMaxOpt;
     private boolean usePartitionColumnValueOnly;
     private boolean canUseCountOpt;
+
+    // TopN scan reorder (ORDER BY <col> [ASC|DESC] LIMIT k): the leading sort-key column. Its
+    // min/max per file is used to order morsels (best first) and to drop whole files against the
+    // TopN runtime filter. null means this is off for the scan.
+    private ColumnRefOperator topnReorderKey;
+    private boolean topnReorderDesc;
+    private boolean topnReorderNullsFirst;
 
     public void setCanUseAnyColumn(boolean v) {
         canUseAnyColumn = v;
@@ -52,12 +61,33 @@ public class ScanOptimizeOption {
         return canUseCountOpt;
     }
 
+    public void setTopnReorder(ColumnRefOperator key, boolean desc, boolean nullsFirst) {
+        this.topnReorderKey = key;
+        this.topnReorderDesc = desc;
+        this.topnReorderNullsFirst = nullsFirst;
+    }
+
+    public ColumnRefOperator getTopnReorderKey() {
+        return topnReorderKey;
+    }
+
+    public boolean isTopnReorderDesc() {
+        return topnReorderDesc;
+    }
+
+    public boolean isTopnReorderNullsFirst() {
+        return topnReorderNullsFirst;
+    }
+
     public ScanOptimizeOption copy() {
         ScanOptimizeOption opt = new ScanOptimizeOption();
         opt.canUseAnyColumn = this.canUseAnyColumn;
         opt.canUseMinMaxOpt = this.canUseMinMaxOpt;
         opt.usePartitionColumnValueOnly = this.usePartitionColumnValueOnly;
         opt.canUseCountOpt = this.canUseCountOpt;
+        opt.topnReorderKey = this.topnReorderKey;
+        opt.topnReorderDesc = this.topnReorderDesc;
+        opt.topnReorderNullsFirst = this.topnReorderNullsFirst;
         return opt;
     }
 }

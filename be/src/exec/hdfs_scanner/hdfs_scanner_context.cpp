@@ -22,6 +22,8 @@
 #include "column/datum_convert.h"
 #include "column/runtime_type_traits.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "storage/primitive/zone_map_detail.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/timestamp_value.h"
@@ -309,6 +311,146 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
         }
     }
     return col;
+}
+
+bool HdfsScannerContext::decode_min_max_endpoint(const TypeDescriptor& type, const TExprMinMaxValue& value,
+                                                 Datum* min_out, Datum* max_out) {
+    if (value.type == TExprNodeType::NULL_LITERAL) {
+        return false;
+    }
+    switch (type.type) {
+#define DECODE_INT_ENDPOINT(T)                                    \
+    case T:                                                       \
+        *min_out = Datum((RunTimeCppType<T>)value.min_int_value); \
+        *max_out = Datum((RunTimeCppType<T>)value.max_int_value); \
+        return true;
+        DECODE_INT_ENDPOINT(TYPE_BOOLEAN)
+        DECODE_INT_ENDPOINT(TYPE_TINYINT)
+        DECODE_INT_ENDPOINT(TYPE_SMALLINT)
+        DECODE_INT_ENDPOINT(TYPE_INT)
+        DECODE_INT_ENDPOINT(TYPE_BIGINT)
+#undef DECODE_INT_ENDPOINT
+    case TYPE_DATE:
+        *min_out = Datum(DateValue::from_days_since_unix_epoch(value.min_int_value));
+        *max_out = Datum(DateValue::from_days_since_unix_epoch(value.max_int_value));
+        return true;
+    case TYPE_DATETIME: {
+        // Same micros->TimestampValue decode as create_min_max_value_column.
+        auto to_ts = [](int64_t micros) {
+            constexpr int64_t kMicrosPerSecond = 1000000L;
+            TimestampValue ts;
+            int64_t seconds = micros / kMicrosPerSecond;
+            int64_t microseconds = micros % kMicrosPerSecond;
+            if (microseconds < 0) {
+                microseconds += kMicrosPerSecond;
+                --seconds;
+            }
+            ts.from_unix_second(seconds, microseconds);
+            return ts;
+        };
+        *min_out = Datum(to_ts(value.min_int_value));
+        *max_out = Datum(to_ts(value.max_int_value));
+        return true;
+    }
+    default:
+        // float/double (NaN, not eligible), time, decimal/string (absent from min_max_values).
+        return false;
+    }
+}
+
+StatusOr<bool> HdfsScannerContext::should_skip_scan_range_by_topn_min_max() {
+    const int32_t slot_id = options.topn_reorder_slot_id;
+    if (slot_id < 0 || predicates.runtime_filter_scan_range_pruner == nullptr || scan_range == nullptr) {
+        return false;
+    }
+    if (!scan_range->__isset.min_max_values) {
+        return false;
+    }
+    auto it = scan_range->min_max_values.find(slot_id);
+    if (it == scan_range->min_max_values.end()) {
+        return false;
+    }
+    const TExprMinMaxValue& value = it->second;
+
+    const SlotDescriptor* reorder_slot = nullptr;
+    if (tuple_desc != nullptr) {
+        for (SlotDescriptor* s : tuple_desc->slots()) {
+            if (s->id() == slot_id) {
+                reorder_slot = s;
+                break;
+            }
+        }
+    }
+    if (reorder_slot == nullptr) {
+        return false;
+    }
+
+    // NULL handling. An all-null file has no numeric bound, so never skip it. With NULLS FIRST a
+    // file that has any null may hold top-k rows, so never skip it either.
+    if (value.all_null) {
+        return false;
+    }
+    if (value.has_null && options.topn_reorder_nulls_first) {
+        return false;
+    }
+
+    Datum file_min;
+    Datum file_max;
+    if (!decode_min_max_endpoint(reorder_slot->type(), value, &file_min, &file_max)) {
+        return false; // type without a comparable bound -> no skip
+    }
+    ZoneMapDetail detail(file_min, file_max, value.has_null);
+
+    bool skip = false;
+
+    // (a) An RF that already arrived when the scanner context was built is folded into the predicate
+    //     tree as a min/max range on the sort column, not into the pruner. Use only the root-level
+    //     (immediate) predicates: they form a true AND, so testing the file's zone map against each of
+    //     them is safe. The full map also flattens leaves out of OR nodes (a < 5 OR a > 1000 becomes
+    //     [a < 5, a > 1000]); AND-testing those would drop a file that matches through one arm, which
+    //     is a wrong result. OR predicates are left to the footer skip, which keeps their structure.
+    //     For ConnectorPredicateParser the predicate cid equals the slot id.
+    {
+        const auto& cid_to_preds = predicates.predicate_tree.get_immediate_column_predicate_map();
+        if (auto it_preds = cid_to_preds.find(slot_id); it_preds != cid_to_preds.end()) {
+            for (const auto* pred : it_preds->second) {
+                if (!pred->zone_map_filter(detail)) {
+                    skip = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // (b) An RF that arrives later sits in the pruner. Probe a throwaway copy, not the scanner's own
+    //     pruner: update_range_if_arrived changes its arrived/version state, and the Parquet footer
+    //     path copies that pruner for its own row-group skip. Mutating the original here would mark
+    //     this RF version as consumed and suppress that skip.
+    if (!skip) {
+        RuntimeScanRangePruner probe = *predicates.runtime_filter_scan_range_pruner;
+        Status st = probe.update_range_if_arrived(
+                global_dictmaps,
+                [&](int cid, const std::vector<const ColumnPredicate*>& preds) -> Status {
+                    if (cid != slot_id) {
+                        return Status::OK();
+                    }
+                    // AND zone-map test, same as PredicateFilterEvaluatorUtils::zonemap_satisfy but
+                    // without the parquet GroupReader visitor.
+                    for (const auto* pred : preds) {
+                        if (!pred->zone_map_filter(detail)) {
+                            skip = true;
+                            break;
+                        }
+                    }
+                    return Status::OK();
+                },
+                /*force=*/true, /*raw_read_rows=*/0);
+        if (st.is_end_of_file()) {
+            return true; // RF is always-false -> drop the whole file
+        }
+        RETURN_IF_ERROR(st);
+    }
+    return skip;
 }
 
 Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {

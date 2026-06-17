@@ -18,6 +18,7 @@
 #include <functional>
 
 #include "exec/pipeline/scan/dynamic_morsel_queue_builder.h"
+#include "exec/pipeline/scan/priority_morsel_queue.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 
 namespace starrocks::connector {
@@ -51,6 +52,15 @@ StatusOr<pipeline::MorselQueueBuilderPtr> DataSourceProvider::convert_scan_range
             return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
                    down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
         });
+    }
+
+    // TopN scan reorder: order morsels by the reorder slot's min/max with a priority queue. Only
+    // when this provider does not already impose an order (partition/bucket); the FE rule excludes
+    // those scans, so this never overlaps with the stable_sorts above.
+    if (topn_reorder_slot_id() >= 0 && !output_chunk_by_bucket() && !partition_order_hint().has_value()) {
+        return pipeline::make_priority_morsel_queue_builder(std::move(morsels), has_more_morsel, scan_parallelism,
+                                                            topn_reorder_slot_id(), topn_reorder_desc(),
+                                                            topn_reorder_nulls_first());
     }
 
     return pipeline::make_dynamic_morsel_queue_builder(std::move(morsels), has_more_morsel, scan_parallelism);

@@ -59,6 +59,7 @@ import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewri
 import com.starrocks.sql.optimizer.rule.transformation.HoistHeavyCostExprsUponTopnRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.IcebergTopNScanPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.InnerToSemiRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.LargeInPredicateToJoinRule;
@@ -716,6 +717,8 @@ public class QueryOptimizer extends Optimizer {
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
+        // Must run after IcebergEqualityDeleteRewriteRule (above) so it never marks a rewritten scan.
+        scheduler.rewriteOnce(tree, rootTaskContext, new IcebergTopNScanPruneRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
         Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());

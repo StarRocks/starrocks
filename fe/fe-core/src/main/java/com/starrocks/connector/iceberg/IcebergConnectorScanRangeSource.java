@@ -129,6 +129,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
     private final boolean usedForDelete;
+    // Slot id of the leading ORDER BY column for TopN scan reorder/skip (-1 = disabled). When set,
+    // per-file min/max is shipped (so BE can order morsels and skip files) even if useMinMaxOpt is off.
+    private int topnReorderSlotId = -1;
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
@@ -164,6 +167,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.partitionIdGenerator = partitionIdGenerator;
         this.useMinMaxOpt = useMinMaxOpt;
         this.usedForDelete = usedForDelete;
+    }
+
+    public void setTopnReorderSlotId(int slotId) {
+        this.topnReorderSlotId = slotId;
     }
 
     public void clearScannedFiles() {
@@ -422,7 +429,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
-        if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
+        if ((useMinMaxOpt || topnReorderSlotId >= 0) && file.nullValueCounts() != null && file.valueCounts() != null) {
             // fill min/max value
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
                     table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
