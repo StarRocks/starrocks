@@ -451,13 +451,13 @@ description: "Alphabetical s"
 
 - 単位: ミリ秒
 - タイプ: ヒストグラム
-- 説明: 受理されたサンプリングベースのタブレット事前分割 reshard ジョブの `FINISHED` をコーディネーターが待機した壁時計時間。両方の本番経路で更新されます — INSERT-from-FILES の hook（`StmtExecutor` で `StatementPlanner.plan` が取り込みトランザクションを開く前に呼ばれる）と Broker Load の hook（`BrokerLoadJob.createLoadingTask` で `beginTxn` が `T_load` を開く前に呼ばれる）。テスト用の `runPreSplit` 同期待機ラッパーでも更新されます。いずれの経路でも、トリガーとなった取り込み自身が分割後のタブレットレイアウトに対してプランされます。
+- 説明: 受理されたサンプリングベースのタブレット事前分割 reshard ジョブの `FINISHED` をコーディネーターが待機した壁時計時間。すべての本番取り込み種別で更新されます — INSERT-from-FILES と INSERT-from-table（いずれも `InsertPreSplitHook` 経由、`StmtExecutor` で `StatementPlanner.plan` が取り込みトランザクションを開く前に呼ばれる）、および Broker Load（`BrokerLoadPreSplitHook` 経由、`BrokerLoadJob.createLoadingTask` で `beginTxn` が `T_load` を開く前に呼ばれる）で、いずれも共有の `PreSplitFlow` を通じて同期待機します。テスト用の `runPreSplit` 同期待機ラッパーでも更新されます。いずれの経路でも、トリガーとなった取り込み自身が分割後のタブレットレイアウトに対してプランされます。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: サンプリングベースのタブレット事前分割で post-submit ハードキャップが発火した累計回数。受理された reshard ジョブが `tablet_pre_split_post_submit_wait_seconds` 以内に `FINISHED` に到達しなかったときにインクリメントされます。INSERT-from-FILES 本番経路でタイムアウト時に発火します（INSERT は**中止せずに継続実行**し、その時点で可視のタブレットレイアウトに対してプランされます — デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウトとなり得ます。INSERT 自体は中止されないため、`tablet_pre_split_load_abort` はインクリメントされません）。テスト用の `runPreSplit` 同期待機ラッパーでも発火します。Broker Load 本番経路は待機しないため、このカウンタは更新されません。
+- 説明: サンプリングベースのタブレット事前分割で post-submit ハードキャップが発火した累計回数。受理された reshard ジョブが `tablet_pre_split_post_submit_wait_seconds` 以内に `FINISHED` に到達しなかったときにインクリメントされます。すべての本番取り込み種別でタイムアウト時に発火します — INSERT-from-FILES、INSERT-from-table、および Broker Load（いずれも共有の `PreSplitFlow` を通じて同期待機）。テスト用の `runPreSplit` 同期待機ラッパーでも発火します。取り込みはこのとき**中止せずに継続実行**し、その時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウト）。取り込み自体は中止されないため、`tablet_pre_split_load_abort` はインクリメントされません。
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
