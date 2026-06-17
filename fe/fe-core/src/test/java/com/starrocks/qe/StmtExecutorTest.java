@@ -20,6 +20,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
@@ -271,5 +272,44 @@ public class StmtExecutorTest {
         String filesSql = filesProfile.getChild("Summary").getInfoString(ProfileManager.SQL_STATEMENT);
         Assertions.assertFalse(filesSql.contains("PROFILE_SECRET"));
         Assertions.assertTrue(filesSql.contains("***"));
+    }
+
+    @Test
+    public void testProcessQueryStatisticsUpdatesReturnRowsForOutfileOnly() {
+        // OUTFILE (and Arrow Flight) queries do not deliver result rows through the normal row
+        // batches, so context.returnRows is never accumulated from batch row sizes and must be taken
+        // from the BE-reported statistics.returnedRows. Regular queries already count rows per batch,
+        // so they must NOT pull from statistics here, otherwise the count would be doubled.
+
+        // 1) OUTFILE query: returnRows should come from statistics.returnedRows (empty result batch).
+        ConnectContext outfileCtx = UtFrameUtils.createDefaultCtx();
+        StatementBase outfileStmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        outfileStmt.setOrigStmt(new OriginStatement("select 1", 0));
+        StmtExecutor outfileExecutor = new StmtExecutor(outfileCtx, outfileStmt);
+
+        RowBatch outfileBatch = new RowBatch();
+        PQueryStatistics outfileStats = new PQueryStatistics();
+        outfileStats.returnedRows = 42L;
+        outfileBatch.setQueryStatistics(outfileStats);
+
+        outfileCtx.resetReturnRows();
+        outfileExecutor.processQueryStatisticsFromResult(outfileBatch, null, true);
+        Assertions.assertEquals(42L, outfileCtx.getReturnRows());
+
+        // 2) Regular (non-OUTFILE, non-Arrow-Flight) query: returnRows must NOT be pulled from
+        //    statistics; it stays at whatever the per-batch loop accumulated (0 here).
+        ConnectContext plainCtx = UtFrameUtils.createDefaultCtx();
+        StatementBase plainStmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        plainStmt.setOrigStmt(new OriginStatement("select 1", 0));
+        StmtExecutor plainExecutor = new StmtExecutor(plainCtx, plainStmt);
+
+        RowBatch plainBatch = new RowBatch();
+        PQueryStatistics plainStats = new PQueryStatistics();
+        plainStats.returnedRows = 99L;
+        plainBatch.setQueryStatistics(plainStats);
+
+        plainCtx.resetReturnRows();
+        plainExecutor.processQueryStatisticsFromResult(plainBatch, null, false);
+        Assertions.assertEquals(0L, plainCtx.getReturnRows());
     }
 }
