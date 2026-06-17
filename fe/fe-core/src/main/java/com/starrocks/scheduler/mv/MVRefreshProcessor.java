@@ -202,8 +202,9 @@ public abstract class MVRefreshProcessor {
 
     /**
      * Generate the next task run to be processed and set it to the nextTaskRun field.
+     * Returns true iff this call enqueued a successor task run, false otherwise.
      */
-    public abstract void generateNextTaskRunIfNeeded();
+    public abstract boolean generateNextTaskRunIfNeeded();
 
     /**
      * Whether this refresh will spawn another batch task run after the current one.

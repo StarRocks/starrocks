@@ -17,6 +17,8 @@ package com.starrocks.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -34,6 +36,7 @@ import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
@@ -55,6 +58,9 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -194,22 +200,33 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 Preconditions.checkState(mv != null);
                 mvMetricsEntity = MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
                 this.taskRunState = retryProcessTaskRun(context);
+                boolean spawnedNext = false;
                 if (this.taskRunState == Constants.TaskRunState.SUCCESS) {
                     logger.info("Refresh materialized view {} finished successfully.", mv.getName());
                     // advance LAST_FRESHNESS_CONFIRMED_AT even when the refresh changed no version
                     mvRefreshProcessor.confirmFreshness();
-                    // if success, try to generate next task run
-                    mvRefreshProcessor.generateNextTaskRunIfNeeded();
+                    spawnedNext = mvRefreshProcessor.generateNextTaskRunIfNeeded();
+                    if (!spawnedNext && mvRefreshProcessor.hasNextBatchRun()) {
+                        // A pending next batch could not be enqueued (e.g. the task-run queue is full): the
+                        // refresh is incomplete, so fail it through the normal failure path below, keeping the
+                        // metric, task history and materialized_view_refresh_jobs consistent on FAILED.
+                        throw new DmlException("Materialized view %s refresh incomplete: " +
+                                "a pending batch could not be scheduled", mv.getName());
+                    }
                 } else {
                     logger.info("Refresh materialized view {} failed with state: {}.", mv.getName(), taskRunState);
                 }
-                // update metrics
-                mvMetricsEntity.increaseRefreshJobStatus(taskRunState);
+                // Count the job once on its terminal run; intermediate successful batches are not counted.
+                if (!spawnedNext) {
+                    mvMetricsEntity.increaseRefreshJobStatus(this.taskRunState);
+                    recordRefreshJobDuration(mvMetricsEntity);
+                }
                 connectContext.getState().setOk();
             }
         } catch (Exception e) {
             if (mvMetricsEntity != null) {
                 mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
+                recordRefreshJobDuration(mvMetricsEntity);
             }
             connectContext.getState().setError(e.getMessage());
             throw e;
@@ -320,8 +337,6 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         final MVRefreshProcessor.ProcessExecPlan processExecPlan = mvRefreshProcessor.getProcessExecPlan(taskRunContext);
         if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
             logger.info("MV {} refresh task skipped, no partitions to refresh", mv.getName());
-            long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
-            mvMetricsEntity.updateRefreshDuration(elapsed);
             return Constants.TaskRunState.SKIPPED;
         }
 
@@ -329,7 +344,6 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         Constants.TaskRunState result = mvRefreshProcessor.execProcessExecPlan(taskRunContext, processExecPlan, executor);
         long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
         logger.info("refresh mv success, cost time(ms): {}", DebugUtil.DECIMAL_FORMAT_SCALE_3.format(elapsed));
-        mvMetricsEntity.updateRefreshDuration(elapsed);
         return result;
     }
 
@@ -450,5 +464,44 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     @VisibleForTesting
     public RuntimeProfile getRuntimeProfile() {
         return runtimeProfile;
+    }
+
+    // Records the job's wall-clock duration once, on the terminal run, reusing the exact roll-up the
+    // materialized_view_refresh_jobs system table uses so the metric and the table never diverge.
+    private void recordRefreshJobDuration(IMaterializedViewMetricsEntity metricsEntity) {
+        try {
+            if (mvTaskRunContext == null || mvTaskRunContext.getStatus() == null) {
+                return;
+            }
+            String jobId = mvTaskRunContext.getStatus().getStartTaskRunId();
+            if (Strings.isNullOrEmpty(jobId)) {
+                return;
+            }
+            List<TaskRunStatus> batch = Lists.newArrayList();
+            // Include archived runs: a long multi-batch refresh may have had early batches archived out of
+            // in-memory history before this terminal run, and the system table's roll-up also reads archived history.
+            String dbName = db == null ? null : db.getFullName();
+            if (dbName != null) {
+                String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+                for (TaskRunStatus s : GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunHistory()
+                        .lookupLastJobOfTasks(dbName, Collections.singleton(mvTaskName))) {
+                    if (jobId.equals(s.getStartTaskRunId()) && s.getState() != Constants.TaskRunState.MERGED) {
+                        batch.add(s);
+                    }
+                }
+            }
+            batch.add(mvTaskRunContext.getStatus());
+            // fromTaskRuns picks first/last by createTime — sort the same way.
+            batch.sort(Comparator.comparingLong(TaskRunStatus::getCreateTime));
+            ShowMaterializedViewStatus.RefreshJobStatus rjs = ShowMaterializedViewStatus.fromTaskRuns(batch);
+            long startBasis = rjs.getMvRefreshProcessTime() > 0
+                    ? rjs.getMvRefreshProcessTime() : rjs.getMvRefreshStartTime();
+            // The terminal run's finishTime may not be persisted yet; fall back to now().
+            long endMs = rjs.getMvRefreshEndTime() > 0 ? rjs.getMvRefreshEndTime() : System.currentTimeMillis();
+            long wallMs = Math.max(0L, endMs - startBasis);
+            metricsEntity.updateRefreshDuration(wallMs);
+        } catch (Exception e) {
+            logger.warn("skip refresh job duration metric for mv {}", mv.getName(), e);
+        }
     }
 }
