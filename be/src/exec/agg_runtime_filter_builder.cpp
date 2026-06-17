@@ -96,11 +96,10 @@ bool AggInRuntimeFilterMerger::merge(size_t seq, RuntimeFilterBuildDescriptor* d
     // A null builder result means this driver could not contribute its keys to the IN filter (e.g. a
     // constant build column, see AggInRuntimeFilterBuilder). An IN filter is only correct if it
     // contains every build-side key, so a single missing contribution forces the whole filter to
-    // always-true (no pruning). Return true so the caller observes the finished state and skips
-    // publishing via the always_true() check.
+    // always-true (no pruning); return false so it is never published.
     if (in_rf == nullptr) {
         _always_true = true;
-        return true;
+        return false;
     }
     if (_always_true) {
         return false;
@@ -117,7 +116,7 @@ bool AggInRuntimeFilterMerger::merge(size_t seq, RuntimeFilterBuildDescriptor* d
         });
         if (total_size > config::max_pushdown_conditions_per_column) {
             _always_true = true;
-            return true;
+            return false;
         }
         for (size_t i = 1; i < _target_filters.size(); ++i) {
             _target_filters[0]->merge(_target_filters[i]);
