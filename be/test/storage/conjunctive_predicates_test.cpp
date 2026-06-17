@@ -39,6 +39,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/predicate_parser.h"
 #include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/predicate_parser.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 #include "types/logical_type.h"

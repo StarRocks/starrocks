@@ -45,6 +45,8 @@
 #include "base/simd/simd.h"
 #include "base/string/faststring.h"
 #include "base/utility/alignment.h"
+#include "cache/mem_cache/page_handle.h"
+#include "cache/mem_cache/page_handle_fwd.h"
 #include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/config_rowset_fwd.h"
@@ -55,8 +57,6 @@
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/options.h"
-#include "storage/rowset/page_handle.h"
-#include "storage/rowset/page_handle_fwd.h"
 
 namespace starrocks {
 

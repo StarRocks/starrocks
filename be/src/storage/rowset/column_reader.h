@@ -40,6 +40,7 @@
 #include <utility>
 
 #include "base/concurrency/once.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
@@ -50,7 +51,6 @@
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
 #include "types/datum.h"

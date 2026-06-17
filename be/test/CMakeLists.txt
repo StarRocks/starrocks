@@ -492,7 +492,6 @@ SET(DW_TEST_FILES
     ./storage/meta_reader_test.cpp
     ./storage/non_retryable_load_errors_test.cpp
     ./storage/olap_meta_reader_test.cpp
-    ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/persistent_index_consistency_test.cpp
     ./storage/persistent_index_load_executor_test.cpp
     ./storage/persistent_index_snapshot_load_test.cpp
@@ -529,7 +528,6 @@ SET(DW_TEST_FILES
     ./storage/rowset_merger_test.cpp
     ./storage/rowset/metadata_cache_test.cpp
     ./storage/rowset/ordinal_page_index_test.cpp
-    ./storage/rowset/page_handle_test.cpp
     ./storage/rowset/page_io_test.cpp
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp

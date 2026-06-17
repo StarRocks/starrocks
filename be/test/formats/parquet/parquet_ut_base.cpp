@@ -23,7 +23,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_parser.h"
+#include "storage/primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
