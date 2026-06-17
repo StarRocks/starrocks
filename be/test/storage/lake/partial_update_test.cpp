@@ -16,14 +16,7 @@
 
 #include <random>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "column/array_column.h"
->>>>>>> 1ccf93c6fb ([BugFix] Fix lake PCU crash and silent corruption under schema drift (#74005))
 #include "column/chunk.h"
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
@@ -47,6 +40,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
