@@ -1,5 +1,6 @@
 #include "storage/column_expr_predicate.h"
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <utility>
 
 #include "column/column_helper.h"
@@ -16,7 +17,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate_factory.h"
-#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/primitive/inverted_index_common.h"
+#include "storage/primitive/inverted_index_iterator.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -327,7 +329,7 @@ StatusOr<std::optional<roaring::Roaring>> ColumnExprPredicate::read_inverted_ind
 
     // check if satisfy valid LIKE format
     valid_like = vectorized_function_call != nullptr &&
-                 LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
+                 LIKE_FN_NAME == boost::algorithm::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
