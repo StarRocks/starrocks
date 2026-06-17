@@ -371,6 +371,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             throw e;
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
+            // the MV refresh uses its own fresh ConnectContext whose audit builder starts at the default value.
+            executor.recordExecStatsIntoContext();
             auditAfterExec(mvTaskRunContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             executor.addFinishedQueryDetail();
         }

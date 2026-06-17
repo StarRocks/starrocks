@@ -1356,7 +1356,7 @@ public class StmtExecutor {
      * some statements may execute multiple statement which will also create multiple StmtExecutor, so here
      * we accumulate them into the ConnectContext instead of using the last one
      */
-    private void recordExecStatsIntoContext() {
+    public void recordExecStatsIntoContext() {
         PQueryStatistics execStats = getQueryStatisticsForAuditLog();
         context.getAuditEventBuilder().addCpuCostNs(execStats.getCpuCostNs() != null ? execStats.getCpuCostNs() : 0);
         context.getAuditEventBuilder()
