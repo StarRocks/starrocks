@@ -43,6 +43,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -94,11 +95,12 @@ public class LanceScanNode extends ScanNode {
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_lance_jni_reader(true);
-        hdfsScanRange.setLance_dataset_uri(lanceTable.getUri());
-        hdfsScanRange.setLance_split_info("{\"fragment_ids\": [0]}");
+        // lance_dataset_uri now lives on TLanceTable in TTableDescriptor (see LanceTable.toThrift);
+        // the per-split payload only carries fragment metadata.
+        hdfsScanRange.setLance_split_info("{\"fragment_ids\": [0]}".getBytes(StandardCharsets.UTF_8));
         hdfsScanRange.setFile_length(0);
         hdfsScanRange.setLength(0);
-        hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
+        hdfsScanRange.setFile_format(THdfsFileFormat.LANCE);
 
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
