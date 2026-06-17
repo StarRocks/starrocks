@@ -1,0 +1,44 @@
+-- name: test_parse_json_throw_exception
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+-- result:
+-- !result
+create table t_pj (id int, s varchar(100)) properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_pj values (1, '{"a": 1}'), (2, '{'), (3, '[1,2,3]'), (4, '{"a":}');
+-- result:
+-- !result
+select id, get_json_string(s, '$.a') from t_pj order by id;
+-- result:
+[REGEX].*Expecting item.*
+-- !result
+select id, parse_json(s) from t_pj order by id;
+-- result:
+[REGEX].*Expecting item.*
+-- !result
+create table t_dst (id int, j json) properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_dst select id, parse_json(s) from t_pj;
+-- result:
+[REGEX].*Expecting item.*
+-- !result
+select id, j from t_dst order by id;
+-- result:
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+select id, parse_json(s) from t_pj order by id;
+-- result:
+1	{"a": 1}
+2	None
+3	[1, 2, 3]
+4	None
+-- !result
+drop table if exists t_dst;
+-- result:
+-- !result
+drop table if exists t_pj;
+-- result:
+-- !result
