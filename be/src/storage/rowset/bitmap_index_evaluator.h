@@ -26,6 +26,8 @@
 
 namespace starrocks {
 
+class Schema;
+
 struct BitmapContext {
     struct ColumnContext {
         SparseRange<> bitmap_ranges;
