@@ -140,7 +140,7 @@ When reading Parquet files (for example, via `FILES()` or Broker Load), StarRock
 
 - **Instant Semantics**: If `isAdjustedToUTC` is `true`, the value identifies an instant on the timeline normalized to UTC. StarRocks converts it to the wall-clock reading in the current session time zone.
 - **Local Semantics**: If `isAdjustedToUTC` is `false`, the value is a wall-clock reading without a time zone. StarRocks returns it as written, regardless of the session time zone.
-- The legacy INT96 physical type carries no `isAdjustedToUTC` attribute. StarRocks treats a top-level INT96 column as an instant normalized to UTC and converts it to the session time zone. An INT96 timestamp nested inside a STRUCT, ARRAY, or MAP is read as a wall-clock value with no session time zone shift.
+- The legacy INT96 physical type carries no `isAdjustedToUTC` attribute. StarRocks treats an INT96 column as an instant normalized to UTC and converts it to the session time zone, whether the INT96 timestamp is a top-level column or nested inside a STRUCT, ARRAY, or MAP.
 
 :::note
 
