@@ -269,10 +269,10 @@ let
       md5 = "282e54a68911f516b15d07136c78592b";
       sha256 = "19hprnr6c87490m8531vl9ygnhzbkw7whz1yy1lk09njzjq8xccj";
     };
-    "protobuf-3.14.0.tar.gz" = {
-      url = "https://github.com/google/protobuf/archive/v3.14.0.tar.gz";
-      md5 = "0c9d2a96f3656ba7ef3b23b533fb6170";
-      sha256 = "04v1q7g6kx9nwm1fs8dix27iszh3ycnsidf8wry00mnns02zdxfh";
+    "protobuf-3.16.1.tar.gz" = {
+      url = "https://github.com/google/protobuf/archive/v3.16.1.tar.gz";
+      md5 = "6294f01dedea72a76b9e113369f55097";
+      sha256 = "0zsxh0lxcn874rmhjzcqqx1bhqpnxalvh2yscsgr9x1d1fq5i4gv";
     };
     "pulsar-client-3.3.0.tar.gz" = {
       url = "https://github.com/apache/pulsar-client-cpp/archive/refs/tags/v3.3.0.tar.gz";
@@ -464,7 +464,7 @@ let
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
       "thrift-0.23.0.tar.gz"
-      "protobuf-3.14.0.tar.gz"
+      "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
@@ -535,7 +535,7 @@ let
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
       "thrift-0.23.0.tar.gz"
-      "protobuf-3.14.0.tar.gz"
+      "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
@@ -604,7 +604,7 @@ let
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
       "thrift-0.23.0.tar.gz"
-      "protobuf-3.14.0.tar.gz"
+      "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
