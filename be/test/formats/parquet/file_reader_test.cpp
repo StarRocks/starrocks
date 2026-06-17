@@ -429,7 +429,7 @@ HdfsScannerContext* FileReaderTest::_create_scan_context() {
     ctx->lazy_column_coalesce_counter = _scanner_ctx.lazy_column_coalesce_counter;
     ctx->runtime_filter_collector = _scanner_ctx.runtime_filter_collector;
     ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_stats;
+    ctx->format_scan_context.stats = &g_hdfs_stats;
     return ctx;
 }
 
@@ -447,17 +447,19 @@ HdfsScannerContext* FileReaderTest::_create_scan_context(Utils::SlotDesc* slot_d
     _scanner_ctx.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     _scanner_ctx.runtime_filter_collector = _rf_probe_collector;
     _scanner_ctx.scan_range = _create_scan_range(file_path, scan_length);
-    _scanner_ctx.options.parquet_bloom_filter_enable = true;
-    _scanner_ctx.options.parquet_page_index_enable = true;
+    _scanner_ctx.format_scan_context.options.parquet_bloom_filter_enable = true;
+    _scanner_ctx.format_scan_context.options.parquet_page_index_enable = true;
 
     ctx->lazy_column_coalesce_counter = _scanner_ctx.lazy_column_coalesce_counter;
     ctx->runtime_filter_collector = _scanner_ctx.runtime_filter_collector;
     ctx->scan_range = _scanner_ctx.scan_range;
-    ctx->options.parquet_bloom_filter_enable = _scanner_ctx.options.parquet_bloom_filter_enable;
-    ctx->options.parquet_page_index_enable = _scanner_ctx.options.parquet_page_index_enable;
+    ctx->format_scan_context.options.parquet_bloom_filter_enable =
+            _scanner_ctx.format_scan_context.options.parquet_bloom_filter_enable;
+    ctx->format_scan_context.options.parquet_page_index_enable =
+            _scanner_ctx.format_scan_context.options.parquet_page_index_enable;
 
     ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_stats;
+    ctx->format_scan_context.stats = &g_hdfs_stats;
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
@@ -1788,7 +1790,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
 
     Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {"c2", c2}, {""}};
     auto ctx = _create_scan_context(slot_descs, _file4_path);
-    ctx->options.case_sensitive = true;
+    ctx->format_scan_context.options.case_sensitive = true;
     // --------------finish init context---------------
 
     ASSERT_OK(file_reader->init(ctx));
@@ -3427,11 +3429,11 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
 
     // first init, populate footer cache
     auto* ctx = _create_file1_base_context();
-    ctx->stats->footer_cache_read_count = 0;
-    ctx->stats->footer_cache_write_count = 0;
+    ctx->format_scan_context.stats->footer_cache_read_count = 0;
+    ctx->format_scan_context.stats->footer_cache_write_count = 0;
     ASSERT_OK(file_reader->init(ctx));
-    ASSERT_EQ(ctx->stats->footer_cache_read_count, 0);
-    ASSERT_EQ(ctx->stats->footer_cache_write_count, 1);
+    ASSERT_EQ(ctx->format_scan_context.stats->footer_cache_read_count, 0);
+    ASSERT_EQ(ctx->format_scan_context.stats->footer_cache_write_count, 1);
 
     auto file_reader2 = std::make_shared<FileReader>(
             config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path), _mock_datacache_options());
@@ -3439,13 +3441,13 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
 
     // second init, read footer cache
     auto* ctx2 = _create_file1_base_context();
-    ctx2->stats->footer_cache_read_count = 0;
-    ctx2->stats->footer_cache_write_count = 0;
-    ctx2->stats->footer_cache_read_ns = 0;
+    ctx2->format_scan_context.stats->footer_cache_read_count = 0;
+    ctx2->format_scan_context.stats->footer_cache_write_count = 0;
+    ctx2->format_scan_context.stats->footer_cache_read_ns = 0;
     Status status2 = file_reader2->init(ctx2);
     ASSERT_TRUE(status2.ok());
-    ASSERT_EQ(ctx2->stats->footer_cache_read_count, 1);
-    ASSERT_EQ(ctx2->stats->footer_cache_write_count, 0);
+    ASSERT_EQ(ctx2->format_scan_context.stats->footer_cache_read_count, 1);
+    ASSERT_EQ(ctx2->format_scan_context.stats->footer_cache_write_count, 0);
 }
 
 TEST_F(FileReaderTest, TestTime) {

@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "column/global_dict/types.h"
 #include "column/variant_path_parser.h"
 #include "formats/parquet/column_reader.h"
 #include "types/type_descriptor.h"

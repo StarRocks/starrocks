@@ -30,6 +30,7 @@
 namespace starrocks {
 
 class ExprContext;
+struct FileScanSplitContext;
 
 struct SkipRowsContext {
     DeletionBitmapPtr deletion_bitmap;
@@ -146,6 +147,12 @@ struct FormatScannerOptions {
     bool enable_dynamic_prune_scan_range = true;
     bool use_partition_column_value_only = false;
     int64_t connector_max_split_size = 0;
+};
+
+struct FormatScanContext {
+    FormatScannerOptions options;
+    FormatScannerStats* stats = nullptr;
+    const FileScanSplitContext* split_context = nullptr;
 };
 
 // All conjunct contexts and slot metadata derived from the scan plan node.

@@ -158,7 +158,7 @@ Status HdfsScanner::_build_scanner_context() {
 
     ctx.slot_descs = _scanner_ctx->tuple_desc->slots();
     ctx.timezone = _runtime_state->timezone();
-    ctx.stats = &_app_stats;
+    ctx.format_scan_context.stats = &_app_stats;
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_ctx->conjuncts.all_ctxs;
