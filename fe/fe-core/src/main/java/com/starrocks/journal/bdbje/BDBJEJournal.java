@@ -420,7 +420,16 @@ public class BDBJEJournal implements Journal {
                         currentTransaction.commit();
                     }
                     return;
-                } catch (DatabaseException e) {
+                } catch (DatabaseException | IllegalStateException e) {
+                    // IllegalStateException: the JE transaction was invalidated/closed before commit() ran
+                    // (e.g. it timed out during a long stall, or leadership was lost). JE's
+                    // Transaction.checkOpen() throws a plain java.lang.IllegalStateException ("Transaction
+                    // has been closed"), which is NOT a DatabaseException. If it escaped, it would bypass
+                    // JournalWriter.writeOneBatch's JournalException handler, the in-flight batch's tasks
+                    // would never be aborted, their waiting callers would block forever, and the leader WAL
+                    // apply in-flight fence would leak -> demotion's awaitLeaderWalAppliesDrained then times
+                    // out (leader_demotion_drain_timeout_sec) and System.exit(-1)s. Treat it as a commit
+                    // failure so the normal retry/abort path runs.
                     String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
                             i + 1, currentTransaction, currentJournalDB);
                     LOG.error(errMsg, e);
