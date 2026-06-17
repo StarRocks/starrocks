@@ -18,11 +18,11 @@
 
 #include <stdexcept>
 
-#include "base/types/numeric_types.h"
+#include "util/numeric_types.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
-#include "column/runtime_type_traits.h"
+#include "column/type_traits.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
