@@ -242,15 +242,19 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         ASSIGN_OR_RETURN(rows_survive, _filter_and_backfill_lazy(r, state));
         if (!rows_survive) continue;
 
-        // 6. Append output side columns BEFORE emit.
-        //    This guarantees all slots exist when fill_dst_column is called in step 7.
-        if (state.active_chunk->num_rows() > 0) {
-            RETURN_IF_ERROR(
-                    _param.scanner_ctx->append_side_columns_to_chunk(chunk, state.active_chunk->num_rows()));
-        }
-
-        // 7. Emit output
+        // 6. Emit output
         RETURN_IF_ERROR(_emit_output_columns(state, chunk, row_count));
+
+        // 7. Append output side columns AFTER emit.
+        //    Use saved row count because emit_physical_columns swaps columns
+        //    out of active_chunk (active_chunk->num_rows() becomes 0).
+        {
+            size_t saved_rows = (*chunk)->num_rows();
+            if (saved_rows > 0) {
+                RETURN_IF_ERROR(
+                        _param.scanner_ctx->append_side_columns_to_chunk(chunk, saved_rows));
+            }
+        }
         break;
     }
 
