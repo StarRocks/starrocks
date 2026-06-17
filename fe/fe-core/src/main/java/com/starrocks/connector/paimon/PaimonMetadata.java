@@ -136,8 +136,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final ConnectorProperties properties;
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
     private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
-    // Carries the tag name from version parsing to getRemoteFiles, same pattern as `branch`.
-    private final ThreadLocal<String> scanTag = ThreadLocal.withInitial(() -> null);
+    // Resolved tag name, keyed by "tableName#snapshotId" (snapshot ids are per-table, not global).
+    private final Map<String, String> scanTags = new ConcurrentHashMap<>();
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -377,7 +377,12 @@ public class PaimonMetadata implements ConnectorMetadata {
         view.setComment(comment);
         return view;
     }
-
+    
+    @Override
+    public void clear() {
+        scanTags.clear();
+    }
+    
     @Override
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                 Optional<ConnectorTableVersion> startVersion,
@@ -482,12 +487,12 @@ public class PaimonMetadata implements ConnectorMetadata {
                         throw new StarRocksConnectorException("%s does not include tag: %s",
                                 table.fullName(), refNameParts[1]);
                     }
-                    scanTag.set(refNameParts[1]);
                     snapshotId = tagManager.tagObjects().stream()
                             .filter(p -> p.getValue().equals(refNameParts[1]))
                             .map(p -> p.getKey().id())
                             .findFirst()
                             .get();
+                    scanTags.put(table.fullName() + "#" + snapshotId, refNameParts[1]);
                 }
             } else {
                 throw new StarRocksConnectorException("Please input correct format like branch:branch_name or tag:tag_name");
@@ -623,8 +628,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         snapshotId = tvrVersionRange.end().isPresent() ? tvrVersionRange.end().get() : -1L;
 
         Map<String, String> options = new HashMap<>();
-        String currentTag = scanTag.get();
-        scanTag.remove();
+        String currentTag = scanTags.get(
+                paimonTable.getCatalogDBName() + "." + paimonTable.getCatalogTableName() + "#" + snapshotId);
         boolean isDeltaScan = tvrVersionRange.start().isPresent() && tvrVersionRange.end().isPresent();
         if (currentTag != null && !isDeltaScan) {
             // Use scan.tag-name: tags survive snapshot expiration, scan.snapshot-id does not.
