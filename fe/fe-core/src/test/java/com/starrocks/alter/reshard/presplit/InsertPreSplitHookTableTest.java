@@ -585,6 +585,20 @@ public class InsertPreSplitHookTableTest {
         }
     }
 
+    @Test
+    public void prepareSkipsTemporaryTableSource() throws Exception {
+        // The sampler runs as ROOT in a fresh statistics context that cannot see the user's
+        // session temporary tables, so a temp-table source would be sampled as the shadowed
+        // permanent table (or fail). prepare must skip (return null) when the resolved source
+        // is temporary.
+        try (SourceFixture fixture = sourceFixture()) {
+            when(fixture.sourceTable.isTemporaryTable()).thenReturn(true);
+
+            Assertions.assertNull(fixture.prepareScanContext(),
+                    "a temporary-table source must skip pre-split (ROOT sampler cannot see it)");
+        }
+    }
+
     // ---------- Shared fixtures ----------
 
     /**

@@ -639,7 +639,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将 `enable_tablet_pre_split_for_insert_from_files = false` 和 `enable_tablet_pre_split_for_broker_load = false` 同时设为 `false`，新导入将立即跳过预分裂。
+1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 

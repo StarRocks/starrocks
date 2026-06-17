@@ -189,6 +189,13 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         if (!(table instanceof OlapTable sourceTable)) {
             return null;
         }
+        // The sampler runs as UserIdentity.ROOT in a fresh statistics ConnectContext that cannot see
+        // the user's session temporary tables. A temp-table source would be re-resolved by ROOT to the
+        // shadowed permanent table (or fail), so the sample would observe different rows than the load
+        // writes — skip pre-split entirely when the resolved source is a temporary table.
+        if (sourceTable.isTemporaryTable()) {
+            return null;
+        }
         String sourceAlias = sourceRelation.getAlias() == null ? null : sourceRelation.getAlias().getTbl();
         String sourceFromSql = SqlUtils.getIdentSql(normalized.getDb())
                 + "." + SqlUtils.getIdentSql(normalized.getTbl())
