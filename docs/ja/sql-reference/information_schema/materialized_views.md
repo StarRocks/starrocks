@@ -22,7 +22,7 @@ description: "materialized_viewsはすべてのマテリアライズドビュー
 | TASK_NAME                            | マテリアライズドビューをリフレッシュするタスクの名前。       |
 | LAST_REFRESH_START_TIME              | 最新のリフレッシュタスクの開始時間。                         |
 | LAST_REFRESH_FINISHED_TIME           | 最新のリフレッシュタスクの終了時間。                         |
-| LAST_REFRESH_DURATION                | 最新のリフレッシュタスクの期間。                             |
+| LAST_REFRESH_DURATION                | 最新のリフレッシュの実時間（秒）。最後のタスク実行の終了時刻から最初のタスク実行の処理開始時刻を引いた値。そのジョブの `materialized_view_refresh_jobs.DURATION_TIME` と一致します。 |
 | LAST_REFRESH_STATE                   | 最新のリフレッシュタスクの状態。                             |
 | LAST_REFRESH_FORCE_REFRESH           | 最新のリフレッシュタスクが強制リフレッシュであったかどうかを示します。 |
 | LAST_REFRESH_START_PARTITION         | 最新のリフレッシュタスクの開始パーティション。               |
