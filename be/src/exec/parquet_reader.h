@@ -84,10 +84,13 @@ private:
     Status next_selected_row_group();
     // _init_parquet_reader initializes the underlying parquets reader.
     Status _init_parquet_reader();
-    // Re-tag INT96 timestamp columns of the current _batch as UTC. Legacy INT96 carries no
-    // isAdjustedToUTC flag and Arrow decodes it as timezone-naive, indistinguishable from an
-    // INT64 isAdjustedToUTC=false (wall-clock) column. Tagging INT96 as UTC keeps its instant
-    // semantics so the converter shifts it to the session timezone, matching the native reader.
+    // Re-tag INT96 timestamp leaves of the current _batch as UTC, recursing through nested
+    // ARRAY/MAP/STRUCT columns. Legacy INT96 carries no isAdjustedToUTC flag and Arrow decodes it
+    // as timezone-naive, indistinguishable from an INT64 isAdjustedToUTC=false (wall-clock) column.
+    // Tagging INT96 as UTC keeps its instant semantics so the converter shifts it to the session
+    // timezone, matching the native reader. Only genuine INT96 leaves are re-tagged: the column's
+    // ArrayData tree is walked in lockstep with the parquet SchemaField tree (from the FileReader
+    // manifest) so a sibling INT64 wall-clock leaf in the same complex column is left untouched.
     void _rectify_int96_timezone();
 
     const int32_t _num_of_columns_from_file;
@@ -103,7 +106,9 @@ private:
 
     // For nested column type, it's consisting of multiple physical-columns
     std::map<std::string, std::vector<int>> _map_column_nested;
-    // Top-level column names whose parquet physical type is INT96 (see _rectify_int96_timezone).
+    // Coarse filter: top-level column names that contain at least one INT96 leaf, including leaves
+    // nested inside ARRAY/MAP/STRUCT. _rectify_int96_timezone() uses it to skip columns with no
+    // INT96 leaf, then resolves the precise per-leaf re-tag via the FileReader schema manifest.
     std::unordered_set<std::string> _int96_columns;
     std::vector<int> _parquet_column_ids;
     int _total_groups{0}; // groups in a parquet file
