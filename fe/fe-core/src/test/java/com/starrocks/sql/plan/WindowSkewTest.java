@@ -298,7 +298,8 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "Predicates: [5: p, INT, true] = 999");
 
         // Check unskewed branch predicate. It must include null values.
-        assertContains(plan, "Predicates: ([1: p, INT, true] IS NULL) OR ((([1: p, INT, true] != 999) AND ([1: p, INT, true] != 998)) AND ([1: p, INT, true] != 997))");
+        assertContains(plan, "Predicates: ([1: p, INT, true] IS NULL) OR " +
+                "((([1: p, INT, true] != 999) AND ([1: p, INT, true] != 998)) AND ([1: p, INT, true] != 997))");
 
     }
 
@@ -337,7 +338,8 @@ class WindowSkewTest extends PlanTestBase {
 
         // Check unskewed branch predicate. It must *not* include null values.
         assertContains(plan,
-                "Predicates: [1: p, INT, true] != 999, [1: p, INT, true] != 998, [1: p, INT, true] != 997, [1: p, INT, true] IS NOT NULL");
+                "Predicates: [1: p, INT, true] != 999, [1: p, INT, true] != 998, [1: p, INT, true] != 997, " +
+                        "[1: p, INT, true] IS NOT NULL");
     }
 
     @Test
@@ -426,13 +428,17 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertNullSplit(plan);
 
-        assertContains(plan, "ANALYTIC\n" +
-                "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
-                "  |  order by: [6: s, INT, true] ASC");
+        assertContains(plan, """
+                ANALYTIC
+                  |  functions: [, sum[([7: x, INT, true]); \
+                args: INT; result: BIGINT; args nullable: true; result nullable: true], ]
+                  |  order by: [6: s, INT, true] ASC""");
 
-        assertContains(plan, "ANALYTIC\n" +
-                "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
-                "  |  partition by: [1: p, INT, true]");
+        assertContains(plan, """
+                ANALYTIC
+                  |  functions: [, sum[([3: x, INT, true]); \
+                args: INT; result: BIGINT; args nullable: true; result nullable: true], ]
+                  |  partition by: [1: p, INT, true]""");
     }
 
     @Test
