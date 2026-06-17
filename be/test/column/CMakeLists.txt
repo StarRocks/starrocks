@@ -37,6 +37,7 @@ set(COLUMN_TEST_FILES
     decimalv3_json_core_test.cpp
     append_with_mask_core_test.cpp
     datum_convert_core_test.cpp
+    type_converter_core_test.cpp
     column_helper_time_core_test.cpp
     json_converter_core_test.cpp
     adaptive_offsets_test.cpp

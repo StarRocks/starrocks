@@ -56,7 +56,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/chunk_helper.h"
-#include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/metadata_util.h"

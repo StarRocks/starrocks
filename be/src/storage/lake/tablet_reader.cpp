@@ -32,6 +32,7 @@
 #include "gutil/stl_util.h"
 #include "runtime/env/global_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
@@ -49,7 +50,6 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
-#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "util/json_flattener.h"
 
