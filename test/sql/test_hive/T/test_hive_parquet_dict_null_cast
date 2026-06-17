@@ -1,0 +1,48 @@
+-- name: test_hive_parquet_dict_null_cast
+-- Regression for a strict (ALLOW_THROW_EXCEPTION) narrowing cast throwing on NULL rows' data.
+-- A dictionary-encoded, mostly-NULL BIGINT column read through the native parquet reader leaves
+-- NULL rows' data slots uninitialized; narrowing it to INT under ALLOW_THROW_EXCEPTION used to
+-- throw "conflict with range" on that garbage, even though those rows are NULL and the value is
+-- irrelevant. The fix is at the cast layer: the strict cast no longer lets a NULL row's data
+-- trigger an overflow error, so the cast succeeds regardless of what the NULL slots contain and
+-- NULL rows stay NULL. (The decoder still leaves those slots uninitialized; this PR does not
+-- zero-fill them.)
+-- NOTE: to reliably catch a regression here, run this case under ASAN or jemalloc_debug; otherwise
+-- the uninitialized NULL slots may happen to hold benign values and the cast won't throw even
+-- without the fix.
+
+create external catalog hive_dict_null_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+set catalog hive_dict_null_${uuid0};
+create database hive_db_${uuid0};
+use hive_db_${uuid0};
+
+-- Source: low cardinality (-> dictionary encoded) BIGINT with ~95% scattered NULLs
+-- (-> sparse branch of the dict decoder, the path that left null slots uninitialized).
+create table src_${uuid0} (val_col bigint) properties ("file_format" = "parquet");
+insert into src_${uuid0}
+select case when generate_series % 20 = 0 then cast(1000000 + (generate_series % 7) as bigint) else null end
+from table(generate_series(1, 2000));
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+create table dst_${uuid0} (val_col int) properties ("replication_num" = "1");
+
+set sql_mode='ALLOW_THROW_EXCEPTION';
+
+-- implicit BIGINT -> INT narrowing cast in the sink projection (matches the original incident)
+insert into dst_${uuid0} select val_col from hive_dict_null_${uuid0}.hive_db_${uuid0}.src_${uuid0};
+select count(*), count(val_col), min(val_col), max(val_col) from dst_${uuid0};
+
+-- explicit narrowing cast over the same data
+select count(cast(val_col as int)) from hive_dict_null_${uuid0}.hive_db_${uuid0}.src_${uuid0};
+
+set sql_mode='';
+drop table dst_${uuid0} force;
+drop database db_${uuid0};
+set catalog hive_dict_null_${uuid0};
+use hive_db_${uuid0};
+drop table src_${uuid0} force;
+drop database hive_db_${uuid0};
+drop catalog hive_dict_null_${uuid0};
+set catalog default_catalog;
