@@ -20,6 +20,7 @@ import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -199,8 +200,11 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         properties.put("aws.s3.secret_key", "back\\slash");
         Column sortKeyColumn = new Column("weird`name", IntegerType.BIGINT);
 
-        String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                properties, List.of(sortKeyColumn), List.of(),
+        String propertiesClause = FilesSampleSubqueryExecutor.buildPropertiesClause(properties);
+        String fromClauseSql = "FILES(" + propertiesClause + ")";
+        List<String> sortKeyIdents = List.of(SqlUtils.getIdentSql(sortKeyColumn.getName()));
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql(
+                fromClauseSql, /*whereClauseSqlOrNull=*/ null, sortKeyIdents, List.of(),
                 /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
 
         Assertions.assertTrue(sql.contains("`weird``name`"), "backtick in identifier must be doubled: " + sql);
@@ -371,7 +375,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         Mockito.when(computeResource.getWarehouseId()).thenReturn(42L);
 
-        ConnectContext returned = FilesSampleSubqueryExecutor.configureSampleContext(
+        ConnectContext returned = AbstractSqlSampleSubqueryExecutor.configureSampleContext(
                 sampleContext, computeResource, /*queryTimeoutSeconds=*/ 0);
 
         Assertions.assertSame(sampleContext, returned);
@@ -396,7 +400,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         Mockito.when(computeResource.getWarehouseId()).thenReturn(7L);
 
-        FilesSampleSubqueryExecutor.configureSampleContext(
+        AbstractSqlSampleSubqueryExecutor.configureSampleContext(
                 sampleContext, computeResource, /*queryTimeoutSeconds=*/ 45);
 
         Mockito.verify(sessionVariable).setQueryTimeoutS(45);

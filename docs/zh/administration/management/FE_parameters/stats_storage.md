@@ -590,6 +590,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为 Broker Load 启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
 - 引入版本: v4.1.0
 
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入（INSERT-from-OLAP-table）启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 引入版本: v4.1.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - 默认值: 300
@@ -639,7 +648,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将 `enable_tablet_pre_split_for_insert_from_files = false` 和 `enable_tablet_pre_split_for_broker_load = false` 同时设为 `false`，新导入将立即跳过预分裂。
+1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 
