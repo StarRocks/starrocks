@@ -16,6 +16,14 @@
 
 #include <random>
 
+<<<<<<< HEAD
+=======
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "column/array_column.h"
+>>>>>>> 1ccf93c6fb ([BugFix] Fix lake PCU crash and silent corruption under schema drift (#74005))
 #include "column/chunk.h"
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
@@ -4219,6 +4227,627 @@ TEST_P(LakePartialUpdateTest, test_parallel_row_mode_partial_update_multi_segmen
     // c2 should remain unchanged (c0 * 4).
     ASSERT_EQ(kChunkSize * kNumSourceWrites,
               check(version, [](int c0, int c1, int c2) { return (c0 * 7 == c1) && (c0 * 4 == c2); }));
+}
+
+// Regression tests for column-mode partial update (PCU) under schema drift.
+//
+// Background: PCU records the column id (cid) of target columns at write time
+// in the txn log. If ALTER TABLE changes the schema before publish, those cids
+// may no longer match the current schema. The handler must resolve target
+// columns via their unique id (uid) instead of the stale cid; otherwise writes
+// land on the wrong column or crash on type-mismatched column writers.
+class LakePcuSchemaDriftTest : public TestBase {
+public:
+    LakePcuSchemaDriftTest() : TestBase(kTestDirectory) { build_default_schema(); }
+
+    constexpr static const char* const kTestDirectory = "test_lake_pcu_schema_drift";
+    constexpr static const int kChunkSize = 10;
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    }
+
+    void TearDown() override {
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        remove_test_dir_or_die();
+    }
+
+protected:
+    // Build default schema {c0(INT,key), v_int(INT,nullable), v_arr(ARRAY<INT>,nullable)}.
+    void build_default_schema() {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+
+        auto* schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+
+        auto* c0 = schema->add_column();
+        _c0_uid = next_id();
+        c0->set_unique_id(_c0_uid);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+
+        auto* v_int = schema->add_column();
+        _v_int_uid = next_id();
+        v_int->set_unique_id(_v_int_uid);
+        v_int->set_name("v_int");
+        v_int->set_type("INT");
+        v_int->set_is_key(false);
+        v_int->set_is_nullable(true);
+        v_int->set_aggregation("REPLACE");
+
+        auto* v_arr = schema->add_column();
+        _v_arr_uid = next_id();
+        v_arr->set_unique_id(_v_arr_uid);
+        v_arr->set_name("v_arr");
+        v_arr->set_type("ARRAY");
+        v_arr->set_is_key(false);
+        v_arr->set_is_nullable(true);
+        v_arr->set_aggregation("REPLACE");
+        auto* child = v_arr->add_children_columns();
+        child->set_unique_id(next_id());
+        child->set_name("element");
+        child->set_type("INT");
+        child->set_is_nullable(true);
+
+        _tablet_schema = TabletSchema::create(*schema);
+
+        // Build slot descriptors. Slot id <-> column id mapping mirrors LakePartialUpdateTestBase.
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "v_int", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TypeDescriptor{LogicalType::TYPE_INT}));
+
+        _slot_pointers_full.emplace_back(&_slots[0]);
+        _slot_pointers_full.emplace_back(&_slots[1]);
+        _slot_pointers_full.emplace_back(&_slots[2]);
+
+        _slot_pointers_v_arr.emplace_back(&_slots[0]);
+        _slot_pointers_v_arr.emplace_back(&_slots[2]);
+
+        _slot_pointers_v_int.emplace_back(&_slots[0]);
+        _slot_pointers_v_int.emplace_back(&_slots[1]);
+
+        _slot_cid_map.emplace(0, 0);
+        _slot_cid_map.emplace(1, 1);
+        _slot_cid_map.emplace(2, 2);
+    }
+
+    // Build an ARRAY<INT> nullable column: row i = [i*scale, i*scale+1].
+    ColumnPtr build_array_column(int n_rows, int scale) {
+        auto element = Int32Column::create();
+        auto null_column = NullColumn::create();
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        for (int i = 0; i < n_rows; i++) {
+            element->append(i * scale);
+            null_column->append(0);
+            element->append(i * scale + 1);
+            null_column->append(0);
+            offsets->append((i + 1) * 2);
+        }
+        auto nullable_element = NullableColumn::create(std::move(element), std::move(null_column));
+        auto array_col = ArrayColumn::create(std::move(nullable_element), std::move(offsets));
+        // Wrap in NullableColumn since the outer v_arr is nullable.
+        auto outer_null = NullColumn::create();
+        for (int i = 0; i < n_rows; i++) outer_null->append(0);
+        return NullableColumn::create(std::move(array_col), std::move(outer_null));
+    }
+
+    // Full-row chunk: c0=[0..N-1], v_int=[100..100+N-1], v_arr=[i*10, i*10+1].
+    Chunk make_full_chunk(int n_rows) {
+        auto c0 = Int32Column::create();
+        auto v_int = Int32Column::create();
+        for (int i = 0; i < n_rows; i++) {
+            c0->append(i);
+            v_int->append(100 + i);
+        }
+        auto v_arr = build_array_column(n_rows, /*scale=*/10);
+        return Chunk({std::move(c0), std::move(v_int), std::move(v_arr)}, _slot_cid_map);
+    }
+
+    // Partial chunk for PCU on v_arr: only c0 + v_arr columns.
+    // v_arr[i] = [i*scale, i*scale+1].
+    Chunk make_partial_chunk_v_arr(int n_rows, int scale) {
+        auto c0 = Int32Column::create();
+        for (int i = 0; i < n_rows; i++) c0->append(i);
+        auto v_arr = build_array_column(n_rows, scale);
+        // Slot id 0 -> column index 0, slot id 2 -> column index 1 (v_arr is 2nd in this partial chunk)
+        Chunk::SlotHashMap partial_map;
+        partial_map.emplace(0, 0);
+        partial_map.emplace(2, 1);
+        return Chunk({std::move(c0), std::move(v_arr)}, partial_map);
+    }
+
+    // Verify v_arr contents after publish. Also asserts:
+    //   - inserted column c_new (created by AddColumn) is all NULL
+    //   - v_int unchanged at base value (100+i)
+    //   - row count matches kChunkSize
+    // expected_v_arr_scale: each row's v_arr should be [rowid*scale, rowid*scale+1].
+    void verify_v_arr_content(int64_t version, int expected_v_arr_scale) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = tablet_schema->schema();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*schema, 128);
+
+        // Locate column indexes by name in the post-ALTER schema.
+        int c0_idx = -1, v_int_idx = -1, v_arr_idx = -1, c_new_idx = -1;
+        for (size_t i = 0; i < tablet_schema->num_columns(); i++) {
+            const auto& name = tablet_schema->column(i).name();
+            if (name == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (name == "v_int")
+                v_int_idx = static_cast<int>(i);
+            else if (name == "v_arr")
+                v_arr_idx = static_cast<int>(i);
+            else
+                c_new_idx = static_cast<int>(i);
+        }
+        ASSERT_EQ(c0_idx, 0);
+        ASSERT_EQ(c_new_idx, 1);
+        ASSERT_EQ(v_int_idx, 2);
+        ASSERT_EQ(v_arr_idx, 3);
+
+        int64_t total = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                int rowid = chunk->columns()[c0_idx]->get(i).get_int32();
+                EXPECT_TRUE(chunk->columns()[c_new_idx]->get(i).is_null())
+                        << "rowid=" << rowid << " c_new should be NULL";
+                EXPECT_EQ(100 + rowid, chunk->columns()[v_int_idx]->get(i).get_int32())
+                        << "rowid=" << rowid << " v_int drifted";
+                auto arr = chunk->columns()[v_arr_idx]->get(i).get_array();
+                ASSERT_EQ(2u, arr.size()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * expected_v_arr_scale, arr[0].get_int32()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * expected_v_arr_scale + 1, arr[1].get_int32()) << "rowid=" << rowid;
+            }
+            total += chunk->num_rows();
+            chunk->reset();
+        }
+        EXPECT_EQ(kChunkSize, total);
+    }
+
+    // Partial chunk for PCU on v_int: only c0 + v_int columns.
+    // v_int[i] = delta + i.
+    Chunk make_partial_chunk_v_int(int n_rows, int delta) {
+        auto c0 = Int32Column::create();
+        auto v_int = Int32Column::create();
+        for (int i = 0; i < n_rows; i++) {
+            c0->append(i);
+            v_int->append(delta + i);
+        }
+        Chunk::SlotHashMap partial_map;
+        partial_map.emplace(0, 0);
+        partial_map.emplace(1, 1);
+        return Chunk({std::move(c0), std::move(v_int)}, partial_map);
+    }
+
+    // Verify v_int = delta+i (post-fix correct); v_arr at base [i*10, i*10+1] (unchanged).
+    void verify_v_int_content(int64_t version, int delta) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = tablet_schema->schema();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*schema, 128);
+
+        // Post-ALTER schema layout: [c0, c_new, v_int, v_arr].
+        int c0_idx = -1, c_new_idx = -1, v_int_idx = -1, v_arr_idx = -1;
+        for (size_t i = 0; i < tablet_schema->num_columns(); i++) {
+            const auto& name = tablet_schema->column(i).name();
+            if (name == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (name == "v_int")
+                v_int_idx = static_cast<int>(i);
+            else if (name == "v_arr")
+                v_arr_idx = static_cast<int>(i);
+            else
+                c_new_idx = static_cast<int>(i);
+        }
+        ASSERT_EQ(c0_idx, 0);
+        ASSERT_EQ(c_new_idx, 1);
+        ASSERT_EQ(v_int_idx, 2);
+        ASSERT_EQ(v_arr_idx, 3);
+
+        int64_t total = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                int rowid = chunk->columns()[c0_idx]->get(i).get_int32();
+                EXPECT_EQ(delta + rowid, chunk->columns()[v_int_idx]->get(i).get_int32())
+                        << "rowid=" << rowid << " v_int silently drifted";
+                auto arr = chunk->columns()[v_arr_idx]->get(i).get_array();
+                ASSERT_EQ(2u, arr.size()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * 10, arr[0].get_int32()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * 10 + 1, arr[1].get_int32()) << "rowid=" << rowid;
+            }
+            total += chunk->num_rows();
+            chunk->reset();
+        }
+        EXPECT_EQ(kChunkSize, total);
+    }
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers_full;
+    std::vector<SlotDescriptor*> _slot_pointers_v_arr;
+    std::vector<SlotDescriptor*> _slot_pointers_v_int;
+    Chunk::SlotHashMap _slot_cid_map;
+    int64_t _partition_id = 4561;
+    uint32_t _c0_uid = 0;
+    uint32_t _v_int_uid = 0;
+    uint32_t _v_arr_uid = 0;
+};
+
+// PCU targets an ARRAY column whose cid is shifted by a subsequent ADD COLUMN.
+// Without uid-based resolution the write hits a non-array column writer and
+// crashes inside ArrayColumnWriter::append; this test guards against that
+// regression by asserting the array values are written to the correct column.
+TEST_F(LakePcuSchemaDriftTest, WriteThenAddColumnAfterPublish_ArrayCrashRegression) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // ---- Step A: write base full row, publish v2 ----
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // ---- Step B: PCU partial update on v_arr (writes txn_log under OLD schema) ----
+    auto pcu_txn_id = next_id();
+    {
+        auto chunk = make_partial_chunk_v_arr(kChunkSize, /*scale=*/100);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_arr)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ---- Step C: ALTER ADD COLUMN at pos=1 (between c0 and v_int) ----
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        AddColumn modifier(/*pos=*/1, "BIGINT", /*nullable=*/true, /*default=*/"NULL");
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // ---- Step D: publish PCU under NEW schema. Pre-fix: segfault. Post-fix: OK. ----
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, pcu_txn_id).status());
+    version++;
+
+    // ---- Step E: read & verify ----
+    verify_v_arr_content(version, /*expected_v_arr_scale=*/100);
+}
+
+// PCU targets a fixed-length INT column whose cid is shifted by ADD COLUMN.
+// The bug here was silent data corruption: writes landed on the newly inserted
+// BIGINT column without any error. This test verifies the values are routed
+// back to the original column via uid lookup.
+TEST_F(LakePcuSchemaDriftTest, WriteThenAddColumnAfterPublish_FixedLengthDriftIsSilent) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // base full-row write
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // PCU partial update on v_int (writes 200+i)
+    auto pcu_txn_id = next_id();
+    {
+        auto chunk = make_partial_chunk_v_int(kChunkSize, /*delta=*/200);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_int)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ALTER ADD COLUMN at pos=1
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        AddColumn modifier(1, "BIGINT", true, "NULL");
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // publish PCU
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, pcu_txn_id).status());
+    version++;
+
+    // verify: v_int must be 200+i (not base 100+i); v_arr must be base [i*10, i*10+1]
+    verify_v_int_content(version, /*delta=*/200);
+}
+
+// Conditional update where the merge-condition column's cid is shifted by
+// ADD COLUMN. The handler must re-resolve the condition cid against the
+// current schema and locate it within the partial-update schema; otherwise
+// the merge_condition filter compares against the wrong column.
+TEST_F(LakePcuSchemaDriftTest, ConditionalUpdateAfterAddColumn) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // Base write: full row with v_int=[100,101,102,...], v_arr=[[0,1],[10,11],[20,21],...]
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // PCU + condition update on v_int.
+    //   base v_int[i]   = 100 + i              (i=0..9 → 100..109)
+    //   new  v_int[i]   = i==0 ? 50 : 200+50*i (→ [50, 250, 300, 350, ..., 650])
+    // merge_condition='v_int' updates a row only if new > old:
+    //   row 0: 50  > 100   → filtered out, keeps 100
+    //   row i (i>=1): 200+50*i > 100+i  → always true, applied
+    auto pcu_txn_id = next_id();
+    {
+        auto c0 = Int32Column::create();
+        auto v_int = Int32Column::create();
+        for (int i = 0; i < kChunkSize; i++) {
+            c0->append(i);
+            v_int->append(i == 0 ? 50 : 200 + 50 * i);
+        }
+        Chunk::SlotHashMap partial_map;
+        partial_map.emplace(0, 0);
+        partial_map.emplace(1, 1);
+        Chunk chunk({std::move(c0), std::move(v_int)}, partial_map);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_int)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .set_merge_condition("v_int")
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ALTER ADD COLUMN at pos=1 (between c0 and v_int)
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        AddColumn modifier(1, "BIGINT", true, "NULL");
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // publish PCU
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, pcu_txn_id).status());
+    version++;
+
+    // verify: row 0 must keep base value (100), others updated
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto ts = TabletSchema::create(metadata->schema());
+        auto sch = ts->schema();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *sch);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*sch, 128);
+        int c0_idx = -1, v_int_idx = -1;
+        for (size_t i = 0; i < ts->num_columns(); i++) {
+            if (ts->column(i).name() == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (ts->column(i).name() == "v_int")
+                v_int_idx = static_cast<int>(i);
+        }
+        ASSERT_GE(c0_idx, 0);
+        ASSERT_GE(v_int_idx, 0);
+
+        std::map<int, int> got;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                int rowid = chunk->columns()[c0_idx]->get(i).get_int32();
+                int v = chunk->columns()[v_int_idx]->get(i).get_int32();
+                got[rowid] = v;
+            }
+            chunk->reset();
+        }
+        EXPECT_EQ(static_cast<size_t>(kChunkSize), got.size());
+        // Row 0: merge_condition filters (50 < 100), so v_int stays at base value 100
+        EXPECT_EQ(100, got[0]) << "row 0 should be filtered by merge_condition (50 < 100)";
+        // Row 1+: new value > old value, so update passes
+        for (int i = 1; i < kChunkSize; i++) {
+            EXPECT_EQ(200 + 50 * i, got[i]) << "row " << i << " should be updated";
+        }
+    }
+}
+
+// A PCU target column is dropped by ALTER between write and publish. The
+// handler must surface a clean InternalError referencing the missing unique
+// id, rather than dereferencing a stale cid or producing corrupt output.
+TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // base full-row write
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // PCU partial update on v_arr (write while v_arr still exists)
+    auto pcu_txn_id = next_id();
+    {
+        auto chunk = make_partial_chunk_v_arr(kChunkSize, 100);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_arr)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ALTER DROP COLUMN v_arr (col_idx=2 in default schema)
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        DropColumn modifier(/*col_idx=*/2);
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // publish PCU under new schema — expect failure.
+    auto res = publish_single_version(tablet_id, version + 1, pcu_txn_id);
+    auto st = res.status();
+    ASSERT_FALSE(st.ok()) << "publish should fail when PCU target column is dropped";
+    EXPECT_TRUE(st.is_internal_error()) << "got: " << st.to_string();
+    EXPECT_NE(std::string::npos, st.message().find("unique id"))
+            << "expected 'unique id' in message; got: " << st.message();
 }
 
 } // namespace starrocks::lake
