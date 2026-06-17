@@ -4373,7 +4373,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkFactory::new_chunk(*schema, 128);
+        auto chunk = ChunkHelper::new_chunk(*schema, 128);
 
         // Locate column indexes by name in the post-ALTER schema.
         int c0_idx = -1, v_int_idx = -1, v_arr_idx = -1, c_new_idx = -1;
@@ -4438,7 +4438,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkFactory::new_chunk(*schema, 128);
+        auto chunk = ChunkHelper::new_chunk(*schema, 128);
 
         // Post-ALTER schema layout: [c0, c_new, v_int, v_arr].
         int c0_idx = -1, c_new_idx = -1, v_int_idx = -1, v_arr_idx = -1;
@@ -4736,7 +4736,7 @@ TEST_F(LakePcuSchemaDriftTest, ConditionalUpdateAfterAddColumn) {
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *sch);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkFactory::new_chunk(*sch, 128);
+        auto chunk = ChunkHelper::new_chunk(*sch, 128);
         int c0_idx = -1, v_int_idx = -1;
         for (size_t i = 0; i < ts->num_columns(); i++) {
             if (ts->column(i).name() == "c0")
