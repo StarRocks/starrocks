@@ -21,16 +21,17 @@
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/bloom_filter.h"
+#include "common/column_id.h"
 #include "common/object_pool.h"
-#include "storage/column_predicate_factory.h"
-#include "storage/olap_common.h" // ColumnId
 #include "storage/primitive/bitmap_index_iterator.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/inverted_index_iterator.h"
 #include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/primitive/zone_map_detail.h"
-#include "storage/types.h"
 #include "types/datum.h"
 #include "types/olap_type_infra.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 class BloomFilter;

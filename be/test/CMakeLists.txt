@@ -399,9 +399,6 @@ SET(DW_TEST_FILES
     ./storage/chunk_aggregator_test.cpp
     ./storage/chunk_helper_test.cpp
     ./storage/column_aggregator_test.cpp
-    ./storage/column_and_predicate_test.cpp
-    ./storage/column_or_predicate_test.cpp
-    ./storage/column_predicate_test.cpp
     ./storage/column_predicate_inverted_index_fallback_test.cpp
     ./storage/compaction_manager_test.cpp
     ./storage/compaction_parallelization_test.cpp
@@ -419,7 +416,6 @@ SET(DW_TEST_FILES
     ./storage/delta_writer_test.cpp
     ./storage/del_vector_test.cpp
     ./storage/dictionary_cache_manager_test.cpp
-    ./storage/disjunctive_predicates_test.cpp
     ./storage/fast_schema_evolution_test.cpp
     ./storage/get_use_pk_index_test.cpp
     ./storage/index/vector_index_test.cpp

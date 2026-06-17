@@ -22,9 +22,9 @@
 #include <vector>
 
 #include "column/global_dict/types.h"
-#include "storage/disjunctive_predicates.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/primitive/disjunctive_predicates.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"

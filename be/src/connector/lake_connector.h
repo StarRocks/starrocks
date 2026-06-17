@@ -16,10 +16,10 @@
 
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
-#include "storage/conjunctive_predicates.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/primitive/conjunctive_predicates.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 

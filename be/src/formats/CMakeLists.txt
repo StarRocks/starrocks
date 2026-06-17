@@ -143,7 +143,7 @@ ADD_BE_LIB(Formats
         parquet/parquet_pos_reader.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatOrc FormatAvro FormatJson FormatCsv FormatCore Cache)
+target_link_libraries(Formats PUBLIC FormatOrc FormatAvro FormatJson FormatCsv FormatCore StoragePrimitive Cache)
 
 add_subdirectory(orc/apache-orc)
 target_link_libraries(FormatOrc PUBLIC orc)

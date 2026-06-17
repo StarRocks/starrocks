@@ -32,7 +32,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 #include "storage/primitive/range.h"
 #include "types/logical_type.h"

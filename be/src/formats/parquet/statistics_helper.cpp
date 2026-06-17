@@ -30,7 +30,7 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/types.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"

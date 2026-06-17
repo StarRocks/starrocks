@@ -18,7 +18,7 @@
 #include <type_traits>
 
 #include "column/nullable_column.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 
 namespace starrocks {
 // Implementing a complete ColumnPredicate is very difficult, most of the ColumnPredicate logic is similar,

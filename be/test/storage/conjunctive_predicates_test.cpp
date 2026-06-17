@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/conjunctive_predicates.h"
+#include "storage/primitive/conjunctive_predicates.h"
 
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
@@ -37,8 +37,8 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate_factory.h"
 #include "storage/predicate_parser.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 #include "types/logical_type.h"
