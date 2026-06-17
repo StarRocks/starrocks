@@ -31,6 +31,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -38,11 +39,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.InsertStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.OriginStatement;
-import com.starrocks.sql.ast.QualifiedName;
->>>>>>> 9601835ebd ([BugFix] Record exported row count in audit log for SELECT INTO OUTFILE (#74467))
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
