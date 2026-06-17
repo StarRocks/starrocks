@@ -131,10 +131,12 @@ public:
 
     // Number of remote-storage writes issued by lake compaction tasks. "remote" is backend-
     // neutral: covers object-storage backends (S3, OSS, GCS, Azure Blob) and HDFS. Counted as
-    // one write per file close (output segment, sst, .lcrm, and txn log). This is an
-    // approximation: multipart uploads of large files issue several real PUTs underneath, and
-    // the publish-time tablet metadata write is not counted here (it happens outside the
-    // compaction task).
+    // one write per file close: output segment, sst, .lcrm, and the txn log -- but the txn log
+    // is counted only when the compaction task itself writes it; when skip_write_txnlog is set
+    // (e.g. parallel compaction) the txn log is deferred to the caller/publish path and is not
+    // counted here. This is an approximation: multipart uploads of large files issue several
+    // real PUTs underneath, and the publish-time tablet metadata write is likewise not counted
+    // (both happen outside the compaction task).
     METRIC_DEFINE_INT_COUNTER(lake_compaction_remote_write_count, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);

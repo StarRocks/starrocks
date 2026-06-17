@@ -245,7 +245,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Cumulative
-- Description: Number of remote-storage writes issued by shared-data (lake) compaction tasks. "remote" is backend-neutral and covers object-storage backends (S3, OSS, GCS, Azure Blob) and HDFS. Counted as one write per file close — output segment, sst, `.lcrm`, and txn log. This is an approximation: multipart uploads of large files issue several real PUTs underneath, and the publish-time tablet metadata write is not included (it happens outside the compaction task).
+- Description: Number of remote-storage writes issued by shared-data (lake) compaction tasks. "remote" is backend-neutral and covers object-storage backends (S3, OSS, GCS, Azure Blob) and HDFS. Counted as one write per file close — output segment, sst, and `.lcrm`. The txn log is also counted, but only when the compaction task writes it itself; for compactions that defer the txn-log write to the caller/publish path (e.g. parallel compaction, which ships the merged txn log back for the FE to persist), it is not counted here. This is an approximation: multipart uploads of large files issue several real PUTs underneath, and the publish-time tablet metadata write is likewise not included (both happen outside the compaction task).
 
 ## `lake_vacuum_del_file_batch_size_minute`
 

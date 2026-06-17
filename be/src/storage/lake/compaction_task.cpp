@@ -32,9 +32,11 @@ namespace starrocks::lake {
 // the BE metrics endpoint as gauge series (count, percentiles, max) under this name.
 static bvar::LatencyRecorder g_lake_compaction_output_segment_size_bytes("lake_compaction_output_segment_size_bytes");
 
+#ifdef BE_TEST
 int64_t lake_compaction_output_segment_size_recorded_count() {
     return g_lake_compaction_output_segment_size_bytes.count();
 }
+#endif
 
 CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
                                CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)

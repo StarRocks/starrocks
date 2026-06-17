@@ -245,7 +245,7 @@ description: "Alphabetical i - p"
 
 - 单位：个
 - 类型：累积
-- 描述：存算分离（lake）压缩任务发起的远端存储写入次数。「远端」对后端中立，覆盖对象存储后端（S3、OSS、GCS、Azure Blob）以及 HDFS。按每次文件关闭计为一次写入 —— 包括输出 Segment、sst、`.lcrm` 以及事务日志。这是一个近似值：大文件的分段上传（multipart upload）底层会产生多次实际 PUT，且发布阶段的 tablet 元数据写入不计入此处（发生在压缩任务之外）。
+- 描述：存算分离（lake）压缩任务发起的远端存储写入次数。「远端」对后端中立，覆盖对象存储后端（S3、OSS、GCS、Azure Blob）以及 HDFS。按每次文件关闭计为一次写入 —— 包括输出 Segment、sst 以及 `.lcrm`。事务日志也会被计入，但仅当压缩任务自身写入它时；对于将事务日志写入推迟到调用方/发布阶段的压缩（例如并行压缩，会把合并后的事务日志返回给 FE 持久化），此处不计入。这是一个近似值：大文件的分段上传（multipart upload）底层会产生多次实际 PUT，且发布阶段的 tablet 元数据写入同样不计入此处（二者都发生在压缩任务之外）。
 
 ## `lake_vacuum_del_file_batch_size_minute`
 
