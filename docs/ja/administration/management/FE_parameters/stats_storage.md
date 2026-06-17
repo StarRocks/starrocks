@@ -581,6 +581,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Broker Load に対してサンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。
 - 導入時期：v4.1.0
 
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込み（INSERT-from-OLAP-table）に対して、サンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
+- 導入時期：v4.1.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - デフォルト：300
@@ -630,7 +639,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
 
-1. `enable_tablet_pre_split_for_insert_from_files = false` と `enable_tablet_pre_split_for_broker_load = false` を同時に設定します。新規取り込みは即座に事前分割をスキップします。
+1. 3 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`。新規取り込みは即座に事前分割をスキップします。
 2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
 3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
 
