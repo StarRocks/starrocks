@@ -343,13 +343,20 @@ Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_
                                        chunk_filter, conv_ctx);
     }
 
-    // for timestamp type, state->timezone which is specified by user. convert function
-    // obtains timezone from array. thus timezone in array should be rectified to
-    // state->timezone.
+    // Per Parquet LogicalTypes.md TIMESTAMP section, an INT64 timestamp with
+    // isAdjustedToUTC=false is surfaced by Arrow as timezone-naive (empty
+    // `timezone`) and must be displayed identically regardless of session
+    // timezone. Only rectify the column timezone to the session timezone when it
+    // is already timezone-aware (non-empty Arrow tz): an isAdjustedToUTC=true
+    // column, or a top-level INT96 column that ParquetReaderWrap::_rectify_int96_timezone()
+    // re-tagged as UTC. Naive INT64 columns keep their wall-clock value and are
+    // read as UTC by the downstream converter.
     if (array->type_id() == ArrowTypeId::TIMESTAMP) {
         auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
         auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-        mutable_timezone = conv_ctx->state->timezone();
+        if (!mutable_timezone.empty()) {
+            mutable_timezone = conv_ctx->state->timezone();
+        }
     }
 
     uint8_t* null_data;
