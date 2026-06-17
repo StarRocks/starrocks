@@ -395,6 +395,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
         ClusterSnapshotMgrEPack data = reader.readJson(ClusterSnapshotMgrEPack.class);
 
         storageVolumeName = data.getAutomatedSnapshotSvName();
+        automatedSnapshotIntervalSeconds = data.getAutomatedSnapshotIntervalSeconds();
         automatedSnapshotJobs = data.getAutomatedSnapshotJobs();
         manualClusterSnapshotRequestQueue = data.getManualClusterSnapshotRequestQueue();
         manualClusterSnapshotJobs = data.getManualClusterSnapshotJobs();
