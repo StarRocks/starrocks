@@ -98,6 +98,8 @@ protected:
     DataCacheOptions _mock_datacache_options();
 
     std::shared_ptr<FileReader> _create_file_reader(const std::string& file_path, int64_t chunk_size = 4096);
+    Status _get_next_scan_chunk(const std::shared_ptr<FileReader>& file_reader, HdfsScannerContext* ctx,
+                                ChunkPtr* chunk);
 
     HdfsScannerContext* _create_scan_context();
     HdfsScannerContext* _create_scan_context(Utils::SlotDesc* slot_descs, const std::string& file_path,
@@ -438,6 +440,19 @@ std::shared_ptr<FileReader> FileReaderTest::_create_file_reader(const std::strin
     auto* file_ptr = _pool.add(file.release());
     uint64_t file_size = std::filesystem::file_size(file_path);
     return std::make_shared<FileReader>(chunk_size, file_ptr, file_size, _mock_datacache_options());
+}
+
+Status FileReaderTest::_get_next_scan_chunk(const std::shared_ptr<FileReader>& file_reader, HdfsScannerContext* ctx,
+                                            ChunkPtr* chunk) {
+    FileReader::ReadResult result;
+    RETURN_IF_ERROR(file_reader->get_next(chunk, &result));
+    if (result.count_result) {
+        return ctx->append_or_update_count_and_partition_columns_to_chunk(chunk, result.rows_read);
+    }
+    if (result.rows_read > 0) {
+        return ctx->append_or_update_non_file_columns_to_chunk(chunk, result.rows_read);
+    }
+    return Status::OK();
 }
 
 HdfsScannerContext* FileReaderTest::_create_scan_context(Utils::SlotDesc* slot_descs, const std::string& file_path,
@@ -1240,11 +1255,11 @@ TEST_F(FileReaderTest, TestGetNextPartition) {
 
     // get next
     auto chunk = _create_chunk_for_partition();
-    status = file_reader->get_next(&chunk);
+    status = _get_next_scan_chunk(file_reader, ctx, &chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(4, chunk->num_rows());
 
-    status = file_reader->get_next(&chunk);
+    status = _get_next_scan_chunk(file_reader, ctx, &chunk);
     ASSERT_TRUE(status.is_end_of_file());
 }
 
@@ -1257,11 +1272,11 @@ TEST_F(FileReaderTest, TestGetNextEmpty) {
 
     // get next
     auto chunk = _create_chunk_for_not_exist();
-    status = file_reader->get_next(&chunk);
+    status = _get_next_scan_chunk(file_reader, ctx, &chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(4, chunk->num_rows());
 
-    status = file_reader->get_next(&chunk);
+    status = _get_next_scan_chunk(file_reader, ctx, &chunk);
     ASSERT_TRUE(status.is_end_of_file());
 }
 

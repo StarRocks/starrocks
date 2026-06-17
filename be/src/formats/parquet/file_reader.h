@@ -69,6 +69,11 @@ struct SplitContext : public HdfsSplitContext {
 
 class FileReader {
 public:
+    struct ReadResult {
+        size_t rows_read = 0;
+        bool count_result = false;
+    };
+
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                const DataCacheOptions& datacache_options = DataCacheOptions(),
                SharedBufferedInputStream* sb_stream = nullptr, SkipRowsContextPtr skipRowsContext = nullptr);
@@ -76,7 +81,10 @@ public:
 
     Status init(HdfsScannerContext* scanner_ctx);
 
+    // Reads Parquet/reserved-field data only. Scan-level columns such as missing,
+    // partition, extended, and count columns are materialized by the scanner.
     Status get_next(ChunkPtr* chunk);
+    Status get_next(ChunkPtr* chunk, ReadResult* result);
 
     const FileMetaData* get_file_metadata();
 
@@ -102,8 +110,8 @@ private:
     // get row group to read
     bool _select_row_group(const tparquet::RowGroup& row_group);
 
-    // only scan partition column + not exist column
-    Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
+    // Handles scans that produce rows without reading any physical Parquet column.
+    Status _exec_no_materialized_column_scan(ReadResult* result);
 
     Status _build_split_tasks();
 

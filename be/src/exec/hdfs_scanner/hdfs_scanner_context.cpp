@@ -196,6 +196,20 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
     return Status::OK();
 }
 
+Status HdfsScannerContext::append_or_update_non_file_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(chunk, row_count));
+    append_or_update_partition_column_to_chunk(chunk, row_count);
+    append_or_update_extended_column_to_chunk(chunk, row_count);
+    return Status::OK();
+}
+
+Status HdfsScannerContext::append_or_update_count_and_partition_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    append_or_update_count_column_to_chunk(chunk, row_count);
+    append_or_update_partition_column_to_chunk(chunk, 1);
+    append_or_update_extended_column_to_chunk(chunk, 1);
+    return Status::OK();
+}
+
 void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.empty() || row_count < 0) return;
     ChunkPtr& ck = (*chunk);

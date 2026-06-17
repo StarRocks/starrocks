@@ -265,9 +265,17 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    RETURN_IF_ERROR(_reader->get_next(chunk));
-    // Evaluate multi-slot predicates after FileReader has materialised all columns
-    // (including lazily-loaded ones from its internal predicate pipeline).
+    parquet::FileReader::ReadResult read_result;
+    RETURN_IF_ERROR(_reader->get_next(chunk, &read_result));
+    if (read_result.count_result) {
+        RETURN_IF_ERROR(
+                _scanner_ctx->append_or_update_count_and_partition_columns_to_chunk(chunk, read_result.rows_read));
+    } else if (read_result.rows_read > 0) {
+        RETURN_IF_ERROR(_scanner_ctx->append_or_update_non_file_columns_to_chunk(chunk, read_result.rows_read));
+    }
+
+    // Evaluate multi-slot predicates after all scan columns have been materialised
+    // (including lazily-loaded columns from FileReader's internal predicate pipeline).
     // This pass is the correctness guarantee; statistics-based skipping inside
     // FileReader is approximate.  In the future, expression-driven lazy
     // materialisation will replace this with interleaved column-load/evaluate.

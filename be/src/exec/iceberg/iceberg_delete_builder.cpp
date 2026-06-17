@@ -148,12 +148,16 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
         ASSIGN_OR_RETURN(ChunkPtr chunk,
                          RuntimeChunkHelper::new_chunk_checked(slot_descriptors, _runtime_state->chunk_size()));
 
-        Status status = reader->get_next(&chunk);
+        parquet::FileReader::ReadResult read_result;
+        Status status = reader->get_next(&chunk, &read_result);
         if (status.is_end_of_file()) {
             break;
         }
 
         RETURN_IF_ERROR(status);
+        if (read_result.rows_read == 0) {
+            continue;
+        }
         RETURN_IF_ERROR(fill_skip_rowids(chunk));
     }
     _skip_rows_ctx->deletion_bitmap = _deletion_bitmap;

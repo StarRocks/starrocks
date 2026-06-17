@@ -268,6 +268,10 @@ struct HdfsScannerContext {
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
     Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+    // Materialize scanner-owned columns after a file reader has produced data rows.
+    Status append_or_update_non_file_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+    // Count optimization emits a single output row whose count column stores row_count.
+    Status append_or_update_count_and_partition_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
 
     // If there is no partition column in the chunk, append partition column to chunk,
     // otherwise update partition column in chunk
