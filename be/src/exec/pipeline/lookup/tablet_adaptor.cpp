@@ -131,6 +131,7 @@ private:
     std::vector<ColumnAccessPathPtr> _column_access_paths;
     ColumnIdToGlobalDictMap* _global_dicts = nullptr;
     OlapScanLazyMaterializationContext* _glm_ctx = nullptr;
+    bool _use_page_cache = false;
 };
 
 class LakeScanTabletAdaptor final : public LookUpTabletAdaptor {
@@ -165,6 +166,7 @@ private:
     ColumnIdToGlobalDictMap* _global_dicts = nullptr;
     LakeScanLazyMaterializationContext* _glm_ctx = nullptr;
     std::vector<lake::RowsetPtr> _rowsets;
+    bool _use_page_cache = false;
 };
 
 Status OlapScanTabletAdaptor::init(int64_t tablet_id) {
@@ -174,6 +176,7 @@ Status OlapScanTabletAdaptor::init(int64_t tablet_id) {
 }
 
 Status OlapScanTabletAdaptor::init_schema(RuntimeState* state) {
+    _use_page_cache = state->use_page_cache();
     const auto& thrift_olap_scan_node = _glm_ctx->scan_node();
 
     if (thrift_olap_scan_node.__isset.schema_id && thrift_olap_scan_node.schema_id > 0 &&
@@ -232,6 +235,11 @@ auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
+    // Honor the same page-cache policy as the normal scan (RuntimeState::use_page_cache(),
+    // which already respects the disable_storage_page_cache config and the session var).
+    // Otherwise the lookup bypasses StoragePageCache and re-decompresses every fetched
+    // column page per row locator. See olap_chunk_source.cpp.
+    rs_opts.use_page_cache = _use_page_cache;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;
@@ -261,6 +269,7 @@ Status LakeScanTabletAdaptor::init(int64_t tablet_id) {
 }
 
 Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
+    _use_page_cache = state->use_page_cache();
     auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 
@@ -343,6 +352,12 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
+    // Honor the same page-cache policy as the normal scan (RuntimeState::use_page_cache(),
+    // which already respects the disable_storage_page_cache config and the session var).
+    // Otherwise the lookup bypasses StoragePageCache and re-decompresses every fetched
+    // column page per row locator. See lake_connector.cpp. Data-cache (fill_data_cache)
+    // is left at its default so the lookup does not override the scan's per-range policy.
+    rs_opts.use_page_cache = _use_page_cache;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;
