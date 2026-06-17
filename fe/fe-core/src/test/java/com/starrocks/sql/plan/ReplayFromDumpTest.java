@@ -1102,23 +1102,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertContains(replayPair.second, "5:OlapScanNode\n" +
                 "     TABLE: tbl_5");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testLowCardinalityJoinPredicateTypeConsistency() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-
-        String dumpString = getDumpInfoFromFile("query_dump/test_low_cardinality_join_predicate_type_consistency");
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
-        String plan = replayPair.second;
-        PlanTestBase.assertContains(plan,
-                "equal join conjunct: [66: s_nation, VARCHAR, false] = [47: s_nation, VARCHAR, false]");
-        PlanTestBase.assertNotContains(plan, "dict_col=s_nation");
-
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
-    }
 
     @Test
     public void testPushDownDistinctBelowWindowNoEmptyAnalytic() throws Exception {
@@ -1135,5 +1118,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "Plan contains empty analytic functions — PruneEmptyWindowRule was not called after "
                         + "PRUNE_COLUMNS_RULES in pushDownAggregation:\n" + plan);
     }
->>>>>>> a02142fe3a ([BugFix] Prune empty analytic operator after pushing down distinct agg (#74810))
 }
