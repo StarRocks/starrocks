@@ -17,11 +17,11 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -348,8 +348,8 @@ public class ScalarOperatorsReuseTest {
         // ScalarOperators are considered equal by CompoundPredicateOperator#equals (which
         // normalizes child order). The previous ImmutableMap.Builder put failed with
         // "Multiple entries with same key".
-        ColumnRefOperator c1 = columnRefFactory.create("c1", IntegerType.INT, true);
-        ColumnRefOperator c2 = columnRefFactory.create("c2", IntegerType.INT, true);
+        ColumnRefOperator c1 = columnRefFactory.create("c1", ScalarType.INT, true);
+        ColumnRefOperator c2 = columnRefFactory.create("c2", ScalarType.INT, true);
 
         BinaryPredicateOperator a = new BinaryPredicateOperator(BinaryType.GT, c1, ConstantOperator.createInt(1));
         BinaryPredicateOperator b = new BinaryPredicateOperator(BinaryType.GT, c2, ConstantOperator.createInt(2));
