@@ -34,11 +34,11 @@
 
 #pragma once
 
+#include "cache/mem_cache/page_handle_fwd.h"
 #include "column/nullable_column.h"
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
 #include "storage/primitive/range.h"
-#include "storage/rowset/page_handle_fwd.h"
 
 namespace starrocks {
 class ColumnPredicate;

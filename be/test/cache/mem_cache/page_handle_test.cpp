@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/rowset/page_handle.h"
+#include "cache/mem_cache/page_handle.h"
 
 #include <gtest/gtest.h>
 

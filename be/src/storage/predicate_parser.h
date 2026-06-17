@@ -53,30 +53,4 @@ private:
     // const std::vector<SlotDescriptor*>* _slot_desc = nullptr;
 };
 
-class ConnectorPredicateParser final : public PredicateParser {
-public:
-    explicit ConnectorPredicateParser(const std::vector<SlotDescriptor*>* slot_descriptors)
-            : _slot_desc(slot_descriptors) {}
-
-    bool can_pushdown(const ColumnPredicate* predicate) const override;
-
-    bool can_pushdown(const ConstPredicateNodePtr& pred_tree) const override;
-
-    bool can_pushdown(const SlotDescriptor* slot_desc) const override;
-
-    StatusOr<ColumnPredicate*> parse_thrift_cond(const TCondition& condition) const override;
-    StatusOr<ColumnPredicate*> parse_thrift_cond(const GeneralCondition& condition) const override;
-
-    StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
-                                              ExprContext* expr_ctx) const override;
-
-    uint32_t column_id(const SlotDescriptor& slot_desc) const override;
-
-private:
-    template <typename ConditionType>
-    ColumnPredicate* t_parse_thrift_cond(const ConditionType& condition) const;
-
-    const std::vector<SlotDescriptor*>* _slot_desc = nullptr;
-};
-
 } // namespace starrocks

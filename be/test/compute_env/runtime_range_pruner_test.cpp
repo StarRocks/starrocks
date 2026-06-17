@@ -12,29 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "compute_env/runtime_range_pruner.hpp"
+
 #include <gtest/gtest.h>
+
+#include <vector>
 
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_parser.h"
 #include "storage/primitive/column_predicate_factory.h"
-#include "storage/runtime_range_pruner.hpp"
+#include "storage/primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
-#include "testutil/schema_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
-class OlapRuntimeRangePrunerTest : public ::testing::Test {
-public:
-    void SetUp() override {
-        _tablet_schema = SchemaTestHelper::gen_schema_of_dup(TYPE_INT, 1, 3, 1);
-        _predicate_parser = std::make_unique<OlapPredicateParser>(_tablet_schema);
-    }
-
+class RuntimeRangePrunerTest : public ::testing::Test {
 protected:
     StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> _gen_runtime_filter_desc();
 
@@ -47,11 +43,9 @@ protected:
     ObjectPool _pool;
     RuntimeState _runtime_state;
     TPlanNodeId _node_id = 0;
-    TabletSchemaSPtr _tablet_schema;
-    std::unique_ptr<OlapPredicateParser> _predicate_parser;
 };
 
-StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTest::_gen_runtime_filter_desc() {
+StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> RuntimeRangePrunerTest::_gen_runtime_filter_desc() {
     TRuntimeFilterDescription desc;
     desc.__set_filter_id(1);
     desc.__set_has_remote_targets(false);
@@ -69,7 +63,7 @@ StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTe
     return runtime_filter_desc;
 }
 
-TEST_F(OlapRuntimeRangePrunerTest, min_max_parser) {
+TEST_F(RuntimeRangePrunerTest, min_max_parser) {
     Int32Decoder decoder(nullptr);
 
     Int32RuntimeFilter rf;
@@ -84,7 +78,7 @@ TEST_F(OlapRuntimeRangePrunerTest, min_max_parser) {
     ASSERT_EQ(max_column->debug_string(), "CONST: 20 Size : 1");
 }
 
-TEST_F(OlapRuntimeRangePrunerTest, min_max_parser_for_decimal) {
+TEST_F(RuntimeRangePrunerTest, min_max_parser_for_decimal) {
     Int32Decoder decoder(nullptr);
 
     Decimal32RuntimeFilter rf;
@@ -99,14 +93,16 @@ TEST_F(OlapRuntimeRangePrunerTest, min_max_parser_for_decimal) {
     ASSERT_EQ(max_column->debug_string(), "CONST: 0.0020 Size : 1");
 }
 
-TEST_F(OlapRuntimeRangePrunerTest, update_1) {
+TEST_F(RuntimeRangePrunerTest, update_1) {
     SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
+    std::vector<SlotDescriptor*> slot_descs{&slot};
+    ConnectorPredicateParser predicate_parser(&slot_descs);
 
     ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc, _gen_runtime_filter_desc());
 
     UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
     unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
-    RuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
+    RuntimeScanRangePruner pruner(&predicate_parser, unarrivedRuntimeFilterList);
 
     size_t pred_size = 0;
     std::string pred_1;
@@ -158,14 +154,16 @@ TEST_F(OlapRuntimeRangePrunerTest, update_1) {
     ASSERT_EQ(pred_2, "(columnId(0)<=15)");
 }
 
-TEST_F(OlapRuntimeRangePrunerTest, update_has_null) {
+TEST_F(RuntimeRangePrunerTest, update_has_null) {
     SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
+    std::vector<SlotDescriptor*> slot_descs{&slot};
+    ConnectorPredicateParser predicate_parser(&slot_descs);
 
     ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc, _gen_runtime_filter_desc());
 
     UnarrivedRuntimeFilterList unarrivedRuntimeFilterList;
     unarrivedRuntimeFilterList.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
-    RuntimeScanRangePruner pruner(_predicate_parser.get(), unarrivedRuntimeFilterList);
+    RuntimeScanRangePruner pruner(&predicate_parser, unarrivedRuntimeFilterList);
 
     size_t pred_size = 0;
     std::string pred;

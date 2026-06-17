@@ -67,6 +67,7 @@
 #endif
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/bloom_filter.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
@@ -77,7 +78,6 @@
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/options.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/scalar_column_iterator.h"

@@ -23,6 +23,7 @@ set(CACHE_TEST_FILES
     datacache_metrics_test.cpp
     datacache_utils_test.cpp
     mem_cache/lrucache_engine_test.cpp
+    mem_cache/page_handle_test.cpp
     mem_cache/page_cache_test.cpp
     scan/shared_buffered_input_stream_test.cpp
 )

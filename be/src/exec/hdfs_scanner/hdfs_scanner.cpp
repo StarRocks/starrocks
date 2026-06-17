@@ -23,13 +23,14 @@
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
-#include "storage/predicate_parser.h"
-#include "storage/runtime_range_pruner.hpp"
+#include "storage/primitive/predicate_parser.h"
+
 namespace starrocks {
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {

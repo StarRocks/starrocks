@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "compute_env/runtime_range_pruner.h"
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -24,7 +25,6 @@
 #include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 #include "storage/primitive/predicate_tree_params.h"
 #include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
 
 namespace starrocks {
 

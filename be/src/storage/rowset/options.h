@@ -36,10 +36,10 @@
 
 #include <memory>
 
+#include "cache/mem_cache/page_handle.h"
 #include "io/seekable_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/rowset/page_handle.h"
 
 namespace starrocks {
 
