@@ -42,7 +42,6 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.metrics.MetricsReporter;
 import org.apache.iceberg.metrics.ScanMetricsUtil;
-import org.apache.iceberg.util.ParallelIterable;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.TableScanUtil;
 import org.apache.logging.log4j.LogManager;
@@ -305,7 +304,10 @@ public class StarRocksIcebergTableScan
         Iterable<CloseableIterable<FileScanTask>> tasks =
                 CloseableIterable.transform(CloseableIterable.withNoopClose(dataManifestWithCache), this::filterDataFiles);
 
-        CloseableIterable<FileScanTask> tasksWithCache = new ParallelIterable<>(tasks, planExecutor());
+        // Cached manifests are fully in memory; their scan tasks are assembled lazily on the
+        // consumer thread, since there is no IO here for a worker pool to overlap. Routing them
+        // through ParallelIterable would only add executor hand-off and its poll-based wait.
+        CloseableIterable<FileScanTask> tasksWithCache = CloseableIterable.concat(tasks);
         if (dataManifestWithoutCache.isEmpty()) {
             return tasksWithCache;
         } else {
