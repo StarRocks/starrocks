@@ -297,6 +297,11 @@ public class CompactionScheduler extends Daemon {
             return job;
         } catch (Exception e) {
             LOG.warn("Fail to dispatch PUBLISH_ONLY tasks partition={} err={}", partitionIdentifier, e.getMessage());
+            // The setup block already pinned minRetainVersion to visibleVersion. This job is
+            // never registered in runningCompactions (we return null), so the success/failure
+            // reset in scheduleNewCompaction will never run for it. Reset here, otherwise the
+            // partition's version GC/vacuum stays pinned at visibleVersion indefinitely.
+            partition.setMinRetainVersion(0);
             abortTransactionIgnoreError(job, e.getMessage());
             return null;
         }
