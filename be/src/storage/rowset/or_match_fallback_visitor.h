@@ -20,11 +20,11 @@
 #include "common/status.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h" // SlotDescriptor::col_name() is called below
-#include "storage/column_expr_predicate.h"
-#include "storage/column_predicate_factory.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/column_expr_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {

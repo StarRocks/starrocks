@@ -14,11 +14,12 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
 #include "base/string/string_parser.hpp"
 #include "column/hash_set.h"
-#include "storage/types.h"
 #include "types/decimalv3.h"
 #include "types/storage_type_traits.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 

@@ -25,11 +25,11 @@
 #include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "storage/primitive/column_predicate.h"
-#include "storage/types.h"
 #include "types/decimalv3.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/storage_type_traits.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 

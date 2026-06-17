@@ -2,11 +2,11 @@
 
 #include <utility>
 
+#include "common/column_id.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "storage/column_predicate_factory.h"
-#include "storage/olap_common.h"
-#include "storage/types.h"
+#include "storage/primitive/column_predicate_factory.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 class ZoneMapDetail;

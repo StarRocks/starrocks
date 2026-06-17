@@ -17,8 +17,8 @@
 #include <vector>
 
 #include "column/global_dict/dict_column.h"
-#include "storage/column_operator_predicate.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_operator_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "types/datum.h"
 
 namespace starrocks {

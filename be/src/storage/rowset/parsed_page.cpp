@@ -50,7 +50,7 @@
 #include "common/config_rowset_fwd.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"

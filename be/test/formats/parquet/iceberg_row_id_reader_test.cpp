@@ -20,7 +20,7 @@
 #include "common/object_pool.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
-#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/range.h"
 #include "types/datum.h"
 
