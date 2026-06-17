@@ -388,7 +388,25 @@ public class CompactionScheduler extends Daemon {
                 } else if (taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS ||
                            taskResult == CompactionTask.TaskResult.NONE_SUCCESS) {
                     job.getPartition().setMinRetainVersion(0);
-                    errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
+                    String failMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
+                    // Benign no-op: an autonomous PUBLISH_ONLY that found nothing to publish.
+                    // FE's version_delta publish trigger is more eager than the BE's EXECUTE
+                    // score threshold (and can race ahead of it), so a partition may be asked
+                    // to publish before any local compaction result exists. The aggregator
+                    // rejects an empty CombinedTxnLogPB — that is NOT a real failure. Quietly
+                    // drop the job and retry on the next trigger once results accumulate,
+                    // instead of ERROR-spamming and churning the failure history/penalty.
+                    if (job.getJobType() == CompactionJob.JobType.PUBLISH_ONLY
+                            && failMsg.contains("empty CombinedTxnLogPB")) {
+                        iterator.remove();
+                        job.finish();
+                        abortTransactionIgnoreException(job, "autonomous publish: nothing to publish this round");
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("PUBLISH_ONLY no-op (nothing to publish) partition={}", partition);
+                        }
+                        continue;
+                    }
+                    errorMsg = failMsg;
                     LOG.error("Compaction job {} failed: {}", job.getDebugString(), errorMsg);
                     job.abort(); // Abort any executing task, if present.
                 } else if (taskResult != CompactionTask.TaskResult.NOT_FINISHED) {
