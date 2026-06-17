@@ -1933,6 +1933,8 @@ public class PaimonMetadataTest {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
                 result = paimonNativeTable;
+                paimonNativeTable.fullName();
+                result = "db1.tbl1";
                 paimonNativeTable.tagManager();
                 result = tagManager;
                 tagManager.tagExists("20260610");
@@ -1950,7 +1952,7 @@ public class PaimonMetadataTest {
             }
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
-        // Parsing the tag version records the tag name in a ThreadLocal that getRemoteFiles reads.
+        // Parsing the tag version records the tag name in scanTags that getRemoteFiles reads back.
         long snapshotId = metadata.getSnapshotIdFromVersion(paimonTable.getNativeTable(),
                 new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createVarchar("tag:20260610")));
         assertEquals(100L, snapshotId);
@@ -1971,6 +1973,160 @@ public class PaimonMetadataTest {
                 boolean usesSnapshotId = capturedOptions.stream()
                         .anyMatch(opts -> opts.containsKey(CoreOptions.SCAN_SNAPSHOT_ID.key()));
                 assertFalse(usesSnapshotId, "tag read must not inject scan.snapshot-id");
+            }
+        };
+    }
+    
+    @Test
+    public void testGetRemoteFilesWithTagMultipleTables(@Mocked FileStoreTable tableA,
+                                                        @Mocked FileStoreTable tableB,
+                                                        @Mocked ReadBuilder readBuilder,
+                                                        @Mocked InnerTableScan scan,
+                                                        @Mocked TagManager tagManagerA,
+                                                        @Mocked TagManager tagManagerB,
+                                                        @Mocked Tag tagA,
+                                                        @Mocked Tag tagB) throws Catalog.TableNotExistException {
+        // Two different tables, each read at its own tag, resolve to different snapshot ids.
+        // The tag of one table must not leak into the scan of the other (regression for the case
+        // where a single shared slot was overwritten by the last parsed table).
+        new Expectations() {
+            {
+                tableA.fullName();
+                result = "db1.tblA";
+                tableA.tagManager();
+                result = tagManagerA;
+                tagManagerA.tagExists("taga");
+                result = true;
+                tagManagerA.tagObjects();
+                result = Lists.newArrayList(Pair.of(tagA, "taga"));
+                tagA.id();
+                result = 100L;
+
+                tableB.fullName();
+                result = "db1.tblB";
+                tableB.tagManager();
+                result = tagManagerB;
+                tagManagerB.tagExists("tagb");
+                result = true;
+                tagManagerB.tagObjects();
+                result = Lists.newArrayList(Pair.of(tagB, "tagb"));
+                tagB.id();
+                result = 200L;
+
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = tableA;
+                tableA.newReadBuilder();
+                result = readBuilder;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
+                result = splits;
+                readBuilder.newScan();
+                result = scan;
+            }
+        };
+        PaimonTable paimonTableA = (PaimonTable) metadata.getTable(connectContext, "db1", "tblA");
+
+        // Parse both tag versions first (as the planner does for all scans before reading files),
+        // so the single-slot bug would have left only the last table's tag behind.
+        long snapshotA = metadata.getSnapshotIdFromVersion(tableA,
+                new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createVarchar("tag:taga")));
+        long snapshotB = metadata.getSnapshotIdFromVersion(tableB,
+                new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createVarchar("tag:tagb")));
+        assertEquals(100L, snapshotA);
+        assertEquals(200L, snapshotB);
+
+        List<String> requiredNames = Lists.newArrayList("f2", "dt");
+        metadata.getRemoteFiles(paimonTableA, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames)
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotA))).build());
+
+        new Verifications() {
+            {
+                List<Map<String, String>> capturedOptions = new ArrayList<>();
+                tableA.copy(withCapture(capturedOptions));
+                // tableA scan (snapshot 100) must use tagA, never tagB or scan.snapshot-id.
+                boolean usesTagA = capturedOptions.stream()
+                        .anyMatch(opts -> "taga".equals(opts.get(CoreOptions.SCAN_TAG_NAME.key())));
+                assertTrue(usesTagA, "tableA scan must use its own tag (tagA)");
+                boolean leakedTagB = capturedOptions.stream()
+                        .anyMatch(opts -> "tagb".equals(opts.get(CoreOptions.SCAN_TAG_NAME.key())));
+                assertFalse(leakedTagB, "tableB's tag must not leak into tableA scan");
+            }
+        };
+    }
+
+    @Test
+    public void testGetRemoteFilesWithTagSameSnapshotId(@Mocked FileStoreTable tableA,
+                                                        @Mocked FileStoreTable tableB,
+                                                        @Mocked ReadBuilder readBuilder,
+                                                        @Mocked InnerTableScan scan,
+                                                        @Mocked TagManager tagManagerA,
+                                                        @Mocked TagManager tagManagerB,
+                                                        @Mocked Tag tagA,
+                                                        @Mocked Tag tagB) throws Catalog.TableNotExistException {
+        // Two different tables read at their own tags that BOTH resolve to the same snapshot id (1).
+        // Paimon snapshot ids restart from 1 per table, so distinct tables routinely share an id.
+        // Keying the remembered tag on the snapshot id alone would let tableB's tag overwrite tableA's
+        // (a cross-join "tableA FOR VERSION AS OF 'tag:taga'" join "tableB FOR VERSION AS OF 'tag:tagb'"
+        // would then scan tableA with tagb and fail). The key must combine the table full name.
+        new Expectations() {
+            {
+                tableA.fullName();
+                result = "db1.tblA";
+                tableA.tagManager();
+                result = tagManagerA;
+                tagManagerA.tagExists("taga");
+                result = true;
+                tagManagerA.tagObjects();
+                result = Lists.newArrayList(Pair.of(tagA, "taga"));
+                tagA.id();
+                result = 1L;
+
+                tableB.fullName();
+                result = "db1.tblB";
+                tableB.tagManager();
+                result = tagManagerB;
+                tagManagerB.tagExists("tagb");
+                result = true;
+                tagManagerB.tagObjects();
+                result = Lists.newArrayList(Pair.of(tagB, "tagb"));
+                tagB.id();
+                result = 1L;
+
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = tableA;
+                tableA.newReadBuilder();
+                result = readBuilder;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
+                result = splits;
+                readBuilder.newScan();
+                result = scan;
+            }
+        };
+        PaimonTable paimonTableA = (PaimonTable) metadata.getTable(connectContext, "db1", "tblA");
+
+        // Parse both tag versions first; with the snapshot-id-only key the second parse (tableB)
+        // would clobber tableA's entry, since both resolve to snapshot 1.
+        long snapshotA = metadata.getSnapshotIdFromVersion(tableA,
+                new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createVarchar("tag:taga")));
+        long snapshotB = metadata.getSnapshotIdFromVersion(tableB,
+                new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createVarchar("tag:tagb")));
+        assertEquals(1L, snapshotA);
+        assertEquals(1L, snapshotB);
+
+        List<String> requiredNames = Lists.newArrayList("f2", "dt");
+        metadata.getRemoteFiles(paimonTableA, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames)
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotA))).build());
+
+        new Verifications() {
+            {
+                List<Map<String, String>> capturedOptions = new ArrayList<>();
+                tableA.copy(withCapture(capturedOptions));
+                // tableA scan must use its own tag (taga), even though tableB shares snapshot id 1.
+                boolean usesTagA = capturedOptions.stream()
+                        .anyMatch(opts -> "taga".equals(opts.get(CoreOptions.SCAN_TAG_NAME.key())));
+                assertTrue(usesTagA, "tableA scan must use its own tag (taga)");
+                boolean leakedTagB = capturedOptions.stream()
+                        .anyMatch(opts -> "tagb".equals(opts.get(CoreOptions.SCAN_TAG_NAME.key())));
+                assertFalse(leakedTagB, "tableB's tag must not leak into tableA scan despite shared snapshot id");
             }
         };
     }
