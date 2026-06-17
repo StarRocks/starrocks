@@ -38,6 +38,7 @@ class ResultBufferMgr;
 class ResultQueueMgr;
 class RoutineLoadTaskExecutor;
 class RuntimeFilterCache;
+class RuntimeFilterQueryLifecycle;
 class RuntimeFilterWorker;
 class SmallFileMgr;
 class StreamContextMgr;
@@ -46,6 +47,7 @@ class TFileBrokerServiceClient;
 class ThreadPool;
 class TransactionMgr;
 class FrontendServiceClient;
+class MetricRegistry;
 template <class T>
 class ClientCache;
 
@@ -113,6 +115,7 @@ struct LakeServices {
     lake::ReplicationTxnManager* lake_replication_txn_manager = nullptr;
     ThreadPool* put_aggregate_metadata_thread_pool = nullptr;
     ThreadPool* lake_metadata_fetch_thread_pool = nullptr;
+    ThreadPool* lake_vector_index_build_thread_pool = nullptr;
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr = nullptr;
     ThreadPool* pk_index_execution_thread_pool = nullptr;
     ThreadPool* pk_index_memtable_flush_thread_pool = nullptr;
@@ -136,6 +139,7 @@ struct RuntimeServices {
     RoutineLoadTaskExecutor* routine_load_task_executor = nullptr;
     SmallFileMgr* small_file_mgr = nullptr;
     RuntimeFilterWorker* runtime_filter_worker = nullptr;
+    RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* runtime_filter_cache = nullptr;
     ProfileReportWorker* profile_report_worker = nullptr;
     pipeline::QueryContextManager* query_context_mgr = nullptr;
@@ -156,6 +160,7 @@ struct QueryExecutionServices {
     const RpcServices* rpc = nullptr;
     const LakeServices* lake = nullptr;
     const RuntimeServices* runtime = nullptr;
+    MetricRegistry* process_metrics = nullptr;
 };
 
 struct AdminServices {

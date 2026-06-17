@@ -14,10 +14,12 @@
 
 package com.starrocks.connector;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -132,6 +134,18 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Lazily fetch the table comment when a caller really needs it
+     * (e.g. information_schema.tables). Default implementation returns
+     * the comment already on the cached Table object — i.e. for Iceberg
+     * the comment travels with getTable() so this is free. JDBC overrides
+     * to issue a dedicated REMARKS query.
+     */
+    default String getTableComment(ConnectContext context, String dbName, String tblName) {
+        Table table = getTable(context, dbName, tblName);
+        return table == null ? "" : Strings.nullToEmpty(table.getComment());
+    }
+
+    /**
      * Build a temporary table from a pass-through query when the connector can infer the result schema.
      */
     default Table getTableFromQuery(ConnectContext context, String dbName, String query) {
@@ -157,6 +171,15 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Like {@link #getCurrentTvrSnapshot} but lets storages that pin snapshots
+     * per caller attach a reference for {@code mvId} as a side effect. Default
+     * is a pure read.
+     */
+    default TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        return getCurrentTvrSnapshot(dbName, table);
+    }
+
+    /**
      * NOTE: ensure the last snapshot is at the last of the collection.
      *
      * @param dbName  database name
@@ -169,6 +192,15 @@ public interface ConnectorMetadata {
                                                           TvrTableSnapshot fromSnapshotExclusive,
                                                           TvrTableSnapshot toSnapshotInclusive) {
         return Lists.newArrayList();
+    }
+
+    /**
+     * Commit time of {@code version} (the table's own version space, e.g. an Iceberg snapshot id)
+     * in epoch millis, or empty when it cannot be resolved (unknown/expired version, or a format
+     * with no per-version commit time).
+     */
+    default Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        return Optional.empty();
     }
 
     default boolean tableExists(ConnectContext context, String dbName, String tblName) {

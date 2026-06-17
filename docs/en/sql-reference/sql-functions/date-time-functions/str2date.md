@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a string into a DATE value according to the specified format."
 ---
 
 # str2date

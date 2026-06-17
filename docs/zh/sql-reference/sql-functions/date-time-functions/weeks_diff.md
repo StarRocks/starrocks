@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算开始时间和结束时间相差的周数，精确到周。"
 ---
 
 # weeks_diff

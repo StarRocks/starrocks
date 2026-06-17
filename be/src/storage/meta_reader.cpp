@@ -23,10 +23,10 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "column/global_dict/config.h"
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "fs/fs_factory.h"
-#include "runtime/global_dict/config.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -449,7 +449,7 @@ Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_ite
         ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
         // For JSON data, the schema may be heterogeneous, meaning that some segments might not contain the dictionary column,
         // but a global dictionary could still be present and usable.
-        if (!tablet_column->is_extended()) {
+        if (!tablet_column->is_extended() || !column_iter->only_nulls()) {
             return Status::GlobalDictError("no global dict");
         } else {
             return Status::OK();

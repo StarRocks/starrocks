@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "スキーマ設計とテーブルタイプ選択を通じた、StarRocks クエリパフォーマンスの最適化のベストプラクティス。"
 sidebar_position: 50
 ---
 

@@ -20,24 +20,25 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/file_reader.h"
 
 namespace starrocks {
 
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
-Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    if (scanner_params.split_context != nullptr) {
-        auto split_ctx = down_cast<const parquet::SplitContext*>(scanner_params.split_context);
+Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
+    if (_scanner_ctx->split_context != nullptr) {
+        auto split_ctx = down_cast<const parquet::SplitContext*>(_scanner_ctx->split_context);
         _skip_rows_ctx = split_ctx->skip_rows_ctx;
         return Status::OK();
     }
 
-    if (!scanner_params.deletes.empty()) {
+    if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         auto iceberg_delete_builder =
-                std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, scanner_params);
-        for (const auto& delete_file : scanner_params.deletes) {
+                std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, *_scanner_ctx);
+        for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
                 RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));
             } else {
@@ -47,21 +48,21 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 return Status::InternalError(s);
             }
         }
-        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
-    } else if (scanner_params.paimon_deletion_file != nullptr) {
+        _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
+    } else if (_scanner_ctx->table_specific.paimon_deletion_file != nullptr) {
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
-                new PaimonDeleteFileBuilder(scanner_params.fs, _skip_rows_ctx));
-        RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
-    } else if (scanner_params.deletion_vector_descriptor != nullptr) {
+                new PaimonDeleteFileBuilder(_scanner_ctx->fs, _skip_rows_ctx));
+        RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_ctx->table_specific.paimon_deletion_file.get()));
+    } else if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
-        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(scanner_params);
+        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(*_scanner_ctx);
         RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
         _app_stats.deletion_vector_build_count += 1;
     }
     return Status::OK();
 }
 
-void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
+void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     // deletion vector build only in the first task which used for split sub-tasks,
@@ -100,8 +101,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
 
     // io coalesce
-    RuntimeProfile::Counter* group_active_lazy_coalesce_together = nullptr;
-    RuntimeProfile::Counter* group_active_lazy_coalesce_seperately = nullptr;
+    RuntimeProfile::Counter* active_lazy_coalesce_together = nullptr;
+    RuntimeProfile::Counter* active_lazy_coalesce_seperately = nullptr;
 
     // page statistics
     RuntimeProfile::Counter* has_page_statistics = nullptr;
@@ -158,10 +159,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
 
-    group_active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether",
-                                                            TUnit::UNIT, kParquetProfileSectionPrefix);
-    group_active_lazy_coalesce_seperately = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceSeperately",
-                                                              TUnit::UNIT, kParquetProfileSectionPrefix);
+    active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
+                                                      kParquetProfileSectionPrefix);
+    active_lazy_coalesce_seperately = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
+                                                        kParquetProfileSectionPrefix);
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
@@ -204,8 +205,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(group_chunk_read_timer, _app_stats.group_chunk_read_ns);
     COUNTER_UPDATE(group_dict_filter_timer, _app_stats.group_dict_filter_ns);
     COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
-    COUNTER_UPDATE(group_active_lazy_coalesce_together, _app_stats.group_active_lazy_coalesce_together);
-    COUNTER_UPDATE(group_active_lazy_coalesce_seperately, _app_stats.group_active_lazy_coalesce_seperately);
+    COUNTER_UPDATE(active_lazy_coalesce_together, _app_stats.active_lazy_coalesce_together);
+    COUNTER_UPDATE(active_lazy_coalesce_seperately, _app_stats.active_lazy_coalesce_seperately);
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
@@ -213,20 +214,42 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     do_update_deletion_vector_filter_counter(root);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
-    COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
-    COUNTER_UPDATE(filtered_row_groups, _app_stats.parquet_filtered_row_groups);
+    COUNTER_UPDATE(total_row_groups, _app_stats.total_row_groups);
+    COUNTER_UPDATE(filtered_row_groups, _app_stats.filtered_row_groups);
 
-    COUNTER_UPDATE(statistics_tried_counter, _app_stats._optimzation_counter.statistics_tried_counter);
-    COUNTER_UPDATE(statistics_success_counter, _app_stats._optimzation_counter.statistics_success_counter);
-    COUNTER_UPDATE(page_index_tried_counter, _app_stats._optimzation_counter.page_index_tried_counter);
-    COUNTER_UPDATE(page_index_success_counter, _app_stats._optimzation_counter.page_index_success_counter);
-    COUNTER_UPDATE(page_index_filter_group_counter, _app_stats._optimzation_counter.page_index_filter_group_counter);
-    COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats._optimzation_counter.bloom_filter_tried_counter);
-    COUNTER_UPDATE(bloom_filter_success_counter, _app_stats._optimzation_counter.bloom_filter_success_counter);
+    COUNTER_UPDATE(statistics_tried_counter, _app_stats.statistics_tried_counter);
+    COUNTER_UPDATE(statistics_success_counter, _app_stats.statistics_success_counter);
+    COUNTER_UPDATE(page_index_tried_counter, _app_stats.page_index_tried_counter);
+    COUNTER_UPDATE(page_index_success_counter, _app_stats.page_index_success_counter);
+    COUNTER_UPDATE(page_index_filter_group_counter, _app_stats.page_index_filter_group_counter);
+    COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
+    COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
-    if (_scanner_ctx.conjuncts_manager != nullptr &&
-        _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
-        root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());
+    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        root->add_info_string("ParquetPredicateTreeFilter",
+                              _scanner_ctx->predicates.predicate_tree.root().debug_string());
+    }
+
+    // Global-dict opt visibility for Hive/Iceberg/Hudi/Paimon Parquet workloads.
+    // Authoritative signal is the counter pair; the info-string is a quick grep
+    // hook published if any row group wrapped a dict-aware reader at all.
+    RuntimeProfile::Counter* gd_total_row_groups =
+            ADD_CHILD_COUNTER(root, "GlobalDictTotalRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_applied_row_groups =
+            ADD_CHILD_COUNTER(root, "GlobalDictAppliedRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_applied_slots =
+            ADD_CHILD_COUNTER(root, "GlobalDictAppliedSlots", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_dict_code_reader_slots =
+            ADD_CHILD_COUNTER(root, "GlobalDictDictCodeReaderSlots", TUnit::UNIT, kParquetProfileSectionPrefix);
+    RuntimeProfile::Counter* gd_encode_reader_slots =
+            ADD_CHILD_COUNTER(root, "GlobalDictEncodeReaderSlots", TUnit::UNIT, kParquetProfileSectionPrefix);
+    COUNTER_UPDATE(gd_total_row_groups, _app_stats.global_dict_total_row_groups);
+    COUNTER_UPDATE(gd_applied_row_groups, _app_stats.global_dict_applied_row_groups);
+    COUNTER_UPDATE(gd_applied_slots, _app_stats.global_dict_applied_slots);
+    COUNTER_UPDATE(gd_dict_code_reader_slots, _app_stats.global_dict_dict_code_reader_slots);
+    COUNTER_UPDATE(gd_encode_reader_slots, _app_stats.global_dict_encode_reader_slots);
+    if (_app_stats.global_dict_applied_row_groups > 0) {
+        root->add_info_string_if_not_exists("GlobalDictOptApplied", "true");
     }
 }
 
@@ -234,16 +257,25 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
-                                                    _scanner_params.datacache_options,
+                                                    _scanner_ctx->datacache_options,
                                                     _shared_buffered_input_stream.get(), _skip_rows_ctx);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
+    RETURN_IF_ERROR(_reader->init(_scanner_ctx));
     return Status::OK();
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    Status status = _reader->get_next(chunk);
-    return status;
+    RETURN_IF_ERROR(_reader->get_next(chunk));
+    // Evaluate multi-slot predicates after FileReader has materialised all columns
+    // (including lazily-loaded ones from its internal predicate pipeline).
+    // This pass is the correctness guarantee; statistics-based skipping inside
+    // FileReader is approximate.  In the future, expression-driven lazy
+    // materialisation will replace this with interleaved column-load/evaluate.
+    if ((*chunk)->num_rows() > 0 && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, chunk->get()));
+    }
+    return Status::OK();
 }
 
 void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {

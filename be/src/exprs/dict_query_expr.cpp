@@ -15,15 +15,16 @@
 #include "exprs/dict_query_expr.h"
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
-#include "runtime/client_cache.h"
-#include "runtime/thrift_rpc_helper.h"
+#include "platform/thrift_rpc_helper.h"
 #include "storage/chunk_helper.h"
 #include "storage/table_reader.h"
 
@@ -67,7 +68,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     }
 
     std::vector<bool> found;
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_schema, key_chunk->num_rows());
+    ChunkPtr value_chunk = ChunkFactory::new_chunk(_value_schema, key_chunk->num_rows());
     value_chunk->set_slot_id_to_index(_value_slot_id, 0);
 
     Status status = _table_reader->multi_get(*key_chunk, {_dict_query_expr.value_field}, found, *value_chunk);

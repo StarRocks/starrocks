@@ -23,7 +23,7 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "types/logical_type.h"
 #include "types/value_generator.h"
 

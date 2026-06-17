@@ -25,10 +25,11 @@
 #include "base/hash/hash.h"
 #include "base/phmap/phmap.h"
 #include "bench/bench_util.h"
+#include "exprs/function_context.h"
 #include "exprs/hash_functions.h"
 #include "exprs/time_functions.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "testutil/function_utils.h"
 
 namespace starrocks {
 
@@ -226,19 +227,21 @@ public:
         globals.__set_timestamp_ms(1577836800000);
         globals.__set_time_zone("UTC");
         state = std::make_unique<starrocks::RuntimeState>(globals);
-        utils = std::make_unique<starrocks::FunctionUtils>(state.get());
+        mem_pool = std::make_unique<starrocks::MemPool>();
+        fn_ctx.reset(starrocks::FunctionContext::create_context(
+                state.get(), mem_pool.get(), FunctionContext::TypeDesc{}, std::vector<FunctionContext::TypeDesc>{}));
     }
 
     void bench_hour_from_unixtime(benchmark::State& state_bench) {
         for (auto _ : state_bench) {
-            auto result = starrocks::TimeFunctions::hour_from_unixtime(utils->get_fn_ctx(), columns).value();
+            auto result = starrocks::TimeFunctions::hour_from_unixtime(fn_ctx.get(), columns).value();
             benchmark::DoNotOptimize(result);
         }
     }
 
     void bench_from_unixtime_extract_hour(benchmark::State& state_bench) {
         for (auto _ : state_bench) {
-            auto dt_col_ptr = starrocks::TimeFunctions::from_unix_to_datetime_64(utils->get_fn_ctx(), columns).value();
+            auto dt_col_ptr = starrocks::TimeFunctions::from_unix_to_datetime_64(fn_ctx.get(), columns).value();
             auto dt_col = starrocks::ColumnHelper::cast_to<starrocks::TYPE_DATETIME>(dt_col_ptr);
             int64_t sum = 0;
 
@@ -264,7 +267,8 @@ private:
     starrocks::Columns columns;
     starrocks::TQueryGlobals globals;
     std::unique_ptr<starrocks::RuntimeState> state;
-    std::unique_ptr<starrocks::FunctionUtils> utils;
+    std::unique_ptr<starrocks::MemPool> mem_pool;
+    std::unique_ptr<starrocks::FunctionContext> fn_ctx;
 };
 
 static void BM_HourFromUnixtime(benchmark::State& state) {

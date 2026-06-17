@@ -32,7 +32,9 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PointerType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -51,6 +53,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.types.Types;
@@ -61,6 +64,7 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
@@ -79,10 +83,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TRANSFORMS_DB_NAME = "partitioned_transforms_db";
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
+    public static final String MOCKED_UNPARTITIONED_V2_TABLE_NAME = "t0_v2";
     public static final String MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME = "variant_t0";
     public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
     public static final String MOCKED_UNKNOWN_TYPE_TABLE_NAME = "t_unknown_types";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
+    public static final String MOCKED_PARTITIONED_V2_TABLE_NAME = "t1_v2";
     // date partition table
     public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "t2";
 
@@ -108,6 +114,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME = "t0_date_month_identity_evolution";
 
     private static final List<String> PARTITION_TABLE_NAMES = ImmutableList.of(MOCKED_PARTITIONED_TABLE_NAME1,
+            MOCKED_PARTITIONED_V2_TABLE_NAME,
             MOCKED_PARTITIONED_TABLE_NAME2,
             MOCKED_STRING_PARTITIONED_TABLE_NAME1,
             MOCKED_STRING_PARTITIONED_TABLE_NAME2,
@@ -178,6 +185,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         required(4, "data", Types.StringType.get()),
                         required(5, "date", Types.StringType.get())),
                 3);
+        // V2 unpartitioned table for UPDATE tests (format version 2)
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_V2_TABLE_NAME,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("data", StringType.STRING, true),
+                        new Column("date", StringType.STRING, true)),
+                new Schema(required(3, "id", Types.IntegerType.get()),
+                        required(4, "data", Types.StringType.get()),
+                        required(5, "date", Types.StringType.get())),
+                2);
         registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME,
                 ImmutableList.of(new Column("id", IntegerType.INT, true),
                         new Column("v", VariantType.VARIANT, true)),
@@ -265,7 +281,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             List<String> colNames = columns.stream().map(Column::getName).collect(Collectors.toList());
             columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
                     col -> ColumnStatistic.unknown()));
-            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
+            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1) ||
+                    tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
                 icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0,
                         100, columnStatisticMap));
             } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
@@ -298,7 +315,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     private static List<Column> getPartitionedTableSchema(String tblName) {
-        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
+        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1) ||
+                tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
             return ImmutableList.of(new Column("id", IntegerType.INT, true),
                     new Column("data", StringType.STRING, true),
                     new Column("date", StringType.STRING, true));
@@ -319,7 +337,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     private static Schema getIcebergPartitionSchema(String tblName) {
-        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
+        if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1) ||
+                tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
             return new Schema(required(3, "id", Types.IntegerType.get()),
                     required(4, "data", Types.StringType.get()),
                     required(5, "date", Types.StringType.get()));
@@ -355,6 +374,14 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                     new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
                             + MOCKED_PARTITIONED_TABLE_NAME1), MOCKED_PARTITIONED_TABLE_NAME1,
                     schema, spec, 3);
+        } else if (tblName.equals(MOCKED_PARTITIONED_V2_TABLE_NAME)) {
+            // V2 partitioned table for UPDATE tests
+            PartitionSpec spec =
+                    PartitionSpec.builderFor(schema).identity("date").build();
+            return TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
+                            + MOCKED_PARTITIONED_V2_TABLE_NAME), MOCKED_PARTITIONED_V2_TABLE_NAME,
+                    schema, spec, 2);
         } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
             PartitionSpec spec =
                     PartitionSpec.builderFor(schema).identity("date").build();
@@ -615,6 +642,39 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, com.starrocks.catalog.Table table) {
         return TvrTableSnapshot.of(TvrVersion.of(1L));
+    }
+
+    @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, com.starrocks.catalog.Table table, long version) {
+        Snapshot snapshot = ((IcebergTable) table).getNativeTable().snapshot(version);
+        return snapshot == null ? Optional.empty() : Optional.of(snapshot.timestampMillis());
+    }
+
+    // ConnectorMetadata's default returns TvrTableSnapshot.empty(), which leaves the planned scan
+    // pinned to the MIN snapshot (0 partitions, no data) -- low-cardinality dict collection and the
+    // group-by min/max rule both then no-op. Mirror production's IcebergMetadata.getTableVersionRange:
+    // no bounds -> current snapshot; any bound -> TvrTableDelta so time-travel/delta tests keep the
+    // correct TVR shape. Only VERSION pointers are resolvable here; TEMPORAL would need a snapshot
+    // history that the mock does not carry.
+    @Override
+    public TvrVersionRange getTableVersionRange(
+            String dbName, com.starrocks.catalog.Table table,
+            Optional<ConnectorTableVersion> startVersion,
+            Optional<ConnectorTableVersion> endVersion) {
+        if (startVersion.isEmpty() && endVersion.isEmpty()) {
+            return getCurrentTvrSnapshot(dbName, table);
+        }
+        Optional<Long> start = startVersion.map(MockIcebergMetadata::snapshotIdFromVersion);
+        Optional<Long> end = endVersion.map(MockIcebergMetadata::snapshotIdFromVersion);
+        return TvrTableDelta.of(start, end);
+    }
+
+    private static long snapshotIdFromVersion(ConnectorTableVersion version) {
+        if (version.getPointerType() != PointerType.VERSION) {
+            throw new UnsupportedOperationException(
+                    "MockIcebergMetadata only resolves VERSION pointers; got " + version.getPointerType());
+        }
+        return version.getConstantOperator().getBigint();
     }
 
     public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,

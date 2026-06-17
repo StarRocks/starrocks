@@ -19,6 +19,7 @@
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "common/config_lake_fwd.h"
@@ -26,11 +27,16 @@
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
@@ -39,18 +45,17 @@
 #include "exprs/jsonpath.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/flat_json_metrics.h"
-#include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
+#include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
@@ -90,7 +95,10 @@ Status LakeDataSource::open(RuntimeState* state) {
         const auto& vector_search_options = thrift_lake_scan_node.vector_search_options;
         _use_vector_index = vector_search_options.enable_use_ann;
         if (_use_vector_index) {
-            _use_ivfpq = vector_search_options.use_ivfpq;
+            // use_ivfpq is the deprecated predecessor of refine_distance (both mean "run the refine
+            // path"). Honor it too so an older FE that only sets use_ivfpq picks the right path under
+            // a rolling upgrade.
+            _refine_distance = vector_search_options.refine_distance || vector_search_options.use_ivfpq;
             _vector_distance_column_name = vector_search_options.vector_distance_column_name;
             _vector_slot_id = vector_search_options.vector_slot_id;
             _params.vector_search_option = std::make_shared<VectorSearchOption>();
@@ -98,6 +106,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     }
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", tuple_desc->table_desc()->database());
     if (thrift_lake_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", thrift_lake_scan_node.rollup_name);
     }
@@ -150,7 +159,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     opts.scan_keys_unlimited = true;
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
-    opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
+    opts.pred_tree_params = state->fragment_runtime_state()->pred_tree_params();
     opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
 
     _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
@@ -181,8 +190,8 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr,
-                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
+                                                                                  _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
 
     do {
@@ -236,9 +245,10 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
         schema_key_pb.set_schema_id(t_schema_key.schema_id);
         schema_key_pb.set_db_id(t_schema_key.db_id);
         schema_key_pb.set_table_id(t_schema_key.table_id);
-        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
-                                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
-                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+        ASSIGN_OR_RETURN(_tablet_schema,
+                         tablet_manager->table_schema_service()->get_schema_for_scan(
+                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
+                                 _runtime_state->fragment_runtime_state()->fe_addr(), _tablet.metadata()));
     } else {
         // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
         // so fallback to the old way to get schema from tablet metadata
@@ -292,7 +302,7 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index;
-        if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+        if (_use_vector_index && !_refine_distance && slot->id() == _vector_slot_id) {
             index = _tablet_schema->num_columns();
             _params.vector_search_option->vector_column_id = index;
             _params.vector_search_option->vector_slot_id = slot->id();
@@ -390,7 +400,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         }
         _params.vector_search_option->vector_range = vector_options.vector_range;
         _params.vector_search_option->result_order = vector_options.result_order;
-        _params.vector_search_option->use_ivfpq = _use_ivfpq;
+        _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
         _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
     }
@@ -464,8 +474,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
                       thrift_lake_scan_node.enable_global_late_materialization;
     if (enable_glm) {
         int32_t scan_node_id = _provider->_scan_node->id();
-        auto* glm_mgr = runtime_state->query_ctx()->global_late_materialization_ctx_mgr();
-        auto* obj_pool = runtime_state->query_ctx()->object_pool();
+        auto* glm_mgr = runtime_state->query_runtime_state()->global_late_materialization_ctx_mgr();
+        auto* obj_pool = runtime_state->query_runtime_state()->object_pool();
         auto creator = [&]() {
             auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
             return ctx;
@@ -479,6 +489,13 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));
+    // init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty() && _runtime_profile != nullptr) {
+        _runtime_profile->add_info_string("GlobalDictOptApplied", "true");
+        _runtime_profile->add_info_string("GlobalDictAppliedSlots", std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
 
@@ -535,7 +552,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
         COUNTER_SET(_non_pushdown_predicates_counter,
                     static_cast<int64_t>(_not_push_down_conjuncts.size() + _non_pushdown_pred_tree.size()));
-        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        if (runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
             _runtime_profile->add_info_string(
                     "NonPushdownPredicateTree",
                     _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
@@ -1106,7 +1123,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
-    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+    if (_runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
         _runtime_profile->add_info_string(
                 "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
     }
@@ -1284,7 +1301,7 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
             RETURN_IF_ERROR(
                     ExprFactory::create_expr_tree(pool, partition_conjuncts[i], &_partition_conjunct_ctxs[i], state));
         }
-        // Prepare and open once here. convert_scan_range_to_morsel_queue may run multiple times
+        // Prepare and open once here. convert_scan_range_to_morsel_queue_builder may run multiple times
         // per fragment (once per driver sequence), and ExprContext::open short-circuits on
         // repeat calls, so re-opening after an inline close would leave function state stale.
         RETURN_IF_ERROR(ExprExecutor::prepare(_partition_conjunct_ctxs, state));
@@ -1305,7 +1322,7 @@ DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<LakeDataSourceProvider>(scan_node, plan_node);
 }
 
-StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
@@ -1334,14 +1351,15 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         }
     }
 
-    ASSIGN_OR_RETURN(auto morsel_queue,
-                     DataSourceProvider::convert_scan_range_to_morsel_queue(
+    ASSIGN_OR_RETURN(auto builder,
+                     DataSourceProvider::convert_scan_range_to_morsel_queue_builder(
                              *effective_scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
                              tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
+    builder = pipeline::make_olap_dynamic_morsel_queue_builder_from(std::move(builder));
     if (_could_split) {
-        morsel_queue->set_has_more_from_split(true);
+        builder->set_has_more_from_split(true);
     }
-    return morsel_queue;
+    return builder;
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(

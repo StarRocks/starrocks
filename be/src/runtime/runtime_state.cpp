@@ -62,17 +62,7 @@ RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                            const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
                            ExecEnv* exec_env)
-        : _exec_env(exec_env),
-          _obj_pool(new ObjectPool()),
-          _is_cancelled(false),
-          _per_fragment_instance_idx(0),
-          _num_rows_load_total_from_source(0),
-          _num_bytes_load_from_source(0),
-          _num_rows_load_sink(0),
-          _num_bytes_load_sink(0),
-          _num_rows_load_filtered(0),
-          _num_rows_load_unselected(0),
-          _num_print_error_rows(0) {
+        : _exec_env(exec_env), _obj_pool(new ObjectPool()) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, query_execution_services);
@@ -87,17 +77,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
 RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                            const TQueryOptions& query_options, const TQueryGlobals& query_globals,
                            const QueryExecutionServices* query_execution_services, ExecEnv* exec_env)
-        : _query_id(query_id),
-          _exec_env(exec_env),
-          _obj_pool(new ObjectPool()),
-          _per_fragment_instance_idx(0),
-          _num_rows_load_total_from_source(0),
-          _num_bytes_load_from_source(0),
-          _num_rows_load_sink(0),
-          _num_bytes_load_sink(0),
-          _num_rows_load_filtered(0),
-          _num_rows_load_unselected(0),
-          _num_print_error_rows(0) {
+        : _query_id(query_id), _exec_env(exec_env), _obj_pool(new ObjectPool()) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, query_execution_services);
@@ -108,8 +88,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
         : RuntimeState(query_id, fragment_instance_id, query_options, query_globals,
                        static_cast<const QueryExecutionServices*>(nullptr), exec_env) {}
 
-RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
-        : _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
+RuntimeState::RuntimeState(const TQueryGlobals& query_globals) : _obj_pool(new ObjectPool()) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
@@ -154,10 +133,9 @@ RuntimeState::~RuntimeState() {
         delete _error_log_file;
         _error_log_file = nullptr;
     }
-    // close rejected record file
-    if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
-        _rejected_record_file->close();
-    }
+    // The legacy tab-delimited rejected-record file was removed; the
+    // Phase 2 RejectedRecordWriter owns its own file handle and closes
+    // it via its destructor when `_rejected_record_writer` is released.
 }
 
 void RuntimeState::init_fragment_mem_pool() {
@@ -167,8 +145,17 @@ void RuntimeState::init_fragment_mem_pool() {
     }
 }
 
-void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) {
+void RuntimeState::set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state,
+                                 ObjectPool* query_obj_pool) {
+    _query_ctx = query_ctx;
+    _query_runtime_state = query_runtime_state;
+    _query_obj_pool = query_obj_pool;
+}
+
+void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx,
+                                    pipeline::FragmentRuntimeState* fragment_runtime_state) {
     _fragment_ctx = fragment_ctx;
+    _fragment_runtime_state = fragment_runtime_state;
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,

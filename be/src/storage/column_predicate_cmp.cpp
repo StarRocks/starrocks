@@ -20,16 +20,17 @@
 #include "column/column.h" // Column
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
+#include "common/bloom_filter.h"
 #include "common/object_pool.h"
-#include "olap_type_infra.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/olap_common.h" // ColumnId
-#include "storage/range.h"
-#include "storage/rowset/bitmap_index_reader.h"
+#include "storage/primitive/bitmap_index_iterator.h"
+#include "storage/primitive/inverted_index_iterator.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/zone_map_detail.h"
 #include "storage/types.h"
-#include "storage/zone_map_detail.h"
 #include "types/datum.h"
-#include "util/bloom_filter.h"
+#include "types/olap_type_infra.h"
 
 namespace starrocks {
 class BloomFilter;
@@ -38,7 +39,6 @@ class ObjectPool;
 class ExprContext;
 class RuntimeState;
 class SlotDescriptor;
-class BitmapIndexIterator;
 class BloomFilter;
 } // namespace starrocks
 
@@ -1154,6 +1154,9 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
         break;
     case PredicateType::kPlaceHolder:
         os << "placeholder";
+        break;
+    case PredicateType::kGinFallback:
+        os << "gin_fallback";
         break;
     default:
         CHECK(false) << "unknown predicate " << p;

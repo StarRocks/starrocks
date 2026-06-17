@@ -97,16 +97,16 @@ OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
 OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
-THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.22.0/thrift-0.22.0.tar.gz"
-THRIFT_NAME=thrift-0.22.0.tar.gz
-THRIFT_SOURCE=thrift-0.22.0
-THRIFT_MD5SUM="29f4ef82e6ebc336c69ef4f26fb4d2a1"
+THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.23.0/thrift-0.23.0.tar.gz"
+THRIFT_NAME=thrift-0.23.0.tar.gz
+THRIFT_SOURCE=thrift-0.23.0
+THRIFT_MD5SUM="7b62f4258ded41e233a638fe8b9fcf64"
 
 # protobuf
-PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
-PROTOBUF_NAME=protobuf-3.14.0.tar.gz
-PROTOBUF_SOURCE=protobuf-3.14.0
-PROTOBUF_MD5SUM="0c9d2a96f3656ba7ef3b23b533fb6170"
+PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.16.1.tar.gz"
+PROTOBUF_NAME=protobuf-3.16.1.tar.gz
+PROTOBUF_SOURCE=protobuf-3.16.1
+PROTOBUF_MD5SUM="6294f01dedea72a76b9e113369f55097"
 
 # gflags
 GFLAGS_DOWNLOAD="https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
@@ -138,11 +138,11 @@ GPERFTOOLS_NAME=gperftools-2.7.tar.gz
 GPERFTOOLS_SOURCE=gperftools-gperftools-2.7
 GPERFTOOLS_MD5SUM="797e7b7f6663288e2b90ab664861c61a"
 
-# zlib
-ZLIB_DOWNLOAD="https://github.com/madler/zlib/archive/refs/tags/v1.2.11.tar.gz"
-ZLIB_NAME=zlib-1.2.11.tar.gz
-ZLIB_SOURCE=zlib-1.2.11
-ZLIB_MD5SUM="0095d2d2d1f3442ce1318336637b695f"
+# zlib-ng (compat mode: same API/ABI as zlib, faster inflate via SSE/AVX2/NEON)
+ZLIB_DOWNLOAD="https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz"
+ZLIB_NAME=zlib-ng-2.3.3.tar.gz
+ZLIB_SOURCE=zlib-ng-2.3.3
+ZLIB_MD5SUM="72337e6a7d2662af50a4ed0274c61b7e"
 
 # lz4
 LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.10.0.tar.gz"
@@ -210,8 +210,8 @@ SASL_NAME=cyrus-sasl-2.1.28.tar.gz
 SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
-# kerberos MIT
-KRB5_DOWNLOAD="https://kerberos.org/dist/krb5/1.19/krb5-1.19.4.tar.gz"
+# MIT Kerberos publishes release archives from web.mit.edu/kerberos/dist.
+KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz"
 KRB5_NAME=krb5-1.19.4.tar.gz
 KRB5_SOURCE=krb5-1.19.4
 KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
@@ -283,10 +283,10 @@ CCTZ_SOURCE="cctz-2.3"
 CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
 
 # FMT
-FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/8.1.1/fmt-8.1.1.zip"
-FMT_NAME="fmt-8.1.1.zip"
-FMT_SOURCE="fmt-8.1.1"
-FMT_MD5SUM="16dcd48ecc166f10162450bb28aabc87"
+FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/10.2.1/fmt-10.2.1.zip"
+FMT_NAME="fmt-10.2.1.zip"
+FMT_SOURCE="fmt-10.2.1"
+FMT_MD5SUM="04e266ad52659480d593486a17eed804"
 
 # RYU
 RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
@@ -404,10 +404,10 @@ LIBDEFLATE_SOURCE="libdeflate-1.18"
 LIBDEFLATE_MD5SUM="1ec42dfe7d777929ade295281560d750"
 
 # llvm
-LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz"
-LLVM_NAME="llvm-project-16.0.6.src.tar.xz"
-LLVM_SOURCE="llvm-project-16.0.6.src"
-LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
+LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/llvm-project-18.1.8.src.tar.xz"
+LLVM_NAME="llvm-project-18.1.8.src.tar.xz"
+LLVM_SOURCE="llvm-project-18.1.8.src"
+LLVM_MD5SUM="81cd0be5ae6f1ad8961746116d426a96"
 
 #clucene
 CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz"
@@ -481,6 +481,11 @@ HADOOPSRC_NAME="hadoop-3.4.3-src.tar.gz"
 HADOOPSRC_SOURCE="hadoop-3.4.3-src"
 HADOOPSRC_MD5SUM="c5ac53ca70cc667189ec824c6048914a"
 
+BLAKE3_DOWNLOAD="https://github.com/BLAKE3-team/BLAKE3/archive/refs/tags/1.8.5.tar.gz"
+BLAKE3_NAME="BLAKE3-1.8.5.tar.gz"
+BLAKE3_SOURCE="BLAKE3-1.8.5"
+BLAKE3_MD5SUM="3731247eb9086571ba7128a794c1d2d3"
+
 # xxhash
 XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"
 XXHASH_NAME=xxHash-0.8.3.tar.gz
@@ -499,7 +504,7 @@ TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSO
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BENCHGEN"
+            BLAKE3 BENCHGEN"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

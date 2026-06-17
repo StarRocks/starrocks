@@ -1396,6 +1396,50 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     /**
+     * Mark this sub-task COMMITED (or FINISHED when the transaction is already visible)
+     * after the parent multi-statement transaction committed successfully.
+     * Sub-tasks of a multi-statement transaction are not registered as transaction state
+     * callbacks (the explicit transaction carries no callback id), so
+     * afterCommitted/afterVisible are never invoked on them; the parent task drives their
+     * terminal state instead. Without this, display outlets that delegate to sub-tasks
+     * (information_schema.loads, SHOW STREAM LOAD) would show PREPARING forever.
+     * A COMMITED sub-task may be upgraded to FINISHED by a later call with visible=true
+     * (the transaction became visible after the commit returned).
+     */
+    public void markCommittedByParent(boolean visible, long finishTimeMs) {
+        boolean becameVisible = false;
+        writeLock();
+        try {
+            if (state == State.CANCELLED || state == State.FINISHED) {
+                return;
+            }
+            State finalState = visible ? State.FINISHED : State.COMMITED;
+            if (state == finalState) {
+                return;
+            }
+            for (int i = 0; i < channelNum; i++) {
+                this.channels.set(i, finalState);
+            }
+            this.state = finalState;
+            if (this.commitTimeMs <= 0) {
+                this.commitTimeMs = finishTimeMs;
+            }
+            this.isCommitting = false;
+            if (visible) {
+                this.endTimeMs = finishTimeMs;
+                gcObject();
+                becameVisible = true;
+            }
+        } finally {
+            writeUnlock();
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+        }
+        if (becameVisible) {
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
+        }
+    }
+
+    /**
      * Cancel the coordinator and set task state to CANCELLED without aborting the transaction.
      * This is used for sub-tasks in multi-statement transactions where the parent task
      * manages the transaction lifecycle.
@@ -1728,6 +1772,21 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             info.setLoad_start_time(TimeUtils.longToTimeString(startLoadingTimeMs));
             info.setLoad_commit_time(TimeUtils.longToTimeString(commitTimeMs));
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
+            // New BE prefers these UTC epoch-ms fields and converts to the session
+            // zone on materialization, so the rendered column value matches whatever
+            // zone the querying session is in.
+            if (createTimeMs > 0) {
+                info.setCreate_time_ms(createTimeMs);
+            }
+            if (startLoadingTimeMs > 0) {
+                info.setLoad_start_time_ms(startLoadingTimeMs);
+            }
+            if (commitTimeMs > 0) {
+                info.setLoad_commit_time_ms(commitTimeMs);
+            }
+            if (endTimeMs > 0) {
+                info.setLoad_finish_time_ms(endTimeMs);
+            }
 
             info.setType(getStringByType());
 

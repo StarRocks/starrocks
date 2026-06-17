@@ -22,20 +22,6 @@ namespace starrocks {
 
 static_assert(sizeof(lake::Rowset) > 0);
 
-GlobalLateMaterilizationContext* GlobalLateMaterilizationContextMgr::get_ctx(int64_t scan_node_id) const {
-    DCHECK(_ctx_map.contains(scan_node_id));
-    return _ctx_map.at(scan_node_id);
-}
-
-GlobalLateMaterilizationContext* GlobalLateMaterilizationContextMgr::get_or_create_ctx(
-        int64_t scan_node_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func) {
-    _ctx_map.lazy_emplace(scan_node_id, [&](const auto& ctor) {
-        auto ctx = ctor_func();
-        ctor(scan_node_id, ctx);
-    });
-    return _ctx_map.at(scan_node_id);
-}
-
 RowsetSharedPtr OlapScanLazyMaterializationContext::get_rowset(int32_t tablet_id, int32_t drssid,
                                                                int32_t* segment_idx) const {
     std::shared_lock lock(_mutex);
@@ -112,7 +98,7 @@ lake::RowsetPtr LakeScanLazyMaterializationContext::get_rowset(const std::vector
     for (const auto& rowset : rowsets) {
         const auto& rowset_meta = rowset->metadata();
         const uint32_t rssid_base = rowset_meta.id();
-        size_t num_segment = rowset_meta.segments_size();
+        size_t num_segment = rowset_meta.segment_metas_size();
         if (rssid_base <= rssid && rssid < rssid_base + num_segment) {
             segment_id = rssid - rssid_base;
             target = rowset;

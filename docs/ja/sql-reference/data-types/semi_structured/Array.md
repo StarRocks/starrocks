@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "多次元配列のネスト、スライス、比較、フィルタリングをサポートする配列型。"
 ---
 
 # ARRAY

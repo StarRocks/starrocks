@@ -17,18 +17,21 @@
 #include <atomic>
 #include <memory>
 
+#include "base/status_fmt.hpp"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "compute_env/global_dict/parser.h"
+#include "connector/connector_registry.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 
@@ -38,7 +41,12 @@ static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMe
 ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
-    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    const auto& connector_name = tnode.connector_scan_node.connector_name;
+    auto c = connector::ConnectorRegistry::default_instance()->get(connector_name);
+    if (c == nullptr) {
+        _connector_status = Status::Unknown("Unknown connector: {}", connector_name);
+        return;
+    }
     _connector_type = c->connector_type();
     if (tnode.connector_scan_node.__isset.catalog_type) {
         _catalog_type = tnode.connector_scan_node.catalog_type;
@@ -55,6 +63,7 @@ ConnectorScanNode::~ConnectorScanNode() {
 }
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(_connector_status);
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
     RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
 
@@ -64,8 +73,8 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         mem_ratio = query_options.connector_scan_use_query_mem_ratio;
     }
 
-    if (runtime_state()->query_ctx() != nullptr) {
-        _mem_share_arb = runtime_state()->query_ctx()->connector_scan_operator_mem_share_arbitrator();
+    if (runtime_state()->query_runtime_state() != nullptr) {
+        _mem_share_arb = runtime_state()->query_runtime_state()->connector_scan_operator_mem_share_arbitrator();
     }
     if (_mem_share_arb != nullptr) {
         _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);
@@ -132,10 +141,6 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
 
-    if (_data_source_provider->stream_data_source()) {
-        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
-    }
-
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
 
@@ -166,8 +171,9 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
     if (_data_source_provider->insert_local_exchange_operator()) {
-        operators = context->maybe_interpolate_local_passthrough_exchange(
-                context->fragment_context()->runtime_state(), id(), operators, context->degree_of_parallelism());
+        operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, context->fragment_context()->runtime_state(), id(), operators,
+                context->degree_of_parallelism());
     }
     return operators;
 }
@@ -710,11 +716,11 @@ bool ConnectorScanNode::always_shared_scan() const {
     return _data_source_provider->always_shared_scan();
 }
 
-StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> ConnectorScanNode::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
-    return _data_source_provider->convert_scan_range_to_morsel_queue(
+    return _data_source_provider->convert_scan_range_to_morsel_queue_builder(
             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
             num_total_scan_ranges);
 }

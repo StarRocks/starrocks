@@ -103,12 +103,12 @@ Core shared infrastructure above Base/Gutil and generated code only. Higher-leve
 - Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code.
 
 ### Cache (`cache`)
-Cache implementation module for DataCache facade, cache engines, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
+Cache implementation module for DataCache facade, cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
 - Targets: `Cache`
-- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `FSCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `RuntimeCore`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `cache_test`
-- Remediation: Keep Cache self-contained within cache engines, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache.
+- Remediation: Keep Cache self-contained within cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache.
 
 ### HttpCore (`httpcore`)
 Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.
@@ -118,43 +118,43 @@ Reusable HTTP transport and request primitives above Common without BE admin or 
 - Core tests: `http_core_test`
 - Remediation: Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward.
 
-### IOCore (`iocore`)
-Minimal IO foundation used by upper IO/FS layers.
-- Targets: `IOCore`
-- Allowed internal include prefixes: `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+### IO (`io`)
+Minimal IO foundation used by FS and upper layers.
+- Targets: `IO`
+- Allowed internal include prefixes: `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Common`, `Base`, `Gutil`
 - Core tests: `io_test`
-- Remediation: Keep IOCore free of higher IO/FS/runtime/storage code; lift the dependency into IO or FileSystem instead.
+- Remediation: Keep IO free of higher FS/runtime/storage/exec/service code; move the dependency upward or add a lower-level interface.
 
 ### FSCore (`fscore`)
-Minimal filesystem core on top of IOCore.
+Minimal filesystem core on top of IO.
 - Targets: `FSCore`
-- Allowed internal include prefixes: `fs/`, `io/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `IOCore`, `Common`, `Base`, `Gutil`
+- Allowed internal include prefixes: `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `IO`, `Common`, `Base`, `Gutil`
 - Core tests: `fs_core_test`
-- Remediation: Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem.
+- Remediation: Keep FSCore limited to IO plus core FS abstractions; move backend-specific behavior into FileSystem.
 
-### SpillCore (`spillcore`)
-Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.
-- Targets: `SpillCore`
-- Allowed internal include prefixes: `exec/spill/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `spill_core_test`
-- Remediation: Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward.
+### Platform (`platform`)
+Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.
+- Targets: `Platform`
+- Allowed internal include prefixes: `platform/`, `http/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `HttpCore`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `platform_test`
+- Remediation: Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward.
 
-### TypesCore (`typecore`)
+### Types (`typecore`)
 Core type system without runtime/storage/exec coupling.
-- Targets: `TypesCore`
+- Targets: `Types`
 - Allowed internal include prefixes: `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Common`, `Base`, `Gutil`
 - Core tests: `types_test`
-- Remediation: Keep TypesCore independent of runtime/util/storage/exec layers; move integration code into higher layers.
+- Remediation: Keep Types independent of runtime/util/storage/exec layers; move integration code into higher layers.
 
 ### ColumnCore (`columncore`)
 Core column representations that must stay independent of ChunkCore and higher layers.
 - Targets: `ColumnCore`
 - Allowed internal include prefixes: `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `column_test`
 - Remediation: Keep ColumnCore free of ChunkCore/Runtime/Exec/Storage coupling; move integration code upward or introduce an interface.
 
@@ -162,54 +162,109 @@ Core column representations that must stay independent of ChunkCore and higher l
 Core chunk, schema, field, and chunk-adjacent helpers on top of ColumnCore.
 - Targets: `ChunkCore`
 - Allowed internal include prefixes: `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `chunk_test`
 - Remediation: Keep ChunkCore limited to chunk/schema helpers and free of Runtime/Exec/Storage/Serde coupling.
 
 ### RuntimeCore (`runtimecore`)
 Core runtime building blocks without full Runtime/Exec/Storage coupling.
 - Targets: `RuntimeCore`
-- Allowed internal include prefixes: `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `runtime/`, `platform/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Platform`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `runtime_core_test`
 - Remediation: Keep RuntimeCore restricted to core runtime infrastructure; move service/storage/stream-load/integration code into Runtime.
+
+### FormatCore (`formatcore`)
+Format-oriented core primitives above ComputeEnv, ExprCore, RuntimeCore, FSCore, ChunkCore, ColumnCore, and Types.
+- Targets: `FormatCore`
+- Allowed internal include prefixes: `formats/column_evaluator.h`, `formats/deletion_bitmap.h`, `formats/disk_range.hpp`, `formats/file_writer.h`, `formats/io/`, `formats/scan_context.h`, `formats/utils.h`, `exprs/`, `runtime/`, `fs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ExprCore`, `RuntimeCore`, `FSCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `format_test`
+- Remediation: Keep FormatCore limited to reusable format primitives; move connector orchestration and higher execution policy upward.
+
+### RuntimeEnv (`runtimeenv`)
+Process-scoped runtime environment resources below full Runtime and above RuntimeCore.
+- Targets: `RuntimeEnv`
+- Allowed internal include prefixes: `runtime/env/`, `runtime/`, `platform/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Platform`, `RuntimeCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `runtime_env_test`
+- Remediation: Keep RuntimeEnv limited to process-scoped runtime environment resources; move query execution, storage, service, connector, and UDF integration upward.
+
+### StoragePrimitive (`storageprimitive`)
+Primitive storage contracts, predicate contracts, predicate trees, and value types shared below ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+- Targets: `StoragePrimitive`
+- Allowed internal include prefixes: `storage/primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `storage_primitive_test`
+- Remediation: Keep StoragePrimitive limited to reusable storage contracts, predicate contracts, predicate trees, and value types; move concrete storage engine, tablet, rowset, lake, service, connector, and full Exec integration upward.
+
+### StorageBase (`storagebase`)
+Base storage algorithms and mask-buffer helpers above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+- Targets: `StorageBase`
+- Allowed internal include prefixes: `storage/base/`, `storage/primitive/`, `compute_env/sorting/`, `serde/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `StoragePrimitive`, `Serde`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `storage_base_test`
+- Remediation: Keep StorageBase limited to reusable storage algorithms and helpers that may depend on ComputeEnv; move concrete storage engine, tablet, rowset, lake, service, connector, cache, and full Exec integration upward.
+
+### ComputeEnv (`computeenv`)
+Shared compute-side BE environment boundary for process-scoped compute resources, load-path management, query-scoped scan coordination helpers, query-cache primitives, WorkGroup scheduling/executor resources, and pipeline controls below full Exec/Storage and above RuntimeEnv.
+- Targets: `ComputeEnv`
+- Allowed internal include prefixes: `compute_env/`, `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `util/time_guard.h`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `StoragePrimitive`, `ExecPrimitive`, `ExprCore`, `Serde`, `Util`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `compute_env_test`, `compute_env_sorting_test`
+- Remediation: Keep ComputeEnv limited to process-scoped compute resources, load-path management without ExecEnv or concrete storage engine coupling, query-scoped scan coordination helpers without concrete scan/storage policy, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward.
 
 ### ExprCore (`exprcore`)
 Core expression infrastructure that depends only on RuntimeCore and lower layers.
 - Targets: `ExprCore`
 - Allowed internal include prefixes: `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `expr_core_test`
 - Remediation: Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs.
 
-### ExecCore (`execcore`)
-Execution-node base and runtime-filter infrastructure on top of ExprCore without broader Exec/Runtime service coupling.
-- Targets: `ExecCore`
-- Allowed internal include prefixes: `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `exec_core_test`
-- Remediation: Keep ExecCore limited to the legacy execution-node base and runtime-filter orchestration; only the pipeline forward header is allowed from broader pipeline code.
+### ExecPrimitive (`execprimitive`)
+Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.
+- Targets: `ExecPrimitive`
+- Allowed internal include prefixes: `exec/data_sink.h`, `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/operator_factory.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_hub.h`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/split_morsel_ticket_checker.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `exec_primitive_test`
+- Remediation: Keep ExecPrimitive limited to execution contracts, the DataSink base contract, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, concrete sinks, storage, service, and connector integration upward.
 
-### PipelinePrimitives (`pipelineprimitives`)
-Stable pipeline operator primitives without pipeline runtime, scheduler, context, factory, or concrete operator coupling.
-- Targets: `PipelinePrimitives`
-- Allowed internal include prefixes: `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/runtime_filter/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExecCore`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Remediation: Keep pipeline primitives limited to base operator contracts and narrow helper types; move runtime, scheduler, factory, and concrete operator behavior into higher pipeline modules.
+### ExecRuntime (`execruntime`)
+Operator-tree execution framework for query and fragment contexts, driver lifecycle, execution groups, and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.
+- Targets: `ExecRuntime`
+- Allowed internal include prefixes: `compute_env/`, `exec/runtime/`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/operator_with_dependency.h`, `exec/pipeline/source_operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_hub.h`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/split_morsel_ticket_checker.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `exec/runtime_filter/`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ExecPrimitive`, `StoragePrimitive`, `ExprCore`, `Serde`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `exec_runtime_test`
+- Remediation: Keep ExecRuntime limited to the operator-tree execution framework and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward.
 
-### ExecSinkCore (`execsinkcore`)
-DataSink base contract and default mechanics without concrete sink, pipeline, connector, storage, service, or Runtime coupling.
-- Targets: `ExecSinkCore`
-- Allowed internal include prefixes: `exec/data_sink.h`, `exec/pipeline/pipeline_fwd.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `data_sink_core_test`
-- Remediation: Keep ExecSinkCore limited to the DataSink base contract; move construction, concrete sinks, pipeline decomposition, and future sink IO behavior into higher modules.
+### ConnectorPrimitive (`connectorprimitive`)
+Read-side connector contracts, DataSource, and DataSourceProvider default mechanics without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
+- Targets: `ConnectorPrimitive`
+- Allowed internal include prefixes: `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/runtime_filter/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `connector_primitive_test`
+- Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
+
+### ConnectorBootstrap (`connectorbootstrap`)
+Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.
+- Targets: `ConnectorBootstrap`
+- Allowed internal include prefixes: `connector/connector_bootstrap.h`, `connector/benchmark/`, `connector/elasticsearch/`, `connector/mysql/`, `connector/connector.h`, `connector/connector_registry.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap.
+
+### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)
+Top-level built-in connector registration composition above connector contracts and concrete connector libraries.
+- Targets: `ConnectorBuiltinRegistry`
+- Allowed internal include prefixes: `connector/builtin_connector_registry.h`, `connector/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Connector`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target.
 
 ### ExecSchemaScannerCore (`execschemascannercore`)
 Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.
 - Targets: `ExecSchemaScannerCore`
 - Allowed internal include prefixes: `exec/schema_scanner.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `schema_scanner_core_test`
 - Remediation: Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules.
 
@@ -217,23 +272,15 @@ Schema scanner base contract and shared mechanics without concrete scanner, pipe
 Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.
 - Targets: `ExecSchemaScanners`
 - Allowed internal include prefixes: `exec/schema_scanner.h`, `exec/schema_scanner/schema_column_filler.h`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExecSchemaScannerCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `ExecSchemaScannerCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_schema_scanners_test`
 - Remediation: Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries.
-
-### ExecSortingCore (`execsortingcore`)
-Reusable exec sorting algorithms without pipeline, spill, workgroup, storage, or service coupling.
-- Targets: `ExecSortingCore`
-- Allowed internal include prefixes: `exec/sorting/`, `exprs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `exec_sorting_core_test`
-- Remediation: Keep ExecSortingCore limited to reusable sorting algorithms; leave merge-path pipeline observer integration, chunk sorters, spill-aware sorting, and exec-node adapters in higher modules.
 
 ### ExecJoinCore (`execjoincore`)
 Reusable exec join hash table algorithms without join nodes, pipeline, storage, service, or util coupling.
 - Targets: `ExecJoinCore`
-- Allowed internal include prefixes: `exec/join/`, `exec/sorting/sort_helper.h`, `exprs/`, `serde/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExecSortingCore`, `ExprCore`, `Serde`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `exec/join/`, `compute_env/sorting/sort_helper.h`, `exprs/`, `serde/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ExprCore`, `Serde`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_join_core_test`
 - Remediation: Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules.
 

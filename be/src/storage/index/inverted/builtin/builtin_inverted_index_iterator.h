@@ -29,18 +29,18 @@ class FunctionContext;
 
 std::string get_next_prefix(const Slice& prefix_s);
 
-class BuiltinInvertedIndexIterator final : public InvertedIndexIterator {
+class BuiltinInvertedIndexIterator final : public SegmentInvertedIndexIterator {
 public:
     BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
-                                 OlapReaderStatistics* stats, std::unique_ptr<BitmapIndexIterator>& bitmap_itr,
+                                 OlapReaderStatistics* stats, std::unique_ptr<SegmentBitmapIndexIterator>& bitmap_itr,
                                  const size_t& segment_rows);
 
     ~BuiltinInvertedIndexIterator() override = default;
 
-    Status read_from_inverted_index(const std::string& column_name, const void* query_value,
+    Status read_from_inverted_index(const std::string_view column_name, const void* query_value,
                                     InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
 
-    Status read_null(const std::string& column_name, roaring::Roaring* bit_map) override;
+    Status read_null(const std::string_view column_name, roaring::Roaring* bit_map) override;
 
 private:
     Status _tokenize_query_by_parser(const Slice& query, std::vector<std::string>* tokens);
@@ -55,7 +55,7 @@ private:
     std::unique_ptr<lucene::util::StringReader> _query_string_reader;
     // Reused builtin analyzer for parser=english query tokenization.
     std::unique_ptr<SimpleAnalyzer> _builtin_query_analyzer;
-    std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
+    std::unique_ptr<SegmentBitmapIndexIterator> _bitmap_itr;
     size_t _segment_rows;
 };
 

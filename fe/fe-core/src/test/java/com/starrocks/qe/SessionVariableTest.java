@@ -103,17 +103,17 @@ public class SessionVariableTest {
 
         // Default mode is AUTO
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.AUTO,
-                sessionVariable.getConnectorSinkShuffleMode());
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
 
         // Backward compatibility: enableIcebergSinkGlobalShuffle implies FORCE when mode stays at default AUTO.
         com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "enableIcebergSinkGlobalShuffle", true);
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.FORCE,
-                sessionVariable.getConnectorSinkShuffleMode());
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
 
         // Explicitly set mode to NEVER should not be affected by legacy boolean.
         com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "connectorSinkShuffleMode", "never");
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.NEVER,
-                sessionVariable.getConnectorSinkShuffleMode());
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
     }
 
     @Test

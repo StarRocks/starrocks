@@ -57,6 +57,8 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"STORAGE_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TABLET_BALANCED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
         {"METADATA_SWITCH_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"MIN_VI_BUILT_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"MAX_VI_BUILT_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -312,6 +314,16 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
         case 31: {
             // METADATA_SWITCH_VERSION
             fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.metadata_switch_version);
+            break;
+        }
+        case 32: {
+            // MIN_VI_BUILT_VERSION
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.min_vi_built_version);
+            break;
+        }
+        case 33: {
+            // MAX_VI_BUILT_VERSION
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.max_vi_built_version);
             break;
         }
 

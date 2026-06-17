@@ -19,6 +19,7 @@
 #include <string>
 
 #include "common/status.h"
+#include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
 
@@ -32,12 +33,6 @@ public:
     static void init_runtime_filter_port(RuntimeState* state);
     static ObjectPool* global_obj_pool(const RuntimeState* state);
 
-    static Status create_error_log_file(RuntimeState* state);
-    static Status create_rejected_record_file(RuntimeState* state);
-    static void append_error_msg_to_file(RuntimeState* state, const std::string& line, const std::string& error_msg,
-                                         bool is_summary = false);
-    static void append_rejected_record_to_file(RuntimeState* state, const std::string& record,
-                                               const std::string& error_msg, const std::string& source);
     static void update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params);
 
     static std::shared_ptr<QueryStatisticsRecvr> query_recv(RuntimeState* state);

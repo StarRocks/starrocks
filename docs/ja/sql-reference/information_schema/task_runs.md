@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "task_runsは非同期タスクの実行に関する情報を提供します。"
 ---
 
 # task_runs
@@ -26,6 +27,7 @@ displayed_sidebar: docs
 | PROPERTIES    | タスクのプロパティ。                                         |
 | JOB_ID        | タスクのジョブ ID。                                          |
 | PROCESS_TIME  | タスクの処理時間。                                           |
+| TASK_SOURCE   | タスクを送信したソース。 有効な値は `CTAS`、`MV`、`INSERT`、`PIPE`、`DATACACHE_SELECT` です。ソースが記録されていないレガシーレコードの場合は `UNKNOWN` が返されます。 |
 
 タスク実行記録は、[SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) または [CREATE MATERIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) によって生成されます。
 

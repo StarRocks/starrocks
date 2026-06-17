@@ -119,10 +119,6 @@ add_library(pprof STATIC IMPORTED)
 set_target_properties(pprof PROPERTIES IMPORTED_LOCATION
     ${GPERFTOOLS_HOME}/lib/libprofiler.a)
 
-add_library(tcmalloc STATIC IMPORTED)
-set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
-    ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
-
 add_library(protobuf STATIC IMPORTED GLOBAL)
 set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
 
@@ -188,6 +184,21 @@ add_library(crypto STATIC IMPORTED GLOBAL)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
 add_library(AWS::crypto ALIAS crypto)
+
+add_library(libz STATIC IMPORTED GLOBAL)
+set_target_properties(libz PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/include)
+
+# Pre-declare ZLIB::ZLIB for third-party config packages that call
+# find_package(ZLIB), so they do not create a competing imported target.
+add_library(ZLIB::ZLIB ALIAS libz)
+set(ZLIB_FOUND TRUE)
+set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+set(ZLIB_INCLUDE_DIRS "${THIRDPARTY_DIR}/include")
+set(ZLIB_LIBRARY "${THIRDPARTY_DIR}/lib/libz.a")
+set(ZLIB_LIBRARIES ZLIB::ZLIB)
+
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
 set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
 foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
@@ -196,6 +207,16 @@ foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
 endforeach()
 find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
+
+if (APPLE AND "$ENV{STARROCKS_USE_NIX_DEPS}" STREQUAL "1" AND NOT "$ENV{PCRE2_ROOT_DIR}" STREQUAL "")
+    set(PCRE2_ROOT_DIR "$ENV{PCRE2_ROOT_DIR}" CACHE PATH "PCRE2 search path" FORCE)
+    set(PCRE2_INCLUDE_DIR "$ENV{PCRE2_ROOT_DIR}/include" CACHE PATH "PCRE2 include directory" FORCE)
+    if (EXISTS "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.a")
+        set(PCRE2_LIBRARY "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.a" CACHE FILEPATH "PCRE2 library" FORCE)
+    elseif (EXISTS "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.dylib")
+        set(PCRE2_LIBRARY "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.dylib" CACHE FILEPATH "PCRE2 library" FORCE)
+    endif()
+endif()
 
 set(Poco_ROOT "${THIRDPARTY_DIR}" CACHE PATH "Poco search path" FORCE)
 set(Poco_ROOT_DIR "${THIRDPARTY_DIR}" CACHE PATH "Poco search path" FORCE)
@@ -347,7 +368,7 @@ if (ENABLE_MULTI_DYNAMIC_LIBS)
         set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${FMT_SHARED_LIBRARY})
         file(GLOB FMT_SHARED_FILES "${FMT_SHARED_DIR}/libfmt*.dylib")
     else()
-        set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.8)
+        set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.10)
         file(GLOB FMT_SHARED_FILES "${THIRDPARTY_DIR}/lib64/libfmt.so*")
     endif()
     install(FILES ${FMT_SHARED_FILES} DESTINATION ${OUTPUT_DIR}/lib)
@@ -360,9 +381,6 @@ endif()
 starrocks_resolve_thirdparty_library(RYU_LIBRARY libryu.a)
 add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${RYU_LIBRARY})
-
-add_library(libz STATIC IMPORTED GLOBAL)
-set_target_properties(libz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a)
 
 add_library(libbz2 STATIC IMPORTED)
 set_target_properties(libbz2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbz2.a)
@@ -419,7 +437,7 @@ starrocks_resolve_thirdparty_library(OPENTELEMETRY_JAEGER_LIBRARY libopentelemet
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${OPENTELEMETRY_JAEGER_LIBRARY})
 
-if (APPLE)
+if (APPLE AND NOT "$ENV{STARROCKS_USE_NIX_DEPS}" STREQUAL "1")
     add_library(libxml2 SHARED IMPORTED GLOBAL)
     set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libxml2.dylib)
 else()
@@ -466,7 +484,6 @@ find_package(gRPC CONFIG REQUIRED)
 get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 message(STATUS "Using gRPC ${gRPC_VERSION}")
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
-add_library(ZLIB::ZLIB ALIAS libz)
 
 # Disable libdeflate on aarch64
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

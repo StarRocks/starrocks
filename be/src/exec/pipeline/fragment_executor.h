@@ -14,11 +14,15 @@
 
 #pragma once
 
+#include <map>
+#include <unordered_map>
+#include <vector>
+
 #include "common/global_types.h"
 #include "common/status.h"
-#include "exec/pipeline/pipeline.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/workgroup/work_group_fwd.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env_fwd.h"
@@ -33,6 +37,7 @@ namespace pipeline {
 class FragmentContext;
 class PipelineBuilderContext;
 class QueryContext;
+class QueryContextManager;
 
 // For the exec_batch_plan_fragments RPC request, common_request and unique_request are different.
 // - common_request contains the common fields of all the fragment instances.
@@ -108,6 +113,17 @@ public:
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                  TExecPlanFragmentResult* response);
 
+    // Register the partition_value of each scan range into its HiveTableDescriptor's
+    // _partition_id_to_desc_map. The HdfsPartitionDescriptor is allocated from the
+    // query-level ObjectPool (RuntimeStateHelper::global_obj_pool) so that the map's
+    // entries outlive any single fragment instance — see the function body for the
+    // UAF this prevents.
+    //
+    // Exposed here so unit tests can pin the contract; production callers go through
+    // _prepare_exec_plan / append_incremental_scan_ranges, not this entry point.
+    static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                                   const std::vector<TScanRangeParams>& scan_ranges);
+
     Status prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request);
     void _fail_cleanup(bool fragment_has_registed);
 
@@ -137,6 +153,7 @@ private:
     bool _is_in_colocate_exec_group(PlanNodeId plan_node_id);
 
     int64_t _fragment_start_time = 0;
+    QueryContextManager* _query_ctx_mgr = nullptr;
     QueryContext* _query_ctx = nullptr;
     FragmentContextPtr _fragment_ctx = nullptr;
     workgroup::WorkGroupPtr _wg = nullptr;

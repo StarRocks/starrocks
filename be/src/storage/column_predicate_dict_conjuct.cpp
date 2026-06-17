@@ -16,9 +16,9 @@
 #include <sstream>
 #include <vector>
 
-#include "runtime/global_dict/dict_column.h"
+#include "column/global_dict/dict_column.h"
 #include "storage/column_operator_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "types/datum.h"
 
 namespace starrocks {

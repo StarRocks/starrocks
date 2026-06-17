@@ -102,6 +102,7 @@ statement
     | insertStatement
     | updateStatement
     | deleteStatement
+    | mergeIntoStatement
 
     // Routine Statement
     | createRoutineLoadStatement
@@ -134,6 +135,7 @@ statement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
     | adminAlterAutomatedSnapshotIntervalStatement
+    | adminSkipCommittedTransactionStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -170,6 +172,7 @@ statement
 
     // UDF Statement
     | showFunctionsStatement
+    | showCreateFunctionStatement
     | dropFunctionStatement
     | createFunctionStatement
 
@@ -648,7 +651,7 @@ truncateTableStatement
     ;
 
 cancelAlterTableStatement
-    : CANCEL ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')? FORCE?
     | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
     ;
 
@@ -831,6 +834,10 @@ adminSetAutomatedSnapshotOffStatement
 
 adminAlterAutomatedSnapshotIntervalStatement
     : ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET interval
+    ;
+
+adminSkipCommittedTransactionStatement
+    : ADMIN SKIP_KW COMMITTED TRANSACTION txnId=INTEGER_VALUE (REASON reason=string)?
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
@@ -1350,6 +1357,28 @@ deleteStatement
     : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
+mergeIntoStatement
+    : explainDesc? MERGE INTO qualifiedName (AS? targetAlias=identifier)?
+      USING relation (AS? sourceAlias=identifier)?
+      ON mergeCondition=expression
+      mergeWhenClause+
+    ;
+
+mergeWhenClause
+    : WHEN MATCHED (AND matchedCondition=expression)? THEN mergeMatchedAction       #mergeWhenMatched
+    | WHEN NOT MATCHED (AND notMatchedCondition=expression)? THEN mergeNotMatchedAction   #mergeWhenNotMatched
+    ;
+
+mergeMatchedAction
+    : UPDATE SET assignmentList      #mergeMatchedUpdate
+    | DELETE                         #mergeMatchedDelete
+    ;
+
+mergeNotMatchedAction
+    : INSERT ASTERISK_SYMBOL                                                                    #mergeNotMatchedInsertStar
+    | INSERT ('(' cols+=identifier (',' cols+=identifier)* ')')? VALUES '(' expressionList ')'   #mergeNotMatchedInsertValues
+    ;
+
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
 createRoutineLoadStatement
     : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
@@ -1582,6 +1611,10 @@ classifier
 
 showFunctionsStatement
     : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
+    ;
+
+showCreateFunctionStatement
+    : SHOW CREATE GLOBAL? FUNCTION qualifiedName '(' typeList ')'
     ;
 
 dropFunctionStatement
@@ -2254,7 +2287,14 @@ roleList
     ;
 
 executeScriptStatement
-    : ADMIN EXECUTE ON (FRONTEND | INTEGER_VALUE) string
+    : ADMIN EXECUTE ON executeScriptTarget string
+    ;
+
+executeScriptTarget
+    : FRONTEND
+    | INTEGER_VALUE (',' INTEGER_VALUE)*
+    | ALL BACKENDS
+    | ALL COMPUTE NODES
     ;
 
 unsupportedStatement
@@ -2738,6 +2778,7 @@ primaryExpression
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
     | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
+    | primaryExpression DOUBLE_COLON type                                                 #typeCast
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -2787,6 +2828,7 @@ functionCall
     | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
+    | TRIM '(' (trimType=(BOTH | LEADING | TRAILING))? (remstr=string)? FROM str=expression ')'   #trimFunction
     | qualifiedName '(' functionNamedArgumentList ')'                                     #namedArgsFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
@@ -3148,6 +3190,14 @@ unitBoundary
     : FLOOR | CEIL
     ;
 
+filesSchema
+    : filesSchemaColumn (',' filesSchemaColumn)* EOF
+    ;
+
+filesSchemaColumn
+    : identifier type
+    ;
+
 type
     : baseType
     | decimalType
@@ -3284,7 +3334,7 @@ number
 nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS | BOTH
     | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTIONS | CONSISTENT | COSTS | COUNT
@@ -3298,8 +3348,8 @@ nonReserved
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
@@ -3309,10 +3359,10 @@ nonReserved
     | REPOSITORIES | RECURSIVE
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
-    | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
+    | STREAM | SUM | STATUS | STOP | SKIP_KW | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
-    | TRIM_SPACE
+    | TRIM_SPACE | TRAILING | TRIM
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
     | VALUE | VARBINARY | VARIABLES | VARIANT | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES

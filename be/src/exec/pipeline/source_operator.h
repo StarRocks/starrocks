@@ -14,25 +14,27 @@
 
 #pragma once
 
+#include <algorithm>
+#include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
-#include "exec/pipeline/adaptive/adaptive_fwd.h"
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/scan/chunk_source.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/workgroup/work_group_fwd.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "gen_cpp/Partitions_types.h"
+#include "gutil/casts.h"
 
 namespace starrocks {
 
 class ExprContext;
-class PriorityThreadPool;
 
 namespace pipeline {
 
 class SourceOperator;
 using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
-class MorselQueueFactory;
 
 class SourceOperatorFactory : public OperatorFactory {
 public:
@@ -52,7 +54,6 @@ public:
     void set_morsel_queue_factory(MorselQueueFactory* morsel_queue_factory) {
         _morsel_queue_factory = morsel_queue_factory;
     }
-    size_t num_total_original_morsels() const { return _morsel_queue_factory->num_original_morsels(); }
 
     // When the pipeline of this source operator wants to insert a local shuffle for some complex operators,
     // such as hash join and aggregate, use this method to decide whether really need to insert a local shuffle.

@@ -1207,7 +1207,7 @@ public class OlapTable extends Table {
             if (numBucket > 0) {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
-                numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(isLightWeightTabletCreation());
                 info.setBucketNum((int) numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {
@@ -2066,6 +2066,16 @@ public class OlapTable extends Table {
         return tableProperty.enablePersistentIndex();
     }
 
+    public boolean isLightWeightTabletCreation() {
+        return tableProperty.lightWeightTabletCreation();
+    }
+
+    public void setLightWeightTabletCreation(boolean lightWeightTabletCreation) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION,
+                Boolean.valueOf(lightWeightTabletCreation).toString());
+        tableProperty.buildLightWeightTabletCreation();
+    }
+
     public int primaryIndexCacheExpireSec() {
         return tableProperty.primaryIndexCacheExpireSec();
     }
@@ -2204,10 +2214,15 @@ public class OlapTable extends Table {
         return tableProperty.enableStatisticCollectOnFirstLoad();
     }
 
+    public boolean isSetEnableStatisticCollectOnFirstLoad() {
+        return tableProperty != null && tableProperty.isSetEnableStatisticCollectOnFirstLoad();
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                 Boolean.valueOf(enable).toString());
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
+        tableProperty.setEnableStatisticCollectOnFirstLoad(enable);
     }
 
     public int getTableQueryTimeout() {
@@ -2269,6 +2284,16 @@ public class OlapTable extends Table {
 
     public Boolean enableLoadProfile() {
         return tableProperty.enableLoadProfile();
+    }
+
+    public int getLoadInitialOpenPartitionNumber() {
+        return tableProperty == null ? TableProperty.INVALID : tableProperty.getLoadInitialOpenPartitionNumber();
+    }
+
+    public void setLoadInitialOpenPartitionNumber(int n) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(n));
+        tableProperty.buildLoadInitialOpenPartitionNumber();
     }
 
     public void setEnableLoadProfile(boolean enableLoadProfile) {
@@ -2749,8 +2774,7 @@ public class OlapTable extends Table {
             // which is harmless because the next create on the same colocate_with name allocates a
             // new grpId via getNextId().
             if (colocateTableIndex.isRangeColocateGroup(groupId)) {
-                List<ColocateRange> ranges = colocateTableIndex.getColocateRangeMgr()
-                        .getColocateRanges(groupId.grpId);
+                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
                 if (!ranges.isEmpty()) {
                     GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
                             ColocateRangePersistInfo.create(groupId.grpId, ranges));
@@ -2982,9 +3006,9 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
         }
 
-        Boolean enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad();
-        if (!enableStatisticCollectOnFirstLoad) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
+        if (isSetEnableStatisticCollectOnFirstLoad()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                    Boolean.toString(enableStatisticCollectOnFirstLoad()));
         }
 
         // base compaction forbidden time ranges
@@ -3021,6 +3045,11 @@ public class OlapTable extends Table {
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 
+        if (isCloudNativeTable()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION,
+                    Boolean.toString(isLightWeightTabletCreation()));
+        }
+
         // lake_compaction_max_parallel (only for cloud native table, only show when not default)
         if (isCloudNativeTable()) {
             int lakeCompactionMaxParallel = getLakeCompactionMaxParallel();
@@ -3049,6 +3078,13 @@ public class OlapTable extends Table {
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // load initial open partition number
+        String loadInitialOpenPartitionNumber =
+                tableProperties.get(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+        if (loadInitialOpenPartitionNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, loadInitialOpenPartitionNumber);
         }
 
         // partition ttl

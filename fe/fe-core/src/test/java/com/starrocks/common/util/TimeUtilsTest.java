@@ -22,13 +22,16 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.type.DateType;
-import mockit.Expectations;
-import mockit.Mocked;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.TimeZone;
@@ -39,34 +42,15 @@ import static com.starrocks.common.util.TimeUtils.DATETIME_WITH_TIME_ZONE_PATTER
 
 public class TimeUtilsTest {
 
-    @Mocked
-    TimeUtils timeUtils;
-
-    @BeforeEach
-    public void setUp() {
-        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
-        new Expectations(timeUtils) {
-            {
-                TimeUtils.getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
-    }
-
     @Test
     public void testNormal() {
         Assertions.assertNotNull(TimeUtils.getCurrentFormatTime());
         Assertions.assertTrue(TimeUtils.getEstimatedTime(0L) > 0);
 
-        Assertions.assertEquals(-62167248343000L,
-                TimeUtils.MIN_DATE.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
-        Assertions.assertEquals(253402185600000L,
-                TimeUtils.MAX_DATE.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
-        Assertions.assertEquals(-62167248343000L,
-                TimeUtils.MIN_DATETIME.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
-        Assertions.assertEquals(253402271999000L,
-                TimeUtils.MAX_DATETIME.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        Assertions.assertEquals(LocalDate.of(0, 1, 1), TimeUtils.MIN_DATE);
+        Assertions.assertEquals(LocalDate.of(9999, 12, 31), TimeUtils.MAX_DATE);
+        Assertions.assertEquals(LocalDateTime.of(0, 1, 1, 0, 0, 0), TimeUtils.MIN_DATETIME);
+        Assertions.assertEquals(LocalDateTime.of(9999, 12, 31, 23, 59, 59), TimeUtils.MAX_DATETIME);
     }
 
     @Test
@@ -79,6 +63,7 @@ public class TimeUtilsTest {
         validDateList.add("9999-12-31");
         validDateList.add("1900-01-01");
         validDateList.add("2013-2-28");
+        validDateList.add("0000-01-01");
         for (String validDate : validDateList) {
             try {
                 TimeUtils.parseDate(validDate);
@@ -119,6 +104,7 @@ public class TimeUtilsTest {
         validDateTimeList.add("2013-2-28 23:59:59");
         validDateTimeList.add("2013-2-28 2:3:4");
         validDateTimeList.add("2014-05-07 19:8:50");
+        validDateTimeList.add("0000-01-01 00:00:00");
         for (String validDateTime : validDateTimeList) {
             try {
                 TimeUtils.parseDateTime(validDateTime);
@@ -150,6 +136,13 @@ public class TimeUtilsTest {
 
     @Test
     public void testDateTrans() throws AnalysisException {
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+            }
+        };
+
         Assertions.assertEquals(FeConstants.NULL_STRING, TimeUtils.longToTimeString(-2));
 
         long timestamp = 1426125600000L;
@@ -289,5 +282,95 @@ public class TimeUtilsTest {
         String value3 = " 2024-09-10";
         Matcher matcher3 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value3);
         Assertions.assertFalse(matcher3.matches());
+    }
+
+    // Regressions introduced by the java.time refactor in PR #66360.
+    // These tests fail on the unfixed code and pass after the fix.
+
+    @Test
+    public void testLongToTimeStringHonorsSessionTimeZone() {
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // 1426125600000L = 2015-03-12 10:00:00 +08:00 = 2015-03-12 02:00:00 UTC
+        long timestamp = 1426125600000L;
+        Assertions.assertEquals("2015-03-12 02:00:00", TimeUtils.longToTimeString(timestamp));
+    }
+
+    @Test
+    public void testTimeStringToLongHonorsSessionTimeZone() {
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // "2015-03-12 02:00:00" interpreted as UTC -> 1426125600000L
+        Assertions.assertEquals(1426125600000L, TimeUtils.timeStringToLong("2015-03-12 02:00:00"));
+    }
+
+    @Test
+    public void testTimeStringToLongInStorageZoneParsesAsShanghai() {
+        // Parses a legacy wall-clock string as fixed +08:00, independent of any
+        // mocked session timezone. This is the only remaining use case after
+        // BackendStatus stopped round-tripping through a wall-clock string.
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getTimeZone(ZoneOffset.UTC);
+            }
+        };
+        // "2015-03-12 10:00:00" interpreted as +08:00 -> 1426125600000L
+        Assertions.assertEquals(1426125600000L,
+                TimeUtils.timeStringToLongInStorageZone("2015-03-12 10:00:00"));
+    }
+
+    @Test
+    public void testGetCurrentFormatTimeUsesFixedShanghaiTimeZone() {
+        // Pin Instant.now() so the assertion is deterministic; do not rely on wall-clock
+        // tolerance windows. Setting the JVM default to UTC simultaneously guards
+        // against a regression to LocalDateTime.now() (which would silently follow the
+        // JVM default zone instead of the fixed storage zone).
+        Instant fixed = Instant.parse("2024-06-15T07:30:45Z");
+        new MockUp<Instant>() {
+            @Mock
+            public Instant now() {
+                return fixed;
+            }
+        };
+        TimeZone original = TimeZone.getDefault();
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone(ZoneOffset.UTC));
+            // 2024-06-15 07:30:45 UTC = 2024-06-15 15:30:45 +08:00.
+            Assertions.assertEquals("2024-06-15 15:30:45", TimeUtils.getCurrentFormatTime());
+        } finally {
+            TimeZone.setDefault(original);
+        }
+    }
+
+    @Test
+    public void testParseSupportsYearZero() {
+        Assertions.assertEquals(LocalDate.of(0, 1, 1),
+                Assertions.assertDoesNotThrow(() -> TimeUtils.parseDate("0000-01-01")));
+        Assertions.assertEquals(LocalDateTime.of(0, 1, 1, 0, 0, 0),
+                Assertions.assertDoesNotThrow(() -> TimeUtils.parseDateTime("0000-01-01 00:00:00")));
+        Assertions.assertNotEquals(-1L, TimeUtils.timeStringToLong("0000-01-01 00:00:00"));
+    }
+
+    @Test
+    public void testMinMaxConstantsAreTimezoneIndependent() {
+        TimeZone original = TimeZone.getDefault();
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone(ZoneOffset.UTC));
+            Assertions.assertEquals(LocalDate.of(0, 1, 1), TimeUtils.MIN_DATE);
+            Assertions.assertEquals(LocalDate.of(9999, 12, 31), TimeUtils.MAX_DATE);
+            Assertions.assertEquals(LocalDateTime.of(0, 1, 1, 0, 0, 0), TimeUtils.MIN_DATETIME);
+            Assertions.assertEquals(LocalDateTime.of(9999, 12, 31, 23, 59, 59), TimeUtils.MAX_DATETIME);
+        } finally {
+            TimeZone.setDefault(original);
+        }
     }
 }

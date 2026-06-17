@@ -18,9 +18,9 @@
 #include <memory>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/status.h"
-#include "runtime/global_dict/types_fwd_decl.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks {
 class SlotDescriptor;

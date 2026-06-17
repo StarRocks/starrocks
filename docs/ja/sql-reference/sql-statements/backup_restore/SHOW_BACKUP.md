@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定したデータベース内の最後の BACKUP タスクを表示します。"
 ---
 
 # SHOW BACKUP

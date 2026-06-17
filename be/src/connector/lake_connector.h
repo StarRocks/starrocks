@@ -20,7 +20,8 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class TabletSchema;
@@ -135,7 +136,7 @@ private:
 
     // Vector index search
     bool _use_vector_index = false;
-    bool _use_ivfpq = false;
+    bool _refine_distance = false;
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id = 0;
 
@@ -248,7 +249,7 @@ public:
 
     bool always_shared_scan() const override { return false; }
 
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges, size_t scan_parallelism = 0) override;

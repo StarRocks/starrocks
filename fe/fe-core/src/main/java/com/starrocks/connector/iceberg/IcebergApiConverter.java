@@ -118,7 +118,7 @@ public class IcebergApiConverter {
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
                                               String remoteTableName, String nativeCatalogType) {
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
-                .setId(CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setSrTableName(remoteTableName)
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "iceberg"))
@@ -723,7 +723,7 @@ public class IcebergApiConverter {
         String defaultDbName = currentVersion.defaultNamespace().level(0);
         String viewName = icebergView.name();
         String location = icebergView.location();
-        IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
+        IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName, dbName, viewName,
                 columns, sqlView.sql(), defaultCatalogName, defaultDbName, location, icebergView.properties());
         view.setComment(comment);
         return view;

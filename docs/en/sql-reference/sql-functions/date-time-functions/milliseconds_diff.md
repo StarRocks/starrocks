@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the time difference between the start date and end date in milliseconds."
 ---
 
 # milliseconds_diff

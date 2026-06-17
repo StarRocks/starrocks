@@ -48,7 +48,9 @@
 #include "base/coding.h"
 #include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
+#include "common/column_id.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
@@ -69,18 +71,18 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
+#include "platform/store_path.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
-#include "storage/key_coder.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
-#include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
-#include "storage/options.h"
 #include "storage/primary_key_dump.h"
+#include "storage/primitive/key_coder.h"
+#include "storage/primitive/storage_stats.h"
+#include "storage/primitive/zone_map_detail.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -94,7 +96,8 @@
 #include "storage/sstable/table.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/zone_map_detail.h"
+#include "types/olap_type_infra.h"
+#include "util/logging.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -384,17 +387,16 @@ void dump_lake_persistent_index_sst(const std::string& file_name, const starrock
 
     // Open the table via the official API for full KV iteration.
     Options tbl_opts;
-    Table* table = nullptr;
-    st = Table::Open(tbl_opts, file.get(), file_size, &table);
+    std::unique_ptr<Table> table;
+    st = Table::Open(tbl_opts, file.get(), file_size, table);
     if (!st.ok()) {
         std::cerr << "open SST table for iteration failed: " << st << std::endl;
         return;
     }
-    std::unique_ptr<Table> table_guard(table);
 
     ReadOptions iter_opts;
     iter_opts.fill_cache = false;
-    auto* iter = table_guard->NewIterator(iter_opts);
+    auto* iter = table->NewIterator(iter_opts);
     std::unique_ptr<Iterator> iter_guard(iter);
 
     // Dump all key-value entries.
@@ -1328,7 +1330,7 @@ Status SegmentDump::calc_checksum() {
 
     int64_t checksum = 0;
 
-    auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
     st = seg_iter->get_next(chunk.get());
     while (st.ok()) {
         size_t size = chunk->num_rows();
@@ -1411,7 +1413,7 @@ Status SegmentDump::dump_segment_data() {
 
     // iter chunk
     size_t row = 0;
-    auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+    auto chunk = ChunkFactory::new_chunk(*schema, 4096);
     do {
         st = seg_iter->get_next(chunk.get());
         if (!st.ok()) {
@@ -1462,7 +1464,7 @@ Status SegmentDump::dump_column_size() {
             auto seg_iter = std::move(seg_res.value());
 
             // iter chunk
-            auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+            auto chunk = ChunkFactory::new_chunk(*schema, 4096);
             do {
                 st = seg_iter->get_next(chunk.get());
                 if (!st.ok()) {
@@ -1477,52 +1479,24 @@ Status SegmentDump::dump_column_size() {
             return Status::OK();
         };
 
-        if (tablet_column.subcolumn_count() == 0) {
-            // regular column
-            read_the_segment().ok();
+        // Scan the whole column once and report a single total. For complex types
+        // (ARRAY/MAP/STRUCT) this reads every underlying stream (elements, keys/values,
+        // null flags, offsets, dictionary pages) exactly once, so the reported size is
+        // correct and free of double-counting. Previously each sub-column was scanned
+        // separately and the per-sub-column sizes summed, which over-counted the
+        // structural streams (null/offset) shared across sub-columns. The full column
+        // structure is still printed via the recursive ColumnMetaPB DebugString below.
+        read_the_segment().ok();
 
-            auto compession_desc = CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
-            auto encoding_desc = EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
+        auto compession_desc = CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
+        auto encoding_desc = EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
 
-            fmt::print(
-                    "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
-                    "bytes: {}, rows: {}, pages: {}]\n",
-                    id, column_name, compession_desc->name(), encoding_desc->name(),
-                    stats.compressed_bytes_read_request, column_meta.total_mem_footprint(), column_meta.num_rows(),
-                    stats.io_count_request);
-            fmt::print("{}\n", column_meta.DebugString());
-
-        } else {
-            // sub columns
-            for (size_t sub_id = 0; sub_id < tablet_column.subcolumn_count(); sub_id++) {
-                auto& sub_column = tablet_column.subcolumn(sub_id);
-                std::string sub_column_name = std::string(sub_column.name());
-
-                // reset the stats
-                OlapReaderStatistics stats;
-                seg_opts.stats = &stats;
-
-                // access path
-                std::vector<ColumnAccessPathPtr> access_paths;
-                seg_opts.column_access_paths = &access_paths;
-                auto maybe_path = ColumnAccessPath::create(TAccessPathType::FIELD, "", id);
-                RETURN_IF_ERROR(maybe_path);
-                ColumnAccessPath::insert_json_path(maybe_path.value().get(), sub_column.type(), sub_column_name);
-                access_paths.emplace_back(std::move(maybe_path.value()));
-
-                // read it
-                read_the_segment().ok();
-
-                const ColumnMetaPB& sub_column_meta = column_meta.children_columns(sub_id);
-
-                fmt::print(">>>>>>>>>>>>> sub column start >>>>>>>>>>>>>>>\n");
-                fmt::print("[ column id: {} subcolumn {} {} compressed bytes: {} pages: {}]\n", id, sub_id,
-                           sub_column_name, stats.compressed_bytes_read_request, stats.io_count_request);
-                std::string meta_string = sub_column_meta.DebugString();
-                fmt::print("{}\n", meta_string);
-                fmt::print(">>>>>>>>>>>>> sub column end >>>>>>>>>>>>>>>\n");
-            }
-        }
+        fmt::print(
+                "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
+                "bytes: {}, rows: {}, pages: {}]\n",
+                id, column_name, compession_desc->name(), encoding_desc->name(), stats.compressed_bytes_read_request,
+                column_meta.total_mem_footprint(), column_meta.num_rows(), stats.io_count_request);
+        fmt::print("{}\n", column_meta.DebugString());
     }
 
     return Status::OK();

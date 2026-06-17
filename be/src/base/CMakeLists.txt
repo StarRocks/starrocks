@@ -59,6 +59,7 @@ ADD_BE_LIB(Base
   path/path_util.cpp
   random/random.cc
   simd/expand.cpp
+  simd/rle_simd.cpp
   stats/ndv_estimator.cpp
   metrics.cpp
   string/base85.cpp
@@ -77,6 +78,9 @@ ADD_BE_LIB(Base
   time/time.cpp
   time/timezone_utils.cpp
   template/mustache/mustache.cc
+  # base/testutil is not the UT-only TestUtil library. Production sources
+  # include its BE_TEST-gated sync-point/fault-injection macros, which compile
+  # to no-ops outside unit-test builds.
   testutil/assert.cpp
   testutil/sync_point.cc
   testutil/sync_point_impl.cc

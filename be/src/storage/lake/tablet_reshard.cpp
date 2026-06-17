@@ -41,6 +41,11 @@ bvar::Adder<int64_t> g_tablet_reshard_split_failed("tablet_reshard_split_failed"
 bvar::LatencyRecorder g_tablet_reshard_split_latency("tablet_reshard_split");
 bvar::Adder<int64_t> g_tablet_reshard_split_output_tablet_count("tablet_reshard_split_output_tablet_count");
 bvar::Adder<int64_t> g_tablet_reshard_split_fallback_total("tablet_reshard_split_fallback_total");
+bvar::Adder<int64_t> g_tablet_reshard_split_external_boundaries_fallback_total(
+        "tablet_reshard_split_external_boundaries_fallback_total");
+// Phase-1 per-segment shared optimization counters.
+bvar::Adder<int64_t> g_tablet_reshard_split_exclusive_segments_total("tablet_reshard_split_exclusive_segments_total");
+bvar::Adder<int64_t> g_tablet_reshard_split_anomaly_total("tablet_reshard_split_anomaly_total");
 
 // Layer 2: Merge metrics
 bvar::Adder<int64_t> g_tablet_reshard_merge_total("tablet_reshard_merge_total");
@@ -332,14 +337,15 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     new_tablet_new_metadata->clear_compaction_inputs();
     new_tablet_new_metadata->clear_orphan_files();
     new_tablet_new_metadata->clear_prev_garbage_version();
+    // uid is inherited verbatim from the source rowsets via the metadata copy above.
     new_metadatas.emplace(identical_tablet.new_tablet_id(), std::move(new_tablet_new_metadata));
     return Status::OK();
 }
 
-// Transform |txn_log| (which still carries the source tablet id) for publish
+// Transform |txn_log| (which still carries the old tablet id) for publish
 // on the merged tablet. Drops compaction as a no-op (background compaction
 // will rerun it on the merged tablet) and asynchronously deletes the output
-// files that the compaction had already written under the source tablet's path.
+// files that the compaction had already written under the old tablet's path.
 // Other op shapes (op_write only, or empty log) pass through unchanged.
 Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
     if (!txn_log->has_op_compaction() && !txn_log->has_op_parallel_compaction()) {
@@ -352,25 +358,25 @@ Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
     return Status::OK();
 }
 
-// Transform |txn_log| for publish on one of the split child tablets.
+// Transform |txn_log| for publish on one of the split new tablets.
 //
 // Compaction ops are dropped on cross-publish, mirroring the merging-side
 // handling (see convert_txn_log_for_merging above). The reason is the same in
-// the other direction: a compaction transaction committed on the parent before
+// the other direction: a compaction transaction committed on the old tablet before
 // the split has its rows-mapper file (.lcrm) and output rowset built against
-// the parent tablet's full key range. Each split child only owns a subrange,
+// the old tablet's full key range. Each split new tablet only owns a subrange,
 // so when the conflict resolver runs for its op_compaction publish on the
-// child it iterates fewer segment rows than the mapper's stored row_count and
+// new tablet it iterates fewer segment rows than the mapper's stored row_count and
 // `RowsMapperIterator::status()` rejects the publish with
 //   "Chunk vs rows mapper's row count mismatch. <N> vs <total>"
 // (see storage/rows_mapper.cpp:155, storage/primary_key_compaction_conflict_resolver.cpp:124,175).
-// Because the compaction's input rowsets are still present in every child's
+// Because the compaction's input rowsets are still present in every new tablet's
 // metadata (shared via set_all_data_files_shared), it is safe to drop the
-// compaction here — background compaction on the child will rerun it. The
-// compaction's output files were written under the parent tablet's path and
+// compaction here — background compaction on the new tablet will rerun it. The
+// compaction's output files were written under the old tablet's path and
 // are deleted async so they do not leak. The async cleanup is gated to a
-// single child (split_index == 0) because publish runs convert_txn_log once
-// per split child against the same parent txn_log; without the gate the
+// single new tablet (split_index == 0) because publish runs convert_txn_log once
+// per split new tablet against the same old tablet txn_log; without the gate the
 // identical output paths would be queued for deletion split_count times.
 Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                      const PublishTabletInfo& publish_tablet_info) {
@@ -453,7 +459,7 @@ StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetada
     auto new_txn_log = std::make_shared<TxnLogPB>(*txn_log);
 
     // Each case increments its per-type metric and applies any op-level
-    // transform while the log still carries the source tablet id (critical for
+    // transform while the log still carries the old tablet id (critical for
     // MERGING, benign for others). Final tablet_id rewrite happens uniformly.
     switch (type) {
     case PublishTabletInfo::SPLITTING_TABLET:

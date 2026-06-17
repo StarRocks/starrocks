@@ -17,11 +17,15 @@
 #include <google/protobuf/descriptor.pb.h>
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <fstream>
+
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs_factory.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class HdfsScannerJsonReaderTest : public testing::Test {
@@ -37,13 +41,13 @@ public:
 protected:
     std::shared_ptr<FileSystem> _fs;
     OpenFileOptions _opts;
-    HdfsScanStats _app_stats;
-    HdfsScanStats _fs_stats;
+    FormatScannerStats _app_stats;
+    FormatScannerStats _fs_stats;
     RuntimeState _runtime_state;
     ObjectPool _pool;
 
-    std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
-    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+    std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
+    std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     std::unique_ptr<RandomAccessFile> _file;
 };
 
@@ -57,7 +61,7 @@ void HdfsScannerJsonReaderTest::TearDown() {}
 void HdfsScannerJsonReaderTest::create_random_access_file(const std::string& path) {
     ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(path));
     _opts.fs = _fs.get();
-    _opts.path = path;
+    _opts.file_path = path;
     _opts.file_size = _fs->get_file_size(path).value();
     ASSIGN_OR_ABORT(_file,
                     HdfsScanner::create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, _opts));
@@ -107,7 +111,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_all_rows) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
     ASSERT_EQ(chunk->num_rows(), 10);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]");
@@ -124,7 +128,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_more_rows) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(json_reader.next_record(chunk.get(), 4));
     ASSERT_EQ(chunk->num_rows(), 4);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3, 4]");
@@ -152,7 +156,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_large_file) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(json_reader.next_record(chunk.get(), 50));
     ASSERT_EQ(chunk->num_rows(), 50);
 
@@ -184,7 +188,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_large_rows) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::NotSupported(""), json_reader.next_record(chunk.get(), 50));
 }
 
@@ -197,11 +201,101 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_wrong_order_json) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
     ASSERT_EQ(chunk->num_rows(), 8);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3, 4, 5, NULL, 7, NULL]");
     ASSERT_EQ(chunk->get_column_by_slot_id(1)->debug_string(),
               "['str_1', 'str_2', 'str_3', 'str_4', NULL, 'str_6', 'str_7', NULL]");
+}
+
+namespace {
+void write_file(const std::string& path, const std::string& content) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out.write(content.data(), static_cast<std::streamsize>(content.size()));
+}
+
+std::string col_value(Chunk* chunk, int slot, size_t row) {
+    return chunk->get_column_by_slot_id(slot)->get(row).get_slice().to_string();
+}
+
+// Build NDJSON in which row2's value starts just before `lead_off`, so that the
+// multi-byte character `mb` has its leading byte at `lead_off` and is therefore split
+// across the read boundary at INIT_BUF_SIZE. row1 is a complete filler row occupying
+// exactly [0, lead_off - len(head2)). On return *c2_row2 holds row2's expected value.
+std::string build_split_content(const std::string& mb, size_t lead_off, std::string* c2_row2) {
+    const std::string head1 = R"({"c1":1,"c2":")";
+    const std::string head2 = R"({"c1":2,"c2":")";
+    const size_t row2_start = lead_off - head2.size();
+    const size_t pad = row2_start - head1.size() - 3; // 3 = '"' '}' '\n' that close row1
+    *c2_row2 = mb + "Z";
+    return head1 + std::string(pad, 'A') + "\"}\n" + head2 + *c2_row2 + "\"}\n" + R"({"c1":3,"c2":"end"})" + "\n";
+}
+} // namespace
+
+// A multi-byte UTF-8 character split across the INIT_BUF_SIZE read boundary must not
+// trigger UTF8_ERROR: the trailing partial bytes are carried over and the character is
+// reassembled on the next read. These cases depend on BE_TEST INIT_BUF_SIZE == 1024.
+TEST_F(HdfsScannerJsonReaderTest, test_3byte_utf8_split_one_byte_before_boundary) {
+    const std::string zai = std::string("\xE5\x9F\xBC", 3); // 埼, only 0xE5 lands in buffer 0
+    std::string c2_1;
+    std::string content = build_split_content(zai, 1023, &c2_1);
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/utf8_split_3b_a.json";
+    write_file(path, content);
+    DeferOp clean([&]() { std::remove(path.c_str()); });
+
+    create_random_access_file(path);
+    auto* tuple_desc = create_tuple_descriptor();
+    HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
+    ASSERT_OK(json_reader.init());
+
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3]");
+    ASSERT_EQ(col_value(chunk.get(), 1, 1), c2_1);
+    ASSERT_EQ(col_value(chunk.get(), 1, 2), "end");
+}
+
+TEST_F(HdfsScannerJsonReaderTest, test_3byte_utf8_split_two_bytes_before_boundary) {
+    const std::string zai = std::string("\xE5\x9F\xBC", 3); // 埼, 0xE5 0x9F land in buffer 0
+    std::string c2_1;
+    std::string content = build_split_content(zai, 1022, &c2_1);
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/utf8_split_3b_b.json";
+    write_file(path, content);
+    DeferOp clean([&]() { std::remove(path.c_str()); });
+
+    create_random_access_file(path);
+    auto* tuple_desc = create_tuple_descriptor();
+    HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
+    ASSERT_OK(json_reader.init());
+
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3]");
+    ASSERT_EQ(col_value(chunk.get(), 1, 1), c2_1);
+    ASSERT_EQ(col_value(chunk.get(), 1, 2), "end");
+}
+
+TEST_F(HdfsScannerJsonReaderTest, test_4byte_utf8_split_across_boundary) {
+    const std::string emoji = std::string("\xF0\x9F\x98\x80", 4); // 😀, 3 of 4 bytes in buffer 0
+    std::string c2_1;
+    std::string content = build_split_content(emoji, 1021, &c2_1);
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/utf8_split_4b.json";
+    write_file(path, content);
+    DeferOp clean([&]() { std::remove(path.c_str()); });
+
+    create_random_access_file(path);
+    auto* tuple_desc = create_tuple_descriptor();
+    HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
+    ASSERT_OK(json_reader.init());
+
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3]");
+    ASSERT_EQ(col_value(chunk.get(), 1, 1), c2_1);
+    ASSERT_EQ(col_value(chunk.get(), 1, 2), "end");
 }
 } // namespace starrocks

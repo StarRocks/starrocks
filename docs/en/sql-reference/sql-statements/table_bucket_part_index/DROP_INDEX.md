@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP INDEX is used to drop a specified index on a table."
 ---
 
 # DROP INDEX

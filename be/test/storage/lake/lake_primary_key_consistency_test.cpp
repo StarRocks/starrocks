@@ -20,6 +20,7 @@
 #include <random>
 
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -63,7 +64,7 @@ enum PICT_OP {
 
 static const std::string kTestGroupPath = "./test_lake_primary_key_consistency";
 static const int64_t MaxNumber = 1000000;
-static const int64_t MaxN = 10000;
+static const int64_t MaxN = 50000;
 static const size_t MaxUpsert = 4;
 static const size_t MaxBatchCnt = 5;
 static const int64_t io_failure_percent = 3;
@@ -276,6 +277,11 @@ public:
         config::enable_pk_strict_memcheck = false;
         _old_pk_index_eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
         config::pk_index_eager_build_threshold_bytes = 1;
+        _old_pk_index_parallel_execution_min_rows = config::pk_index_parallel_execution_min_rows;
+        config::pk_index_parallel_execution_min_rows = 128;
+        _old_pk_index_parallel_compaction_task_split_threshold_bytes =
+                config::pk_index_parallel_compaction_task_split_threshold_bytes;
+        config::pk_index_parallel_compaction_task_split_threshold_bytes = 4 * 1024 * 1024;
     }
 
     void TearDown() override {
@@ -284,6 +290,9 @@ public:
         config::write_buffer_size = _old_memtable_size;
         config::enable_pk_strict_memcheck = _old_enable_pk_strict_memcheck;
         config::pk_index_eager_build_threshold_bytes = _old_pk_index_eager_build_threshold_bytes;
+        config::pk_index_parallel_execution_min_rows = _old_pk_index_parallel_execution_min_rows;
+        config::pk_index_parallel_compaction_task_split_threshold_bytes =
+                _old_pk_index_parallel_compaction_task_split_threshold_bytes;
     }
 
     std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type) {
@@ -417,9 +426,9 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto ret = ChunkHelper::new_chunk(*_schema, 128);
+        auto ret = ChunkFactory::new_chunk(*_schema, 128);
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*_schema, 128);
+            auto tmp = ChunkFactory::new_chunk(*_schema, 128);
             auto st = reader->get_next(tmp.get());
             if (st.is_end_of_file()) {
                 break;
@@ -719,11 +728,13 @@ protected:
     int64_t _old_memtable_size = 0;
     bool _old_enable_pk_strict_memcheck = false;
     int64_t _old_pk_index_eager_build_threshold_bytes = 0;
+    int64_t _old_pk_index_parallel_execution_min_rows = 0;
+    int64_t _old_pk_index_parallel_compaction_task_split_threshold_bytes = 0;
 };
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
     _seed = 1719499276; // seed
-    _run_second = 50;   // 50 second
+    _run_second = 100;  // 100 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -733,7 +744,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     _seed = time(nullptr); // use current ts as seed
-    _run_second = 50;      // 50 second
+    _run_second = 100;     // 100 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -742,8 +753,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
-                         ::testing::Values(PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::LOCAL},
-                                           PrimaryKeyParam{
-                                                   .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
+                         ::testing::Values(PrimaryKeyParam{
+                                 .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
 
 } // namespace starrocks::lake

@@ -21,13 +21,17 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "column/nullable_column.h"
 #include "column/variant_encoder.h"
 #include "common/object_pool.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
-#include "storage/column_predicate.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "formats/parquet/scalar_column_reader.h"
+#include "formats/parquet/schema.h"
+#include "storage/column_predicate_factory.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
+#include "types/type_descriptor.h"
 #include "types/type_info.h"
 #include "types/variant.h"
 
@@ -624,7 +628,7 @@ TEST(VariantShreddedPruningTest, CollectIORangeSkipsUnrequestedSiblings) {
     ParquetField root_field;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field));
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     reader->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
 
@@ -799,7 +803,7 @@ TEST(VariantZoneMapTest, VariantVirtualZoneMapReaderNoOpApis) {
     zm_reader.get_levels(&def_levels, &rep_levels, &num_levels);
     zm_reader.set_need_parse_levels(true);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 77;
     zm_reader.collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     EXPECT_TRUE(ranges.empty());
@@ -1051,6 +1055,52 @@ TEST(ParquetComplexColumnReaderTest, VariantVirtualZoneMapReaderSkipsWhenSourceI
     EXPECT_FALSE(prepared);
     EXPECT_EQ(nullptr, leaf_reader);
     EXPECT_TRUE(rewritten_predicates.empty());
+}
+
+// White-box coverage for the fail-fast invariants introduced by the dict-code-leak fix.
+//
+// In normal flow fill_dst_column()/_restore_tmp_column() are only reached right after read_range()
+// has swapped in the reader's internal temporary column, so the "source is not a temporary column"
+// and "lost original destination column" guards are unreachable end to end. The test target is built
+// with -fno-access-control, so construct the readers directly and reach into their internals.
+TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource) {
+    ColumnReaderOptions opts;
+    ParquetField field;
+    tparquet::ColumnChunk chunk_meta;
+    TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    GlobalDictMap dict;
+    auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
+
+    // LowCardColumnReader::fill_dst_column rejects a src that is not its dict-code column
+    // (_dict_code is null without a preceding read_range()).
+    {
+        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
+        ColumnPtr dst = make_int_col();
+        ColumnPtr src = make_int_col();
+        EXPECT_FALSE(reader.fill_dst_column(dst, src).ok());
+    }
+
+    // LowRowsColumnReader::fill_dst_column rejects a src that is not its temporary string column.
+    {
+        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        LowRowsColumnReader reader(base, &dict, /*slot_id=*/1);
+        ColumnPtr dst = make_int_col();
+        ColumnPtr src = make_int_col();
+        EXPECT_FALSE(reader.fill_dst_column(dst, src).ok());
+    }
+
+    // RawColumnReader::_restore_tmp_column errors when a temporary column is still referenced as the
+    // caller-visible column but the original destination column was lost.
+    {
+        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
+        ColumnPtr code = make_int_col();
+        reader._dict_code = code;
+        reader._ori_column = nullptr;
+        ColumnPtr col = code;
+        EXPECT_FALSE(reader._restore_tmp_column(col).ok());
+    }
 }
 
 } // namespace starrocks::parquet

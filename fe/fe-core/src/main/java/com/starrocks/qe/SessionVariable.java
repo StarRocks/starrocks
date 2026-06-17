@@ -240,6 +240,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
@@ -558,8 +559,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
     public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
     public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
+    public static final String SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT = "skew_join_max_other_side_overlap_row_count";
     public static final String SKEW_JOIN_MCV_SINGLE_THRESHOLD = "skew_join_mcv_single_threshold";
     public static final String SKEW_JOIN_MCV_MIN_INPUT_ROWS = "skew_join_mcv_min_input_rows";
+    public static final String ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS = "enable_skew_detect_with_inaccurate_stats";
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
@@ -610,6 +613,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
     public static final String ENABLE_RANGE_DISTRIBUTION = "enable_range_distribution";
+
+    public static final String ENABLE_TABLET_PRE_SPLIT = "enable_tablet_pre_split";
 
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
@@ -739,6 +744,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -1078,6 +1084,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String K_FACTOR = "k_factor";
 
+    public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
+
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
      */
@@ -1181,7 +1189,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
     public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
-    
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1344,6 +1352,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // When true and a profile is built for the query, the EXPLAIN COSTS text
+    // of the executed plan is embedded in the profile's Summary section.
+    @VariableMgr.VarAttr(name = ENABLE_EXPLAIN_IN_PROFILE)
+    private boolean enableExplainInProfile = false;
 
     @VariableMgr.VarAttr(name = BINARY_ENCODING_FORMAT)
     private String binaryEncodingFormat = BinaryEncodingFormat.HEX.sessionValue();
@@ -2019,6 +2032,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION, flag = VariableMgr.INVISIBLE)
     private boolean enableRangeDistribution = false;
+
+    // Per-session opt-out for Sample-Based Tablet Pre-Split. Defaults to true so the FE-side
+    // Config gates (enable_tablet_pre_split_for_*) are the primary on/off switch; users with
+    // session-specific reasons (e.g. a one-off load they want to leave undisturbed) can flip
+    // this to false. Both the Config and the session var must be true for pre-split to run.
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_PRE_SPLIT)
+    private boolean enableTabletPreSplit = true;
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
@@ -2777,6 +2797,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
+    private boolean avroUseJNIReader = false;
+
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
@@ -3146,6 +3169,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = K_FACTOR)
     private double kFactor = 1;
 
+    // When on, a quantized vector index (IVFPQ, or HNSW with a non-flat quantizer) refines its ANN
+    // result by recomputing the exact distance on the full-precision vectors. Off = trust the (lossy)
+    // index distance. No effect on a non-quantized index, whose distance is already exact.
+    @VarAttr(name = ENABLE_VECTOR_INDEX_REFINE)
+    private boolean enableVectorIndexRefine = false;
+
+    public boolean isEnableVectorIndexRefine() {
+        return enableVectorIndexRefine;
+    }
+
+    public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {
+        this.enableVectorIndexRefine = enableVectorIndexRefine;
+    }
+
     public int getPrepareMetadataPoolSize() {
         return prepareMetadataPoolSize;
     }
@@ -3213,7 +3250,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePaimonColumnStatistics = false;
 
     @VarAttr(name = PLAN_MODE)
-    private String planMode = PlanMode.AUTO.modeName();
+    private String planMode = PlanMode.LOCAL.modeName();
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
@@ -3227,6 +3264,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SKEW_JOIN_DATA_SKEW_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double skewJoinDataSkewThreshold = 0.2;
 
+    // Maximum number of overlapping MCV rows on the other side of the join. When exceeding the overlap,
+    // the skew join optimization is skipped as this can lead to a row explosion.
+    // With the default value of `skewJoinRandRange` = 1000, an overlap of 1M leads to 1Bn rows.
+    @VarAttr(name = SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT, flag = VariableMgr.INVISIBLE)
+    private long skewJoinMaxOtherSideOverlapRowCount = 1_000_000;
+
     // A single MCV value must exceed this total-domain ratio to be considered as a skew value candidate.
     @VarAttr(name = SKEW_JOIN_MCV_SINGLE_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double skewJoinMcvSingleThreshold = 0.1;
@@ -3234,6 +3277,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Minimal input rows (estimated) to enable MCV-based skew join elimination rewrite.
     @VarAttr(name = SKEW_JOIN_MCV_MIN_INPUT_ROWS, flag = VariableMgr.INVISIBLE)
     private long skewJoinMcvMinInputRows = 10000000;
+
+    // When enabled, skew detection proceeds even when table row count is marked as potentially inaccurate (isTableRowCountMayInaccurate).
+    // This allows rules consuming skew info (joins, aggregations, window functions) to fire based on
+    // histogram/MCV data regardless of row count reliability.
+    @VarAttr(name = ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS, flag = VariableMgr.INVISIBLE)
+    private boolean enableSkewDetectWithInaccurateStats = false;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -3610,6 +3659,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return paimonForceJNIReader;
     }
 
+    public boolean getAvroUseJNIReader() {
+        return avroUseJNIReader;
+    }
+
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
     }
@@ -3886,6 +3939,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableExplainInProfile() {
+        return enableExplainInProfile;
+    }
+
+    public void setEnableExplainInProfile(boolean enableExplainInProfile) {
+        this.enableExplainInProfile = enableExplainInProfile;
     }
 
     public boolean getColorExplainOutput() {
@@ -4642,7 +4703,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
-        ConnectorSinkShuffleMode mode = ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+        return ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+    }
+
+    public ConnectorSinkShuffleMode getIcebergConnectorSinkShuffleMode() {
+        ConnectorSinkShuffleMode mode = getConnectorSinkShuffleMode();
         // Backward compatibility: legacy iceberg-only boolean implies FORCE when new mode stays at default AUTO.
         if (mode == ConnectorSinkShuffleMode.AUTO && enableIcebergSinkGlobalShuffle) {
             return ConnectorSinkShuffleMode.FORCE;
@@ -4901,6 +4966,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRangeDistribution(boolean enableRangeDistribution) {
         this.enableRangeDistribution = enableRangeDistribution;
+    }
+
+    public boolean isEnableTabletPreSplit() {
+        return enableTabletPreSplit;
+    }
+
+    public void setEnableTabletPreSplit(boolean enableTabletPreSplit) {
+        this.enableTabletPreSplit = enableTabletPreSplit;
     }
 
     public void setAllowDefaultPartition(boolean allowDefaultPartition) {
@@ -5785,6 +5858,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableStatsToOptimizeSkewJoin = enableStatsToOptimizeSkewJoin;
     }
 
+    public boolean isEnableSkewDetectWithInaccurateStats() {
+        return enableSkewDetectWithInaccurateStats;
+    }
+
+    public void setEnableSkewDetectWithInaccurateStats(boolean enableSkewDetectWithInaccurateStats) {
+        this.enableSkewDetectWithInaccurateStats = enableSkewDetectWithInaccurateStats;
+    }
+
     public int getSkewJoinOptimizeUseMCVCount() {
         return skewJoinOptimizeUseMCVCount;
     }
@@ -5799,6 +5880,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSkewJoinDataSkewThreshold(double skewJoinDataSkewThreshold) {
         this.skewJoinDataSkewThreshold = skewJoinDataSkewThreshold;
+    }
+
+    public long getSkewJoinMaxOtherSideOverlapRowCount() {
+        return skewJoinMaxOtherSideOverlapRowCount;
+    }
+
+    public void setSkewJoinMaxOtherSideOverlapRowCount(long skewJoinMaxOtherSideOverlapRowCount) {
+        this.skewJoinMaxOtherSideOverlapRowCount = skewJoinMaxOtherSideOverlapRowCount;
     }
 
     public double getSkewJoinMcvSingleThreshold() {
@@ -6358,6 +6447,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
         if (loadCompressionType != null) {
             tResult.setLoad_transmission_compression_type(loadCompressionType);
+        }
+
+        // Propagate log_rejected_record_num so INSERT (and any path using
+        // context.getSessionVariable().toThrift()) can emit rejected records
+        // to _statistics_.rejected_records. Without this, the BE writer stays
+        // disabled because log_rejected_record_num defaults to 0. Only
+        // forward when the user has set a non-default value so existing
+        // tests that assert the field is unset on default sessions stay
+        // correct, and broker-load / stream-load paths that inject their own
+        // value keep winning the last-writer race.
+        if (logRejectedRecordNum != 0) {
+            tResult.setLog_rejected_record_num(logRejectedRecordNum);
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);

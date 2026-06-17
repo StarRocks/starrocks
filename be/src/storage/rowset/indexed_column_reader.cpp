@@ -36,7 +36,7 @@
 
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h" // for Substitute
-#include "storage/key_coder.h"
+#include "storage/primitive/key_coder.h"
 #include "storage/rowset/encoding_info.h" // for EncodingInfo
 #include "storage/rowset/page_io.h"
 

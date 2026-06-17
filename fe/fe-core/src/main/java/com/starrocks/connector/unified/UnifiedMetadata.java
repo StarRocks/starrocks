@@ -16,6 +16,7 @@ package com.starrocks.connector.unified;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -142,6 +143,12 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     @Override
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.acquireTvrSnapshot(dbName, table, mvId);
+    }
+
+    @Override
     public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
                                                          TvrTableSnapshot fromSnapshotExclusive,
                                                          TvrTableSnapshot toSnapshotInclusive) {
@@ -155,6 +162,12 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
                                                 Optional<ConnectorTableVersion> endVersion) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
+    }
+
+    @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getVersionCommitTimeMillis(dbName, table, version);
     }
 
     @Override

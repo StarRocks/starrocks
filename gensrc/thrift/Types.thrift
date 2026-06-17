@@ -220,6 +220,8 @@ enum TTaskType {
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
     EXTERNAL_CLUSTER_SNAPSHOT,
+    // Placeholder for external cluster snapshot feature.
+    TABLET_RESTORE,
     NUM_TASK_TYPE
 }
 
@@ -438,7 +440,8 @@ enum TTableType {
     ICEBERG_FILES_TABLE,
     ICEBERG_PARTITIONS_TABLE,
     BENCHMARK_TABLE,
-    ICEBERG_PROPERTIES_TABLE
+    ICEBERG_PROPERTIES_TABLE,
+    LANCE_TABLE
 }
 
 enum TKeysType {
@@ -628,6 +631,14 @@ struct TSnapshotInfo {
     1: optional TBackend backend
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TClusterSnapshotPartitionSpec {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 partition_id
+    4: optional i64 physical_partition_id
 }
 
 enum TTxnType {

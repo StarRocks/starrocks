@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 ---
 
@@ -247,12 +248,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，FE 审计子系统会将 ConnectProcessor 处理的 SQL 语句文本记录到 FE 审计日志 (`fe.audit.log`) 中。存储的语句遵循其他控制：加密语句将被 redacted (`AuditEncryptionChecker`)，如果设置了 `enable_sql_desensitize_in_log`，敏感凭据可能会被 redacted 或脱敏，并且 digest 记录由 `enable_sql_digest` 控制。当设置为 `false` 时，ConnectProcessor 会在审计事件中将语句文本替换为 "?" — 其他审计字段（用户、主机、持续时间、状态、通过 `qe_slow_log_ms` 进行的慢查询检测以及指标）仍会记录。启用 SQL 审计会增加取证和故障排除的可见性，但可能会暴露敏感的 SQL 内容并增加日志量和 I/O；禁用它会提高隐私性，但代价是审计日志中会丢失完整的语句可见性。
 - 引入版本: -
 
+### `enable_print_load_profile_to_log`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，导入 profile（如 Stream Load、Routine Load、Broker Load、Merge Commit 等）在被推送到 `ProfileManager` 时，会额外以 INFO 级别写入 profile 日志 (`fe.profile.log`)，格式为单行 JSON，与 query profile log 一致。这样即使导入 profile 因 `profile_info_reserved_num` 限制而从 `ProfileManager` 中被淘汰，仍可从日志中找回。之所以写入 profile 日志而非 `fe.log`，是因为其 JSON layout 的字符串上限是 `sys_log_json_profile_max_string_length`，而非小得多的 `sys_log_json_max_string_length`，因此较大的导入 profile 不会被截断；该文件的轮转与保留由 `profile_log_*` 系列参数控制。仅打印查询类型为 `Load` 的 profile，查询 profile 不受影响。只有在导入 profile 实际被收集时（例如启用了 `enable_profile`，或导入耗时超过大导入 profile 阈值）才会打印。
+- 引入版本: -
+
 ### `enable_profile_log`
 
 - 默认值: true
 - 类型: Boolean
 - 单位: -
-- 是否可变: No
+- 是否可变: Yes
 - 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行；当 `enable_profile_log_compress` 启用时，JSON 可能会在日志记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
 - 引入版本: v3.2.5
 
@@ -271,7 +281,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 描述: 当此项设置为 `true` 时，系统会在将敏感 SQL 内容写入日志和查询详细记录之前替换或隐藏这些内容。遵循此配置的代码路径包括 ConnectProcessor.formatStmt（审计日志）、StmtExecutor.addRunningQueryDetail（查询详细信息）和 SimpleExecutor.formatSQL（内部执行器日志）。启用此功能后，无效的 SQL 可能会被替换为固定的脱敏消息，凭据（用户/密码）将被隐藏，并且 SQL 格式化程序必须生成 sanitized 表示（它还可以启用摘要式输出）。这减少了审计/内部日志中敏感文字和凭据的泄露，但也意味着日志和查询详细信息不再包含原始完整 SQL 文本（这可能会影响回放或调试）。
+- 描述: 当此项设置为 `true` 时，系统会在将敏感 SQL 内容写入日志、查询详细记录以及查询 profile 之前替换或隐藏这些内容。遵循此配置的代码路径包括 ConnectProcessor.formatStmt（审计日志）、StmtExecutor.addRunningQueryDetail（查询详细信息）、SimpleExecutor.formatSQL（内部执行器日志），以及 StmtExecutor.buildTopLevelProfile / processProfileAsync（profile 的 `Summary` 段中的 `Sql Statement` 与 `ExplainPlan` info-string）。启用此功能后，无效的 SQL 可能会被替换为固定的脱敏消息，凭据（用户/密码）将被隐藏，并且 SQL 格式化程序必须生成 sanitized 表示（它还可以启用摘要式输出）。对于通过会话变量 `enable_explain_in_profile` 加入的 `ExplainPlan` 字段，此配置还会强制对嵌入的 `EXPLAIN COSTS` 文本启用文字（literal）摘要渲染，从而避免 profile 中的 `Sql Statement` 已被脱敏但 `ExplainPlan` 仍然暴露原始字面量。这减少了审计/内部日志和 profile 中敏感字面量和凭据的泄露，但也意味着日志、查询详细信息和 profile 不再包含原始完整 SQL 文本（这可能会影响回放或调试）。
 - 引入版本: -
 
 ### `internal_log_delete_age`
@@ -481,14 +491,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于判断查询是否为慢查询的阈值。如果查询的响应时间超过此阈值，则会在 **fe.audit.log** 中记录为慢查询。
 - 引入版本: -
 
-### `slow_lock_log_every_ms`
+### `slow_lock_log_l2_info_interval_ms`
 
 - 默认值: 3000L
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 在为同一 SlowLockLogStats 实例发出另一个“慢锁”警告之前，等待的最短间隔（以毫秒为单位）。LockUtils 在锁等待超过 `slow_lock_threshold_ms` 后检查此值，并会抑制额外的警告，直到自上次记录慢锁事件以来已过去 `slow_lock_log_every_ms` 毫秒。使用更大的值可在长时间争用期间减少日志量，或使用更小的值以获得更频繁的诊断。更改在运行时对后续检查生效。
-- 引入版本: v3.2.0
+- 别名: `slow_lock_log_every_ms`（原名,为向后兼容保留——两个名字指向同一参数）。
+- 描述: **L2** 慢锁日志档位的最小时间间隔——一条不含堆栈的完整 lock-info JSON。慢锁日志按三档逐级降级、节流由严到松：**L1** = 完整信息 + 堆栈（`slow_lock_log_l1_stack_interval_ms`），**L2** = 完整信息、无堆栈（本参数），**L3** = 纯文本最简信息（`slow_lock_log_l3_brief_interval_ms`）。对一次慢锁事件,输出当前节流允许的最高档;选中较高档会同时消耗较低档的窗口,因此总日志量不会超过最松那一档被允许的速率。节流作用域随发射所在的锁层不同:在 `LockManager.logSlowLockTrace` 中是**全局**(一个 static 门控覆盖所有 rid);在 `QueryableReentrantReadWriteLock` 中是**per-instance**(每个锁对象——例如每个 `RoutineLoadJob`——各有一份门控);在老 `LockUtils` 路径中是**per-Database**。设置为 `0`(或负数)可禁用 L2 门控(总是放行)。值越大日志越稀,值越小完整信息诊断越密。
+- 引入版本: v3.2.0（原名 `slow_lock_log_every_ms`）;v4.1 重命名为 `slow_lock_log_l2_info_interval_ms`。
 
 ### `slow_lock_print_stack`
 
@@ -496,8 +507,35 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许 LockManager 在 `logSlowLockTrace` 发出的慢锁警告的 JSON 负载中包含拥有线程的完整堆栈跟踪（"stack" 数组通过 `LogUtil.getStackTraceToJsonArray` 填充，`start=0` 且 `max=Short.MAX_VALUE`）。此配置仅控制当锁获取超过由 `slow_lock_threshold_ms` 配置的阈值时显示的锁所有者的额外堆栈信息。启用此功能通过提供持有锁的精确线程堆栈来帮助调试；禁用它可减少日志量和在高并发环境中捕获和序列化堆栈跟踪导致的 CPU/内存开销。
+- 描述: 控制慢锁告警 JSON 中是否抓取 owner / 当前线程的堆栈跟踪的总开关。同时作用于 `LockManager.logSlowLockTrace`（owner 的 `"stack"` 字段）和 `QueryableReentrantReadWriteLock.getLockInfoToJson`（老 db 锁路径与 `RoutineLoadJob` per-job 锁所用,涵盖 owner / 最早 reader / 当前线程的 `"stack"` 字段）。启用此功能通过提供持有锁的精确线程堆栈来帮助调试；禁用它可减少日志量和在高并发环境中捕获和序列化堆栈跟踪导致的 CPU/内存开销。开启后,抓取频率还会受到 `slow_lock_log_l1_stack_interval_ms` 的限速控制。
 - 引入版本: v3.3.16, v3.4.5, v3.5.1
+
+### `slow_lock_log_l1_stack_interval_ms`
+
+- 默认值: 30000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 跨慢锁日志事件之间堆栈抓取的最小时间间隔。仅在 `slow_lock_print_stack` 为 `true` 时生效。节流作用域随层不同:在 `LockManager.logSlowLockTrace` 中是**全局**(一个 static 门控覆盖所有 rid);在 `QueryableReentrantReadWriteLock.getLockInfoToJson` 中是**per-instance**(每个锁对象各有一份门控)。当开关打开但距上次抓取未达到该间隔时,`"stack"` 字段在 LockManager 路径会被替换为标记 `"throttled"`,在 QueryableReentrantReadWriteLock 路径会被省略;warn 日志的其余部分(rid、owners、waiters、queryId、时间统计等)如果外层事件门 (`slow_lock_log_l2_info_interval_ms`) 允许的话仍正常输出。设置为 `0`(或负数)可禁用限速,恢复每次慢锁事件都抓取堆栈的旧行为。`Thread.getStackTrace` 会触发 JVM safepoint,在慢锁事件频繁的大集群中开销显著——该参数在不影响诊断日志输出的前提下限制这部分开销。
+- 引入版本: v4.1
+
+### `slow_lock_max_waiter_count_to_log`
+
+- 默认值: 30
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 单条慢锁日志事件中序列化的 waiter 条目数上限。同时作用于 `LockManager.logSlowLockTrace`(`"waiter"` 数组)和 `QueryableReentrantReadWriteLock.getLockInfoToJson`(老 db 锁路径与 `RoutineLoadJob` per-job 锁所用的 `"queuedReaders"` / `"queuedWriters"` 数组)。当实际 waiter 数超过该上限时,前 N 个 waiter 被逐条列出,剩余部分由附加在数组末尾的单条 trailer `{"omitted": "remain M waiters omitted"}` 汇总。用于在极端竞争场景下控制 Gson 序列化开销和日志行长度,同时保留 waiter 总数的诊断信息。设置为 `0`(或负数)可禁用该上限,序列化所有 waiter。
+- 引入版本: v4.1
+
+### `slow_lock_log_l3_brief_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: **L3** 慢锁日志档位的最小时间间隔——当更丰富的档位(L1 的 `slow_lock_log_l1_stack_interval_ms`、L2 的 `slow_lock_log_l2_info_interval_ms`)都被节流时,输出一条纯文本 warn(无 JSON、无堆栈)。这是三档中最松的一档。最简信息**每间隔至多输出一条**:在 L3 门控仍关闭的窗口内到达的慢锁事件会被抑制(不打)。它**不保证**每个事件都留痕——只是把持续竞争下的最长静默时间限制在一个最简信息间隔以内。应调得比另两档更小:`slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`。设置为 `0`(或负数)会让最简信息不限速——此时每个被节流的事件都留一行(开销可预测,但 storm 下可能每秒很多条)。作用域规则与其他慢锁节流一致(`LockManager` 全局,`QueryableReentrantReadWriteLock` per-instance)。
+- 引入版本: v4.1
 
 ### `slow_lock_threshold_ms`
 
@@ -505,7 +543,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 用于将锁操作或持有的锁分类为“慢”的阈值（以毫秒为单位）。当锁的等待或持有时间超过此值时，StarRocks 将（根据上下文）发出诊断日志，包括堆栈跟踪或等待/所有者信息，并在 LockManager 中在此延迟后开始死锁检测。它由 LockUtils（慢锁日志记录）、QueryableReentrantReadWriteLock（过滤慢速读取器）、LockManager（死锁检测延迟和慢锁跟踪）、LockChecker（周期性慢锁检测）和其他调用者（例如 DiskAndTabletLoadReBalancer 日志记录）使用。降低此值会增加敏感性和日志记录/诊断开销；将其设置为 0 或负值会禁用初始基于等待的死锁检测延迟行为。与 `slow_lock_log_every_ms`、`slow_lock_print_stack` 和 `slow_lock_stack_trace_reserve_levels` 一起调整。
+- 描述: 用于将锁操作或持有的锁分类为“慢”的阈值（以毫秒为单位）。当锁的等待或持有时间超过此值时，StarRocks 将（根据上下文）发出诊断日志，包括堆栈跟踪或等待/所有者信息，并在 LockManager 中在此延迟后开始死锁检测。它由 LockUtils（慢锁日志记录）、QueryableReentrantReadWriteLock（过滤慢速读取器）、LockManager（死锁检测延迟和慢锁跟踪）、LockChecker（周期性慢锁检测）和其他调用者（例如 DiskAndTabletLoadReBalancer 日志记录）使用。降低此值会增加敏感性和日志记录/诊断开销；将其设置为 0 或负值会禁用初始基于等待的死锁检测延迟行为。与 `slow_lock_log_l2_info_interval_ms`、`slow_lock_print_stack` 和 `slow_lock_stack_trace_reserve_levels` 一起调整。
 - 引入版本: 3.2.0
 
 ### `sys_log_delete_age`
@@ -766,6 +804,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点中 HTTP 服务器监听的端口。
 - 引入版本: -
 
+### `enable_http_auth`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 引入版本: v4.2.0
+- 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
+  - 公开探针 / 可观测性: `/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature`、`/metrics`、`/api/oauth2`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+
+  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+
 ### `http_web_page_display_hardware`
 
 - 默认值: true
@@ -837,6 +888,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: FE 节点中 MySQL 服务器持有的 backlog 队列的长度。
 - 引入版本: -
+
+### `mysql_send_packet_timeout_ms`
+
+- 默认值: 60000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: MySQL 协议通道单次写包的超时时间。限制 FE worker 在发送结果行时等待慢客户端 TCP 接收缓冲区排空的时长。不限制的话 worker 可能在 `Selector.select()` 上无限阻塞，且查询无法被 `KILL QUERY` 终止。设置为 `0` 禁用（旧版无限等待行为）。
+- 引入版本: v4.1
 
 ### `mysql_server_version`
 
@@ -937,7 +997,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 StarRocks 为慢速或持有的锁转储锁调试信息时捕获和发出的堆栈跟踪帧数。此值由 `QueryableReentrantReadWriteLock` 在生成排他锁所有者、当前线程和最旧/共享读取器的 JSON 时传递给 `LogUtil.getStackTraceToJsonArray`。增加此值可为诊断慢锁或死锁问题提供更多上下文，但代价是 JSON 负载更大，并且堆栈捕获的 CPU/内存略高；减少此值可降低开销。注意：当只记录慢锁时，读取器条目可以通过 `slow_lock_threshold_ms` 过滤。
+- 描述: 控制 StarRocks 为慢速或持有的锁转储锁调试信息时捕获和发出的堆栈跟踪帧数。此值由 `QueryableReentrantReadWriteLock` 在生成排他锁所有者、当前线程和最旧/共享读取器的 JSON 时传递给 `LogUtil.getStackTraceToJsonArray`。增加此值可为诊断慢锁或死锁问题提供更多上下文，但代价是 JSON 负载更大，并且堆栈捕获的 CPU/内存略高；减少此值可降低开销。注意：此上限仅作用于 `QueryableReentrantReadWriteLock` 抓栈路径；`LockManager` 慢锁路径抓取完整栈深、不受此值限制。当只记录慢锁时，读取器条目可以通过 `slow_lock_threshold_ms` 过滤。
 - 引入版本: v3.4.0, v3.5.0
 
 ### `ssl_cipher_blacklist`
@@ -1247,6 +1307,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否启用周期性 Hive 元数据缓存刷新。启用后，StarRocks 会轮询 Hive 集群的 metastore（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Hive Catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。
 - 引入版本: v2.5.5
+
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局异步调度线程池中的线程数，用于处理来自 Connector 写入路径的 “refresh other FE” 后台任务。这些线程仅负责调度后台刷新任务，不会直接向其他 FE 发送刷新 RPC。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- 默认值: 4
+- 类型: Integer
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 全局 RPC 线程池中的线程数，用于执行 “refresh other FE” 的 fan-out 调用。该线程池限制同步和异步外表刷新流程中，向其他 FE 并发发送刷新 RPC 的数量。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
 
 ### `enable_collect_query_detail_info`
 

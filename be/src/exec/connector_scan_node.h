@@ -14,9 +14,13 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <vector>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "connector/connector.h"
@@ -58,7 +62,7 @@ public:
     bool use_stream_load_thread_pool() { return _use_stream_load_thread_pool; };
 #endif
 
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges) override;
@@ -140,7 +144,8 @@ private:
 private:
     // pipeline fields and methods.
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
-    connector::ConnectorType _connector_type;
+    Status _connector_status = Status::OK();
+    connector::ConnectorType _connector_type = connector::ConnectorType::HIVE;
     std::string _catalog_type;
     void _estimate_scan_row_bytes();
     void _estimate_data_source_mem_bytes();

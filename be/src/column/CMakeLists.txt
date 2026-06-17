@@ -26,6 +26,9 @@ ADD_BE_LIB(ColumnCore
         column_visitor_mutable.cpp
         mysql_row_buffer.cpp
         german_string.cpp
+        global_dict/decoder.cpp
+        global_dict/miscs.cpp
+        global_dict/types.cpp
         object_column.cpp
         variant_column.cpp
         variant_converter.cpp
@@ -40,7 +43,11 @@ ADD_BE_LIB(ColumnCore
         append_with_mask.cpp
         column_helper.cpp
         column_helper_time.cpp
+        arrow/arrow_to_starrocks_converter.cpp
+        arrow/arrow_to_json_converter.cpp
+        arrow/column_to_arrow_converter.cpp
         datum_convert.cpp
+        logical_type_size.cpp
         runtime_type_traits.cpp
         column_viewer.cpp
         column_view/column_view_base.cpp
@@ -50,9 +57,14 @@ ADD_BE_LIB(ColumnCore
         variant_builder.cpp
         variant_merger.cpp
         column_hash/column_hash.cpp
+        adaptive_offsets.cpp
 )
 
+target_link_libraries(ColumnCore PRIVATE arrow)
+
 ADD_BE_LIB(ChunkCore
+        chunk_factory.cpp
+        chunk_schema_helper.cpp
         field.cpp
         schema.cpp
         chunk.cpp

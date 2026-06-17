@@ -29,6 +29,7 @@
 #include "http/http_headers.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_context_handle.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 
 namespace starrocks {
@@ -41,7 +42,7 @@ public:
         config::merge_commit_trace_log_enable = true;
         _exec_env = ExecEnv::GetInstance();
         std::unique_ptr<ThreadPool> thread_pool;
-        ASSERT_OK(ThreadPoolBuilder("BatchWriteMgrTest")
+        ASSERT_OK(ThreadPoolBuilder("BatchWrMgrTest")
                           .set_min_threads(0)
                           .set_max_threads(4)
                           .set_max_queue_size(2048)
@@ -129,6 +130,30 @@ TEST_F(BatchWriteMgrTest, register_and_unregister_pipe) {
         auto batch_write = status_or_batch_write.value();
         ASSERT_FALSE(batch_write->contain_pipe(ctx));
     }
+}
+
+TEST_F(BatchWriteMgrTest, stream_load_context_handle_cancel_and_close_batch_write_pipe) {
+    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{"k", "v"}}};
+    auto status_or_ctx = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id.db,
+                                                                 batch_write_id.table, batch_write_id.load_params,
+                                                                 "label", 1, generate_uuid(), 10000);
+    ASSERT_OK(status_or_ctx.status());
+    StreamLoadContext* ctx = status_or_ctx.value();
+
+    auto status_or_batch_write = _batch_write_mgr->get_batch_write(batch_write_id);
+    ASSERT_OK(status_or_batch_write.status());
+    auto batch_write = status_or_batch_write.value();
+    ASSERT_TRUE(batch_write->contain_pipe(ctx));
+
+    StreamLoadContextHandle handle(ctx, _batch_write_mgr.get());
+    handle.cancel(Status::Cancelled("cancel only"));
+    ASSERT_TRUE(batch_write->contain_pipe(ctx));
+
+    handle.close(Status::Cancelled("close"));
+    ASSERT_FALSE(batch_write->contain_pipe(ctx));
+
+    handle.close(Status::Cancelled("close again"));
+    ASSERT_FALSE(batch_write->contain_pipe(ctx));
 }
 
 TEST_F(BatchWriteMgrTest, append_data) {

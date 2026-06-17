@@ -17,7 +17,6 @@
 
 #include "util/json_flattener.h"
 
-#include <storage/flat_json_config.h>
 #include <sys/types.h>
 #include <velocypack/StringRef.h>
 
@@ -40,6 +39,7 @@
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_json_flat_fwd.h"
@@ -51,11 +51,11 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
+#include "storage/primitive/flat_json_config.h"
 #include "storage/rowset/column_reader.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 

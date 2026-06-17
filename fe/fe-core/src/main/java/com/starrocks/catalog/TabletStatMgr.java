@@ -141,6 +141,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
+                int parallelismFloor = resolveMergeParallelismFloor(db, olapTable);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -150,9 +151,17 @@ public class TabletStatMgr extends FrontendDaemon {
                             for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                                     IndexExtState.VISIBLE)) {
                                 long indexRowCount = 0L;
+                                List<Tablet> tablets = index.getTablets();
+                                // Only an index above the parallelism floor contributes the merge signal
+                                // (minAdjacentTabletPairSize); otherwise auto-merge could shrink it below the
+                                // tablet count pre-split established for parallelism (and would churn empty
+                                // merge jobs every cycle). Split detection (maxTabletSize) is never gated.
+                                // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
+                                // inside an admitted job, so the floor holds even for manual size-based merges.
+                                boolean eligibleForMerge = tablets.size() > parallelismFloor;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
-                                for (Tablet tablet : index.getTablets()) {
+                                for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
@@ -161,7 +170,7 @@ public class TabletStatMgr extends FrontendDaemon {
                                         prevFreshTabletSize = -1L;
                                         continue;
                                     }
-                                    if (prevFreshTabletSize >= 0) {
+                                    if (prevFreshTabletSize >= 0 && eligibleForMerge) {
                                         minAdjacentTabletPairSize = Math.min(minAdjacentTabletPairSize,
                                                 prevFreshTabletSize + dataSize);
                                     }
@@ -210,6 +219,26 @@ public class TabletStatMgr extends FrontendDaemon {
         LOG.info("finished to update index row num of all databases. cost: {} ms",
                 (System.currentTimeMillis() - start));
         lastWorkTimestamp = LocalDateTime.now();
+    }
+
+    /**
+     * Minimum tablet count auto-merge must keep per index for {@code table}. Returns 0 ("not
+     * floor-gated") for tables that never auto-merge (non-cloud-native or non-range-distribution),
+     * and also on lookup failure so a single table's warehouse error cannot abort the daemon cycle.
+     * Called before the table lock since it resolves warehouse/compute-node state.
+     */
+    private static int resolveMergeParallelismFloor(Database db, OlapTable table) {
+        if (!table.isCloudNativeTableOrMaterializedView() || !table.isRangeDistribution()) {
+            return 0;
+        }
+        try {
+            return TabletReshardUtils.computeParallelismFloor(table.getId());
+        } catch (RuntimeException e) {
+            LOG.warn("Parallelism floor unavailable for table {}.{}; "
+                            + "auto-merge will not be floor-gated for this table.",
+                    db.getFullName(), table.getName(), e);
+            return 0;
+        }
     }
 
     private static void triggerTabletReshard(Database db, OlapTable table,

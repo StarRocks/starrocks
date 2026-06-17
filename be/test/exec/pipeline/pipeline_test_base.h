@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"

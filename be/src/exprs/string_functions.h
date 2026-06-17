@@ -288,6 +288,29 @@ public:
     DEFINE_VECTORIZED_FN(rtrim);
 
     /**
+     * MySQL TRIM(... FROM ...) substring semantics: remove the whole 2nd-arg
+     * substring repeatedly from both ends / left / right.
+     * @param: [string_value, remstr]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(trim_string);
+
+    /**
+     * @param: [string_value, remstr]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(ltrim_string);
+
+    /**
+     * @param: [string_value, remstr]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(rtrim_string);
+
+    /**
      * Return numeric value of left-most character
      *
      * @param: [string_value]
@@ -533,6 +556,8 @@ public:
 
     static Status trim_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status trim_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status trim_string_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     // parse's auxiliary method
     static Status parse_url_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);

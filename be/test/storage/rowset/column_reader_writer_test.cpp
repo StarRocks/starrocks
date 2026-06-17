@@ -41,6 +41,7 @@
 #include "base/uid_util.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
@@ -52,8 +53,10 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -203,7 +206,7 @@ void ColumnReaderWriterTest::test_nullable_data(const Column& src, const std::st
             // sequence read
             {
                 ASSERT_OK(iter->seek_to_first());
-                MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                MutableColumnPtr dst = ChunkFactory::column_from_field_type(type, true);
                 // will do direct copy to column
                 size_t rows_read = src.size();
                 dst->reserve(rows_read);
@@ -224,7 +227,7 @@ void ColumnReaderWriterTest::test_nullable_data(const Column& src, const std::st
                     ASSERT_OK(iter->seek_to_ordinal(rowid));
 
                     size_t rows_read = 1024;
-                    MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                    MutableColumnPtr dst = ChunkFactory::column_from_field_type(type, true);
 
                     ASSERT_OK(iter->next_batch(&rows_read, dst.get()));
                     for (int i = 0; i < rows_read; ++i) {
@@ -238,7 +241,7 @@ void ColumnReaderWriterTest::test_nullable_data(const Column& src, const std::st
             {
                 ASSERT_OK(iter->seek_to_first());
 
-                MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                MutableColumnPtr dst = ChunkFactory::column_from_field_type(type, true);
                 SparseRange<> read_range;
                 size_t write_num = src.size();
                 read_range.add(Range<>(0, write_num / 3));
@@ -281,7 +284,7 @@ void ColumnReaderWriterTest::test_read_default_value(string value, void* result)
         {
             ASSERT_OK(iter.seek_to_first());
 
-            auto column = ChunkHelper::column_from_field_type(type, true);
+            auto column = ChunkFactory::column_from_field_type(type, true);
 
             size_t rows_read = 512;
             ASSERT_OK(iter.next_batch(&rows_read, column.get()));
@@ -308,7 +311,7 @@ void ColumnReaderWriterTest::test_read_default_value(string value, void* result)
         }
 
         {
-            auto column = ChunkHelper::column_from_field_type(type, true);
+            auto column = ChunkFactory::column_from_field_type(type, true);
 
             for (int rowid = 0; rowid < 1024; rowid += 128) {
                 ASSERT_OK(iter.seek_to_ordinal(rowid));
@@ -419,7 +422,7 @@ void ColumnReaderWriterTest::test_int_array(const std::string& null_encoding) {
 template <LogicalType type>
 MutableColumnPtr ColumnReaderWriterTest::numeric_data(int null_ratio) {
     using CppType = StorageCppType<type>;
-    auto col = ChunkHelper::column_from_field_type(type, true);
+    auto col = ChunkFactory::column_from_field_type(type, true);
     CppType value = 0;
     size_t count = 2 * 1024 / sizeof(CppType);
     col->reserve(count);
@@ -437,7 +440,7 @@ MutableColumnPtr ColumnReaderWriterTest::low_cardinality_strings(int null_ratio)
     static std::string s1(4, 'a');
     static std::string s2(4, 'b');
     size_t count = 128 * 1024 / 4;
-    auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
     auto nc = down_cast<NullableColumn*>(col.get());
     nc->reserve(count);
     auto v = std::vector<Slice>{s1, s2, s1, s1, s2, s2, s1, s2, s1, s1, s2, s1, s2, s1, s1, s1};
@@ -461,7 +464,7 @@ MutableColumnPtr ColumnReaderWriterTest::high_cardinality_strings(int null_ratio
     std::string s7("gbcdefghijklmnopqrstuvwxyz");
     std::string s8("hbcdefghijklmnopqrstuvwxyz");
 
-    auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
     size_t count = (128 * 1024 / s1.size()) / 8 * 8;
     auto nc = down_cast<NullableColumn*>(col.get());
     nc->reserve(count);
@@ -486,7 +489,7 @@ MutableColumnPtr ColumnReaderWriterTest::high_cardinality_strings(int null_ratio
 
 MutableColumnPtr ColumnReaderWriterTest::date_values(int null_ratio) {
     size_t count = 4 * 1024 / sizeof(DateValue);
-    auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
+    auto col = ChunkFactory::column_from_field_type(TYPE_DATE, true);
     DateValue value = DateValue::create(2020, 10, 1);
     for (size_t i = 0; i < count; i++) {
         CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -500,7 +503,7 @@ MutableColumnPtr ColumnReaderWriterTest::date_values(int null_ratio) {
 
 MutableColumnPtr ColumnReaderWriterTest::datetime_values(int null_ratio) {
     size_t count = 4 * 1024 / sizeof(TimestampValue);
-    auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
+    auto col = ChunkFactory::column_from_field_type(TYPE_DATETIME, true);
     TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
     for (size_t i = 0; i < count; i++) {
         CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -643,7 +646,7 @@ TEST_F(ColumnReaderWriterTest, test_array_int) {
 }
 
 TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
-    auto col = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto col = ChunkFactory::column_from_field_type(TYPE_INT, true);
     size_t count = 1024;
     col->reserve(count);
     for (int32_t i = 0; i < count; ++i) {
@@ -701,7 +704,7 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
             ASSERT_OK(writer->init());
             config::dictionary_speculate_min_chunk_size = dict_chunk_size;
-            auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
             config::dictionary_speculate_min_chunk_size = 4096;
             std::vector<Slice> col_slices;
             std::vector<std::string> col_strs;
@@ -722,7 +725,7 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             auto segment = create_dummy_segment(fname);
             auto iter = create_and_init_iterator(meta, segment.get(), fname);
             ASSERT_TRUE(iter->seek_to_first().ok());
-            MutableColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
             dst->reserve(TEST_N);
             size_t rows_read = TEST_N;
             ASSERT_TRUE(iter->next_batch(&rows_read, dst.get()).ok());
@@ -737,6 +740,230 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
         }
         config::dictionary_speculate_min_chunk_size = old_config;
     }
+}
+
+// Reproduces SIGSEGV at offset 0x44 in ScalarColumnWriter::finish() when a
+// VARCHAR/CHAR column writer is finalized without any append. String columns
+// set need_speculate_encoding = true, so ScalarColumnWriter::init() skips
+// set_encoding() and _encoding_info stays nullptr. StringColumnWriter::finish()
+// only fixes that up if _buf_column != nullptr (i.e. at least one append
+// happened). With no appends, _encoding_info->encoding() dereferences nullptr
+// and reads _encoding at offset 0x44.
+TEST_F(ColumnReaderWriterTest, test_string_writer_finish_without_append) {
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+    ColumnMetaPB meta;
+    ColumnWriterOptions writer_opts = make_writer_opts<TYPE_VARCHAR, DEFAULT_ENCODING, 2>(&meta);
+
+    TabletColumn column = create_varchar_key(1, true, 128);
+    ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+    ASSERT_OK(writer->init());
+
+    // No writer->append(...) call here.
+    ASSERT_OK(writer->finish());
+}
+
+// ---------------------------------------------------------------------------
+// IDG read-side probe tests (covers scalar_column_iterator.cpp lines 80-99,
+// the `_opts.idg_loader != nullptr` block in init() that flips
+// `_has_idg_{original,ngram}_bf` so the upstream pruning gates surface the
+// fast-path sidecar without a footer rewrite).
+// ---------------------------------------------------------------------------
+
+namespace {
+// Stub loader: returns a caller-provided IndexDeltaGroupList (or empty),
+// optionally fails. Trips a counter so we can assert single-shot probing.
+class StubIdgLoader : public lake::IndexDeltaGroupLoader {
+public:
+    StubIdgLoader(lake::IndexDeltaGroupList list, Status load_st = Status::OK())
+            : _list(std::move(list)), _load_st(std::move(load_st)) {}
+    Status load(const TabletSegmentId& tsid, int64_t query_version, lake::IndexDeltaGroupList* out) override {
+        ++calls;
+        if (!_load_st.ok()) return _load_st;
+        *out = _list;
+        return Status::OK();
+    }
+    int calls = 0;
+
+private:
+    lake::IndexDeltaGroupList _list;
+    Status _load_st;
+};
+
+// Make a ColumnIteratorOptions wired to use `idg_loader`. Only the fields
+// the probe consults are populated; everything else inherits the legacy
+// path's defaults.
+ColumnIteratorOptions make_idg_iter_opts(RandomAccessFile* read_file, OlapReaderStatistics* stats,
+                                         std::shared_ptr<lake::IndexDeltaGroupLoader> loader, int32_t col_uid) {
+    ColumnIteratorOptions o;
+    o.stats = stats;
+    o.read_file = read_file;
+    o.use_page_cache = true;
+    o.idg_loader = std::move(loader);
+    o.tablet_id = 1;
+    o.segment_id = 0;
+    o.query_version = 100;
+    o.col_unique_id = col_uid;
+    return o;
+}
+} // namespace
+
+// Probe records NGRAMBF: has_ngram_bloom_filter_index() flips true even when
+// the segment footer carries no BF metadata.
+TEST_F(ColumnReaderWriterTest, idg_probe_sets_ngram_bf_flag) {
+    auto col = numeric_data<TYPE_INT>(10000);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/0, IndexType::NGRAMBF});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_TRUE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
+    EXPECT_EQ(1, loader->calls); // probe is one-shot at init()
+}
+
+// Probe records original BF: has_original_bloom_filter_index() flips true.
+TEST_F(ColumnReaderWriterTest, idg_probe_sets_original_bf_flag) {
+    auto col = numeric_data<TYPE_INT>(10000);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/0, IndexType::BLOOM_FILTER});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_TRUE(iter_base->has_original_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+}
+
+// Probe ignores entries whose col_unique_id does not match. Both flags stay
+// false.
+TEST_F(ColumnReaderWriterTest, idg_probe_skips_wrong_column) {
+    auto col = numeric_data<TYPE_INT>(10000);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/77, IndexType::NGRAMBF});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    // Iterator's column_unique_id is 0, loader entry is 77 -> no match.
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
+}
+
+// Loader returns an error: probe swallows it (init() must still succeed),
+// neither flag is set.
+TEST_F(ColumnReaderWriterTest, idg_probe_tolerates_loader_error) {
+    auto col = numeric_data<TYPE_INT>(10000);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{}, Status::IOError("simulated"));
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
+}
+
+// Negative col_unique_id (non-lake / pre-IDG path) skips the probe entirely.
+// Loader is never called.
+TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
+    auto col = numeric_data<TYPE_INT>(10000);
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+
+    lake::IndexDeltaGroupEntry e;
+    e.keys.push_back({/*col_unique_id=*/0, IndexType::NGRAMBF});
+    e.index_file = "ix.idx";
+    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
+    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/-1);
+
+    ASSERT_OK(iter_base->init(opts));
+    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
+    EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
 }
 
 } // namespace starrocks

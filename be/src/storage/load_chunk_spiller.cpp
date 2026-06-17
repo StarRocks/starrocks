@@ -14,25 +14,27 @@
 
 #include "storage/load_chunk_spiller.h"
 
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
-#include "exec/spill/options.h"
-#include "exec/spill/serde.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller_factory.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/serde.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller_factory.h"
+#include "compute_env/workgroup/work_group_manager.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "storage/aggregate_iterator.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/merge_iterator.h"
+#include "storage/primitive/union_iterator.h"
 #include "storage/storage_metrics.h"
-#include "storage/union_iterator.h"
 
 namespace starrocks {
 
@@ -319,7 +321,7 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
     std::vector<ChunkIteratorPtr> merge_inputs;
     auto merge_func = [&](const ChunkIteratorPtr& merge_itr) {
         total_merges++;
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(*_schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
         while (true) {
             chunk->reset();

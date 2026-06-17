@@ -34,7 +34,7 @@
 namespace starrocks::connector {
 namespace {
 
-using Stream = io::AsyncFlushOutputStream;
+using Stream = formats::AsyncFlushOutputStream;
 
 class SinkMemoryManagerTest : public ::testing::Test {
 protected:

@@ -22,12 +22,14 @@
 
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
+#include "connector/builtin_connector_registry.h"
+#include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
+#include "exec/runtime/pipeline.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
@@ -44,6 +46,7 @@ protected:
         auto* exec_env = ExecEnv::GetInstance();
         _runtime_state->set_exec_env(exec_env);
         _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        ASSERT_OK(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     }
 
     void TearDown() override {}
@@ -92,7 +95,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
 
     std::vector<starrocks::TExpr> exprs = {};
     IcebergTableSink sink(&_pool, exprs);
-    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
+    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
     auto sink_provider = connector->create_data_sink_provider();
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
@@ -613,7 +616,169 @@ TExpr make_slot_ref_expr(int slot_id) {
 }
 } // namespace
 
-// Drives create_row_delta_sink_context() end-to-end via decompose_to_pipeline,
+TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
+    // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, c1].
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
+                             .column_name("_file")
+                             .column_pos(0)
+                             .nullable(false)
+                             .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
+    auto c1_slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(2).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(file_slot);
+    tuple_desc_builder.add_slot(pos_slot);
+    tuple_desc_builder.add_slot(c1_slot);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn t_column;
+    t_column.__set_column_name("c1");
+    t_iceberg_table.__set_columns({t_column});
+
+    TIcebergSchemaField c1_field;
+    c1_field.__set_field_id(1);
+    c1_field.__set_name("c1");
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({c1_field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_ROW_DELTA_SINK);
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("/path/to/table");
+    iceberg_table_sink.__set_data_location("/path/to/table/data");
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_UPDATE);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
+
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(10, 10)};
+
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+    ASSERT_NE(connector_sink_factory, nullptr);
+
+    auto* row_delta_ctx =
+            dynamic_cast<connector::IcebergRowDeltaSinkContext*>(connector_sink_factory->_sink_context.get());
+    ASSERT_NE(row_delta_ctx, nullptr);
+    EXPECT_EQ(row_delta_ctx->op_code_index, -1);
+
+    EXPECT_EQ(row_delta_ctx->delete_sink_ctx->output_exprs.size(), 3);
+    EXPECT_EQ(row_delta_ctx->delete_sink_ctx->column_slot_map.size(), 3);
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->column_evaluators.size(), 1);
+    ASSERT_NE(row_delta_ctx->data_sink_ctx->override_tuple_desc, nullptr);
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->override_tuple_desc->slots().size(), 1);
+    ASSERT_EQ(row_delta_ctx->data_sink_ctx->column_names.size(), 1);
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->column_names[0], "c1");
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
+}
+
+// Regression for BE crash on UPDATE of an Iceberg table with complex-typed columns
+// (StarRocksTest #11370). The data sub-sink builds an override_tuple_desc from the
+// data-column slots. Previously it copied only slot->type().type (the LogicalType
+// enum), producing a childless ARRAY/MAP TypeDescriptor whose to_thrift() dereferenced
+// children[0] on an empty vector -> SIGSEGV in TypeDescriptor::to_thrift(). The fix
+// passes the full slot->type(), so children are preserved here.
+TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type) {
+    // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, c1 ARRAY<INT>].
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
+                             .column_name("_file")
+                             .column_pos(0)
+                             .nullable(false)
+                             .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
+    auto array_type = TypeDescriptor::create_array_type(TypeDescriptor(LogicalType::TYPE_INT));
+    auto c1_slot = slot_desc_builder.type(array_type).column_name("c1").column_pos(2).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(file_slot);
+    tuple_desc_builder.add_slot(pos_slot);
+    tuple_desc_builder.add_slot(c1_slot);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn t_column;
+    t_column.__set_column_name("c1");
+    t_iceberg_table.__set_columns({t_column});
+
+    TIcebergSchemaField c1_field;
+    c1_field.__set_field_id(1);
+    c1_field.__set_name("c1");
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({c1_field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_ROW_DELTA_SINK);
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("/path/to/table");
+    iceberg_table_sink.__set_data_location("/path/to/table/data");
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_UPDATE);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
+
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(10, 10)};
+
+    // Without the fix this call crashes (SIGSEGV) while building override_tuple_desc.
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+    ASSERT_NE(connector_sink_factory, nullptr);
+
+    auto* row_delta_ctx =
+            dynamic_cast<connector::IcebergRowDeltaSinkContext*>(connector_sink_factory->_sink_context.get());
+    ASSERT_NE(row_delta_ctx, nullptr);
+
+    // The data-only tuple descriptor must preserve the full ARRAY<INT> type, children included.
+    ASSERT_NE(row_delta_ctx->data_sink_ctx->override_tuple_desc, nullptr);
+    ASSERT_EQ(row_delta_ctx->data_sink_ctx->override_tuple_desc->slots().size(), 1);
+    const auto& data_type = row_delta_ctx->data_sink_ctx->override_tuple_desc->slots()[0]->type();
+    EXPECT_EQ(data_type.type, TYPE_ARRAY);
+    ASSERT_EQ(data_type.children.size(), 1);
+    EXPECT_EQ(data_type.children[0].type, TYPE_INT);
+}
+
+// Drives mixed row-delta create_row_delta_sink_context() end-to-end via decompose_to_pipeline,
 // then exercises IcebergRowDeltaSinkProvider::create_chunk_sink() on the
 // resulting context. Covers:
 //   - the row-delta dispatch branch in decompose_to_pipeline
@@ -624,7 +789,7 @@ TExpr make_slot_ref_expr(int slot_id) {
 //   - IcebergRowDeltaSinkProvider::create_chunk_sink() success path, which in
 //     turn drives IcebergDeleteSinkProvider and IcebergChunkSinkProvider
 TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
-    // Tuple layout for a row-delta write: [_file, _pos, c1, op_code]
+    // Tuple layout for a MERGE-style row-delta write: [_file, _pos, c1, op_code]
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
@@ -679,6 +844,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     iceberg_table_sink.__set_location("/path/to/table");
     iceberg_table_sink.__set_data_location("/path/to/table/data");
     iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_MIXED);
     iceberg_table_sink.__set_target_max_file_size(128LL * 1024 * 1024);
     data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
@@ -768,6 +934,7 @@ TEST_F(IcebergTableSinkTest, row_delta_invalid_column_layout) {
     TIcebergTableSink iceberg_table_sink;
     iceberg_table_sink.__set_location("/path/to/table");
     iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_UPDATE);
     data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1)};
@@ -777,7 +944,111 @@ TEST_F(IcebergTableSinkTest, row_delta_invalid_column_layout) {
 
     auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
-    EXPECT_THAT(std::string(status.message()), testing::HasSubstr("Invalid row delta column layout"));
+    EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta layout has no data columns"));
+}
+
+TEST_F(IcebergTableSinkTest, row_delta_mixed_requires_data_column_before_op_column) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
+                             .column_name("_file")
+                             .column_pos(0)
+                             .nullable(false)
+                             .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
+    auto c1_slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(2).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(file_slot);
+    tuple_desc_builder.add_slot(pos_slot);
+    tuple_desc_builder.add_slot(c1_slot);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TIcebergSchema iceberg_schema;
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_ROW_DELTA_SINK);
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("/path/to/table");
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_MIXED);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
+
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(13, 13)};
+
+    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    EXPECT_FALSE(status.ok());
+    EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta layout has no data columns"));
+}
+
+TEST_F(IcebergTableSinkTest, row_delta_routing_column_must_be_tinyint) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
+                             .column_name("_file")
+                             .column_pos(0)
+                             .nullable(false)
+                             .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
+    auto c1_slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(2).nullable(true).build();
+    auto op_slot =
+            slot_desc_builder.type(LogicalType::TYPE_INT).column_name("op_code").column_pos(3).nullable(false).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(file_slot);
+    tuple_desc_builder.add_slot(pos_slot);
+    tuple_desc_builder.add_slot(c1_slot);
+    tuple_desc_builder.add_slot(op_slot);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TIcebergSchema iceberg_schema;
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_ROW_DELTA_SINK);
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("/path/to/table");
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_MIXED);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2),
+                                make_slot_ref_expr(3)};
+
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(14, 14)};
+
+    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    EXPECT_FALSE(status.ok());
+    EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta op column must be TINYINT"));
 }
 
 } // namespace starrocks

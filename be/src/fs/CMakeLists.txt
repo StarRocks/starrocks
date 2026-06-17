@@ -28,13 +28,14 @@ set(CORE_FILES
     fs_posix.cpp
     fs_registry.cpp
     fs_scheme.cpp
+    fs_util.cpp
     )
 
 ADD_BE_LIB(FSCore
     ${CORE_FILES}
 )
 
-target_link_libraries(FSCore PUBLIC IOCore)
+target_link_libraries(FSCore PUBLIC IO)
 
 set(EXEC_FILES
     fs_provider_bootstrap.cpp
@@ -48,10 +49,10 @@ set(EXEC_FILES
     credential/cloud_configuration_factory.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
+    s3/aws_sdk_guard.cpp
     s3/poco_http_client_factory.cpp
     s3/poco_http_client.cpp
     s3/poco_common.cpp
-    fs_util.cpp
     )
 
 if (NOT BUILD_FORMAT_LIB)

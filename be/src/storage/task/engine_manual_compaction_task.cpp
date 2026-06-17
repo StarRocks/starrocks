@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/format.h"
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "runtime/exec_env.h"

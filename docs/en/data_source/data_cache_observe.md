@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to monitor Data Cache performance, usage, and health in StarRocks using built-in observability metrics."
 ---
 
 # Data Cache observability

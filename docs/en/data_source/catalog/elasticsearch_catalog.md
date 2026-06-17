@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+description: "StarRocks supports Elasticsearch catalogs from v3.1 onwards."
 ---
 
 # Elasticsearch catalog

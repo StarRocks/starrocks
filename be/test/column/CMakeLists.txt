@@ -17,6 +17,7 @@ set(COLUMN_TEST_FILES
     column_base_test.cpp
     mysql_row_buffer_test.cpp
     german_string_test.cpp
+    global_dict_core_test.cpp
     object_column_core_test.cpp
     column_visitor_test.cpp
     raw_data_visitor_test.cpp
@@ -26,6 +27,8 @@ set(COLUMN_TEST_FILES
     column_hash_core_test.cpp
     array_column_core_test.cpp
     array_view_column_core_test.cpp
+    arrow_to_starrocks_converter_test.cpp
+    arrow_to_json_converter_test.cpp
     map_column_core_test.cpp
     struct_column_core_test.cpp
     binary_column_core_test.cpp
@@ -36,6 +39,7 @@ set(COLUMN_TEST_FILES
     datum_convert_core_test.cpp
     column_helper_time_core_test.cpp
     json_converter_core_test.cpp
+    adaptive_offsets_test.cpp
     adaptive_nullable_column_core_test.cpp
     column_view_base_core_test.cpp
     type_traits_core_test.cpp
@@ -50,7 +54,7 @@ set(COLUMN_TEST_FILES
 
 set(COLUMN_TEST_LINK_LIBS
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil
@@ -73,6 +77,9 @@ target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)
 set(CHUNK_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     column_access_path_core_test.cpp
+    column_to_arrow_converter_test.cpp
+    chunk_factory_test.cpp
+    chunk_schema_helper_test.cpp
     chunk_core_test.cpp
     segmented_chunk_core_test.cpp
     field_test.cpp
@@ -82,7 +89,7 @@ set(CHUNK_TEST_FILES
 set(CHUNK_TEST_LINK_LIBS
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil

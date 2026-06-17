@@ -29,10 +29,10 @@
 #define private public
 #include "exec/pipeline/fetch_processor.h"
 #undef private
-#include "exec/pipeline/lookup_request.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gtest/gtest.h"
+#include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -167,45 +167,9 @@ TEST(FetchTaskTest, shared_from_this_keeps_task_alive_after_batch_drops) {
     EXPECT_TRUE(weak_task.expired());
 }
 
-// LocalLookUpRequestContext::callback should safely increment finished_request_num
-// when the BatchUnit is still alive.
-TEST(FetchTaskTest, local_callback_increments_counter_when_unit_alive) {
-    auto unit = std::make_shared<BatchUnit>();
-    unit->total_request_num = 2;
-    unit->finished_request_num = 0;
-
-    auto ctx = std::make_shared<FetchTaskContext>();
-    ctx->unit = unit;
-
-    LocalLookUpRequestContext local_ctx(ctx);
-    local_ctx.callback(Status::OK());
-
-    EXPECT_EQ(unit->finished_request_num.load(), 1);
-
-    local_ctx.callback(Status::OK());
-    EXPECT_EQ(unit->finished_request_num.load(), 2);
-}
-
-// LocalLookUpRequestContext::callback should not crash when the BatchUnit
-// has already been released (weak_ptr expired).
-TEST(FetchTaskTest, local_callback_safe_when_unit_expired) {
-    auto ctx = std::make_shared<FetchTaskContext>();
-
-    {
-        auto unit = std::make_shared<BatchUnit>();
-        unit->total_request_num = 1;
-        ctx->unit = unit;
-        // unit goes out of scope here, weak_ptr expires.
-    }
-
-    LocalLookUpRequestContext local_ctx(ctx);
-    // Should not crash or modify anything.
-    EXPECT_NO_FATAL_FAILURE(local_ctx.callback(Status::OK()));
-}
-
 TEST(FetchTaskTest, submit_remote_rpc_failure_marks_done_and_updates_status) {
     ASSERT_NE(ExecEnv::GetInstance(), nullptr);
-    ASSERT_NE(ExecEnv::GetInstance()->brpc_stub_cache(), nullptr);
+    ASSERT_NE(PlatformEnv::GetInstance()->brpc_stub_cache(), nullptr);
 
     const int unused_port = reserve_unused_local_port();
     auto processor = create_fetch_processor(create_nodes_info(unused_port));
@@ -230,7 +194,7 @@ TEST(FetchTaskTest, submit_remote_rpc_failure_marks_done_and_updates_status) {
 
 TEST(FetchTaskTest, submit_remote_rpc_failure_handles_expired_unit) {
     ASSERT_NE(ExecEnv::GetInstance(), nullptr);
-    ASSERT_NE(ExecEnv::GetInstance()->brpc_stub_cache(), nullptr);
+    ASSERT_NE(PlatformEnv::GetInstance()->brpc_stub_cache(), nullptr);
 
     const int unused_port = reserve_unused_local_port();
     auto processor = create_fetch_processor(create_nodes_info(unused_port));

@@ -38,6 +38,7 @@
 
 #include <string_view>
 
+#include "base/auth/auth_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
@@ -45,16 +46,16 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
-#include "common/utils.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
+#include "gutil/walltime.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/thrift_rpc_helper.h"
 #include "storage/non_retryable_load_errors.h"
 
 namespace starrocks {
@@ -146,10 +147,12 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
                 }
 
-                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
-                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
-                                                            executor->runtime_state()->get_rejected_record_file_path());
-                }
+                // The legacy tab-delimited rejected-record file was removed;
+                // ctx->rejected_record_path is never populated anymore. The
+                // StreamLoadContext response JSON still carries the field
+                // for backward compatibility but it will always be empty.
+                // Clients should query `_statistics_.rejected_records` by
+                // Label or txn_id to retrieve rejected rows.
 
                 if (ctx->unref()) {
                     delete ctx;
@@ -226,11 +229,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
-    if (ctx->timeout_second != -1) {
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
-    }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
 
     // set attachment if has
@@ -300,7 +299,7 @@ StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::str
     auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->getLoadTxnStatus(result, request); },
-            config::txn_commit_rpc_timeout_ms);
+            config::stream_load_thrift_rpc_timeout_ms);
     if (!st.ok()) {
         return st;
     } else {
@@ -343,11 +342,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
-    if (ctx->timeout_second != -1) {
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
-    }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     if (ctx->prepared_timeout_second != -1) {
         request.__set_prepared_timeout_second(ctx->prepared_timeout_second);

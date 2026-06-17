@@ -14,8 +14,9 @@
 
 #include "exec/pipeline/scan/meta_chunk_source.h"
 
+#include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 
 namespace starrocks::pipeline {
 

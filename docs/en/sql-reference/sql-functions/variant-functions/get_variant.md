@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "A family of functions that extract typed values from VARIANT objects at specified paths."
 ---
 
 # get_variant

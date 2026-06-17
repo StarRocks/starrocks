@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2 つの Bitmap 値の共通部分のサイズを求める関数です。"
 ---
 
 # intersect_count

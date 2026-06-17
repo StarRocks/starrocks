@@ -176,6 +176,14 @@ public class SqlCredentialRedactor {
             return sql;
         }
 
+        // Fast path: most statements carry no credentials. Skip the regex passes (and their
+        // StringBuilder allocations) entirely when there is no credential marker. This guards the
+        // hot audit path (ConnectProcessor.formatStmt redacts every statement as defense in depth),
+        // which is otherwise re-run on every prepared-statement execution and shows up as FE CPU.
+        if (!mayNeedCredentialRedaction(sql)) {
+            return sql;
+        }
+
         sql = redactKeyValueCredentials(sql);
         sql = redactSqlCredentialClause(sql, IDENTIFIED_BY_PATTERN, 1, 2, 3);
         sql = redactIdentifiedWithClause(sql);

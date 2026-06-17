@@ -312,7 +312,7 @@ public class TransactionStmtExecutor {
                     commitInfos,
                     failInfos,
                     txnCommitAttachment,
-                    timeout);
+                    timeout * 1000L);
 
             // Re-fetch transactionState after commit because the COW pattern in DatabaseTransactionMgr
             // replaces the in-memory state with a deep copy, making the original reference stale.

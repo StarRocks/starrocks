@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Lambda 表达式是匿名函数，可以作为高阶函数的参数，使代码更简洁紧凑。"
 sidebar_position: 0.9
 ---
 

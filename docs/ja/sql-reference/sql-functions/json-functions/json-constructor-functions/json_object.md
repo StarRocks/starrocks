@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "1つ以上のキーと値のペアをJSONオブジェクトに変換します。"
 ---
 
 # json_object

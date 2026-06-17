@@ -47,10 +47,10 @@ public:
                                                                TSchemaHash remote_schema_hash,
                                                                const std::string& file_name, uint64_t timeout_sec);
 
-    static Status download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
-                                             size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
-                                             const FileConverterCreatorFunc& file_converters,
-                                             size_t* final_file_size = nullptr);
+    static Status download_lake_file_with_converter(const std::string& src_file_path, const std::string& src_file_name,
+                                                    size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
+                                                    const FileConverterCreatorFunc& file_converters,
+                                                    size_t* final_file_size = nullptr);
 
     static constexpr uint32_t kFakeColumnUniqueId = INT_MAX;
 

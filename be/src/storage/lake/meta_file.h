@@ -53,7 +53,8 @@ public:
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // append delta column group to builder
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
+                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                    const std::vector<int64_t>& file_sizes);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
@@ -61,6 +62,22 @@ public:
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
                               int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
+
+    // Merge an OpAddIndex (produced by the ADD INDEX fast path) into
+    // TabletMetadataPB.idg_meta. For each SegmentEntry, the new IDG entry is
+    // inserted at the front of the per-segment `entries` list (newest-first
+    // ordering, consistent with LakeIndexDeltaGroupLoader). new_indexes are
+    // reconciled into schema.table_indices in an idempotent way (FE has
+    // usually already published the new schema, so this is a belt-and-braces
+    // step to cover edge cases like FE publish races).
+    void apply_add_index(const TxnLogPB_OpAddIndex& op);
+
+    // Apply an OpDropIndex (produced by the DROP INDEX fast path): merge
+    // tombstones into the dropped_keys list of each matching IDG entry; any
+    // entry whose keys are fully tombstoned gets its .idx file moved to
+    // orphan_files and the entry removed. Also removes matching TabletIndexPB
+    // from schema.table_indices if still present.
+    void apply_drop_index(const TxnLogPB_OpDropIndex& op);
 
     // batch processing functions for merging multiple opwrites into one rowset
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,

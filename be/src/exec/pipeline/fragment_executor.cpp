@@ -24,6 +24,14 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "connector/data_source_provider.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/data_sinks/data_stream_sender.h"
@@ -35,29 +43,35 @@
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/schedule/common.h"
+#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/query_context_manager.h"
+#include "exec/runtime/schedule/common.h"
 #include "exec/scan_node.h"
-#include "exec/workgroup/work_group.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_context_handle.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -107,7 +121,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
 
-    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
+    _query_ctx_mgr = exec_env->query_context_mgr();
+
+    auto&& existing_query_ctx = _query_ctx_mgr->get(query_id);
     if (existing_query_ctx) {
         auto&& existingfragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existingfragment_ctx) {
@@ -116,44 +132,39 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
-    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
+    ASSIGN_OR_RETURN(_query_ctx, _query_ctx_mgr->get_or_register(query_id, query_ctx_should_exist));
     _query_ctx->set_query_execution_services(&exec_env->query_execution_services());
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
 
-    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
-    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
+    auto& query_runtime_state = _query_ctx->query_runtime_state();
+    query_runtime_state.set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    query_runtime_state.set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_delivery_lifetime();
-    _query_ctx->extend_query_lifetime();
+    query_runtime_state.extend_delivery_lifetime();
+    query_runtime_state.extend_query_lifetime();
 
     if (query_options.__isset.enable_pipeline_level_shuffle) {
         _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
     }
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
-        _query_ctx->set_enable_profile();
+        query_runtime_state.set_enable_profile();
     }
     if (query_options.__isset.big_query_profile_threshold) {
-        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_threshold,
-                                                    query_options.big_query_profile_threshold_unit);
+        query_runtime_state.set_big_query_profile_threshold(query_options.big_query_profile_threshold,
+                                                            query_options.big_query_profile_threshold_unit);
     }
     if (query_options.__isset.pipeline_profile_level) {
-        _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+        query_runtime_state.set_profile_level(query_options.pipeline_profile_level);
     }
     if (query_options.__isset.runtime_profile_report_interval) {
-        _query_ctx->set_runtime_profile_report_interval(
+        query_runtime_state.set_runtime_profile_report_interval(
                 std::max<int64_t>(1, query_options.runtime_profile_report_interval));
     }
 
-    bool enable_query_trace = false;
-    if (query_options.__isset.enable_query_debug_trace && query_options.enable_query_debug_trace) {
-        enable_query_trace = true;
-    }
-    _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
-
     if (request.common().__isset.exec_stats_node_ids) {
-        _query_ctx->init_node_exec_stats(request.common().exec_stats_node_ids);
+        _query_ctx->query_runtime_state().init_node_exec_stats(request.common().exec_stats_node_ids);
     }
 
     return Status::OK();
@@ -232,9 +243,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->init_fragment_mem_pool();
     runtime_state->set_enable_pipeline_engine(true);
-    runtime_state->set_fragment_ctx(_fragment_ctx.get());
+    _fragment_ctx->attach_to_runtime_state(runtime_state);
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
-    runtime_state->set_query_ctx(_query_ctx);
+    _query_ctx->attach_to_runtime_state(runtime_state);
     RuntimeStateHelper::init_runtime_filter_port(runtime_state);
 
     // Only consider the `query_mem_limit` variable
@@ -258,7 +269,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         connector_scan_node_number = query_globals.connector_scan_node_number;
     }
     _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
-                                 wg.get(), runtime_state, connector_scan_node_number);
+                                 wg.get(), runtime_state, connector_scan_node_number,
+                                 connector::DataSourceProvider::DEFAULT_DATA_SOURCE_MEM_BYTES);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -318,7 +330,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         runtime_state->debug_action_mgr().add_action(action);
     }
 
-    _fragment_ctx->init_jit_profile();
+    _fragment_ctx->init_jit_profile(RuntimeStateHelper::is_jit_enabled(runtime_state));
     return Status::OK();
 }
 
@@ -335,7 +347,7 @@ uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPl
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
     const auto& query_options = request.common().query_options;
 
-    int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
+    int expired_seconds = QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
     if (query_options.__isset.query_delivery_timeout) {
         if (query_options.__isset.query_timeout) {
             expired_seconds = std::min(query_options.query_timeout, query_options.query_delivery_timeout);
@@ -356,7 +368,7 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
         return std::max<int>(1, query_options.query_timeout);
     }
 
-    return QueryContext::DEFAULT_EXPIRE_SECONDS;
+    return QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
 }
 
 static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
@@ -394,11 +406,9 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
     return offsprings;
 }
 
-// there will be partition values used by this batch of scan ranges and maybe following scan ranges
-// so before process this batch of scan ranges, we have to put partition values into the table associated with.
-static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
-                                               const std::vector<TScanRangeParams>& scan_ranges) {
-    auto* obj_pool = runtime_state->obj_pool();
+Status FragmentExecutor::add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                                          const std::vector<TScanRangeParams>& scan_ranges) {
+    auto* obj_pool = RuntimeStateHelper::global_obj_pool(runtime_state);
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     TTableId cache_table_id = -1;
     TableDescriptor* table = nullptr;
@@ -418,7 +428,7 @@ static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
         if (table == nullptr) continue;
         // only HiveTableDescriptor(includes hive,iceberg,hudi,deltalake etc) supports this feature.
         HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(table);
-        RETURN_IF_ERROR(hive_table->add_partition_value(runtime_state, obj_pool, hdfs_scan_range.partition_id,
+        RETURN_IF_ERROR(hive_table->add_partition_value(obj_pool, hdfs_scan_range.partition_id,
                                                         hdfs_scan_range.partition_value));
     }
     return Status::OK();
@@ -427,7 +437,7 @@ static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
 static Status add_per_driver_scan_ranges_partition_values(RuntimeState* runtime_state,
                                                           const PerDriverScanRangesMap& map) {
     for (const auto& [_, scan_ranges] : map) {
-        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
     }
     return Status::OK();
 }
@@ -577,7 +587,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             enable_shared_scan = false;
         }
 
-        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
         RETURN_IF_ERROR(add_per_driver_scan_ranges_partition_values(runtime_state, scan_ranges_per_driver_seq));
         bool has_more_morsel = ScanMorsel::has_more_scan_ranges(scan_ranges) ||
                                has_more_per_driver_seq_scan_ranges(scan_ranges_per_driver_seq);
@@ -654,17 +664,15 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     if (!iter2->second[0].scan_range.broker_scan_range.__isset.channel_id) {
         return Status::OK();
     }
-    std::vector<StreamLoadContext*> stream_load_contexts;
+    std::vector<std::unique_ptr<FragmentAttachment>> fragment_attachments;
 
     bool success = false;
     DeferOp defer_op([&] {
         if (!success) {
-            for (auto& ctx : stream_load_contexts) {
-                ctx->body_sink->cancel(Status::Cancelled("Failed to prepare stream load pipe"));
-                if (ctx->enable_batch_write) {
-                    exec_env->batch_write_mgr()->unregister_stream_load_pipe(ctx);
-                } else {
-                    exec_env->stream_context_mgr()->remove_channel_context(ctx);
+            const auto status = Status::Cancelled("Failed to prepare stream load pipe");
+            for (const auto& attachment : fragment_attachments) {
+                if (attachment != nullptr) {
+                    attachment->close(status);
                 }
             }
         }
@@ -689,6 +697,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                                                   exec_env, exec_env->batch_write_mgr(), db_name, table_name,
                                                   broker_scan_range.batch_write_parameters, label, txn_id, load_id,
                                                   broker_scan_range.batch_write_interval_ms));
+                    fragment_attachments.emplace_back(
+                            std::make_unique<StreamLoadContextHandle>(ctx, exec_env->batch_write_mgr()));
                 } else {
                     RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
                             exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
@@ -699,14 +709,15 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                     });
                     RETURN_IF_ERROR(
                             exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
+                    fragment_attachments.emplace_back(
+                            std::make_unique<StreamLoadContextHandle>(ctx, exec_env->stream_context_mgr()));
                 }
-                stream_load_contexts.push_back(ctx);
             }
         }
     }
 
     success = true;
-    _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
+    _fragment_ctx->set_fragment_attachments(std::move(fragment_attachments));
     return Status::OK();
 }
 
@@ -728,7 +739,7 @@ static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGro
     auto* driver_executor = wg->executors()->driver_executor();
     for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
         EventPtr group_initialize_event =
-                Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
+                create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
 
         if (auto blocking_event = leader_source_op->adaptive_blocking_event(); blocking_event != nullptr) {
             group_initialize_event->add_dependency(blocking_event.get());
@@ -756,7 +767,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
-    ASSIGN_OR_RETURN(auto exec_ops, builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan));
+    ASSIGN_OR_RETURN(auto exec_ops, plan->decompose_to_pipeline(&context));
+    exec_ops = ::starrocks::pipeline::builder::maybe_interpolate_grouped_exchange(&context, plan->id(), exec_ops);
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
@@ -777,7 +789,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     auto [exec_groups, pipelines] = builder.build();
     _fragment_ctx->set_pipelines(std::move(exec_groups), std::move(pipelines));
 
-    if (runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
+    if (config::enable_pipeline_event_scheduler &&
+        runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
         runtime_state->query_options().enable_pipeline_event_scheduler) {
         // check all pipeline in fragment support event scheduler
         bool all_support_event_scheduler = true;
@@ -793,7 +806,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         all_support_event_scheduler = all_support_event_scheduler && !runtime_state->enable_wait_dependent_event();
         if (all_support_event_scheduler) {
             _fragment_ctx->init_event_scheduler();
-            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->pipeline_timer()));
+            auto timeout_task = std::make_shared<CheckFragmentTimeout>(_fragment_ctx.get());
+            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->compute_env()->pipeline_timer(),
+                                                              std::move(timeout_task)));
         }
     }
     runtime_state->set_enable_event_scheduler(_fragment_ctx->enable_event_scheduler());
@@ -812,14 +827,14 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
 
     // collect unready pipeline groups and instantiate ready drivers
     PipelineGroupMap unready_pipeline_groups;
-    _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, runtime_state](Pipeline* pipeline) {
+    _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, fragment_ctx = _fragment_ctx.get()](Pipeline* pipeline) {
         auto* source_op = pipeline->source_operator_factory();
         if (!source_op->is_adaptive_group_initial_active()) {
             auto* group_leader_source_op = source_op->group_leader();
             unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline);
             return;
         }
-        pipeline->instantiate_drivers(runtime_state);
+        instantiate_pipeline_drivers(fragment_ctx, pipeline);
     });
 
     if (!unready_pipeline_groups.empty()) {
@@ -827,7 +842,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     }
 
     // Acquire driver token to avoid overload
-    ASSIGN_OR_RETURN(auto driver_token, exec_env->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+    ASSIGN_OR_RETURN(auto driver_token,
+                     exec_env->compute_env()->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
     _fragment_ctx->set_driver_token(std::move(driver_token));
 
     return Status::OK();
@@ -865,7 +881,7 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     // so it's safe to put this DeferOp below _prepare_query_ctx
     DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
         if (!prepare_success) {
-            query_ctx->count_down_fragments();
+            query_ctx->count_down_fragment();
         }
     });
 
@@ -902,7 +918,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
         size_t num_process_drivers = 0;
     } profiler;
-    profiler.num_process_drivers = exec_env->driver_limiter()->num_total_drivers();
+    profiler.num_process_drivers = exec_env->compute_env()->driver_limiter()->num_total_drivers();
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
@@ -1028,7 +1044,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
-        _query_ctx->count_down_fragments();
+        DCHECK(_query_ctx_mgr != nullptr);
+        _query_ctx->count_down_fragment();
     }
 }
 
@@ -1071,7 +1088,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                                 print_id(query_id), print_id(instance_id)));
         }
 
-        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
         pipeline::Morsels morsels;
         bool has_more_morsel = false;
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
@@ -1102,7 +1119,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
             for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
                 if (scan_ranges.size() == 0) continue;
-                RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+                RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
                 pipeline::Morsels morsels;
                 [[maybe_unused]] bool local_has_more;
                 pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);

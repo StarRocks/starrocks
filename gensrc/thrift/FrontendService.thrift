@@ -58,12 +58,27 @@ struct TSetSessionParams {
     1: required string user
 }
 
+enum TPrivilegeRequirement {
+    // Identity-only authentication, no role/privilege check beyond AuthN.
+    NONE = 0,
+    // Caller must hold System-level OPERATE privilege.
+    // Maps to Authorizer.checkSystemAction(OPERATE) on the FE side.
+    OPERATE = 1,
+    // Caller must hold System-level NODE privilege.
+    // Maps to Authorizer.checkSystemAction(NODE) on the FE side.
+    NODE = 2,
+}
+
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
     3: optional string host
     4: optional string db_name
     5: optional list<string> table_names;
+    // Required role/privilege the caller must have, in addition to identity AuthN.
+    // Used by FE.checkAuth on the BE HTTP auth path so BE handlers can demand
+    // admin/operate-level checks without round-tripping the role check themselves.
+    6: optional TPrivilegeRequirement required_privilege;
 }
 
 struct TColumnDesc {
@@ -410,6 +425,14 @@ struct TMaterializedViewStatus {
     29: optional string last_refresh_process_time
     30: optional string last_refresh_job_id
     31: optional string last_refresh_time
+    32: optional string warehouse
+    33: optional string refresh_mode
+    34: optional string refresh_trigger
+    35: optional string refresh_policy
+    36: optional string resource_group
+    37: optional string query_rewrite_status_reason
+    38: optional string last_freshness_confirmed_at
+    39: optional string base_table_refresh_version_times
 }
 
 struct TListPipesParams {
@@ -480,6 +503,36 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+struct TMaterializedViewRefreshJobInfo {
+    1: optional string job_id
+    2: optional string materialized_view_id
+    3: optional string table_schema
+    4: optional string table_name
+    5: optional string task_id
+    6: optional string warehouse
+    7: optional string resource_group
+    8: optional string creator
+    9: optional string submit_user
+    10: optional string run_as_user
+    11: optional string submit_time
+    12: optional string refresh_state
+    13: optional string finish_time
+    14: optional string duration_time
+    15: optional string refresh_trigger
+    16: optional string refresh_mode
+    17: optional string imv_source_version_range
+    18: optional string imv_source_timestamp_range
+    19: optional string imv_source_pinned_snapshot_id_map
+    20: optional string failed_task_run_id
+    21: optional string failed_query_id
+    22: optional string error_code
+    23: optional string error_message
+}
+
+struct TListMaterializedViewRefreshJobsResult {
+    1: optional list<TMaterializedViewRefreshJobInfo> jobs
+}
+
 // Pagination cursor for request segmentation
 struct TRequestPagination {
     1: optional i64 offset
@@ -537,6 +590,8 @@ struct TTaskRunInfo {
 
     16: optional string job_id
     17: optional i64 process_time
+
+    18: optional string task_source
 }
 
 struct TGetTaskRunInfoResult {
@@ -552,12 +607,25 @@ struct TGetLoadsParams {
     6: optional string table_name
     7: optional string user
     8: optional string state
-    9: optional string load_start_time_from
+    // Legacy wall-clock-string bounds. BE writes them in whatever zone its session
+    // is in (no zone marker on the wire) and FE parses them in TimeUtils.TIME_ZONE
+    // (Asia/Shanghai). They are kept for cross-version compatibility only; new
+    // code should rely on the *_ms fields below, which are unambiguous UTC epoch ms.
+    9:  optional string load_start_time_from
     10: optional string load_start_time_to
     11: optional string load_finish_time_from
     12: optional string load_finish_time_to
     13: optional string create_time_from
     14: optional string create_time_to
+    // UTC epoch milliseconds. Preferred by new FE; set by new BE alongside the
+    // legacy string fields. Lets FE filter without round-tripping through a
+    // wall-clock string in some implicit zone.
+    15: optional i64 load_start_time_from_ms
+    16: optional i64 load_start_time_to_ms
+    17: optional i64 load_finish_time_from_ms
+    18: optional i64 load_finish_time_to_ms
+    19: optional i64 create_time_from_ms
+    20: optional i64 create_time_to_ms
 }
 
 struct TTrackingLoadInfo {
@@ -596,6 +664,10 @@ struct TLoadInfo {
     21: optional i64 num_filtered_rows
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
+    // Deprecated: the BE-local tab-delimited rejected-record file was
+    // removed. Rejected rows are now in `_statistics_.rejected_records`,
+    // queryable by load label / txn_id. The field ordinal is kept for
+    // wire compatibility across rolling upgrades; BE never populates it.
     24: optional string rejected_record_path
     25: optional string load_id
     26: optional string profile_id
@@ -606,6 +678,14 @@ struct TLoadInfo {
     31: optional string runtime_details
     32: optional string properties
     33: optional i64 num_scan_bytes
+    // UTC epoch milliseconds. Preferred by new BE for materializing the DATETIME
+    // columns of information_schema.loads. When set, BE converts to a DateTimeValue
+    // in the session zone via from_unixtime(); the legacy string fields above are
+    // kept only for old BEs whose code path still relies on from_date_str().
+    34: optional i64 create_time_ms
+    35: optional i64 load_start_time_ms
+    36: optional i64 load_commit_time_ms
+    37: optional i64 load_finish_time_ms
 }
 
 struct TGetLoadsResult {
@@ -763,6 +843,9 @@ struct TReportExecStatusParams {
 
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
+  // Deprecated: see TLoadInfo.rejected_record_path for the original field
+  // and the migration note explaining why it's gone. Kept for wire
+  // compatibility; BE never populates it.
   27: optional string rejected_record_path
 
   28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
@@ -1026,6 +1109,12 @@ struct TMergeCommitRequest {
     6: optional i64 backend_id
     7: optional string backend_host;
     8: optional map<string, string> params;
+    // Cluster-internal trust token: when set and matching the FE cluster
+    // token, the request bypasses Basic-style password verification and
+    // is dispatched as ROOT. Only honored for designated system tables
+    // (currently `_statistics_.rejected_records`); any other db/tbl
+    // falls back to the normal user/passwd check regardless of token.
+    9: optional string internal_token;
 }
 
 struct TMergeCommitResult {
@@ -1502,6 +1591,7 @@ struct TAuthInfo {
 
 struct TGetTablesConfigRequest {
     1: optional TAuthInfo auth_info
+    2: optional string table_name
 }
 
 struct TTableConfigInfo {
@@ -1562,6 +1652,10 @@ struct TPartitionMetaInfo {
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
     32: optional i64 path_id // deprecated
+    // [min, max] vector-index built-version span across the partition's base-index
+    // tablets. Only meaningful for tables with an async vector index (shared-data).
+    33: optional i64 min_vi_built_version
+    34: optional i64 max_vi_built_version
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1688,6 +1782,7 @@ struct TQueryStatisticsInfo {
     15: optional string resourceGroupName
     16: optional string execProgress
     17: optional string execState
+    18: optional string queryType
 }
 
 struct TGetQueryStatisticsResponse {
@@ -1926,6 +2021,10 @@ struct TGetGrantsToRolesOrUserResponse {
 
 struct TGetProfileRequest {
     1: optional list<string> query_id
+    // Optional field that controls whether query profiles are retrieved from all Frontends
+    // if true or unset, profiles are collected from all alive FEs
+    // if false, only the local FE (the one that received the query) is queried.
+    2: optional bool is_request_all_frontend
 }
 
 struct TGetProfileResponse {
@@ -2382,6 +2481,7 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+    TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(1: optional TGetTasksParams params)
     TListPipesResult listPipes(1: TListPipesParams params)
     TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 
@@ -2493,4 +2593,9 @@ service FrontendService {
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 
     TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
+
+    // Verify Basic Auth credentials. Used by BE to authenticate external HTTP requests
+    // when `enable_http_auth` is on. Returns OK status when the user/password pair is
+    // valid for the given host, or an error status otherwise.
+    TFeResult checkAuth(1: optional TAuthenticateParams request)
 }

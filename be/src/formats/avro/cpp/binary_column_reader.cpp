@@ -20,7 +20,11 @@
 namespace starrocks::avrocpp {
 
 Status BinaryColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
-    auto binary_column = down_cast<BinaryColumn*>(column);
+    auto* binary_column = dynamic_cast<BinaryColumn*>(column);
+    if (UNLIKELY(binary_column == nullptr)) {
+        return Status::InternalError(fmt::format("Avro binary reader expected BinaryColumn but got {}. column: {}",
+                                                 column == nullptr ? "null" : column->get_name(), _col_name));
+    }
 
     switch (datum.type()) {
     case avro::AVRO_INT:

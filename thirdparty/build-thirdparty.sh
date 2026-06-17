@@ -457,6 +457,14 @@ build_llvm() {
         "LLVMSelectionDAG"
         "LLVMMCParser"
         "LLVMSupport"
+        # LLVM 18 OrcJIT references llvm::findVCToolChain* defined in
+        # WindowsDriver (via COFFVCRuntimeBootstrapper). Required to link
+        # libstarrocks_be even on Linux.
+        "LLVMWindowsDriver"
+        # LLVM 18 split these out of LLVMCodeGen / LLVMipo / pass plugins.
+        "LLVMCodeGenTypes"
+        "LLVMFrontendOffloading"
+        "LLVMHipStdPar"
     )
     if [ "${LLVM_TARGET}" == "X86" ]; then
         LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen" "LLVMX86AsmParser" "LLVMX86Disassembler")
@@ -572,6 +580,21 @@ build_xxhash() {
     mkdir -p $TP_INCLUDE_DIR/xxhash && cp $TP_SOURCE_DIR/$XXHASH_SOURCE/xxhash.h $TP_INCLUDE_DIR/xxhash/
 }
 
+# blake3
+build_blake3() {
+    check_if_source_exist $BLAKE3_SOURCE
+    cd $TP_SOURCE_DIR/$BLAKE3_SOURCE/c
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -S . -B build
+    ${CMAKE_CMD} --build build -j "${PARALLEL}"
+    ${CMAKE_CMD} --install build
+}
+
 # rapidjson
 build_rapidjson() {
     check_if_source_exist $RAPIDJSON_SOURCE
@@ -656,22 +679,27 @@ build_gperftools() {
     make install
 }
 
-# zlib
+# zlib-ng (compat mode: drop-in replacement for zlib with SSE/AVX2/NEON optimizations)
 build_zlib() {
     check_if_source_exist $ZLIB_SOURCE
     cd $TP_SOURCE_DIR/$ZLIB_SOURCE
 
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL
-    make install
-
-    # build minizip
-    cd $TP_SOURCE_DIR/$ZLIB_SOURCE/contrib/minizip
-    autoreconf --force --install
-    ./configure --prefix=$TP_INSTALL_DIR --enable-static=yes --enable-shared=no
-    make -j$PARALLEL
-    make install
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DZLIB_COMPAT=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DWITH_GTEST=OFF \
+        -DWITH_FUZZERS=OFF \
+        -DWITH_BENCHMARKS=OFF \
+        -DWITH_BENCHMARK_APPS=OFF \
+        -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
 }
 
 # lz4
@@ -708,6 +736,9 @@ build_curl() {
     check_if_source_exist $CURL_SOURCE
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
+    PKG_CONFIG_PATH="" \
+    PKG_CONFIG_LIBDIR="${TP_INSTALL_DIR}/lib/pkgconfig:${TP_INSTALL_DIR}/lib64/pkgconfig" \
+    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static  \
                 --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 \
@@ -851,7 +882,7 @@ build_brotli() {
     cd $TP_SOURCE_DIR/$BROTLI_SOURCE
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
+    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
@@ -916,11 +947,13 @@ build_arrow() {
     -DLZ4_INCLUDE_DIR=$TP_INSTALL_DIR/include/lz4 \
     -DARROW_LZ4_USE_SHARED=OFF \
     -DBROTLI_ROOT=$TP_INSTALL_DIR \
+    -DBrotli_SOURCE=SYSTEM \
     -DARROW_BROTLI_USE_SHARED=OFF \
     -Dgflags_ROOT=$TP_INSTALL_DIR/ \
     -DSnappy_ROOT=$TP_INSTALL_DIR/ \
     -DGLOG_ROOT=$TP_INSTALL_DIR/ \
     -DLZ4_ROOT=$TP_INSTALL_DIR/ \
+    -Dlz4_SOURCE=SYSTEM \
     -DBoost_DIR=$TP_INSTALL_DIR \
     -DBoost_ROOT=$TP_INSTALL_DIR \
     -DARROW_BOOST_USE_SHARED=OFF \
@@ -930,7 +963,9 @@ build_arrow() {
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ \
-    -Dthrift_SOURCE=SYSTEM ..
+    -Dthrift_SOURCE=SYSTEM \
+    -Dxsimd_SOURCE=SYSTEM \
+    -Dxsimd_DIR=$TP_INSTALL_DIR/share/cmake/xsimd ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1046,6 +1081,7 @@ build_croaringbitmap() {
     -DROARING_DISABLE_NATIVE=ON \
     -DFORCE_AVX=$FORCE_AVX \
     -DROARING_DISABLE_AVX512=ON \
+    -DROARING_USE_CPM=OFF \
     -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     ${BUILD_SYSTEM} -j$PARALLEL
@@ -1087,24 +1123,29 @@ build_cctz() {
 build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
-    mkdir -p build
-    cd build
+    rm -rf build-static
+    mkdir -p build-static
+    cd build-static
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
-            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF
+            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF \
+            -DBUILD_SHARED_LIBS=OFF
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+    test -f "${TP_INSTALL_DIR}/lib64/libfmt.a"
 }
 
 build_fmt_shared() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
-    mkdir -p build
-    cd build
+    rm -rf build-shared
+    mkdir -p build-shared
+    cd build-shared
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
             -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF \
-            -DBUILD_SHARED_LIBS=ON 
+            -DBUILD_SHARED_LIBS=ON
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+    test -f "${TP_INSTALL_DIR}/lib64/libfmt.so.10"
 }
 
 #ryu
@@ -1393,9 +1434,10 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
+    local cmake_prefix_path="${TP_INSTALL_DIR};${TP_INSTALL_DIR}/lib/cmake;${TP_INSTALL_DIR}/lib64/cmake"
 
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH="${cmake_prefix_path}" -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 
     # cp include and lib
@@ -1681,6 +1723,8 @@ build_flamegraph() {
 build_benchgen() {
     check_if_source_exist ${BENCHGEN_SOURCE}
     cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
+    perl -0pi -e 's/brotlicommon snappy zstd\)/brotlicommon lz4 snappy zstd)/' \
+        cmake_modules/BenchmarkArrow.cmake
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \

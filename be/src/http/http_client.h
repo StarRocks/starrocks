@@ -20,6 +20,7 @@
 #include <curl/curl.h>
 
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <unordered_map>
 
@@ -103,6 +104,12 @@ public:
     // When set to false, the response body will be returned even for HTTP errors
     void set_fail_on_error(bool fail) { curl_easy_setopt(_curl, CURLOPT_FAILONERROR, fail ? 1L : 0L); }
 
+    // Override the HTTP method string without changing curl's transfer
+    // semantics. Use this when you need PUT with an inline body via
+    // set_payload() -- set_method(PUT) sets CURLOPT_UPLOAD which
+    // conflicts with CURLOPT_POSTFIELDS used by set_payload().
+    void set_custom_method(const char* method) { curl_easy_setopt(_curl, CURLOPT_CUSTOMREQUEST, method); }
+
     // Control whether to follow HTTP redirects (3xx responses)
     // Default is true (follow redirects). Set to false to disable redirect following,
     // which is important for SSRF protection in http_request() function.
@@ -127,10 +134,6 @@ public:
         set_method(HEAD);
         return execute();
     }
-
-    // helper function to download a file, you can call this function to downlaod
-    // a file to local_path
-    StatusOr<uint64_t> download(const std::string& local_path);
 
     Status download(const std::function<Status(const void* data, size_t length)>& callback,
                     int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps);

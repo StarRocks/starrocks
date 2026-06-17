@@ -122,8 +122,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     protected long dbId;
     @SerializedName("l")
     protected String label;
+    // Read on the daemon thread (LoadsHistorySyncer.collectShowingLoadJobs,
+    // SHOW LOAD result builders) and on cancel paths without holding the
+    // job's writeLock — declare volatile so transitions made under the
+    // writeLock are visible to lock-free readers.
     @SerializedName("s")
-    protected JobState state = JobState.PENDING;
+    protected volatile JobState state = JobState.PENDING;
     @SerializedName("j")
     protected EtlJobType jobType;
 
@@ -334,6 +338,17 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    /**
+     * Whether {@link #beginTxn()} has run and registered a transaction with the
+     * Global Transaction Manager. Subclasses that defer {@code beginTxn} (e.g.
+     * {@link com.starrocks.load.loadv2.BrokerLoadJob}, where the pre-split hook
+     * fires first) can fail before {@code beginTxn} runs; abort paths must skip
+     * the GTM call in that window because there is no transaction to abort.
+     */
+    public boolean hasBegunTransaction() {
+        return transactionId != 0L;
     }
 
     public long getLoadStartTimestamp() {
@@ -777,8 +792,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         // remove callback before abortTransaction(), so that the afterAborted() callback will not be called again
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
 
-        if (abortTxn) {
-            // abort txn
+        if (abortTxn && hasBegunTransaction()) {
+            // abort txn. !hasBegunTransaction() means the job was cancelled before
+            // beginTxn ran (e.g. BrokerLoadJob defers beginTxn until after the
+            // pre-split hook returns); there is no GTM record to abort.
             try {
                 LOG.debug(new LogBuilder(LogKey.LOAD_JOB, id)
                         .add("transaction_id", transactionId)
@@ -1083,9 +1100,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
                 info.setError_msg("type:" + failMsg.getCancelType() + "; msg:" + failMsg.getMsg());
             }
 
-            // create time
+            // create time. Set both the legacy wall-clock string and the new
+            // UTC epoch ms. New BE materializes the DATETIME column from the
+            // ms field (via from_unixtime() in the session zone), bypassing
+            // the from_date_str() round-trip that loses timezone information.
             if (createTimestamp != -1) {
                 info.setCreate_time(TimeUtils.longToTimeString(createTimestamp));
+                info.setCreate_time_ms(createTimestamp);
             }
             // etl start time
             if (getEtlStartTimestamp() != -1) {
@@ -1096,13 +1117,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
                 info.setEtl_finish_time(TimeUtils.longToTimeString(loadStartTimestamp));
                 // load start time
                 info.setLoad_start_time(TimeUtils.longToTimeString(loadStartTimestamp));
+                info.setLoad_start_time_ms(loadStartTimestamp);
             }
             if (loadCommittedTimestamp != -1) {
                 info.setLoad_commit_time(TimeUtils.longToTimeString(loadCommittedTimestamp));
+                info.setLoad_commit_time_ms(loadCommittedTimestamp);
             }
             // load end time
             if (finishTimestamp != -1) {
                 info.setLoad_finish_time(TimeUtils.longToTimeString(finishTimestamp));
+                info.setLoad_finish_time_ms(finishTimestamp);
             }
             // tracking url
             if (!loadingStatus.getTrackingUrl().equals(EtlStatus.DEFAULT_TRACKING_URL)) {

@@ -15,9 +15,9 @@
 #include "exec/lake_meta_scanner.h"
 
 #include "base/testutil/sync_point.h"
+#include "column/global_dict/config.h"
 #include "exec/lake_meta_scan_node.h"
 #include "gen_cpp/tablet_schema.pb.h"
-#include "runtime/global_dict/config.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 

@@ -162,7 +162,14 @@ Status hostname_to_ipv4(const std::string& host, std::string& ip) {
     }
 
     addr.s_addr = ((sockaddr_in*)(res->ai_addr))->sin_addr.s_addr;
-    ip = inet_ntoa(addr);
+    char ipv4_str[INET_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, &addr, ipv4_str, sizeof(ipv4_str)) == nullptr) {
+        std::string err_msg = strings::Substitute("failed to convert ipv4 for host: $0, errno: $1", host, errno);
+        LOG(WARNING) << err_msg;
+        freeaddrinfo(res);
+        return Status::InternalError(err_msg);
+    }
+    ip = ipv4_str;
 
     freeaddrinfo(res);
     return Status::OK();

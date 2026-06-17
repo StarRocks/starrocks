@@ -39,7 +39,7 @@ public class IcebergPropertiesTable extends MetadataTable {
 
     public static IcebergPropertiesTable create(String catalogName, String originDb, String originTable) {
         return new IcebergPropertiesTable(catalogName,
-                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()

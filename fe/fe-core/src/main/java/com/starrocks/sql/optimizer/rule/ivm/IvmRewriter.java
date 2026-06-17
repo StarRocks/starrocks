@@ -258,6 +258,11 @@ public class IvmRewriter {
     }
 
     static MaterializedView loadTargetMv(OptimizerContext optimizerContext) {
+        // IvmTrialRewriter injects an unregistered mock MV here for CREATE-time trial.
+        MaterializedView override = optimizerContext.getQueryMaterializationContext().getOverrideTargetMv();
+        if (override != null) {
+            return override;
+        }
         String strMvId = optimizerContext.getSessionVariable().getTvrTargetMvId();
         if (Strings.isNullOrEmpty(strMvId)) {
             return null;

@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "cache/cache_options.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -31,10 +32,9 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "io/shared_buffered_input_stream.h"
-#include "storage/column_predicate.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
-#include "storage/range.h"
+#include "storage/column_predicate_factory.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/range.h"
 #include "types/logical_type.h"
 
 namespace tparquet {
@@ -45,7 +45,7 @@ class RowGroup;
 
 namespace starrocks {
 class RandomAccessFile;
-struct HdfsScanStats;
+struct FormatScannerStats;
 class ColumnPredicate;
 class ExprContext;
 class NullableColumn;
@@ -64,8 +64,7 @@ struct ColumnOffsetIndexCtx {
     std::vector<bool> page_selected;
     uint64_t rg_first_row;
 
-    void collect_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                          bool active);
+    void collect_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset, bool active);
 
     // be compatible with PARQUET-1850
     bool check_dictionary_page(int64_t data_page_offset) {
@@ -78,7 +77,7 @@ struct ColumnReaderOptions {
     bool case_sensitive = false;
     bool use_file_pagecache = false;
     int chunk_size = 0;
-    HdfsScanStats* stats = nullptr;
+    FormatScannerStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
@@ -148,8 +147,8 @@ public:
         return Status::OK();
     }
 
-    virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                         int64_t* end_offset, ColumnIOTypeFlags types, bool active) = 0;
+    virtual void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                         ColumnIOTypeFlags types, bool active) = 0;
 
     // For field which type is complex, the filed physical_column_index in file meta is not same with the column index
     // in row_group's column metas

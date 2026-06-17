@@ -39,7 +39,7 @@
 namespace starrocks::config {
 // Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing
 // columns.
-CONF_mBool(enable_cow_optimization, "true");
+CONF_mBool(enable_cow_optimization, "false");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means
 // diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
@@ -153,6 +153,17 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_mInt32(alter_tablet_worker_count, "3");
+// Maximum number of segment-level sub-tasks executed in parallel within a single
+// lake schema-change task (per-tablet). Currently only the ADD INDEX fast path
+// (lake AddIndexSchemaChange) submits sub-tasks to the dedicated lake_schema_change
+// thread pool; LinkedSchemaChange / DirectSchemaChange / SortedSchemaChange and
+// the DROP INDEX fast path remain single-threaded and are unaffected.
+//
+// The dedicated _thread_pool_lake_schema_change capacity is auto-derived as:
+//     pool_max = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+// so the outer alter pool and inner segment pool stay physically isolated and
+// never deadlock against each other.
+CONF_mInt32(lake_schema_change_per_tablet_parallelism, "4");
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 // The count of thread to clone. Deprecated
@@ -221,6 +232,12 @@ CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
+// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
+// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
+// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
+// guard. The pool is built once at startup; CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "0");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -284,6 +301,8 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
+// Number of threads for internal JVM calls that must run on pthreads.
+CONF_Int32(jvm_call_thread_pool_size, "1");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).
@@ -482,6 +501,28 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
+// Maximum number of per-output-segment .lcrm reads kept in flight by
+// RowsMapperIterator during light COMPACTION publish. The unit is **sub-chunks**
+// (each lake_rows_mapper_sub_chunk_bytes in size, never crossing a segment
+// boundary): K controls how many sub-chunk reads stay in flight, decoupled from
+// segment count. Memory bound = K * lake_rows_mapper_sub_chunk_bytes. Each chunk
+// owns its own RandomAccessFile (no shared file-class state across tasks) and
+// is consumed in segment order via vector::swap (zero memcpy when a segment
+// fits one sub-chunk). Set to 1 to disable pipelining and fall back to the
+// sequential single-shot read path.
+CONF_mInt32(lake_rows_mapper_read_parallelism, "32");
+// Sub-chunk granularity for RowsMapperIterator pipelined reads. Each segment is
+// split into ceil(segment_bytes / sub_chunk_bytes) sub-chunks that the iterator
+// pipelines independently. Smaller values raise the achievable parallelism for
+// few-but-large output segments at the cost of more range-reads and an extra
+// memcpy on consume. Defaults to 4 MiB (starcache disk-tier block-friendly).
+CONF_mInt64(lake_rows_mapper_sub_chunk_bytes, "4194304");
+// Memory-pressure gate for the parallel prefetch paths used while rebuilding the shared-data
+// primary key index. When the update mem tracker is already past this percent (0-100) of its
+// limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a
+// time, trading the cold-start latency win for bounded peak memory. Gates parallel reads of
+// del, segment, and other files during the rebuild.
+CONF_mInt32(pk_index_parallel_rebuild_mem_ratio, "50");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
@@ -542,6 +583,50 @@ CONF_Int32(arrow_flight_port, "-1");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
+
+// --- Rejected records sync daemon (Phase 3 of the rejected_records feature) ---
+// How often the RejectedRecordSyncDaemon wakes up to scan local JSON Lines
+// files produced by RejectedRecordWriter. A tick that finds no new files is
+// a no-op; batches are flushed either when a tick picks up files or when a
+// single scan accumulates more than `rejected_record_sync_max_batch_rows`
+// rows worth of records.
+CONF_mInt32(rejected_record_sync_interval_sec, "30");
+// Upper bound on rows included in one merge-commit Stream Load batch. The
+// daemon splits larger backlogs across consecutive ticks rather than
+// attempting a single oversized transaction. The row cap is enforced
+// line-by-line inside a file, so a single giant file won't blow past
+// the limit.
+CONF_mInt32(rejected_record_sync_max_batch_rows, "10000");
+// Byte cap on the accumulated Stream Load payload. When the read-and-
+// concat loop crosses this threshold it commits the current batch and
+// starts a fresh payload, which prevents a load with very wide rows or
+// very long error messages from producing an HTTP PUT body big enough
+// to OOM the BE / FE / intermediate proxies. 32 MiB matches the FE's
+// default streaming_load_max_mb.
+CONF_mInt64(rejected_record_sync_max_batch_bytes, "33554432");
+// Upper bound on the tick interval when post_to_stream_load has been
+// failing persistently. The daemon doubles its sleep after every
+// failure until this cap is reached, then stays there until a tick
+// succeeds. Useful for the common outage pattern where the FE is down
+// for minutes-to-hours and the default 30s interval would otherwise
+// keep pounding the dead endpoint and spamming WARN logs.
+CONF_mInt32(rejected_record_sync_max_backoff_sec, "600");
+// How long the daemon keeps unsyncable local files around before garbage
+// collecting them. Sync failures (FE down, auth error, table missing) keep
+// the files for re-sync; anything older than this is discarded so a
+// misconfigured cluster cannot slowly fill the store path.
+CONF_mInt32(rejected_record_local_retention_hours, "24");
+// Kill switch for the daemon. Defaults to false during the phased rollout
+// so clusters that upgrade to a Phase 3 binary do not start shipping
+// rejected records into _statistics_.rejected_records until the operator
+// has verified the table exists and set log_rejected_record_num > 0 on
+// targeted loads.
+CONF_mBool(enable_rejected_record_sync, "false");
+// Maximum time the daemon waits for the FE Stream Load endpoint per post.
+// Default is deliberately longer than the default load timeout because
+// merge-commit batches synchronously across multiple BEs and may sit in
+// the FE-side commit queue briefly.
+CONF_mInt32(rejected_record_sync_post_timeout_sec, "60");
 // Whether to execute load channel RPC requests asynchronously, that is,
 // to run RPCs in a separate thread pool instead of within BRPC workers
 CONF_mBool(enable_load_channel_rpc_async, "true");
@@ -692,6 +777,16 @@ CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
+// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
+// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
+// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+CONF_Bool(enable_http_auth, "false");
+
+// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
+// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
+// This config is static and requires a BE restart to take effect.
+CONF_Bool(enable_stop_be_action, "true");
+
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
@@ -806,8 +901,11 @@ CONF_Int32(thrift_rpc_max_body_size, "0");
 // The connection will be closed if it has existed in the connection pool for longer than this value.
 CONF_Int32(thrift_rpc_connection_max_valid_time_ms, "5000");
 
-// txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
+// The Thrift RPC timeout (in milliseconds) used by BE stream-load plan (put) and
+// txn prepare/commit calls sent to the FE.
+// NOTE: renamed from `txn_commit_rpc_timeout_ms`, which is kept as a backward-compatible alias.
+CONF_mInt32(stream_load_thrift_rpc_timeout_ms, "60000");
+CONF_Alias(stream_load_thrift_rpc_timeout_ms, txn_commit_rpc_timeout_ms);
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -1046,6 +1144,9 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 CONF_mBool(pipeline_timeout_diagnostic, "false");
+// BE-wide kill switch for the pipeline event scheduler. When false, the event scheduler is
+// disabled even if the session variable `enable_pipeline_event_scheduler` is true.
+CONF_mBool(enable_pipeline_event_scheduler, "true");
 // If this value is greater than 0 and the query time exceeds the timeout, then execute gcore on the process.
 CONF_Int64(pipeline_gcore_timeout_threshold_sec, "-1");
 CONF_String(pipeline_gcore_output_dir, "${STARROCKS_HOME}/log");
@@ -1246,9 +1347,6 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
-// Config for query debug trace
-CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
-
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
 CONF_mInt32(starlet_cache_thread_num, "16");
@@ -1331,9 +1429,18 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+// Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
+// When writing a txn log takes longer than this threshold, the stack trace of the slow thread
+// is dumped to the log to help diagnose slow object-storage writes.
+// Disabled by default (<= 0); set to a positive value such as 4000 (4 seconds) to enable.
+CONF_mInt64(lake_put_txn_log_timeout_guard_ms, "-1");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
+// Whether vacuum tasks honor the timeout carried in the request (VacuumRequest.timeout_ms)
+// and abort themselves once it elapses. Set to false to let vacuum tasks always run to
+// completion no matter how long the FE caller waits.
+CONF_mBool(lake_vacuum_enable_task_timeout, "true");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 // ===== Autonomous compaction (lake mode) =====
@@ -1350,6 +1457,55 @@ CONF_mInt64(lake_autonomous_compaction_local_result_dir_max_bytes, "1073741824")
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
+// below). Enabled by default: low-value sparse mid-tier picks are skipped per the
+// thresholds below. Set to false to turn off the entire gate in one step — every picked
+// level then compacts unconditionally (the pre-gate behavior) and the individual
+// threshold configs below have no effect.
+CONF_mBool(enable_lake_pk_compaction_score_gate, "true");
+// Skip compaction when the size-tiered selector picks a level whose total score is below
+// this threshold and none of the overrides below fire.
+//
+// Score formula (per rowset): io_count * 1MB / read_bytes  (sum across rowsets in level)
+// - Many small/overlapped rowsets => high score => compact (useful work)
+// - Few large non-overlapped rowsets => low score => skip (would just rewrite base)
+//
+// Suppresses sparse mid-tier base merges that re-write GBs of data with low file-count
+// reduction on large PK tables. Levels with overlapped rowsets always compact; the bcr,
+// size_overflow, and emergency overrides below additionally let delete-heavy,
+// overflowing, or read-pressured levels through. Lower toward 0 to skip less aggressively
+// (0 makes the gate a no-op since a level's score is always >= 0).
+CONF_mDouble(lake_pk_compaction_min_level_score, "2.0");
+// Minimum benefit/cost ratio (segments-saved per MB rewritten) for accepting a
+// sparse-mid-tier compaction pick. Together with the read-pressure emergency override
+// below, this turns the binary `min_level_score` gate into a graduated decision:
+// low-pressure partitions skip uneconomical rewrites, high-pressure ones bypass the
+// gate to keep up. Set to 0 to disable this override (only `min_level_score` applies).
+CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.005");
+// Read-pressure emergency override. When the partition's read_pressure_score
+// (segment count) exceeds this threshold, the gate auto-relaxes proportionally so that
+// hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
+// disable the override (gate always applies).
+CONF_mDouble(lake_pk_compaction_emergency_score, "50.0");
+// Weight that converts a level's delete pressure into segment-equivalent benefit units,
+// folded into the bcr numerator:
+//   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
+// Intuition: one rowset that is 100% deleted is "worth w segments saved" from the
+// reader's perspective (i.e., cleaning it has the same benefit as eliminating w
+// hypothetical segments). For a sparse mid-tier with 8 input rowsets at 20% level-wide
+// delete_ratio, w=12 contributes 0.20 * 8 * 12 = 19.2 segment-equivalents on top of
+// the segment-count benefit. Tune up (e.g., 20) to be more aggressive against delete
+// accumulation; tune down (e.g., 4) to favor write amplification. Set to 0 to disable
+// the delete contribution (bcr falls back to segment-only benefit).
+CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "12.0");
+// Size accumulation upper-bound. When the picked level's total bytes exceed
+// alpha * max_rowset_bytes * size_tiered_level_multiple (i.e., alpha * next-tier-target),
+// force compaction regardless of min_level_score/bcr. alpha=2 caps long-tail
+// accumulation at 2x the natural size-tiered promotion target, preventing unbounded
+// mid-tier growth. Note: uses max_rowset_bytes from the actual picked rowsets, not the
+// level's compact_level which can be stale after pick_max_level merges levels.
+// Set to 0 to disable the override (no size cap).
+CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
@@ -1370,6 +1526,12 @@ CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// Batch row count for PrimaryKeyCompactionConflictResolver::execute() — multiple per-chunk
+// `params.index->replace()` calls are accumulated into one call across this many rows. Each
+// replace() in LakePersistentIndex runs a memtable flush check + lock round-trip; batching N
+// chunks amortises that work by ~N×. Setting this <= vector_chunk_size (4096) effectively
+// disables batching. 32 K rows ≈ 8 chunks ≈ ~1.6 MB of accumulated PK bytes.
+CONF_mInt32(primary_key_compaction_replace_batch_rows, "32768");
 // The maximum number of rows which need to be rebuilt in cloud native pk index.
 // If rows which need to be rebuilt exceed this threshold, we will flush memtable immediately
 // to reduce index rebuild cost. 0 means disabled.
@@ -1618,8 +1780,9 @@ CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 // ranges in [1,16], default value is 4.
 CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
-// Used by vector query cache, 500MB in default
-CONF_Int64(vector_query_cache_capacity, "536870912");
+// Vector index cache total capacity (HNSW whole-index + IVF-PQ blocks share
+// the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
+CONF_mString(vector_query_cache_capacity, "20%");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
@@ -1661,6 +1824,18 @@ CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+// Software prefetch distance (in rows) for the agg hash-map / hash-set
+// probe loop.  Default 16 is empirical for L3-resident tables; raise on
+// DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
+// per chunk; changes take effect on the next chunk.
+CONF_mInt32(agg_hash_map_prefetch_dist, "16");
+// Software prefetch is gated on the bucket array spilling L2: it is only
+// enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
+// Below that the table is L2-resident and prefetch is a net loss (measured by
+// agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
+// contended many-driver-per-core deployments where the effective L2 share per
+// table is smaller than the nominal per-core size.
+CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
 
@@ -1721,7 +1896,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
@@ -1872,6 +2047,25 @@ CONF_mInt32(config_vector_index_default_build_threshold, "10000");
 // budget of 2 is enforced, so on small-core machines or with small ratios the effective
 // value may exceed nproc * this value.
 CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
+
+// Per-segment adaptive ef_search for HNSW vector queries.
+// Compensates for recall degradation on larger segments (e.g. after compaction
+// merges many small segments into one large segment).
+//
+// Formula:
+//   ef_effective = max(user_ef, query_k) * min(1 + alpha * log2(rows/baseline), cap)
+CONF_mBool(enable_vector_adaptive_search, "true");
+CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
+CONF_mDouble(vector_adaptive_ef_cap, "8.0");
+CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
+// Per-builder in-memory row buffer cap before tenann does an intermediate
+// add into the faiss in-memory index. Bounds peak memory during HNSWFlat
+// build by capping data_buffer_ at |rows| × dim × 4 bytes (does NOT cap
+// the trained index storage itself, only the staging buffer).
+// 256K rows ≈ 128 MiB at dim=128. Lower this if BE memory is tight.
+// Set to 0 to disable intermediate flushing (whole tablet buffered in RAM).
+CONF_mInt64(vector_index_build_flush_threshold_rows, "262144");
 
 // When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
 // The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.

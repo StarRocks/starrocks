@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks で BE と CN をブラックリストに追加し、接続失敗ノードをクエリ実行から除外する設定方法。"
 ---
 
 # BE と CN のブラックリストを管理する

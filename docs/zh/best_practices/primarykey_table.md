@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+description: "Primary Key tables in StarRocks use a new storage engine supporting real-time data updates while maintaining efficient complex ad-hoc query performance."
 ---
 
 # 主键表

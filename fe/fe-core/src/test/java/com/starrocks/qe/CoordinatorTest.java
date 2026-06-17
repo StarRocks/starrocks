@@ -185,6 +185,47 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
+    public void testTimeoutHintUsesMetadataCollectQueryTimeoutForMetadataContext() {
+        ctx.setMetadataContext(true);
+
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(300);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains(SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT));
+        Assertions.assertFalse(ex.getMessage().contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
+    }
+
+    @Test
+    public void testTimeoutHintUsesInsertTimeoutForLoad() {
+        // In practice INSERT/CTAS timeouts are intercepted FE-side in StmtExecutor (which renders a richer
+        // hint including the load timeout property). This test covers the fallback when BE returns TIMEOUT
+        // before that polling fires: dealStatusToTryRetry must still name insert_timeout, not query_timeout.
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        new Expectations(executor) {
+            {
+                executor.isExecLoadType();
+                result = true;
+                minTimes = 0;
+            }
+        };
+        ctx.setExecutor(executor);
+
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(300);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains(SessionVariable.INSERT_TIMEOUT));
+        Assertions.assertFalse(ex.getMessage().contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
+    }
+
+    @Test
     public void testClearExternalResourcesOnlyOnce() {
         AtomicInteger clearCount = new AtomicInteger();
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));

@@ -39,6 +39,7 @@
 #include <memory>
 
 #include "base/types/int128.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "gutil/int128.h"
@@ -86,7 +87,7 @@ public:
         ASSERT_EQ(0, for_page_decoder.current_index());
         ASSERT_EQ(size, for_page_decoder.count());
 
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkFactory::column_from_field_type(Type, false);
         size_t size_to_fetch = size;
         status = for_page_decoder.next_batch(&size_to_fetch, column.get());
         ASSERT_TRUE(status.ok());
@@ -128,7 +129,7 @@ public:
         ASSERT_EQ(0, for_page_decoder.current_index());
         ASSERT_EQ(size, for_page_decoder.count());
 
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkFactory::column_from_field_type(Type, false);
         size_t size_to_fetch = size;
         status = for_page_decoder.next_batch(&size_to_fetch, column.get());
         ASSERT_TRUE(status.ok());
@@ -143,7 +144,7 @@ public:
         ASSERT_EQ(0, for_page_decoder.current_index());
         ASSERT_EQ(size, for_page_decoder.count());
 
-        auto column1 = ChunkHelper::column_from_field_type(Type, false);
+        auto column1 = ChunkFactory::column_from_field_type(Type, false);
         SparseRange<> read_range;
         read_range.add(Range<>(0, size / 3));
         read_range.add(Range<>(size / 2, (size * 2 / 3)));

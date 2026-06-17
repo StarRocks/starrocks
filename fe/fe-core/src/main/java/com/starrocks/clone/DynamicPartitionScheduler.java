@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -54,7 +55,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
@@ -97,7 +98,7 @@ import java.util.Set;
  * Config.dynamic_partition_enable determine whether this feature is enable, Config.dynamic_partition_check_interval_seconds
  * determine how often the task is performed
  */
-public class DynamicPartitionScheduler extends FrontendDaemon {
+public class DynamicPartitionScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(DynamicPartitionScheduler.class);
     public static final String LAST_SCHEDULER_TIME = "lastSchedulerTime";
     public static final String LAST_UPDATE_TIME = "lastUpdateTime";
@@ -386,10 +387,19 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
                     && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
-                String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
-                            "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
-                runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
-                skipAddPartition = true;
+                // Only the add half is relaxed: a metadata-only alter (UPDATING_META) or a running
+                // safe alter job (lake ADD/DROP INDEX fast path) does not block dynamic ADD PARTITION.
+                // The drop half keeps its existing state handling below. Compute the (job-map-scanning)
+                // tolerance only for non-NORMAL tables so the common NORMAL path stays scan-free.
+                boolean tolerateConcurrentAlter = Config.enable_concurrent_add_partition_during_alter
+                        && (olapTable.getState() == OlapTable.OlapTableState.UPDATING_META
+                            || AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
+                if (!tolerateConcurrentAlter) {
+                    String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
+                                "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
+                    runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
+                    skipAddPartition = true;
+                }
             }
 
             // Determine the partition column type
@@ -421,8 +431,15 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        boolean newInnerCtx = ConnectContext.get() == null;
         ConnectContext ctx = Util.getOrCreateInnerContext();
         ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse(olapTable.getId()).getName());
+        if (newInnerCtx) {
+            // setCurrentWarehouse replaces sessionVariable with a clone of the global default,
+            // discarding ConnectContext.buildInner's MV-rewrite override. Only re-apply when
+            // the context is freshly created so we don't mutate a reused user session.
+            ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        }
 
         Locker locker = new Locker();
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
@@ -502,11 +519,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
     @VisibleForTesting
     public void runOnceForTest() {
-        runAfterCatalogReady();
+        runAfterLeaseValid();
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // Find all tables that need to be scheduled.
         long now = System.currentTimeMillis();
         long checkIntervalMs = Config.dynamic_partition_check_interval_seconds * 1000L;
@@ -528,5 +545,16 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         // partition_ttl_number and partition_ttl work for mv with
         // single column range partitioning(including expr partitioning).
         ttlPartitionScheduler.scheduleTTLPartition();
+    }
+
+    @Override
+    protected void onStopped() {
+        // The schedulable-table set and the lastFindingTime watermark are leader-session
+        // bookkeeping; findSchedulableTables() walks dbs/tables and re-registers when the next
+        // leader activates, so leftover entries can be dropped here without losing tables that
+        // were registered through SQL on this leader.
+        dynamicPartitionTableInfo.clear();
+        ttlPartitionScheduler.getTtlPartitionInfo().clear();
+        lastFindingTime = -1;
     }
 }

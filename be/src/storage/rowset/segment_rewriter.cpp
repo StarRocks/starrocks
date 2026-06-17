@@ -7,6 +7,7 @@
 #include "base/string/slice.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/schema.h"
 #include "fs/fs.h"
@@ -23,10 +24,30 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
+// Mirror of HorizontalGeneralTabletWriter::record_segment_vector_index_ids for the rewrite path:
+// persist on the dest FileInfo the ids of vector indexes whose .vi the dest segment will have —
+// built inline by this writer (sync) or produced later by the FE-scheduled build task (async,
+// above the deferred-build threshold; a dest rewrite file is never a bundle). The ids come from
+// the caller-resolved path map, so shared-nothing callers (empty map) record nothing.
+static void record_rewrite_vector_index_ids(const SegmentWriter& writer, FileInfo* dest) {
+    if (writer.defer_vector_index_build()) {
+        if (writer.num_rows() < writer.vector_index_build_threshold()) {
+            return;
+        }
+    } else if (!writer.has_vector_index_written()) {
+        return;
+    }
+    for (const auto& [index_id, _] : writer.vector_index_file_paths()) {
+        dest->vector_index_ids.push_back(index_id);
+    }
+}
+
 Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                                const std::shared_ptr<const TabletSchema>& tschema,
                                                std::vector<uint32_t>& column_ids, MutableColumns& columns,
-                                               uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
+                                               uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
+                                               SegmentFileMark segment_file_mark,
+                                               RewriteVectorIndexOptions vector_index_opts) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
         // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
@@ -67,11 +88,20 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
+    // Direct how vector indexes on the rewritten columns are produced. Shared-data sync mode
+    // passes location-provider-resolved .vi paths so the SegmentWriter writes them at the
+    // reader-visible path (instead of the empty-segment_file_mark IndexDescriptor fallback, which
+    // is unreachable via the location provider); async mode sets defer so .vi generation is left
+    // to the FE-scheduled VectorIndexBuildTask. Shared-nothing leaves all at their defaults.
+    opts.vector_index_file_paths = std::move(vector_index_opts.file_paths);
+    opts.defer_vector_index_build = vector_index_opts.defer_build;
+    opts.vector_index_build_threshold = vector_index_opts.build_threshold;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
     auto schema = ChunkHelper::convert_schema(tschema, column_ids);
-    auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
+    auto chunk = ChunkFactory::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
         chunk->get_column_by_index(i).reset(std::move(columns[i]));
     }
@@ -82,6 +112,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     TEST_ERROR_POINT("SegmentRewriter::rewrite1");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
+    record_rewrite_vector_index_ids(writer, dest);
     dest->size = segment_file_size;
     return Status::OK();
 }
@@ -92,7 +123,8 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                                const TabletSchemaCSPtr& tschema,
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                               std::vector<uint32_t>& column_ids, MutableColumns* columns) {
+                                               std::vector<uint32_t>& column_ids, MutableColumns* columns,
+                                               SegmentFileMark segment_file_mark) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -122,7 +154,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     }
     Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
 
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(src_schema, num_rows);
     auto read_chunk = chunk_shared_ptr.get();
 
     SegmentReadOptions seg_options;
@@ -147,7 +179,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     std::vector<uint32_t> full_column_ids(tschema->num_columns());
     std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
     auto schema = ChunkHelper::convert_schema(tschema, full_column_ids);
-    auto chunk = ChunkHelper::new_chunk(schema, full_column_ids.size());
+    auto chunk = ChunkFactory::new_chunk(schema, full_column_ids.size());
 
     size_t update_columns_index = 0;
     size_t read_columns_index = 0;
@@ -164,6 +196,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(full_column_ids, true));
 
@@ -184,7 +217,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
         const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
-        const starrocks::lake::Tablet* tablet) {
+        const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
@@ -219,7 +252,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
                      tablet_mgr->load_segment(src, segment_id, &footer_sine_hint, lake_io_opts, fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();
 
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(src_schema, num_rows);
     auto read_chunk = chunk_shared_ptr.get();
 
     SegmentReadOptions seg_options;
@@ -246,7 +279,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest->path));
 
     auto schema = tschema->schema();
-    auto chunk = ChunkHelper::new_chunk(*schema, num_rows);
+    auto chunk = ChunkFactory::new_chunk(*schema, num_rows);
 
     // Fill in the values of columns that have not been modified
     size_t unmodified_column_index = 0;
@@ -263,8 +296,13 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         }
     }
 
-    // Write a complete segment file
+    // Write a complete segment file. All columns (including any vector-indexed one) go through
+    // column writers here, so unlike rewrite_partial_update the inline (sync) vector index build
+    // covers the whole schema; see RewriteVectorIndexOptions for the shared-data/-nothing split.
     SegmentWriterOptions opts;
+    opts.vector_index_file_paths = std::move(vector_index_opts.file_paths);
+    opts.defer_vector_index_build = vector_index_opts.defer_build;
+    opts.vector_index_build_threshold = vector_index_opts.build_threshold;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init());
 
@@ -275,6 +313,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     TEST_ERROR_POINT("SegmentRewriter::rewrite3");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
+    record_rewrite_vector_index_ids(writer, dest);
     dest->size = segment_file_size;
     return Status::OK();
 }

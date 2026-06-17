@@ -107,4 +107,95 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
         const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info);
 
+// Per-rowset estimated stats; used by the external boundaries split path's per-range output.
+struct Statistic {
+    int64_t num_rows = 0;
+    int64_t data_size = 0;
+    int64_t num_dels = 0;
+};
+
+// A new-tablet range plus the per-rowset stats that should be carried into it.
+struct TabletRangeInfo {
+    TabletRangePB range;
+    std::unordered_map<uint32_t, Statistic> rowset_stats;
+};
+
+// Data-driven peer of compute_split_ranges_from_external_boundaries:
+// computes K-1 boundaries from the old tablet's segment distribution and
+// emits K TabletRangeInfo with per-rowset anchored stats. Exposed for unit
+// testing (parity comparison with the external-boundaries path); the production call site
+// is in split_tablet().
+//
+// `tablet_manager` is only dereferenced by build_rowset_anchor's primary-key
+// delvec fallback. For tests using DUP_KEYS metadata with num_dels populated
+// directly, `tablet_manager` may be nullptr.
+Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                               int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
+                               int32_t colocate_column_count = 0);
+
+// external-boundaries peer of get_tablet_split_ranges: produces a vector<TabletRangeInfo>
+// from FE-supplied boundaries instead of computing them from segment
+// distribution. Exposed for unit testing of the validation paths; the
+// production call site is in split_tablet().
+//
+// `tablet_manager` is only dereferenced when the old tablet has rowsets
+// (build_rowset_anchor at step 9). For empty-tablet validation tests
+// `tablet_manager` may be nullptr.
+Status compute_split_ranges_from_external_boundaries(
+        TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
+        const google::protobuf::RepeatedPtrField<TabletRangePB>& external_ranges,
+        std::vector<TabletRangeInfo>* split_ranges);
+
+// -----------------------------------------------------------------------------
+// Phase-1 per-segment shared optimization. The helpers below are exposed for
+// unit testing; the production call site is build_new_tablets_from_split_ranges.
+// -----------------------------------------------------------------------------
+
+// Per-segment keep/shared decision across all new tablets (parallel to the
+// new_tablet_ranges vector index).
+struct SegmentOwnership {
+    std::vector<bool> keep; // keep[new_tablet_index]: segment overlaps that new tablet's range
+    std::vector<bool>
+            shared; // shared[new_tablet_index]: shared flag for that new tablet (meaningful where keep is set)
+};
+struct RowsetOwnership {
+    std::vector<SegmentOwnership> segments; // size == rowset.segment_metas_size()
+};
+
+// True iff a rowset's metadata shape permits per-segment ownership pruning:
+// (a) no partial-compaction cursor, (b) every segment has sort-key bounds. Each
+// SegmentMetadataPB is self-contained (filename/size/shared/bundle_file_offset travel
+// with it), so bundled rowsets prune uniformly with any other.
+bool can_prune_rowset_segments(const RowsetMetadataPB& rowset);
+
+// Computes per-segment ownership of a pruneable rowset against the new tablets'
+// ranges. Fail-closed: returns non-OK (caller degrades the whole rowset to
+// shared) on an unparseable sort key; per-segment, only marks shared=false when
+// the segment is provably contained in exactly one new tablet's range.
+//
+// Two overloads:
+//   - PB form: convenient for tests and one-shot callers; parses
+//     new_tablet_ranges into TabletRange on every call.
+//   - Pre-parsed form: hot-path callers that loop over many source rowsets
+//     against the same new_tablet_ranges should parse once via
+//     parse_tablet_ranges() and call this overload to avoid
+//     N redundant proto parses per rowset.
+StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
+                                                           const std::vector<TabletRangePB>& new_tablet_ranges);
+StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
+                                                           const std::vector<TabletRange>& parsed_ranges);
+
+// Parse a vector of TabletRangePB into TabletRange, returning the first
+// from_proto error encountered. Used by callers of compute_rowset_segment_
+// ownership that need to parse ranges once outside a hot loop.
+StatusOr<std::vector<TabletRange>> parse_tablet_ranges(const std::vector<TabletRangePB>& new_tablet_ranges);
+
+// Filters a copied-into-new-tablet rowset's segment_metas[] down to the segments kept
+// for new_tablet_index, setting each kept segment's `shared` flag from ownership.
+// Validate-then-mutate: returns Status::InternalError with the rowset
+// UNMODIFIED on any impossible post-compute shape mismatch (logic bug; aborts
+// the split).
+Status apply_segment_ownership_to_new_tablet_rowset(RowsetMetadataPB* rowset, const RowsetOwnership& ownership,
+                                                    int new_tablet_index);
+
 } // namespace starrocks::lake

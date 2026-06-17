@@ -86,8 +86,10 @@ Status FileDataSource::_create_scanner() {
     }
     if (_runtime_state->enable_log_rejected_record() &&
         _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
-        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
-        return Status::InternalError("only support csv/json format to log rejected record");
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON &&
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_PARQUET &&
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_ORC) {
+        return Status::InternalError("only support csv/json/parquet/orc format to log rejected record");
     }
     // create scanner object and open
     if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {

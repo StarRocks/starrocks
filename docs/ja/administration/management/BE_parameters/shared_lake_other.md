@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
 ---
 
@@ -33,7 +34,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-このトピックでは、以下の種類のFE構成について紹介します：
+このトピックでは、以下の種類のBE構成について紹介します：
 - [共有データ](#共有データ)
 - [データレイク](#データレイク)
 - [その他](#その他)
@@ -93,6 +94,93 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
+
+### enable_lake_pk_compaction_score_gate
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタにおける主キーテーブルのサイズ階層型コンパクション「スコアゲート」のマスタースイッチ。デフォルトで有効な場合、価値の低い疎な中間層のコンパクションをスキップします。選択された層のコンパクションスコアが `lake_pk_compaction_min_level_score` を下回り、かつ以下のいずれの例外条件も発動しない場合、その層はコンパクションされず、わずかなファイル数の削減のために大量のベースデータを書き換えることを回避します。`false` に設定すると、ゲート全体を 1 つのスイッチで無効化できます。この場合、選択された各層は無条件にコンパクションされ (ゲート導入前の動作)、以下のしきい値パラメータは効果を持ちません。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_min_level_score
+
+- デフォルト: 2.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートのスコアしきい値 (`enable_lake_pk_compaction_score_gate` を参照)。サイズ階層型セレクタが選択した層の合計コンパクションスコアがこの値を下回り、かつ例外条件が一つも発動しない場合、そのコンパクションをスキップします。rowset ごとのスコアは `io_count * 1MB / read_bytes` で、層全体で合計されます。小さい rowset や重複した rowset が多い層はスコアが高く (有用なコンパクション)、大きく重複のない rowset が少数の層はスコアが低くなります (ほぼ純粋なベース書き換え)。`0` に設定するとゲートは無効になります。層のスコアは常に `0` 以上だからです。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_min_benefit_cost_ratio
+
+- デフォルト: 0.005
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層を依然としてコンパクションするために必要な最小の利益/コスト比 (書き換え 1 MB あたりに削減される segment 数)。この利益には削除ベクトル (delvec) のクリーンアップ圧力も含まれます (`lake_pk_compaction_delvec_benefit_weight` を参照)。`0` に設定するとこの例外が無効になり、`lake_pk_compaction_min_level_score` のみが適用されます。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_emergency_score
+
+- デフォルト: 50.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。タブレット全体の読み取り圧力スコア (すべての rowset スコアの合計) がこの値に達すると、選択された層が `lake_pk_compaction_min_level_score` を下回っていてもコンパクションが実行され、読み取り増幅の大きいホットなタブレットが枯渇しないようにします。`0` に設定するとこの例外が無効になります。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_delvec_benefit_weight
+
+- デフォルト: 12.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: `lake_pk_compaction_min_benefit_cost_ratio` で使用される利益/コスト比において、層の削除圧力を segment 換算の利益単位に変換する重み。計算式は `benefit = real_benefit_segments + delete_ratio * input_segments * weight` です。値が大きいほど削除ベクトルのクリーンアップに積極的になり、値が小さいほど書き込み増幅の削減を優先します。`0` に設定すると削除分の寄与がなくなり、この比は segment 数の利益のみを反映します。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_size_overflow_ratio
+
+- デフォルト: 2.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層の合計バイト数が `ratio * largest_rowset_bytes * size_tiered_level_multiple` (つまり自然な次階層への昇格目標の `ratio` 倍) を超えると、長期的な中間層の蓄積を抑えるためにコンパクションが強制されます。デフォルトの `2.0` は、強制マージの前に自然な昇格しきい値の 2 倍まで許容することを意味します。`0` に設定するとこの例外が無効になり、サイズの上限がなくなります。
+- 導入バージョン: v4.2
+
+### lake_put_txn_log_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int64
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: 共有データクラスタでオブジェクトストレージにトランザクションログを書き込む際（`put_txn_log` および `put_combined_txn_log` パス）のタイムアウトガードのしきい値。トランザクションログの書き込みがこの値より長くかかった場合、StarRocks は遅いスレッドのスタックトレースを BE ログにダンプし、オブジェクトストレージへの書き込みが遅い原因の診断に役立てます。デフォルトでは無効（`0` 以下でこのガードを無効化）。有効にするには `4000`（4 秒）などの正の値を設定します。
+- 導入バージョン: -
+
+### lake_rows_mapper_read_parallelism
+
+- デフォルト: 32
+- タイプ: Int
+- 単位: sub-chunk 数
+- 変更可能: はい
+- 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` が `.lcrm`（lake compaction rows-mapper）ファイルを読む際に in-flight で保持する sub-chunk 読み取りの最大数。各 sub-chunk のサイズは `lake_rows_mapper_sub_chunk_bytes` で制御され、segment 境界をまたぎません。イテレータは PK index 実行スレッドプールに最大この数の並行読み取りを投入し、リモート読み取りを呼び出し側の per-segment 処理とパイプライン化します。メモリ上限は `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`。`1` に設定するとパイプライン化を無効にし、逐次読み取りにフォールバックします。
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- デフォルト: 4194304
+- タイプ: Int
+- 単位: バイト
+- 変更可能: はい
+- 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
+
+### lake_vacuum_min_batch_delete_size
+
+- デフォルト: 200
+- タイプ: Int64
+- 単位: ファイル数
+- 変更可能: はい
+- 説明: 共有データクラスタにおいて、Vacuum が単一の `DeleteObjects` リクエストにまとめる古いファイルの数。バッチを大きくすると、呼び出しごとの HTTP / 認証 / 署名オーバーヘッドが摊销され、オブジェクトストレージの prefix 単位リクエストレートへの圧力も軽減されますが、一回あたりの latency が上がり、瞬間的なエラーで retry した際の replay コストも増えます。AWS S3 では `DeleteObjects` のサーバー処理時間が batch size にほとんど依存しないため、AWS S3 ユーザーはこの値をプロトコル上限の `1000` までさらに引き上げることを推奨します。
 
 ### loop_count_wait_fragments_finish
 
@@ -374,6 +462,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでコンパクションタスクがローカルディスクにデータをキャッシュすることを許可するかどうか。
 - 導入バージョン: v3.1.7, v3.2.3
+
+### lake_replication_read_buffer_size
+
+- デフォルト: 16777216
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake replication）でセグメントファイルをダウンロードする際に使用する読み取りバッファサイズ。この値はリモートファイルの読み取りごとの割り当てサイズを決定し、実際にはこの設定値と 1 MB の大きい方が使用されます。値を大きくすると読み取り回数が減りスループットが向上しますが、並行ダウンロードごとのメモリ使用量が増加します。値を小さくするとメモリ使用量は減りますが I/O 呼び出し回数が増加します。ネットワーク帯域幅、ストレージ I/O 特性、並列レプリケーションスレッド数に応じて調整してください。
+- 導入バージョン: v4.1.2
+
+### lake_replication_max_file_copy_retry
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）における非セグメントファイル（`.sst`、`.delvec`、`.del`、`.cols`）コピーの最大リトライ回数。各試行でコピー済みファイルサイズがソースと一致するか検証し、オブジェクトストレージの一時的な問題による切り詰められたコピーを検出します。不安定なストレージ上でレプリケーション中にファイル破損が頻発する場合、この値を増やしてください。
+- 導入バージョン: v4.1.2
+
+### lake_replication_file_copy_threads
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）でファイルごとのコピーに使用する専用スレッドプールのサイズ。`0` は `cpu_cores * 4`（`replication_threads` と同じデフォルトセマンティクス）を意味し、負の値は `-value * cpu_cores` を意味します。このプールはエージェントタスクの `replicate_snapshot` プールと意図的に分離されており、外部タスクが `ThreadPoolToken::wait()` を通じてファイルごとのコピーサブタスクを安全に待機でき、スレッドプールのセルフデッドロックガードをトリガーしません。このプールは起動時に一度だけ作成され、ランタイムのリサイズフックはないため、サイズ変更には CN の再起動が必要です。
+- 導入バージョン: v4.1.2
 
 ### lake_service_max_concurrency
 

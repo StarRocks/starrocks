@@ -1,14 +1,9 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks SQL 查询常见问题。"
 ---
 
 # 查询常见问题
-
-## 构建物化视图失败：fail to allocate memory
-
-修改 `be.conf` 中的`memory_limitation_per_thread_for_schema_change`。
-
-该参数表示单个 schema change 任务允许占用的最大内存，默认大小 2G。修改完成后，需重启 BE 使配置生效。
 
 ## StarRocks 会缓存查询结果吗？
 

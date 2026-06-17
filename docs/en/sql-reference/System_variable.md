@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['session variable']
+description: "StarRocks provides many system variables that can be set and modified to suit your requirements."
 ---
 
 # System variables
@@ -223,6 +224,18 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 ### auto_increment_increment
 
 Used for MySQL client compatibility. No practical usage.
+
+### avro_use_jni_reader
+
+* **Scope**: Session
+* **Description**: Controls whether StarRocks uses the JNI-based Avro reader when scanning Avro data from external catalogs such as Hive. When enabled (`true`), StarRocks uses the JNI reader. When disabled (`false`), StarRocks uses the native Avro reader. This option is mainly used as a compatibility fallback. Because the default value is `false`, StarRocks uses the native Avro reader by default.
+
+  Current notes:
+  - The native Avro reader and the JNI reader are now aligned for `CHAR(n)` semantics. See [#73579](https://github.com/StarRocks/starrocks/pull/73579) for the alignment change, so the native and JNI behaviors are currently consistent on this point.
+  - The native Avro reader currently supports only `null`, `deflate`, and `snappy`, and does not support other codecs such as `bzip2`. If you need to process a codec that is unsupported by the native reader, manually enable the JNI reader.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v4.1.1
 
 ### big_query_profile_threshold
 
@@ -911,6 +924,15 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Default**: false
 
+### enable_explain_in_profile
+
+* **Scope**: Session
+* **Description**: When set to `true` and a profile is built for the query, the `EXPLAIN COSTS` text of the executed plan is embedded in the profile's `Summary` section under the `ExplainPlan` key. This lets the optimizer's cardinality estimates, column statistics, predicates, runtime-filter declarations, and overall plan cost be inspected offline alongside the runtime metrics, which is useful when triaging slow queries from a saved profile artifact without access to the live cluster.
+
+  The embedded plan honors the same desensitization controls as other persisted SQL artifacts: credential literals (e.g. in `FILES(...)`) are always redacted, and predicate / projection literals are rendered as digests when either the cluster-wide FE config `enable_sql_desensitize_in_log` or the session variable `enable_desensitize_explain` is enabled.
+* **Default**: false
+* **Data type**: boolean
+
 ### profile_log_latency_threshold_ms
 
 * **Scope**: Session
@@ -1083,6 +1105,12 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Description**: Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency.
 * **Default**: true
 * **Introduced in**: v2.3
+
+### enable_tablet_pre_split
+
+* **Description**: Per-session opt-out for Sample-Based Tablet Pre-Split. Defaults to `true` so the FE Config gates (`enable_tablet_pre_split_for_*`) remain the primary on/off switch. Set this to `false` for a session whose load you want to leave undisturbed. Both the matching Config flag and this session variable must be `true` for pre-split to run.
+* **Default**: true
+* **Introduced in**: v4.1.0
 
 ### enable_topn_runtime_filter
 
@@ -1499,9 +1527,9 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 * **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
   * `auto`: The system will automatically select the retrieval plan.
-  * `local`: Use the local cache plan.
-  * `distributed`: Use the distributed plan.
-* **Default**: auto
+  * `local`: The FE parses Iceberg manifest files locally and streams scan ranges to BEs incrementally as manifests are processed. This avoids collecting all splits before execution begins, reducing memory usage and first-byte latency.
+  * `distributed`: Manifest parsing is offloaded to multiple BEs in parallel. The FE must wait for all BEs to finish before delivering any scan ranges, which can cause high memory usage and long wait times on large tables with many manifest files. Prefer this only if FE CPU is a bottleneck and the table has a very large number of manifests.
+* **Default**: local (changed from `auto` in v3.5; with incremental scan range delivery enabled by default since v3.5, `local` mode provides lower memory usage and lower latency than `distributed` for most workloads)
 * **Introduced in**: v3.3.3
 
 #### enable_iceberg_column_statistics

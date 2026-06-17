@@ -25,22 +25,21 @@
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
+#include "storage/primitive/column_or_predicate.h"
 
 namespace starrocks::parquet {
 
-void ColumnOffsetIndexCtx::collect_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+void ColumnOffsetIndexCtx::collect_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges,
                                             int64_t* end_offset, bool active) {
     for (size_t i = 0; i < page_selected.size(); i++) {
         if (page_selected[i]) {
-            auto r = io::SharedBufferedInputStream::IORange(
-                    offset_index.page_locations[i].offset, offset_index.page_locations[i].compressed_page_size, active);
+            auto r = SharedBufferedInputStream::IORange(offset_index.page_locations[i].offset,
+                                                        offset_index.page_locations[i].compressed_page_size, active);
             ranges->emplace_back(r);
             *end_offset = std::max(*end_offset, r.offset + r.size);
         }

@@ -11,6 +11,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.BuildVectorIndexResponse;
@@ -46,8 +47,38 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
     private static final long DEFAULT_INTERVAL_MS = 5000;
     static final long BUILD_TIMEOUT_MS = 2 * 60 * 60 * 1000L; // 2 hours
 
-    // Pending queue: tabletId -> target visibleVersion
-    private final ConcurrentHashMap<Long, Long> pendingTablets = new ConcurrentHashMap<>();
+    /**
+     * Per-tablet pending state (two-version frontier). See
+     * docs/design/vector_index_compaction_aware_scheduling.md.
+     */
+    static final class Pending {
+        // Newest pending version (load or compaction).
+        final long latestVersion;
+        // Newest pending compaction-produced version; -1 means no compaction in the
+        // pending span.
+        final long latestCompactionVersion;
+        // Time when builtVersion first caught up to latestCompactionVersion; -1 means
+        // not caught up yet. Used to start the load-tail delay countdown.
+        final long compactionCaughtUpMs;
+
+        Pending(long latestVersion, long latestCompactionVersion, long compactionCaughtUpMs) {
+            this.latestVersion = latestVersion;
+            this.latestCompactionVersion = latestCompactionVersion;
+            this.compactionCaughtUpMs = compactionCaughtUpMs;
+        }
+
+        /**
+         * Conservative entry for recovery / re-enqueue without prior frontier info:
+         * treat the version as both the load and compaction frontier so it dispatches
+         * immediately in phase 1.
+         */
+        static Pending conservativeImmediate(long version) {
+            return new Pending(version, version, -1L);
+        }
+    }
+
+    // Pending queue: tabletId -> Pending
+    private final ConcurrentHashMap<Long, Pending> pendingTablets = new ConcurrentHashMap<>();
 
     // Running tasks: tabletId -> task
     private final Map<Long, VectorIndexBuildTask> runningTasks = new ConcurrentHashMap<>();
@@ -90,10 +121,31 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
 
     /**
      * Enqueue a tablet for async vector index building.
-     * Called from {@link com.starrocks.transaction.LakeTableTxnStateListener#preWriteCommitLog}.
+     * Called from {@link com.starrocks.transaction.PublishVersionDaemon} after publish.
+     *
+     * @param fromCompaction true iff the originating transaction's source type is
+     *                       {@code LAKE_COMPACTION}. Drives the two-phase scheduling:
+     *                       compaction products are dispatched immediately; load-only
+     *                       tail versions wait for a possible subsequent compaction.
      */
-    public void addPendingTablet(long tabletId, long version) {
-        pendingTablets.merge(tabletId, version, Math::max);
+    public void addPendingTablet(long tabletId, long version, boolean fromCompaction) {
+        pendingTablets.compute(tabletId, (k, old) -> {
+            if (old == null) {
+                long lc = fromCompaction ? version : -1L;
+                return new Pending(version, lc, -1L);
+            }
+            // Fast path: nothing advances → return old, no allocation.
+            if (version <= old.latestVersion
+                    && (!fromCompaction || version <= old.latestCompactionVersion)) {
+                return old;
+            }
+            long newLatest = Math.max(old.latestVersion, version);
+            long newLC = fromCompaction ? Math.max(old.latestCompactionVersion, version)
+                    : old.latestCompactionVersion;
+            // A newer compaction frontier resets caughtUp (phase 1 again).
+            long caughtUp = (newLC > old.latestCompactionVersion) ? -1L : old.compactionCaughtUpMs;
+            return new Pending(newLatest, newLC, caughtUp);
+        });
     }
 
     /**
@@ -110,11 +162,16 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
     }
 
     /**
-     * Convenience entry point for publish callers: enqueue all build infos
-     * returned by BE in the publish response. No-op if scheduler is not initialized
-     * or input is empty.
+     * Convenience entry point for publish callers: process all build infos returned by BE
+     * in the publish response. No-op if scheduler is not initialized or input is empty.
+     * <p>
+     * Each info carries {@code buildNeeded}: {@code true} means a new segment needs a real
+     * .vi build (dispatch to CN); {@code false} means this version produced nothing to build
+     * (bundle / below-threshold segments skip the inline .vi), so we advance builtVersion
+     * directly when possible — no CN round-trip — instead of letting it lag and read as
+     * "not built". {@code buildNeeded==null} (older BE) is treated as {@code true} (enqueue).
      */
-    public static void onPublishComplete(List<VectorIndexBuildInfoPB> infos) {
+    public static void onPublishComplete(List<VectorIndexBuildInfoPB> infos, boolean fromCompaction) {
         if (infos == null || infos.isEmpty()) {
             return;
         }
@@ -123,10 +180,54 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             return;
         }
         for (VectorIndexBuildInfoPB info : infos) {
-            if (info.tabletId != null && info.version != null) {
-                scheduler.addPendingTablet(info.tabletId, info.version);
+            if (info.tabletId == null || info.version == null) {
+                continue;
+            }
+            boolean buildNeeded = info.buildNeeded == null || info.buildNeeded;
+            if (buildNeeded) {
+                scheduler.addPendingTablet(info.tabletId, info.version, fromCompaction);
+            } else {
+                scheduler.advanceBuiltVersionForNoBuild(info.tabletId, info.version, fromCompaction);
             }
         }
+    }
+
+    /**
+     * Handle a published version that needs no real vector index build (bundle /
+     * below-threshold segments). When the recovery scan has run for this leader term and the
+     * tablet has no pending/running build, advance builtVersion directly to this version with
+     * no CN dispatch — nothing needs building, so the frontier just moves forward (and no
+     * pending entry is created, so a stream of no-build loads stays on this zero-RPC path).
+     * Otherwise let the build path carry the frontier: it builds any real index and returns
+     * this version, covering the no-build tail without an extra round-trip.
+     * <p>
+     * Why {@code recoveryScanDone && !hasPending} is leapfrog-safe (never skips an un-built
+     * vi-version): a vi-version always enqueues a pending build (kept until the build
+     * completes, re-enqueued on failure), and publishes are processed in version order per
+     * tablet — so any earlier un-built vi-version is already in {@code pendingTablets} when
+     * this no-build version arrives, making {@code hasPending} true and routing it to the
+     * build path. The {@code recoveryScanDone} guard covers the post-leader-switch window
+     * where the in-memory pending set hasn't been rebuilt yet; until the scan runs we
+     * conservatively enqueue instead of direct-advancing.
+     */
+    void advanceBuiltVersionForNoBuild(long tabletId, long version, boolean fromCompaction) {
+        LakeTablet tablet = findLakeTablet(tabletId);
+        if (tablet == null) {
+            return; // tablet/partition/table deleted — nothing to track
+        }
+        long built = tablet.getVectorIndexBuiltVersion();
+        if (built >= version) {
+            return; // already caught up
+        }
+        boolean hasPending = pendingTablets.containsKey(tabletId) || runningTasks.containsKey(tabletId);
+        if (recoveryScanDone && !hasPending) {
+            // No un-built vi work for this tablet -> just move the frontier forward, no dispatch.
+            tablet.setVectorIndexBuiltVersion(version);
+            return;
+        }
+        // A real build is in flight, or recovery hasn't validated yet -> let the build path
+        // carry the frontier to this version.
+        addPendingTablet(tabletId, version, fromCompaction);
     }
 
     // ========== Recovery scan after leader switch ==========
@@ -167,18 +268,45 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                     if (visibleVersion <= 1) {
                         continue;
                     }
+                    // Scan VISIBLE indexes only — never SHADOW. A SHADOW index belongs to an
+                    // in-flight ALTER: its existing data (<= V_snap) is force-inline-built by the
+                    // schema-change conversion, and its incrementally double-written data (> V_snap)
+                    // is enqueued by the conversion's final publish (onPublishComplete at
+                    // commitVersion). Scheduling a shadow tablet here would enqueue it at the
+                    // partition's visibleVersion — a version the shadow tablet has only staged via
+                    // publish_log_version, not applied — so the async build would fail to load that
+                    // metadata. Once the ALTER finishes and the index becomes visible, its tablets
+                    // are picked up here normally (builtVersion < visibleVersion).
                     for (MaterializedIndex index :
-                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             long builtVersion = 0;
                             if (tablet instanceof LakeTablet) {
                                 builtVersion = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
                             }
                             if (builtVersion < visibleVersion) {
-                                // Use merge(Math::max) so a concurrent onPublishComplete
-                                // enqueue with a newer target version is not overwritten
-                                // by recoveryScan's snapshot of visibleVersion.
-                                pendingTablets.merge(tablet.getId(), visibleVersion, Math::max);
+                                // Conservative recovery after leader switch: the in-memory
+                                // compaction-frontier was lost. merge with any concurrent
+                                // pending entry to avoid clobbering a more advanced state
+                                // already populated by an in-flight publish.
+                                final long v = visibleVersion;
+                                pendingTablets.merge(tablet.getId(),
+                                        Pending.conservativeImmediate(v),
+                                        (existing, scan) -> {
+                                            if (existing.latestVersion > scan.latestVersion) {
+                                                return existing;
+                                            }
+                                            if (existing.latestVersion < scan.latestVersion) {
+                                                return scan;
+                                            }
+                                            // tie on latestVersion: prefer the higher
+                                            // latestCompactionVersion so recovery's
+                                            // conservative-immediate wins over a load-only
+                                            // entry that raced ahead of the scan.
+                                            return existing.latestCompactionVersion
+                                                    >= scan.latestCompactionVersion
+                                                    ? existing : scan;
+                                        });
                                 count++;
                             }
                         }
@@ -208,7 +336,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             if (task.isAlreadyBuilding()) {
                 // CN is still building this tablet. Re-enqueue with cooldown
                 // to avoid tight retry loop. Prefer same CN.
-                pendingTablets.merge(tabletId, targetVersion, Math::max);
+                reEnqueuePreservingFrontier(tabletId, targetVersion);
                 preferredNodes.put(tabletId, task.getNode());
                 cooldownUntil.put(tabletId, System.currentTimeMillis() + DEDUP_COOLDOWN_MS);
                 LOG.info("Vector index build in progress on CN (dedup), "
@@ -228,9 +356,10 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                 }
 
                 if (newBuiltVersion < targetVersion) {
-                    // Not all rowsets built yet (batch_limit), re-enqueue for next round.
+                    // Not all rowsets built yet (batch_limit). Re-enqueue preserving
+                    // the frontier so next tick continues from the new builtVersion.
                     // Keep CN affinity so the next round reuses the same CN's cache warmup.
-                    pendingTablets.merge(tabletId, targetVersion, Math::max);
+                    reEnqueuePreservingFrontier(tabletId, targetVersion);
                     preferredNodes.put(tabletId, task.getNode());
                     LOG.info("Async vector index build partial: tablet={}, newBuiltVersion={}, "
                                     + "targetVersion={}, re-enqueued",
@@ -242,7 +371,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                 }
             } catch (Exception e) {
                 // Real failure: re-enqueue, let scheduler freely pick any CN.
-                pendingTablets.merge(tabletId, targetVersion, Math::max);
+                reEnqueuePreservingFrontier(tabletId, targetVersion);
                 LOG.warn("Vector index build failed, re-enqueued: tablet={}", tabletId, e);
             }
             it.remove();
@@ -257,11 +386,27 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             VectorIndexBuildTask task = entry.getValue();
             if (!task.isDone() && now - task.getStartTimeMs() > BUILD_TIMEOUT_MS) {
                 LOG.warn("Vector index build timeout: tablet={}", task.getTabletId());
-                pendingTablets.merge(task.getTabletId(), task.getVersion(), Math::max);
+                reEnqueuePreservingFrontier(task.getTabletId(), task.getVersion());
                 preferredNodes.put(task.getTabletId(), task.getNode());
                 it.remove();
             }
         }
+    }
+
+    /**
+     * Re-enqueue a tablet after a running task ended (failure / dedup / timeout / partial)
+     * without resetting the two-version frontier. If the pending entry was already
+     * cleared (e.g. tablet deleted mid-run), rebuild a minimal entry so the next tick
+     * can still re-evaluate.
+     */
+    private void reEnqueuePreservingFrontier(long tabletId, long targetVersion) {
+        pendingTablets.compute(tabletId, (k, old) -> {
+            if (old == null) {
+                return Pending.conservativeImmediate(targetVersion);
+            }
+            long newLatest = Math.max(old.latestVersion, targetVersion);
+            return new Pending(newLatest, old.latestCompactionVersion, old.compactionCaughtUpMs);
+        });
     }
 
     /**
@@ -279,16 +424,30 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
 
     // ========== Schedule from pending queue ==========
 
+    /**
+     * Two-phase scheduling. For each pending tablet:
+     * <ul>
+     *   <li>Phase 1: {@code built < latestCompactionVersion} → dispatch immediately with
+     *       {@code target = latestCompactionVersion}. Compaction products don't risk
+     *       being swept by an imminent compaction.</li>
+     *   <li>Phase 2: {@code built ≥ latestCompactionVersion} and
+     *       {@code built < latestVersion} → load-only tail. Wait
+     *       {@code lake_vi_build_load_tail_delay_ms}; within that window a new
+     *       compaction event will bump {@code latestCompactionVersion}, sending us
+     *       back to phase 1 and merging the tail into the combined build.</li>
+     * </ul>
+     */
     void scheduleFromPending() {
-        Iterator<Map.Entry<Long, Long>> it = pendingTablets.entrySet().iterator();
+        long now = System.currentTimeMillis();
+        Iterator<Map.Entry<Long, Pending>> it = pendingTablets.entrySet().iterator();
         while (it.hasNext()) {
             if (runningTasks.size() >= MAX_CONCURRENT_TASKS) {
                 break;
             }
 
-            Map.Entry<Long, Long> entry = it.next();
+            Map.Entry<Long, Pending> entry = it.next();
             long tabletId = entry.getKey();
-            long version = entry.getValue();
+            Pending p = entry.getValue();
 
             if (runningTasks.containsKey(tabletId)) {
                 continue;
@@ -297,23 +456,65 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             // Skip tablets in dedup cooldown (CN reported "already in progress")
             Long cooldown = cooldownUntil.get(tabletId);
             if (cooldown != null) {
-                if (System.currentTimeMillis() < cooldown) {
+                if (now < cooldown) {
                     continue;
                 }
                 cooldownUntil.remove(tabletId);
             }
 
-            // Tablet dropped or metadata gone, discard orphan entry
-            LakeTablet tablet = findLakeTablet(tabletId);
-            if (tablet == null) {
-                it.remove();
+            // Cheap fast-path: a tablet stamped as caught-up that's still inside the
+            // load-tail delay window won't dispatch this tick. Skip the metastore lookup.
+            if (p.compactionCaughtUpMs >= 0
+                    && now - p.compactionCaughtUpMs < Config.lake_vi_build_load_tail_delay_ms) {
                 continue;
             }
 
-            // Fast check: already built, skip
-            if (tablet.getVectorIndexBuiltVersion() >= version) {
+            LakeTablet tablet = findLakeTablet(tabletId);
+            if (tablet == null) {
+                // Tablet / partition / table deleted after enqueue → clean up.
                 it.remove();
+                preferredNodes.remove(tabletId);
+                cooldownUntil.remove(tabletId);
                 continue;
+            }
+
+            long built = tablet.getVectorIndexBuiltVersion();
+            if (built >= p.latestVersion) {
+                it.remove();
+                preferredNodes.remove(tabletId);
+                cooldownUntil.remove(tabletId);
+                continue;
+            }
+
+            long target;
+            if (built < p.latestCompactionVersion) {
+                target = p.latestCompactionVersion;
+            } else {
+                // Phase 2: load-only tail. On first observation of catch-up, stamp the
+                // timestamp and re-evaluate the delay window in this same tick (idleMs=0
+                // means we still defer, just without a 1-tick lag).
+                long caughtUp = p.compactionCaughtUpMs;
+                if (caughtUp < 0) {
+                    caughtUp = now;
+                    // Only stamp if the frontier hasn't moved underneath us. A concurrent
+                    // addPendingTablet that advanced latestCompactionVersion (and reset
+                    // caughtUp to -1) must not be overwritten — that race would bury a
+                    // phase-1 tablet under the load-tail delay for up to delay_ms.
+                    final long expectedLC = p.latestCompactionVersion;
+                    final long stamp = caughtUp;
+                    pendingTablets.compute(tabletId, (k, cur) -> {
+                        if (cur == null
+                                || cur.latestCompactionVersion != expectedLC
+                                || cur.compactionCaughtUpMs >= 0) {
+                            return cur;
+                        }
+                        return new Pending(cur.latestVersion, cur.latestCompactionVersion, stamp);
+                    });
+                }
+                if (now - caughtUp < Config.lake_vi_build_load_tail_delay_ms) {
+                    continue;
+                }
+                target = p.latestVersion;
             }
 
             // Prefer the CN that was previously building this tablet (it has
@@ -331,14 +532,16 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             }
             preferredNodes.remove(tabletId);
 
-            long builtVersion = (tablet != null) ? tablet.getVectorIndexBuiltVersion() : 0;
-            VectorIndexBuildTask task = new VectorIndexBuildTask(node, tabletId, version, builtVersion);
+            VectorIndexBuildTask task = new VectorIndexBuildTask(node, tabletId, target, built);
             try {
                 task.sendRequest();
                 runningTasks.put(tabletId, task);
-                it.remove();
-                LOG.info("Scheduled async vector index build: tablet={}, version={}, node={}",
-                        tabletId, version, node.getId());
+                // Do NOT remove from pending — the task-completion path will handle
+                // progress. If the build ends up partial or fails, the entry (with
+                // preserved frontier) is reused on the next tick.
+                LOG.info("Scheduled async vector index build: tablet={}, target={}, "
+                                + "latestVersion={}, latestCompactionVersion={}, node={}",
+                        tabletId, target, p.latestVersion, p.latestCompactionVersion, node.getId());
             } catch (Exception e) {
                 LOG.warn("Failed to send build vector index request: tablet={}", tabletId, e);
             }
@@ -407,7 +610,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
         return -1;
     }
 
-    static boolean hasAsyncVectorIndex(OlapTable table) {
+    public static boolean hasAsyncVectorIndex(OlapTable table) {
         if (table.getIndexes() == null) {
             return false;
         }
@@ -422,13 +625,69 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
         return false;
     }
 
+    /** Whether the table has any vector index (sync or async). */
+    public static boolean hasVectorIndex(OlapTable table) {
+        if (table.getIndexes() == null) {
+            return false;
+        }
+        for (Index index : table.getIndexes()) {
+            if (index.getIndexType() == IndexDef.IndexType.VECTOR) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * {@code [min, max]} vector-index built-version span across the partition's base-index LakeTablets,
+     * for observability (e.g. {@code information_schema.partitions_meta}). Returns {@code null} when the
+     * table has no vector index (callers then leave the columns unset).
+     * <ul>
+     *   <li>Async vector index: the actual per-tablet built-version span. {@code min < visibleVersion}
+     *       means the index is still catching up; {@code min < max} means progress is uneven across
+     *       tablets.</li>
+     *   <li>Sync vector index: built inline on write/compaction, so it is always current as of the
+     *       visible version; both bounds are reported as the partition's visible version.</li>
+     * </ul>
+     * Owns the built-version semantics so observability callers don't reach into LakeTablet directly.
+     */
+    public static long[] getPartitionBuiltVersionSpan(OlapTable table, PhysicalPartition partition) {
+        if (hasAsyncVectorIndex(table)) {
+            MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
+            if (baseIndex == null) {
+                return null;
+            }
+            long minBuilt = Long.MAX_VALUE;
+            long maxBuilt = 0;
+            for (Tablet tablet : baseIndex.getTablets()) {
+                if (tablet instanceof LakeTablet) {
+                    long bv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
+                    minBuilt = Math.min(minBuilt, bv);
+                    maxBuilt = Math.max(maxBuilt, bv);
+                }
+            }
+            return minBuilt == Long.MAX_VALUE ? null : new long[] {minBuilt, maxBuilt};
+        }
+        if (hasVectorIndex(table)) {
+            // Sync-mode vector index: built inline, always current as of the visible version.
+            long visible = partition.getVisibleVersion();
+            return new long[] {visible, visible};
+        }
+        return null;
+    }
+
     // ========== Test helpers ==========
 
+    // Package-private: only same-package tests inspect/mutate the internal maps directly.
     Map<Long, VectorIndexBuildTask> getRunningTasksForTest() {
         return runningTasks;
     }
 
-    ConcurrentHashMap<Long, Long> getPendingTabletsForTest() {
+    ConcurrentHashMap<Long, Pending> getPendingTabletsForTest() {
         return pendingTablets;
+    }
+
+    void setRecoveryScanDoneForTest(boolean done) {
+        this.recoveryScanDone = done;
     }
 }

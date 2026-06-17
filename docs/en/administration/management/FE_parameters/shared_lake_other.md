@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
+description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 ---
 
 # FE Configuration - Shared-data, Data Lake, and Others
@@ -272,6 +273,15 @@ This topic introduces the following types of FE configurations:
 - Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), Google Storage (with native SDK, supported from v3.5.1 onwards), and object storage systems that are compatible with the S3 protocol (such as AWS S3, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, `ADLS2`, and `GS`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `GS`, you must add the parameters prefixed by `gcp_gcs`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
+### `enable_admin_skip_committed_txn`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the `ADMIN SKIP COMMITTED TRANSACTION` statement. When `false`, the statement is rejected with an error. This is an operator-only escape hatch for unblocking a publish-stuck `COMMITTED` transaction on a shared-data (lake) table; the stuck transaction's data contribution is discarded, while the partition's visible version still advances via a "no-op publish" (a new metadata file is written that carries no data changes from this transaction). Only supports lake tables with `file_bundling=true`; load and lake-compaction transaction types only (alter / schema-change are not yet supported). Enable only when an operator needs to manually unblock a stuck transaction, and disable again afterwards to prevent accidental use.
+- Introduced in: -
+
 ### `enable_load_volume_from_conf`
 
 - Default: false
@@ -541,6 +551,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
+### `slow_publish_partition_log_threshold_ms`
+
+- Default: 3000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The threshold above which `PublishVersionDaemon` logs a per-phase breakdown (`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`) of a slow partition publish at the WARN level. Lower this value to capture sub-second jitter when investigating publish latency on a live cluster; raise it to silence routine slow-but-acceptable publishes. There is no behavior change at the default value.
+- Introduced in: v4.2
+
 ### `meta_sync_force_delete_shard_meta`
 
 - Default: false
@@ -686,6 +705,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
+
+### `lake_vi_build_load_tail_delay_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Delay before dispatching async vector index build for a tablet whose latest pending version is load-only (no pending compaction product). Within this window, if a new compaction arrives, its version is built together with the tail; compaction products themselves are always dispatched immediately. Only effective in shared-data mode for tables with an async vector index.
+- Introduced in: v4.2.0
 
 ### `lake_repair_metadata_fetch_max_version_batch_size`
 
@@ -1460,6 +1488,6 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
 

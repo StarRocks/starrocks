@@ -22,7 +22,7 @@
 #####################################################
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.1-rc3/starcache-ubuntu22_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc2/starcache-ubuntu22_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="8a0f018af4c9a0d61fb4853f2acd458f"
+STARCACHE_MD5SUM="78f2030bfd5772a700d731ff864279a2"

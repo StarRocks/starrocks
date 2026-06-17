@@ -1,0 +1,671 @@
+---
+displayed_sidebar: docs
+hide_table_of_contents: true
+description: "Alphabetical s"
+---
+
+# Metrics s
+
+## `schema_change_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used for Schema Change.
+
+## `segment_flush_queue_count`
+
+- Unit: Count
+- Description: Number of queued tasks in the segment flush thread pool.
+
+## `segment_metadata_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by segment metadata.
+
+## `segment_read`
+
+- Unit: Count
+- Description: Total number of segment reads.
+
+## `segment_replicate_queue_count`
+
+- Unit: Count
+- Description: Queued task count in the Segment Replicate thread pool.
+
+## `segment_zonemap_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by segment zonemap.
+
+## `short_key_index_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by the short key index.
+
+## `small_file_cache_count`
+
+- Unit: Count
+- Description: Number of small file caches.
+
+## `spill_disk_bytes_used`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
+
+## `spill_parked_with_uncovered_reason_total`
+
+- Unit: Count
+- Description: Number of times a pipeline driver was parked on a spill wait whose declared reason is not covered by any wakeup subscription. Always 0 in a healthy system; a non-zero value means a parked driver had nobody to wake it (a wakeup-table bug; the query may stall until it is cancelled) and is worth alerting on. Each occurrence also emits a rate-limited WARNING in the BE log.
+
+## `snmp`
+
+- Unit: -
+- Description: Metrics returned by `/proc/net/snmp`.
+
+## `starrocks_be_clone_task_copy_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: The total file size copied by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.
+
+## `starrocks_be_clone_task_copy_duration_ms`
+
+- Unit: ms
+- Type: Cumulative
+- Description: The total time for copy consumed by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.
+
+## `starrocks_be_exec_state_report_active_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks being executed in the thread pool that reports the execution status of the Fragment instance.
+
+## `starrocks_be_exec_state_report_queue_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks queued in the thread pool that reports the execution status of the Fragment instance, up to a maximum of 1000.
+
+## `starrocks_be_exec_state_report_running_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the thread pool that reports the execution status of the Fragment instance, with a minimum of 1 and a maximum of 2.
+
+## `starrocks_be_exec_state_report_threadpool_size`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the thread pool that reports the execution status of the Fragment instance, defaults to 2.
+
+## `starrocks_be_files_scan_num_bytes_read`
+
+- Unit: Bytes
+- Description: Total bytes read from external storage. Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_files_scan_num_files_read`
+
+- Unit: Count
+- Description: Number of files read from external storage (CSV, Parquet, ORC, JSON, Avro). Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_files_scan_num_raw_rows_read`
+
+- Unit: Count
+- Description: Total raw rows read from external storage before format validation and predicate filtering. Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_files_scan_num_rows_return`
+
+- Unit: Count
+- Description: Number of rows returned after predicate filtering. Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_files_scan_num_valid_rows_read`
+
+- Unit: Count
+- Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_flat_json_access_hit_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access hits observed during scan. Aggregated from the per-scan `flat_json_hits` and `merge_json_hits` statistics.
+
+## `starrocks_be_flat_json_access_miss_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access misses observed during scan. Aggregated from the per-scan `dynamic_json_hits` statistics (paths not materialized as flat columns).
+
+## `starrocks_be_flat_json_cast_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent casting flat JSON sub-column values during scan.
+
+## `starrocks_be_flat_json_compaction_schema_change_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of times `HyperJsonTransformer` is re-initialized for compaction input with a different flat JSON schema than the previous input. A high rate indicates schema churn across segments being compacted.
+
+## `starrocks_be_flat_json_compaction_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of compaction invocations that flatten JSON columns via `FlatJsonColumnCompactor`.
+
+## `starrocks_be_flat_json_flatten_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent flattening JSON values during scan.
+
+## `starrocks_be_flat_json_merge_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent merging flat JSON sub-columns back to full JSON during scan.
+
+## `starrocks_be_flat_json_paths_discovered_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths discovered by `JsonPathDeriver` during flat JSON segment writes.
+
+## `starrocks_be_flat_json_paths_extracted_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths materialized as sub-columns by `FlatJsonColumnWriter` (includes the synthetic null/remain columns).
+
+## `starrocks_be_flat_json_segment_write_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of segment writes that invoke flat JSON column extraction.
+
+## `starrocks_be_flat_json_write_rows_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
+
+## `starrocks_be_mem_pool_mem_limit_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Memory limit for each memory pool, measured in bytes.
+
+## `starrocks_be_mem_pool_mem_usage_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Currently used total memory by each memory pool, measured in bytes.
+
+## `starrocks_be_mem_pool_mem_usage_ratio`
+
+- Unit: -
+- Type: Instantaneous
+- Description: Ratio of the memory usage of the memory pool to the memory limit of the memory pool.
+
+## `starrocks_be_mem_pool_workgroup_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of resource groups assigned to each memory pool.
+
+## `starrocks_be_pipe_prepare_pool_queue_len`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Instantaneous value of pipeline prepare thread pool task queue length.
+
+## `starrocks_be_priority_exec_state_report_active_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks being executed in the thread pool that reports the final execution state of the Fragment instance.
+
+## `starrocks_be_priority_exec_state_report_queue_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks queued in the thread pool that reports the final execution status of the Fragment instance, up to a maximum of 2147483647.
+
+## `starrocks_be_priority_exec_state_report_running_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the thread pool that reports the final execution status of the Fragment instance, with a minimum of 1 and a maximum of 2.
+
+## `starrocks_be_priority_exec_state_report_threadpool_size`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the thread pool that reports the final execution status of the Fragment instance, defaults to 2.
+
+## `starrocks_be_resource_group_cpu_limit_ratio`
+
+- Unit: -
+- Type: Instantaneous
+- Description: Instantaneous value of resource group cpu quota ratio.
+
+## `starrocks_be_resource_group_cpu_use_ratio`
+
+- Unit: -
+- Type: Average
+- Description: The ratio of CPU time used by the resource group to the CPU time of all resource groups.
+
+## `starrocks_be_resource_group_mem_inuse_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Instantaneous value of resource group memory usage.
+
+## `starrocks_be_resource_group_mem_limit_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Instantaneous value of resource group memory quota.
+
+## `starrocks_be_segment_file_not_found_total`
+
+- Unit: Count
+- Description: Total number of times a segment file was not found (file missing) during segment open. A continuously increasing value may indicate data loss or storage inconsistency.
+
+## `starrocks_be_staros_shard_info_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Total number of actual starmgr RPCs (`g_starlet->get_shard_info()`) that the BE's StarOSWorker had to issue because the requested shard info was not in the local cache (i.e. the FE had not pushed the shard to this BE before a query/compaction/lake operation referenced it). Only counted when the starlet readiness check passes and the RPC is actually dispatched; starlet-not-ready timeouts are not included. Should normally be near zero. A sustained or rising rate is a strong signal that FE-side task or node selection is scheduling work on a BE that does not yet have the shard, or that shard push propagation from FE is lagging. Recommended alert: high per-BE rate over a 5-minute window.
+
+## `starrocks_be_staros_shard_info_fallback_failed_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Subset of `starrocks_be_staros_shard_info_fallback_total` where the starmgr RPC returned a non-OK status. Use the ratio `failed_total / fallback_total` to alert on transient starmgr errors separately from routine successful fallbacks.
+
+## `starrocks_be_staros_shard_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
+
+## `starrocks_fe_clone_task_copy_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: The total file size copied by Clone tasks in the cluster, including both INTER_NODE and INTRA_NODE types.
+
+## `starrocks_fe_clone_task_copy_duration_ms`
+
+- Unit: ms
+- Type: Cumulative
+- Description: The total time for copy consumed by Clone tasks in the cluster, including both INTER_NODE and INTRA_NODE types.
+
+## `starrocks_fe_clone_task_success`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of successfully executed Clone tasks in the cluster.
+
+## `starrocks_fe_clone_task_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The total number of Clone tasks in the cluster.
+
+## `starrocks_fe_last_finished_job_timestamp`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Indicates the end time of the last query or loading under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse.
+
+## `starrocks_fe_memory_usage`
+
+- Unit: Bytes or Count
+- Type: Instantaneous
+- Description: Indicates the memory statistics for various modules under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse.
+
+## `starrocks_fe_meta_log_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of Edit Logs without a checkpoint. A value within `100000` is considered reasonable..
+
+## `starrocks_fe_publish_version_daemon_loop_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of `publish-version-daemon` loop runs on this FE node.
+
+The following metrics are `summary`-type metrics that provide latency distributions for different phases of a transaction. These metrics are reported exclusively by the Leader FE node.
+
+Each metric includes the following outputs:
+- **Quantiles**: Latency values at different percentile boundaries. These are exposed via the `quantile` label, which can have values of `0.75`, `0.95`, `0.98`, `0.99`, and `0.999`.
+- **`<metric_name>_sum`**: The total cumulative time spent in this phase, for example, `starrocks_fe_txn_total_latency_ms_sum`.
+- **`<metric_name>_count`**: The total number of transactions recorded for this phase, for example, `starrocks_fe_txn_total_latency_ms_count`.
+
+All transaction metrics share the following labels:
+- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups).
+- `is_leader`: Indicates whether the reporting FE node is the Leader. Only the Leader FE (`is_leader="true"`) reports actual metric values. Followers will have `is_leader="false"` and report no data.
+
+## `starrocks_fe_query_resource_group`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Indicates the total number of queries executed under the specific resource group.
+
+## `starrocks_fe_query_resource_group`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of queries for each resource group.
+
+## `starrocks_fe_query_resource_group_err`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Indicates the number of failed queries under the specific resource group.
+
+## `starrocks_fe_query_resource_group_err`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of incorrect queries for each resource group.
+
+## `starrocks_fe_query_resource_group_latency`
+
+- Unit: ms
+- Type: Cumulative
+- Description: Indicates the latency statistics for queries under the specific resource group.
+
+## `starrocks_fe_query_resource_group_latency`
+
+- Unit: Seconds
+- Type: Average
+- Description: the query latency percentile for each resource group.
+
+## `starrocks_fe_routine_load_error_rows`
+
+- Unit: Count
+- Description: The total number of error rows encountered during data loading by all Routine Load jobs.
+
+## `starrocks_fe_routine_load_jobs`
+
+- Unit: Count
+- Description: The total number of Routine Load jobs in different states. For example:
+
+  ```plaintext
+  starrocks_fe_routine_load_jobs{state="NEED_SCHEDULE"} 0
+  starrocks_fe_routine_load_jobs{state="RUNNING"} 1
+  starrocks_fe_routine_load_jobs{state="PAUSED"} 0
+  starrocks_fe_routine_load_jobs{state="STOPPED"} 0
+  starrocks_fe_routine_load_jobs{state="CANCELLED"} 1
+  starrocks_fe_routine_load_jobs{state="UNSTABLE"} 0
+  ```
+
+## `starrocks_fe_routine_load_max_lag_of_partition`
+
+- Unit: -
+- Description: The maximum Kafka partition offset lag for each Routine Load job. It is collected only when the FE configuration `enable_routine_load_lag_metrics` is set to `true` and the offset lag is greater than or equal to the FE configuration `min_routine_load_lag_for_metrics`. By default, `enable_routine_load_lag_metrics` is `false`, and `min_routine_load_lag_for_metrics` is `10000`.
+
+## `starrocks_fe_routine_load_max_lag_time_of_partition`
+
+- Unit: Seconds
+- Description: The maximum Kafka partition offset timestamp lag for each Routine Load job. It is collected only when the FE configuration `enable_routine_load_lag_time_metrics` is set to `true`. By default, `enable_routine_load_lag_time_metrics` is `false`.
+
+## `starrocks_fe_routine_load_paused`
+
+- Unit: Count
+- Description: The total number of times Routine Load jobs are paused.
+
+## `starrocks_fe_routine_load_receive_bytes`
+
+- Unit: Byte
+- Description: The total amount of data loaded by all Routine Load jobs.
+
+## `starrocks_fe_routine_load_rows`
+
+- Unit: Count
+- Description: The total number of rows loaded by all Routine Load jobs.
+
+## `starrocks_fe_safe_mode`
+
+- Unit: -
+- Type: Instantaneous
+- Description: Indicates whether Safe Mode is enabled. Valid values: `0` (disabled) and `1` (enabled). When Safe Mode is enabled, the cluster no longer accepts any loading requests.
+
+## `starrocks_fe_scheduled_pending_tablet_num`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of Clone tasks in Pending state FE scheduled, including both BALANCE and REPAIR types.
+
+## `starrocks_fe_scheduled_running_tablet_num`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of Clone tasks in Running state FE scheduled, including both BALANCE and REPAIR types.
+
+## `starrocks_fe_slow_lock_held_time_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: Histogram tracking the lock held time (in milliseconds) when slow locks are detected. This metric is updated when lock wait time exceeds the `slow_lock_threshold_ms` configuration parameter. It tracks the maximum lock held time among all lock owners when a slow lock event is detected. Each metric includes quantile values (0.75, 0.95, 0.98, 0.99, 0.999), `_sum`, and `_count` outputs. Note: This metric may not accurately reflect the exact lock held time under high contention, because the metric is updated once the wait time exceeds the threshold, but the held time may continue to increase until the owner completes its operation and releases the lock. However, this metric can still be updated even when deadlock occurs.
+
+## `starrocks_fe_slow_lock_wait_time_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: Histogram tracking the lock wait time (in milliseconds) when slow locks are detected. This metric is updated when lock wait time exceeds the `slow_lock_threshold_ms` configuration parameter. It accurately tracks how long threads wait to acquire locks during lock contention scenarios. Each metric includes quantile values (0.75, 0.95, 0.98, 0.99, 0.999), `_sum`, and `_count` outputs. This metric provides precise wait time measurements. Note: This metric cannot be updated when deadlock occurs, hence it cannot be used to detect deadlock situations.
+
+## `starrocks_fe_sql_block_hit_count`
+
+- Unit: Count
+- Description: The number of times blacklisted SQL has been intercepted.
+
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets).
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition (P2-a) path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve.
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total sampler invocations driven by Sample-Based Tablet Pre-Split. Incremented once per eligible invocation when the production sampler pipeline starts a sample.
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission), `pre_create_failed` (multi-partition path: `LocalMetastore.addPartitions` threw while pre-creating a target partition — that one partition is dropped from the combined submit and falls back to BE runtime auto-create; sibling partitions in the same load continue).
+- Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Meta-tier → data-tier fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=data_tier}`.
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `tier` — `meta_tier` (boundaries computed from Parquet/ORC row-group statistics; no row data read) or `data_tier` (boundaries computed from actual row samples collected via a FILES sub-query — covers both direct data-tier invocations and meta-tier → data-tier fallbacks).
+- Description: Total Sample-Based Tablet Pre-Split invocations by which sampler tier produced the boundaries.
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- Unit: Count
+- Type: Histogram
+- Description: Number of boundary tuples produced by the planner per invocation. Equals `effectiveTabletCount - 1` (a K-tablet split needs K-1 cut points).
+
+## `starrocks_fe_tablet_pre_split_partitions_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Multi-partition (P2-a) counter. Total predicted target partitions counted by the Sample-Based Tablet Pre-Split coordinator — one increment per `PartitionSamples` entry that survived the grouper. Combined with `tablet_pre_split_partitions_capped` and the `tablet_pre_split_pre_create{result=...}` family this tells operators how many partitions each multi-partition invocation actually acts on. Stays at zero for the single-partition path.
+
+## `starrocks_fe_tablet_pre_split_partitions_capped`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Multi-partition (P2-a) counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the partitions with the highest sample counts and drops the lowest-count tail; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
+
+## `starrocks_fe_tablet_pre_split_pre_create`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` — `succeeded` (`LocalMetastore.addPartitions` returned normally — the partition was created or silently deduped), `failed` (`addPartitions` threw, e.g. concurrent ALTER or journal failure; the affected partition falls back to BE runtime auto-create and is also recorded under `tablet_pre_split_sampler_failed{reason=pre_create_failed}`), `already_exists` (the partition was found in the catalog at pre-create time — concurrent loader race; the coordinator reuses the existing partition).
+- Description: Multi-partition (P2-a) counter. Number of partition pre-create attempts the coordinator issued via `LocalMetastore.addPartitions`, broken down by outcome. Total attempts = sum of all three labels. Stays at zero for the single-partition path.
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time spent in the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan + build reshard job). Capped by `tablet_pre_split_pre_submit_timeout_seconds`.
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on all production load kinds — INSERT-from-FILES and INSERT-from-table (both via `InsertPreSplitHook`, called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn) and Broker Load (via `BrokerLoadPreSplitHook`, called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`), all sync-awaiting through the shared `PreSplitFlow` — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on every production load kind on timeout — INSERT-from-FILES, INSERT-from-table, and Broker Load (all sync-await through the shared `PreSplitFlow`) — as well as the `runPreSplit` synchronous-await wrapper. The load then proceeds without abort against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); `tablet_pre_split_load_abort` is NOT incremented because the load itself is not aborted.
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Production load paths proceed without abort against the currently visible layout on post-submit timeout rather than abort, so this counter stays at zero in production today; it only fires when a caller uses the strict `runPreSplit` wrapper (tests, or a future caller that opts into abort-on-timeout).
+
+## `starrocks_fe_tablet_max_compaction_score`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Indicates the highest Compaction Score on each BE node.
+
+## `starrocks_fe_tablet_num`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Indicates the number of tablets on each BE node.
+
+## `starrocks_fe_txn_publish_ack_latency_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: The final acknowledgment latency, from `ready-to-finish` time to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes final acknowledgment steps after the transaction is ready to finish.
+
+## `starrocks_fe_txn_publish_can_finish_latency_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: The latency from `publish` task completion to the moment `canTxnFinish()` first returns true, measured from `publish version finish` time to `ready-to-finish` time.
+
+## `starrocks_fe_txn_publish_execute_latency_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: The active execution time of the `publish` task, from when the task is picked up to when it finishes. This metric represents the actual time being spent to make the transaction's changes visible.
+
+## `starrocks_fe_txn_publish_latency_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, `can_finish`, and `ack` sub-phases.
+
+## `starrocks_fe_txn_publish_schedule_latency_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: The time a transaction spends waiting to be published after it has been committed, measured from `commit` time to when the publish task is picked up. This metric reflects scheduling delays or queueing time in the `publish` pipeline.
+
+## `starrocks_fe_txn_total_latency_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: The total latency for a transaction to complete, measured from the `prepare` time to the `finish` time. This metric represents the full end-to-end duration of a transaction.
+
+## `starrocks_fe_txn_write_latency_ms`
+
+- Unit: ms
+- Type: Summary
+- Description: The latency of the `write` phase of a transaction, from `prepare` time to `commit` time. This metric isolates the performance of the data writing and preparation stage before the transaction is ready to be published.
+
+## `starrocks_fe_unfinished_backup_job`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Indicates the number of running BACKUP tasks under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse. For a shared-data cluster, this value is always `0`.
+
+## `starrocks_fe_unfinished_query`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Indicates the number of queries currently running under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse.
+
+## `starrocks_fe_unfinished_restore_job`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Indicates the number of running RESTORE tasks under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse. For a shared-data cluster, this value is always `0`.
+
+## `storage_page_cache_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by storage page cache.
+
+## `spm_baseline_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Current number of global SQL Plan Management (SPM) baselines on the FE leader.
+
+## `spm_capture_candidate_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`captured`, `skipped_duplicate`, `skipped_table_count`, `skipped_table_missing`, `skipped_db_missing`, `skipped_pattern_mismatch`, or `failed`)
+- Description: Total number of SPM auto-capture candidate processing results. Each series records how query-history candidates are classified during auto-capture.
+
+## `spm_rewrite_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`hit`, `miss`, or `error`)
+- Description: Total number of SPM rewrite attempts by result. `hit` means a baseline is matched and applied successfully. `miss` means rewrite is attempted but no enabled baseline matches. `error` means rewrite falls back because an exception occurs during the SPM rewrite flow.
+
+## `stream_load`
+
+- Unit: -
+- Description: Total loaded rows and received bytes.
+
+## `stream_load_pipe_count`
+
+- Unit: Count
+- Description: Number of currently running Stream Load tasks.
+
+## `streaming_load_bytes`
+
+- Unit: Bytes
+- Description: Total bytes loaded by Stream Load.
+
+## `streaming_load_current_processing`
+
+- Unit: Count
+- Description: Number of currently running Stream Load tasks.
+
+## `streaming_load_duration_ms`
+
+- Unit: ms
+- Description: Total time spent on Stream Load.
+
+## `streaming_load_requests_total`
+
+- Unit: Count
+- Description: Total number of Stream Load requests.
+
+##### SPLIT
+

@@ -94,6 +94,7 @@ enum THdfsFileFormat {
   PARQUET = 5,
   ORC = 6,
   SEQUENCE_FILE = 7,
+  LANCE = 8,
 
   UNKNOWN = 100
 }
@@ -212,7 +213,9 @@ enum TSchemaTableType {
 
     SCH_FE_THREADS,
 
-    SCH_BE_TABLET_WRITE_LOG
+    SCH_BE_TABLET_WRITE_LOG,
+
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS
 }
 
 enum THdfsCompression {
@@ -230,6 +233,12 @@ enum TIndexType {
   GIN,
   NGRAMBF,
   VECTOR,
+  // Plain (non-ngram) bloom filter. Used as a fast-path thrift tag for the
+  // lake ADD INDEX IDG flow to carry plain-BF build requests; no TabletIndex
+  // object is created on the FE side for plain BF (source of truth is the
+  // column-level is_bf_column flag driven by the `bloom_filter_columns`
+  // table property).
+  BLOOM_FILTER,
 }
 
 // Not define UNKNOWN type for better compatibility with
@@ -494,6 +503,9 @@ struct THdfsTable {
 
     // timezone
     11: optional string time_zone
+
+    // resolved Avro reader schema json from avro.schema.literal/url
+    12: optional string avro_schema_json
 }
 
 struct TFileTable {
@@ -699,6 +711,10 @@ struct TJDBCTable {
     8: optional string jdbc_passwd
 }
 
+struct TLanceTable {
+  1: optional string lance_dataset_uri
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -738,6 +754,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Lance Table
+  37: optional TLanceTable lanceTable
 }
 
 struct TDescriptorTable {

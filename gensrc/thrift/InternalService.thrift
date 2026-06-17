@@ -238,6 +238,7 @@ struct TQueryOptions {
 
   60: optional i32 query_delivery_timeout;
 
+  // Deprecated: BE query debug trace support was removed. Keep field 61 for wire compatibility.
   61: optional bool enable_query_debug_trace;
 
   62: optional Types.TCompressionType load_transmission_compression_type;
@@ -390,6 +391,14 @@ struct TQueryOptions {
   215: optional string http_request_host_allowlist_regexp = "";
   216: optional bool http_request_allow_private_in_allowlist = false;
   217: optional bool enable_cache_udaf = false;
+
+  // Pre-built JSON anchor of the streaming source for a routine-load
+  // task fragment (e.g. {"format":"kafka","topic":"t","partitions":[0,1],
+  // "begin_offsets":[10,20]}). When set, BE writes it to the
+  // _statistics_.rejected_records.source_info column instead of the
+  // hardcoded "stream-load-pipe" filename. Optional and unused for
+  // non-routine-load query paths.
+  218: optional string routine_load_source_info;
 }
 
 // A scan range plus the parameters needed to execute that scan.

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Looks up a value from a primary key table at query planning time and returns the result for use by the optimizer."
 ---
 
 # lookup_string

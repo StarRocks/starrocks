@@ -44,6 +44,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "base/debug/debug_action.h"
@@ -56,6 +57,7 @@
 #include "runtime/arena_allocator.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_context_lifetime.h"
 
 namespace starrocks {
 
@@ -76,10 +78,14 @@ class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
+class LoadPathStateHelper;
 class RuntimeStateHelper;
+class RejectedRecordWriter;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
+class QueryRuntimeState;
+class FragmentRuntimeState;
 class FragmentContext;
 } // namespace pipeline
 
@@ -133,10 +139,29 @@ public:
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
-    void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
+    ObjectPool* global_obj_pool() const { return _query_obj_pool == nullptr ? _obj_pool.get() : _query_obj_pool; }
+    void set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state,
+                       ObjectPool* query_obj_pool);
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    const pipeline::QueryContext* query_ctx() const { return _query_ctx; }
+    // For contexts without a QueryContext (ExecRuntime-level tests); production code attaches both via
+    // set_query_ctx so that query_runtime_state() is always set together with query_ctx().
+    void set_query_runtime_state(pipeline::QueryRuntimeState* query_runtime_state) {
+        _query_runtime_state = query_runtime_state;
+    }
+    pipeline::QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
+    const pipeline::QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
+    void set_fragment_runtime_state(pipeline::FragmentRuntimeState* fragment_runtime_state) {
+        _fragment_runtime_state = fragment_runtime_state;
+    }
+    pipeline::FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
+    const pipeline::FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
+    void set_query_ctx_lifetime(QueryContextLifetimeWeakPtr lifetime) { _query_ctx_lifetime = std::move(lifetime); }
+    QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
+    const pipeline::FragmentContext* fragment_ctx() const { return _fragment_ctx; }
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx,
+                          pipeline::FragmentRuntimeState* fragment_runtime_state);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
@@ -261,13 +286,30 @@ public:
 
     const std::string& db() const { return _db; }
 
+    // Target table name of the current load. Populated by OlapTableSink on
+    // init so RejectedRecordWriter can stamp rows with the correct
+    // (target_database, target_table) pair. Scanner-phase rejections
+    // inherit whatever the sink set earlier in the fragment's init
+    // sequence; if no sink ran first (rare) this stays empty and the
+    // writer records an empty string, which the FE side treats the
+    // same as NULL.
+    void set_table_name(const std::string& table_name) { _table_name = table_name; }
+
+    const std::string& table_name() const { return _table_name; }
+
     void set_load_label(const std::string& label) { _load_label = label; }
 
     const std::string& load_label() const { return _load_label; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
 
-    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
+    // Lazily-constructed per-fragment writer that persists rejected rows as
+    // JSON Lines for the sync daemon to ship to
+    // `_statistics_.rejected_records`. Returns nullptr when the writer has
+    // not been created; callers should go through
+    // `LoadPathStateHelper::rejected_record_writer(state)` which handles
+    // lazy construction under lock.
+    RejectedRecordWriter* rejected_record_writer_or_null() const { return _rejected_record_writer.get(); }
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
@@ -275,6 +317,13 @@ public:
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
+
+    // Single accounting point for rejected-row counting, bumped from
+    // inside `RejectedRecordWriter::append_serialized`. All entry paths
+    // that eventually reach the writer (legacy helper, ORC capture,
+    // Parquet ArrowConvertContext) share this counter so the per-load
+    // cap in `log_rejected_record_num` fires symmetrically.
+    void note_rejected_record() { _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed); }
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -603,6 +652,7 @@ public:
     void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
+    friend class LoadPathStateHelper;
     friend class RuntimeStateHelper;
 
     // Set per-query state.
@@ -622,9 +672,16 @@ private:
 
     std::mutex _error_log_lock;
 
+    // Guards lazy construction of `_rejected_record_writer`. Used to be
+    // named after the legacy tab-delimited file it guarded; the file is
+    // gone but the mutex keeps the historical name so call sites remain
+    // stable across the deletion.
     std::mutex _rejected_record_lock;
-    std::string _rejected_record_file_path;
-    std::unique_ptr<std::ofstream> _rejected_record_file;
+    // Writer. Lazily constructed by LoadPathStateHelper on first
+    // append so enabled-but-never-triggered loads pay no allocation cost.
+    // Held via shared_ptr so this header does not need RejectedRecordWriter's
+    // complete type for destruction.
+    std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
     std::string _user;
@@ -639,6 +696,7 @@ private:
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
     const QueryExecutionServices* _query_execution_services = nullptr;
+    QueryContextLifetimeWeakPtr _query_ctx_lifetime;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
@@ -660,11 +718,12 @@ private:
     std::unique_ptr<MemPoolResource> _mem_resource;
 
     std::shared_ptr<ObjectPool> _obj_pool;
+    ObjectPool* _query_obj_pool = nullptr;
 
     // if true, execution should stop with a CANCELLED status
     std::atomic<bool> _is_cancelled{false};
 
-    int _per_fragment_instance_idx;
+    int _per_fragment_instance_idx = 0;
     int _num_per_fragment_instances = 0;
 
     // used as send id
@@ -720,6 +779,7 @@ private:
     int64_t _txn_id = 0;
     std::string _load_label;
     std::string _db;
+    std::string _table_name;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
@@ -736,6 +796,8 @@ private:
     FragmentDictState* _fragment_dict_state = nullptr;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+    pipeline::QueryRuntimeState* _query_runtime_state = nullptr;
+    pipeline::FragmentRuntimeState* _fragment_runtime_state = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;

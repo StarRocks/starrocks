@@ -28,6 +28,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -138,20 +141,38 @@ public class ProcProfileCollector extends FrontendDaemon {
 
     private void compressFile(String fileName) throws IOException {
         File sourceFile = new File(profileLogDir + "/" + fileName);
-        try (FileOutputStream fileOutputStream = new FileOutputStream(profileLogDir + "/" + fileName + ".tar.gz");
-                GzipCompressorOutputStream gzipOutputStream = new GzipCompressorOutputStream(fileOutputStream);
-                TarArchiveOutputStream tarArchive = new TarArchiveOutputStream(gzipOutputStream);
-                FileInputStream fileInputStream = new FileInputStream(sourceFile)) {
-            TarArchiveEntry tarEntry = new TarArchiveEntry(sourceFile, sourceFile.getName());
-            tarArchive.putArchiveEntry(tarEntry);
+        File targetFile = new File(profileLogDir + "/" + fileName + ".tar.gz");
+        // Write to a temporary file first and atomically rename it to the final name on success,
+        // so consumers (e.g. /proc_profile listing/download endpoints) never observe a
+        // partially-written .tar.gz file.
+        File tmpFile = new File(profileLogDir + "/" + fileName + ".tar.gz.tmp");
+        try {
+            try (FileOutputStream fileOutputStream = new FileOutputStream(tmpFile);
+                    GzipCompressorOutputStream gzipOutputStream = new GzipCompressorOutputStream(fileOutputStream);
+                    TarArchiveOutputStream tarArchive = new TarArchiveOutputStream(gzipOutputStream);
+                    FileInputStream fileInputStream = new FileInputStream(sourceFile)) {
+                TarArchiveEntry tarEntry = new TarArchiveEntry(sourceFile, sourceFile.getName());
+                tarArchive.putArchiveEntry(tarEntry);
 
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = fileInputStream.read(buffer)) > 0) {
-                tarArchive.write(buffer, 0, len);
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = fileInputStream.read(buffer)) > 0) {
+                    tarArchive.write(buffer, 0, len);
+                }
+                tarArchive.closeArchiveEntry();
+                tarArchive.finish();
             }
-            tarArchive.closeArchiveEntry();
-            tarArchive.finish();
+
+            try {
+                Files.move(tmpFile.toPath(), targetFile.toPath(),
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmpFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            if (tmpFile.exists()) {
+                tmpFile.delete();
+            }
         }
 
         sourceFile.delete();

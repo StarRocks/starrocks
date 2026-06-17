@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the year part in a date and returns a value that ranges from 1000 to 9999."
 ---
 
 # year

@@ -20,9 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 set(UTIL_FILES
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
-  bloom_filter.cpp
-  block_split_bloom_filter.cpp
-  download_util.cpp
   json_util.cpp
   json_flattener.cpp
 # TODO: not supported on RHEL 5
@@ -31,7 +28,6 @@ set(UTIL_FILES
   time_guard.cpp
   system_metrics.cpp
 # coding_util.cpp
-  debug/query_trace_impl.cpp
   memory_lock.cpp
   byte_buffer.cpp
   hdfs_util.cpp
@@ -43,3 +39,5 @@ set(UTIL_FILES
 ADD_BE_LIB(Util
     ${UTIL_FILES}
 )
+
+target_link_libraries(Util PUBLIC RuntimeEnv)

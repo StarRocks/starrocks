@@ -16,13 +16,13 @@
 
 #include <cstdint>
 
+#include "column/global_dict/types.h"
 #include "column/schema.h"
 #include "common/object_pool.h"
-#include "runtime/global_dict/types.h"
-#include "storage/column_predicate.h"
+#include "storage/column_predicate_factory.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/olap_common.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/column_reader.h"
 

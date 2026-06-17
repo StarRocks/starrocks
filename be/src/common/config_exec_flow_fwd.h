@@ -95,6 +95,10 @@ CONF_mBool(pipeline_print_profile, "false");
 
 CONF_mBool(pipeline_timeout_diagnostic, "false");
 
+// BE-wide kill switch for the pipeline event scheduler. When false, the event scheduler is
+// disabled even if the session variable `enable_pipeline_event_scheduler` is true.
+CONF_mBool(enable_pipeline_event_scheduler, "true");
+
 // The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
@@ -192,6 +196,20 @@ CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+
+// Software prefetch distance (in rows) for the agg hash-map / hash-set
+// probe loop.  Default 16 is empirical for L3-resident tables; raise on
+// DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
+// per chunk; changes take effect on the next chunk.
+CONF_mInt32(agg_hash_map_prefetch_dist, "16");
+
+// Software prefetch is gated on the bucket array spilling L2: it is only
+// enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
+// Below that the table is L2-resident and prefetch is a net loss (measured by
+// agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
+// contended many-driver-per-core deployments where the effective L2 share per
+// table is smaller than the nominal per-core size.
+CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");

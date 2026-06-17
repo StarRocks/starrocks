@@ -1,9 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 从 v3.0 起支持 JDBC catalog，无导入直接查询 JDBC 数据源及执行转换导入。"
 toc_max_heading_level: 4
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
 
 # JDBC catalog
 
@@ -216,6 +218,8 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
 
 ## 使用原生 SQL 查询 JDBC 数据
 

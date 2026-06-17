@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -160,8 +161,46 @@ public class ColocateTableIndex implements Writable {
 
     }
 
+    @VisibleForTesting
     public ColocateRangeMgr getColocateRangeMgr() {
         return colocateRangeMgr;
+    }
+
+    /**
+     * Returns the colocate ranges of the given range-colocate group.
+     *
+     * <p>Delegates to {@link ColocateRangeMgr} under this index's read lock and returns an
+     * immutable snapshot, so callers cannot mutate the range list or read it without holding
+     * the lock. {@link ColocateRangeMgr} itself is not synchronized; all access goes through
+     * this index, which owns the lock.
+     *
+     * @return an immutable copy of the colocate ranges (empty if the group is unknown)
+     */
+    public List<ColocateRange> getColocateRanges(long colocateGroupId) {
+        readLock();
+        try {
+            return List.copyOf(colocateRangeMgr.getColocateRanges(colocateGroupId));
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Returns all PACK shard group ids tracked by the range-colocate metadata.
+     *
+     * <p>PACK shard groups are created by FE but not attached to any {@code PhysicalPartition},
+     * so {@code StarMgrMetaSyncer} must union these into its FE-known shard group set to avoid
+     * reaping live PACK shard groups as orphans.
+     *
+     * @return a new set of PACK shard group ids (empty if none); never null
+     */
+    public Set<Long> getAllPackShardGroupIds() {
+        readLock();
+        try {
+            return colocateRangeMgr.getAllPackShardGroupIds();
+        } finally {
+            readUnlock();
+        }
     }
 
     public static String getFullGroupName(long dbId, String colocateGroup) {
@@ -290,7 +329,7 @@ public class ColocateTableIndex implements Writable {
                     if (!(tbl instanceof ExternalOlapTable)) {
                         // Colocate table should keep the same bucket number across the partitions
                         if (hashDistInfo.getBucketNum() == 0) {
-                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends(tbl.isLightWeightTabletCreation());
                             hashDistInfo.setBucketNum(bucketNum);
                         }
                     }
@@ -563,6 +602,20 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    /**
+     * Cheap empty-check counterpart to {@link #getUnstableGroupIds()} that avoids the
+     * snapshot allocation. Intended for hot-path callers (e.g. {@code ColocateChecker})
+     * that want to fast-return when no unstable groups exist.
+     */
+    public boolean hasUnstableGroups() {
+        readLock();
+        try {
+            return !unstableGroups.isEmpty();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public GroupId getGroup(long tableId) {
         readLock();
         try {
@@ -778,38 +831,74 @@ public class ColocateTableIndex implements Writable {
     }
 
     /**
-     * Mark every {@link GroupId} that shares the given colocate {@code grpId} as unstable.
-     * Range colocate groups are keyed in {@link ColocateRangeMgr} by {@code grpId} alone, so a
-     * range-mgr mutation in one database affects every peer database that joined the same group;
-     * marking only the caller's own GroupId would leave peer DBs claiming "stable" while their
-     * tablets are mid-migration, allowing colocate joins to run against an unaligned layout.
+     * Mark every {@link GroupId} that shares the given {@code colocateGroupId} as unstable.
+     * Range colocate groups are keyed in {@link ColocateRangeMgr} by {@code colocateGroupId}
+     * alone, so a range-mgr mutation in one database affects every peer database that joined
+     * the same group; marking only the caller's own GroupId would leave peer DBs claiming
+     * "stable" while their tablets are mid-migration, allowing colocate joins to run against
+     * an unaligned layout.
      */
-    public void markAllGroupsWithSameGrpIdUnstable(long grpId, boolean needEditLog) {
+    public void markAllGroupsWithSameColocateGroupIdUnstable(long colocateGroupId, boolean needEditLog) {
         writeLock();
         try {
             // markGroupUnstable / isGroupUnstable re-acquire the lock; ReentrantReadWriteLock
             // is reentrant for the same thread.
-            group2Schema.keySet().stream()
-                    .filter(g -> Objects.equals(g.grpId, grpId))
-                    .collect(Collectors.toList())
-                    .forEach(peer -> markGroupUnstable(peer, needEditLog));
+            peersOfColocateGroup(colocateGroupId).forEach(peer -> markGroupUnstable(peer, needEditLog));
         } finally {
             writeUnlock();
         }
     }
 
     /**
-     * Returns true iff any {@link GroupId} sharing the given colocate {@code grpId} is unstable.
+     * Symmetric counterpart to {@link #markAllGroupsWithSameColocateGroupIdUnstable}. Marks every
+     * {@link GroupId} that shares the given {@code colocateGroupId} as stable. Used by the
+     * colocate checker once every peer GroupId's tablet layout matches
+     * {@link ColocateRangeMgr#getColocateRanges} — marking only one peer GroupId would leave
+     * the others claiming unstable while the cluster is actually aligned.
      */
-    public boolean isAnyGroupWithSameGrpIdUnstable(long grpId) {
+    public void markAllGroupsWithSameColocateGroupIdStable(long colocateGroupId, boolean needEditLog) {
+        writeLock();
+        try {
+            peersOfColocateGroup(colocateGroupId).forEach(peer -> markGroupStable(peer, needEditLog));
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Returns every {@link GroupId} that shares the given {@code colocateGroupId}, as a snapshot
+     * under the read lock. Useful for the colocate checker which needs to iterate cross-DB peers
+     * without holding the catalog lock for the duration of the cycle.
+     */
+    public List<GroupId> getAllGroupIdsWithSameColocateGroupId(long colocateGroupId) {
         readLock();
         try {
-            return group2Schema.keySet().stream()
-                    .filter(g -> Objects.equals(g.grpId, grpId))
-                    .anyMatch(this::isGroupUnstable);
+            return peersOfColocateGroup(colocateGroupId);
         } finally {
             readUnlock();
         }
+    }
+
+    /**
+     * Returns true iff any {@link GroupId} sharing the given {@code colocateGroupId} is unstable.
+     */
+    public boolean isAnyGroupWithSameColocateGroupIdUnstable(long colocateGroupId) {
+        readLock();
+        try {
+            return peersOfColocateGroup(colocateGroupId).stream().anyMatch(this::isGroupUnstable);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Snapshot of every {@link GroupId} that shares the given {@code colocateGroupId}. Caller
+     * is responsible for holding the appropriate lock (read for queries, write for mutations).
+     */
+    private List<GroupId> peersOfColocateGroup(long colocateGroupId) {
+        return group2Schema.keySet().stream()
+                .filter(g -> Objects.equals(g.grpId, colocateGroupId))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -837,7 +926,7 @@ public class ColocateTableIndex implements Writable {
                         ColocateRangePersistInfo.create(grpId, newRanges),
                         wal -> colocateRangeMgr.setColocateRanges(grpId, newRanges));
             }
-            markAllGroupsWithSameGrpIdUnstable(grpId, /* needEditLog */ true);
+            markAllGroupsWithSameColocateGroupIdUnstable(grpId, /* needEditLog */ true);
         } finally {
             writeUnlock();
         }

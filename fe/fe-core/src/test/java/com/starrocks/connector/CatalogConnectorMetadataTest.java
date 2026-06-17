@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.StarRocksException;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -84,7 +86,8 @@ public class CatalogConnectorMetadataTest {
         List<String> tblNames = catalogConnectorMetadata.listTableNames(new ConnectContext(), InfoSchemaDb.DATABASE_NAME);
         List<String> expected = ImmutableList.of("tables", "table_privileges", "referential_constraints",
                 "key_column_usage", "routines", "schemata", "columns", "character_sets", "collations",
-                "table_constraints", "engines", "user_privileges", "schema_privileges", "statistics",
+                "table_constraints", "engines", "user_privileges", "collation_character_set_applicability",
+                "schema_privileges", "statistics",
                 "triggers", "events", "views", "partitions", "column_privileges"
         );
         assertEquals(expected, tblNames);
@@ -265,5 +268,48 @@ public class CatalogConnectorMetadataTest {
 
         Map<String, String> actualProperties = catalogConnectorMetadata.getCatalogProperties();
         assertEquals(expectedProperties, actualProperties);
+    }
+
+    @Test
+    void testAcquireTvrSnapshotDelegatesToChild(@Mocked ConnectorMetadata connectorMetadata, @Mocked Table table) {
+        MvId mvId = new MvId(1L, 2L);
+        TvrTableSnapshot expected = TvrTableSnapshot.of(123L);
+        new Expectations() {
+            {
+                connectorMetadata.acquireTvrSnapshot("test_db", table, mvId);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        TvrTableSnapshot actual = catalogConnectorMetadata.acquireTvrSnapshot("test_db", table, mvId);
+        assertEquals(expected, actual);
+    }
+
+    @Test
+    void testGetVersionCommitTimeMillisDelegatesToChild(@Mocked ConnectorMetadata connectorMetadata,
+                                                        @Mocked Table table) {
+        Optional<Long> expected = Optional.of(1781000000000L);
+        new Expectations() {
+            {
+                connectorMetadata.getVersionCommitTimeMillis("test_db", table, 42L);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        assertEquals(expected, catalogConnectorMetadata.getVersionCommitTimeMillis("test_db", table, 42L));
     }
 }

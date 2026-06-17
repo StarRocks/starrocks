@@ -15,15 +15,24 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.AnyDistributionSpec;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
+import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -34,12 +43,16 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Direct unit tests for the range-aware branches of {@link OutputPropertyDeriver}:
@@ -56,9 +69,9 @@ class OutputPropertyDeriverRangeTest {
 
     private static RangeDistributionSpec buildRangeSkeleton(long tableId, int... colIds) {
         EquivalentDescriptor descriptor = new EquivalentDescriptor(tableId, Collections.emptyList());
-        List<DistributionCol> cols = java.util.Arrays.stream(colIds)
+        List<DistributionCol> cols = Arrays.stream(colIds)
                 .mapToObj(id -> new DistributionCol(id, true))
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
         descriptor.initDistributionUnionFind(cols);
         return new RangeDistributionSpec(cols, descriptor);
     }
@@ -101,8 +114,7 @@ class OutputPropertyDeriverRangeTest {
         // Repeat intersection includes every colocate column id → preserve.
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1, 2);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
 
         ColumnRefOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "a", true);
         ColumnRefOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "b", true);
@@ -111,9 +123,9 @@ class OutputPropertyDeriverRangeTest {
         new Expectations() {
             {
                 node.getRepeatColumnRef();
-                result = java.util.Arrays.asList(
-                        com.google.common.collect.Lists.newArrayList(col1, col2),
-                        com.google.common.collect.Lists.newArrayList(col1, col2, col3));
+                result = Arrays.asList(
+                        Lists.newArrayList(col1, col2),
+                        Lists.newArrayList(col1, col2, col3));
             }
         };
 
@@ -129,17 +141,16 @@ class OutputPropertyDeriverRangeTest {
         // Intersection drops column 2 (only in first subset) → range dropped.
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1, 2);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
 
         ColumnRefOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "a", true);
         ColumnRefOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "b", true);
         new Expectations() {
             {
                 node.getRepeatColumnRef();
-                result = java.util.Arrays.asList(
-                        com.google.common.collect.Lists.newArrayList(col1, col2),
-                        com.google.common.collect.Lists.newArrayList(col1));
+                result = Arrays.asList(
+                        Lists.newArrayList(col1, col2),
+                        Lists.newArrayList(col1));
             }
         };
 
@@ -155,8 +166,7 @@ class OutputPropertyDeriverRangeTest {
             @Mocked Projection projection) {
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
 
         // Projection renames column 1 → column 100 (identity ref).
         ColumnRefOperator aliased = new ColumnRefOperator(100, IntegerType.INT, "a_alias", true);
@@ -177,8 +187,7 @@ class OutputPropertyDeriverRangeTest {
         EquivalentDescriptor equivDesc = childSpec.getEquivalentDescriptor();
         DistributionCol colocateCol = childSpec.getColocateColumns().get(0);
         DistributionCol aliasCol = new DistributionCol(100, true);
-        org.junit.jupiter.api.Assertions.assertTrue(
-                equivDesc.isConnected(aliasCol, colocateCol),
+        assertTrue(equivDesc.isConnected(aliasCol, colocateCol),
                 "alias should be connected to the colocate column in the descriptor");
     }
 
@@ -186,8 +195,7 @@ class OutputPropertyDeriverRangeTest {
     void updatePropertyWithProjectionNoOpOnNullProjection() throws Exception {
         RangeDistributionSpec childSpec = buildRangeSkeleton(100L, 1);
         PhysicalPropertySet childProperty =
-                new PhysicalPropertySet(
-                        com.starrocks.sql.optimizer.base.DistributionProperty.createProperty(childSpec));
+                new PhysicalPropertySet(DistributionProperty.createProperty(childSpec));
         OutputPropertyDeriver deriver = newDeriver(Collections.emptyList());
         // null projection — early-return path. Use reflection directly since
         // JMockit's Deencapsulation.invoke rejects null args.
@@ -206,5 +214,117 @@ class OutputPropertyDeriverRangeTest {
         OutputPropertyDeriver deriver = newDeriver(Collections.emptyList());
         Deencapsulation.invoke(deriver, "updatePropertyWithProjection", projection, childProperty);
         // No assertion needed beyond "did not throw and did not read projection".
+    }
+
+    // ---- F2 throw-path coverage ----
+
+    private static HashDistributionSpec buildHashSpec(HashDistributionDesc.SourceType source, int... colIds) {
+        EquivalentDescriptor descriptor = new EquivalentDescriptor(200L, Collections.emptyList());
+        List<DistributionCol> cols = Arrays.stream(colIds)
+                .mapToObj(id -> new DistributionCol(id, true))
+                .collect(Collectors.toList());
+        return new HashDistributionSpec(new HashDistributionDesc(cols, source), descriptor);
+    }
+
+    private static PhysicalPropertySet propertyOf(DistributionSpec spec) {
+        return new PhysicalPropertySet(DistributionProperty.createProperty(spec));
+    }
+
+    /**
+     * Stubs the join-operator and expression-context methods that
+     * {@code OutputPropertyDeriver.visitPhysicalJoin} touches before it inspects
+     * the child distribution specs.  With these stubs the throw paths under
+     * test (lines 377, 419, 422) are reachable without a full Memo fixture.
+     */
+    private static void stubInnerJoinWithEmptyColumns(PhysicalHashJoinOperator node,
+                                                      ExpressionContext context) {
+        new Expectations() {
+            {
+                node.getJoinType();
+                result = JoinOperator.INNER_JOIN;
+                minTimes = 0;
+                node.getOnPredicate();
+                result = null;
+                minTimes = 0;
+                node.getJoinHint();
+                result = null;
+                minTimes = 0;
+                context.getChildOutputColumns(0);
+                result = new ColumnRefSet();
+                minTimes = 0;
+                context.getChildOutputColumns(1);
+                result = new ColumnRefSet();
+                minTimes = 0;
+            }
+        };
+    }
+
+    private static StarRocksPlannerException invokeVisitPhysicalJoinExpectingThrow(
+            OutputPropertyDeriver deriver, PhysicalHashJoinOperator node, ExpressionContext context) {
+        // visitPhysicalJoin is private; reflect to invoke it.  Wrap the
+        // InvocationTargetException so JUnit's assertThrows sees the real cause.
+        return assertThrows(StarRocksPlannerException.class, () -> {
+            try {
+                Method method = OutputPropertyDeriver.class.getDeclaredMethod(
+                        "visitPhysicalJoin",
+                        com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator.class,
+                        ExpressionContext.class);
+                method.setAccessible(true);
+                method.invoke(deriver, node, context);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                if (e.getCause() instanceof RuntimeException) {
+                    throw (RuntimeException) e.getCause();
+                }
+                throw new RuntimeException(e.getCause());
+            }
+        });
+    }
+
+    @Test
+    void visitPhysicalJoinThrowsOnMixedRangeHash(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) {
+        stubInnerJoinWithEmptyColumns(node, context);
+        OutputPropertyDeriver deriver = newDeriver(List.of(
+                propertyOf(buildRangeSkeleton(100L, 1)),
+                propertyOf(buildHashSpec(HashDistributionDesc.SourceType.SHUFFLE_JOIN, 2))));
+
+        StarRocksPlannerException ex = invokeVisitPhysicalJoinExpectingThrow(deriver, node, context);
+        assertTrue(ex.getMessage().contains("Mixed range-distribution"),
+                "expected the mixed-range-hash diagnostic, got: " + ex.getMessage());
+    }
+
+    @Test
+    void visitPhysicalJoinThrowsOnInnerInvalidHashCombo(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) {
+        stubInnerJoinWithEmptyColumns(node, context);
+        // Both are HashDistributionSpec → outer isShuffle && isShuffle is true.
+        // (BUCKET, LOCAL) does not match colocate (L is not local), bucket-join
+        // (R is not bucket), or shuffle-join (L/R neither shuffle nor enforce),
+        // so falls through to the inner-else typed exception.
+        OutputPropertyDeriver deriver = newDeriver(List.of(
+                propertyOf(buildHashSpec(HashDistributionDesc.SourceType.BUCKET, 1)),
+                propertyOf(buildHashSpec(HashDistributionDesc.SourceType.LOCAL, 2))));
+
+        StarRocksPlannerException ex = invokeVisitPhysicalJoinExpectingThrow(deriver, node, context);
+        assertTrue(ex.getMessage().contains("Children output property distribution error"),
+                "expected the children-distribution diagnostic, got: " + ex.getMessage());
+    }
+
+    @Test
+    void visitPhysicalJoinThrowsOnOuterNonShuffle(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) {
+        stubInnerJoinWithEmptyColumns(node, context);
+        // Two GatherDistributionSpec children: type=GATHER, so neither is
+        // isShuffle() — falls through to the outer-else typed exception.
+        OutputPropertyDeriver deriver = newDeriver(List.of(
+                propertyOf(new GatherDistributionSpec()),
+                propertyOf(new GatherDistributionSpec())));
+
+        StarRocksPlannerException ex = invokeVisitPhysicalJoinExpectingThrow(deriver, node, context);
+        assertTrue(ex.getMessage().contains("Children output property distribution error"),
+                "expected the children-distribution diagnostic, got: " + ex.getMessage());
     }
 }

@@ -952,6 +952,26 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ProtobufChunkSerde, deserialize_with_schema) {
+    auto chunk = std::make_unique<Chunk>(protobuf_serde_test::make_columns(2), protobuf_serde_test::make_schema(2));
+
+    StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*chunk);
+    ASSERT_TRUE(res.ok()) << res.status();
+    const std::string& serialized_data = res->data();
+
+    auto chunk_or = serde::ProtobufChunkSerde::deserialize_with_schema(*chunk->schema(), serialized_data);
+    ASSERT_TRUE(chunk_or.ok()) << chunk_or.status();
+    Chunk& new_chunk = *chunk_or;
+    ASSERT_EQ(new_chunk.num_rows(), chunk->num_rows());
+    for (size_t i = 0; i < chunk->columns().size(); ++i) {
+        ASSERT_EQ(chunk->columns()[i]->size(), new_chunk.columns()[i]->size());
+        for (size_t j = 0; j < chunk->columns()[i]->size(); ++j) {
+            ASSERT_EQ(chunk->columns()[i]->get(j).get_int32(), new_chunk.columns()[i]->get(j).get_int32());
+        }
+    }
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
     auto chunk = std::make_unique<Chunk>(protobuf_serde_test::make_columns(2), protobuf_serde_test::make_schema(2));
     auto extra_data_meta = std::vector<ChunkExtraColumnsMeta>{

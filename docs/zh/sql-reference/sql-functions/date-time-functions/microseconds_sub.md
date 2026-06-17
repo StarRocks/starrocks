@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从日期时间中减去指定的微秒数。"
 ---
 
 # microseconds_sub

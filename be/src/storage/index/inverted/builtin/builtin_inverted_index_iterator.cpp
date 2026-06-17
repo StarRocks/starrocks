@@ -23,6 +23,7 @@
 #include <memory>
 #include <vector>
 
+#include "column/chunk_factory.h"
 #include "common/runtime_profile.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
@@ -31,9 +32,9 @@
 namespace starrocks {
 BuiltinInvertedIndexIterator::BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta,
                                                            InvertedReader* reader, OlapReaderStatistics* stats,
-                                                           std::unique_ptr<BitmapIndexIterator>& bitmap_itr,
+                                                           std::unique_ptr<SegmentBitmapIndexIterator>& bitmap_itr,
                                                            const size_t& segment_rows)
-        : InvertedIndexIterator(index_meta, reader, stats),
+        : SegmentInvertedIndexIterator(index_meta, reader, stats),
           _bitmap_itr(std::move(bitmap_itr)),
           _segment_rows(segment_rows) {
     if (_analyser_type == InvertedIndexParserType::PARSER_ENGLISH) {
@@ -166,7 +167,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             } else if (!st.ok()) {
                 return st;
             } else {
-                auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+                auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
                 size_t read_num = 1;
                 RETURN_IF_ERROR(_bitmap_itr->next_batch_dictionary(&read_num, column.get()));
                 Slice s = down_cast<BinaryColumn*>(column.get())->immutable_data()[0];
@@ -304,7 +305,8 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     return _bitmap_itr->read_union_bitmap(hit_rowids, bitmap);
 }
 
-Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
+Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string_view column_name,
+                                                              const void* query_value,
                                                               InvertedIndexQueryType query_type,
                                                               roaring::Roaring* bitmap) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
@@ -351,7 +353,7 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
     return Status::OK();
 }
 
-Status BuiltinInvertedIndexIterator::read_null(const std::string& column_name, roaring::Roaring* bitmap) {
+Status BuiltinInvertedIndexIterator::read_null(const std::string_view column_name, roaring::Roaring* bitmap) {
     return Status::InternalError("Unsupported");
 }
 

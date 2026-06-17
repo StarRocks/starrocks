@@ -118,7 +118,9 @@ public:
     // SegmentPKIterators are created and consumed one at a time to avoid memory spike
     // from eagerly initializing all iterators upfront. Each iterator uses lazy_load to
     // read PKs chunk-by-chunk, and each chunk is queried in parallel via thread pool.
-    // Acquires the index cache entry once for all segments.
+    // Acquires the index cache entry once for all segments. To learn each update
+    // segment's physical rowid base (range_start), call
+    // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
     Status batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
                                              std::vector<SegmentPKIteratorPtr>& pk_iters,
                                              std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
@@ -147,11 +149,11 @@ public:
     size_t get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                      const TabletMetadata& metadata, const Tablet& tablet, IndexEntry* index_entry,
+                                      const TabletMetadataPtr& metadata, const Tablet& tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                            const TabletMetadata& metadata, const Tablet& tablet,
+                                            const TabletMetadataPtr& metadata, const Tablet& tablet,
                                             IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
@@ -273,13 +275,10 @@ private:
     // Processes a single chunk during parallel condition merge.
     // Compares condition column values between old and new rows to decide which rows to delete.
     // This is called concurrently by multiple worker threads, with mutex protecting shared state.
-    Status _process_single_chunk_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
-                                                       int32_t upsert_idx, SegmentPKIterator* segment_pk_iterator,
-                                                       ParallelPublishContext* context,
-                                                       const std::pair<ChunkPtr, size_t>& current,
-                                                       const TabletColumn& tablet_column,
-                                                       const std::vector<uint32_t>& read_column_ids,
-                                                       LakePrimaryIndex& index);
+    Status _process_single_chunk_update_with_condition(
+            const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
+            SegmentPKIterator* segment_pk_iterator, ParallelPublishContext* context, const SegmentPKChunkRef& current,
+            const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index);
 
     // Performs condition-based merge update using parallel execution for segments with SST files.
     // This optimized path leverages pre-materialized condition values in SST files to enable

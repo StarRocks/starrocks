@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -132,6 +133,7 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -654,6 +656,11 @@ public class RedirectStatus {
             return RedirectStatus.FORWARD_WITH_SYNC;
         }
 
+        @Override
+        public RedirectStatus visitMergeIntoStatement(MergeIntoStmt statement, Void context) {
+            return RedirectStatus.FORWARD_WITH_SYNC;
+        }
+
         // ------------------------------------------- Routine Statement ---------------------------------------------------
 
         @Override
@@ -804,6 +811,12 @@ public class RedirectStatus {
         @Override
         public RedirectStatus visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt clause,
                                                                                 Void context) {
+            return visitDDLStatement(clause, context);
+        }
+
+        @Override
+        public RedirectStatus visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt clause,
+                                                                            Void context) {
             return visitDDLStatement(clause, context);
         }
 
