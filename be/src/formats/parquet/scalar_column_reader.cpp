@@ -595,6 +595,9 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
                     "Parquet lazy dictionary decode source column is not a dictionary code column");
         }
         if (_dict_filter_ctx != nullptr && !_dict_filter_ctx->is_decode_needed) {
+            // reset_column() guarantees a clean dst regardless of any prior
+            // set_num_rows / resize call (e.g. via append_side_columns_to_chunk).
+            dst->as_mutable_raw_ptr()->reset_column();
             dst->as_mutable_raw_ptr()->append_default(src->size());
             src->as_mutable_raw_ptr()->reset_column();
         } else {

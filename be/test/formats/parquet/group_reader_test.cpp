@@ -4232,7 +4232,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextCanMaterializeAndProvidePhysic
 
     Range<uint64_t> range(0, 2);
     auto active_chunk = group_reader->_column_materializer->create_active_chunk();
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
 
     // can_materialize: true for lazy slot, false for active and unrelated.
     EXPECT_TRUE(ctx.can_materialize(lazy_slot->id()));
@@ -4295,7 +4295,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextHasSlotReturnsTrueForCachedAnd
 
     Range<uint64_t> range(0, 1);
     auto active_chunk = group_reader->_column_materializer->create_active_chunk();
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
 
     // has_slot: active_chunk has active_slot → true
     EXPECT_TRUE(ctx.has_slot(active_slot->id()));
@@ -4347,7 +4347,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextMaterializeSlotDelegatesToColu
 
     Range<uint64_t> range(0, 1);
     auto active_chunk = group_reader->_column_materializer->create_active_chunk();
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
 
     // Trigger set starts empty.
     EXPECT_EQ(0u, group_reader->_column_materializer->lazy_triggered_count());
@@ -4403,7 +4403,7 @@ TEST_F(GroupReaderTest, LazyMaterializationContextGetColumnReturnsNullForUnknown
 
     Range<uint64_t> range(0, 1);
     auto active_chunk = group_reader->_column_materializer->create_active_chunk();
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
 
     // Unknown slot → nullptr (not in lazy_slots, can't materialize).
     EXPECT_EQ(nullptr, ctx.get_column(unknown_slot->id()));
@@ -4480,7 +4480,7 @@ TEST_F(GroupReaderTest, ReadLazyColumnsSeparatesTriggeredFromUntriggered) {
     // Simulate: lazy_a was triggered during predicate eval → in slot_cache.
     // lazy_b was NOT triggered → not in slot_cache.
     group_reader->_column_materializer->reset_read_chunk();
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, full_range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr, active_chunk);
     ASSERT_OK(ctx.materialize_slot(lazy_a_slot->id()));
     EXPECT_NE(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_a_slot->id()));
     EXPECT_EQ(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_b_slot->id()));
@@ -4551,7 +4551,7 @@ TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
 
     // Trigger lazy_slot so it is in slot_cache with full_range data.
     group_reader->_column_materializer->reset_read_chunk();
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, full_range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr, active_chunk);
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
 
     // chunk_filter has 1s for all rows (row 0 and 1 survive).
@@ -4677,7 +4677,7 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
 
     Range<uint64_t> range(0, 2);
     auto active_chunk = group_reader->_column_materializer->create_active_chunk();
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
 
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
 
@@ -4774,7 +4774,7 @@ TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
     // First materialize: read_range appends 1 row, finalize_lazy_state resets temp.
     Range<uint64_t> range1(0, 1);
     auto active_chunk1 = group_reader->_column_materializer->create_active_chunk();
-    LazyMaterializationContext ctx1(*group_reader->_column_materializer, nullptr, range1, nullptr, active_chunk1);
+    LazyMaterializationContext ctx1(group_reader->_column_materializer.get(), nullptr, range1, nullptr, active_chunk1);
     ASSERT_OK(ctx1.materialize_slot(lazy_slot->id()));
     EXPECT_TRUE(mock_lazy_ptr->_finalize_called);
 
@@ -4790,7 +4790,7 @@ TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
     // read_range starts fresh → 1 row, not 2.
     Range<uint64_t> range2(0, 1);
     auto active_chunk2 = group_reader->_column_materializer->create_active_chunk();
-    LazyMaterializationContext ctx2(*group_reader->_column_materializer, nullptr, range2, nullptr, active_chunk2);
+    LazyMaterializationContext ctx2(group_reader->_column_materializer.get(), nullptr, range2, nullptr, active_chunk2);
     ASSERT_OK(ctx2.materialize_slot(lazy_slot->id()));
 
     auto* entry2 = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
@@ -4910,7 +4910,7 @@ TEST_F(GroupReaderTest, EmitPhysicalColumnsBypassesFillDstForLogicalSlots) {
     group_reader->_column_materializer->reset_read_chunk();
 
     // Compound predicate evaluation triggers on-demand lazy materialization.
-    LazyMaterializationContext ctx(*group_reader->_column_materializer, nullptr, full_range, nullptr, active_chunk);
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr, active_chunk);
     ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
     EXPECT_TRUE(mock_lazy_ptr->_finalize_called)
             << "materialize_slot() must call finalize_lazy_state(), converting to LOGICAL";

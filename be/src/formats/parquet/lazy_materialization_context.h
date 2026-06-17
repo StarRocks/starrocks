@@ -54,7 +54,7 @@ class VariantProjectionHandler;
 class LazyMaterializationContext : public MissingColumnProvider {
 public:
     // variant may be nullptr when no variant columns are present.
-    LazyMaterializationContext(ColumnMaterializer& materializer, VariantProjectionHandler* variant,
+    LazyMaterializationContext(ColumnMaterializer* materializer, VariantProjectionHandler* variant,
                                const Range<uint64_t>& range, const Filter* filter, ChunkPtr& active_chunk)
             : _materializer(materializer),
               _variant(variant),
@@ -90,7 +90,7 @@ public:
     ChunkPtr& active_chunk() { return _active_chunk; }
 
 private:
-    ColumnMaterializer& _materializer;
+    ColumnMaterializer* _materializer;
     VariantProjectionHandler* _variant;
     Range<uint64_t> _range;
     const Filter* _filter;

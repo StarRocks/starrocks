@@ -23,14 +23,14 @@
 namespace starrocks::parquet {
 
 bool LazyMaterializationContext::has_slot(SlotId slot_id) const {
-    if (_materializer.get_slot_cache(slot_id) != nullptr) {
+    if (_materializer->get_slot_cache(slot_id) != nullptr) {
         return true;
     }
     return _active_chunk->is_slot_exist(slot_id);
 }
 
 bool LazyMaterializationContext::can_materialize(SlotId slot_id) const {
-    const auto& lazy_slots = _materializer.lazy_slot_ids();
+    const auto& lazy_slots = _materializer->lazy_slot_ids();
     if (std::find(lazy_slots.begin(), lazy_slots.end(), slot_id) != lazy_slots.end()) {
         return true;
     }
@@ -55,18 +55,18 @@ Status LazyMaterializationContext::materialize_slot(SlotId slot_id) {
     if (has_slot(slot_id)) {
         return Status::OK();
     }
-    return _materializer.materialize_slot(slot_id, _range, _filter);
+    return _materializer->materialize_slot(slot_id, _range, _filter);
 }
 
 StatusOr<ColumnPtr> LazyMaterializationContext::provide(SlotId slot_id) {
     bool first_trigger = _triggered_slots.insert(slot_id).second;
     RETURN_IF_ERROR(materialize_slot(slot_id));
     if (first_trigger) {
-        if (auto* s = _materializer.stats()) {
+        if (auto* s = _materializer->stats()) {
             s->parquet_lazy_slot_triggered++;
         }
     }
-    const auto* entry = _materializer.get_slot_cache(slot_id);
+    const auto* entry = _materializer->get_slot_cache(slot_id);
     if (entry != nullptr) {
         return entry->values;
     }
@@ -78,7 +78,7 @@ StatusOr<ColumnPtr> LazyMaterializationContext::provide(SlotId slot_id) {
 }
 
 ColumnPtr LazyMaterializationContext::get_column(SlotId slot_id) {
-    auto* entry = _materializer.get_slot_cache(slot_id);
+    auto* entry = _materializer->get_slot_cache(slot_id);
     if (entry != nullptr) {
         return entry->values;
     }
@@ -93,7 +93,7 @@ ColumnPtr LazyMaterializationContext::get_column(SlotId slot_id) {
         return nullptr;
     }
     // Physical lazy slot: result lands in slot_cache.
-    entry = _materializer.get_slot_cache(slot_id);
+    entry = _materializer->get_slot_cache(slot_id);
     if (entry != nullptr) {
         return entry->values;
     }
