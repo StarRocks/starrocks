@@ -69,20 +69,6 @@ public:
     virtual void do_update_counter(HdfsScannerProfile* profile);
     virtual Status reinterpret_status(const Status& st);
 
-    // ORC and Parquet push conjunct_ctxs_by_slot into their own column-level
-    // readers (lazy materialisation, dict filter, etc.) and do NOT want the base
-    // class to apply them a second time.  All other formats return false so the
-    // base class handles by-slot evaluation uniformly in get_next().
-    virtual bool scanner_handles_predicate_by_slot_internally() const { return false; }
-
-    // True if the scanner evaluates multi-slot predicates (conjuncts->scanner_ctxs)
-    // internally inside do_get_next(), so the base class must not apply them again.
-    // Scanners that return true MUST guarantee row-level correctness; the ORC
-    // search-argument / Parquet statistics pass is only an approximate skip; the
-    // actual predicate must still be evaluated on every returned row.
-    // Future expression-driven Parquet lazy materialisation will also set this true
-    // once it can interleave predicate evaluation with column loading.
-    virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx != nullptr && _scanner_ctx->split.has_split_tasks; }
 

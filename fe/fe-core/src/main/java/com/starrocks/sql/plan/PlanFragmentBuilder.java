@@ -4720,6 +4720,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setColumn(columnRefOperatorColumnMap.get(columnRefOperator));
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                    slotDescriptor.setIsOutputColumn(true);
                     context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
 
@@ -4730,6 +4731,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setColumn(columnRefOperatorColumnMap.get(columnRefOperator));
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                    slotDescriptor.setIsOutputColumn(true);
                     context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
                 List<ColumnRefOperator> fetchRefColumns = rowIdToFetchRefColumns.get(entry.getKey());

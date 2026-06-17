@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -50,6 +51,12 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* late_materialize_skip_rows_counter = nullptr;
+
+    RuntimeProfile::Counter* parquet_lazy_col_skip_rows_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_slot_triggered_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_read_count_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_read_timer = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_full_trigger_count_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_size = nullptr;
 
@@ -196,6 +203,11 @@ struct HdfsScannerContext {
 
     std::vector<SlotDescriptor*> not_existed_slots;
 
+    // ___count___ column for COUNT(*) optimization.
+    // Separated from not_existed_slots because it is an execution marker,
+    // not a schema-evolution missing column.
+    std::optional<SlotDescriptor*> _count_slot;
+
     // for iceberg reserved fields
     std::vector<SlotDescriptor*> reserved_field_slots;
 
@@ -241,6 +253,7 @@ struct HdfsScannerContext {
     }
 
     bool can_use_count_optimization() const;
+    bool has_count_column() const { return _count_slot.has_value(); }
 
     bool can_use_min_max_optimization() const;
 
@@ -262,11 +275,19 @@ struct HdfsScannerContext {
     // If there is no partition column in the chunk, append partition column to chunk,
     // otherwise update partition column in chunk
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    // Emit `output_rows` rows of `value` for the ___count___ column.
+    // Idempotent: if the chunk already has a ___count___ column, this is a no-op.
+    // Used by both the count-opt aggregated path (output_rows=1, value=row_count)
+    // and the per-row fallback (output_rows=row_count, value=1).
+    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t output_rows, int64_t value);
     MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // Append all side columns (not-existed, partition, extended, count) at once.
+    // Safe when any category is empty — each sub-function is a no-op in that case.
+    Status append_side_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
                                           const std::vector<FormatColumnInfo>& columns, const Columns& values);
 
@@ -276,6 +297,11 @@ struct HdfsScannerContext {
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
+
+    // Evaluate both single-slot conjuncts (conjunct_ctxs_by_slot) and multi-slot
+    // conjuncts (conjuncts.scanner_ctxs) on the chunk in place.  Safe to call
+    // when either category is empty — each sub-step is a no-op.
+    Status evaluate_all_predicates(ChunkPtr* chunk);
 
     void merge_split_tasks();
 };

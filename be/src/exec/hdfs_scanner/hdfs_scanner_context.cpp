@@ -14,7 +14,6 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_context.h"
 
-#include <algorithm>
 #include <map>
 #include <utility>
 
@@ -93,13 +92,11 @@ void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
 }
 
 void HdfsScannerContext::update_return_count_columns() {
-    // special handling for ___count__ optimization.
-    // this is different from `can_use_count_optimization` ,  which uses iceberg metadata to return count value
-    // this optimizaton is to fill with `count` rows of default value from parquet/orc header
+    _count_slot.reset();
     std::vector<FormatColumnInfo> updated_columns;
     for (auto& column : materialized_columns) {
         if (column.name() == kCountOptColumnName) {
-            update_with_none_existed_slot(column.slot_desc);
+            _count_slot = column.slot_desc;
         } else {
             updated_columns.emplace_back(column);
         }
@@ -116,9 +113,8 @@ void HdfsScannerContext::update_min_max_columns() {
     for (auto& column : materialized_columns) {
         if (min_max_values.find(column.slot_id()) != min_max_values.end()) {
             // This column has file-level min/max statistics.  Move it to
-            // not_existed_slots so that append_or_update_min_max_column_to_chunk()
-            // fills the column with the statistics values instead of reading the
-            // actual data from the file.
+            // not_existed_slots so that the min-max column is filled with
+            // statistics values instead of reading the actual data from the file.
             update_with_none_existed_slot(column.slot_desc);
         } else if (format_scan_context.options.can_use_any_column) {
             // This column has no min/max statistics (e.g. STRING or TIMESTAMP type
@@ -160,31 +156,23 @@ Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<
 }
 
 Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    ChunkPtr& ck = (*chunk);
     if (not_existed_slots.empty()) return Status::OK();
 
-    ChunkPtr& ck = (*chunk);
-
-    if (format_scan_context.options.use_min_max_opt) {
-        append_or_update_min_max_column_to_chunk(chunk, row_count);
-    }
-
     for (auto* slot_desc : not_existed_slots) {
-        if (format_scan_context.options.use_min_max_opt &&
-            scan_range->min_max_values.find(slot_desc->id()) != scan_range->min_max_values.end()) {
-            // handled in min max column
-            continue;
+        if (format_scan_context.options.use_min_max_opt) {
+            auto it = scan_range->min_max_values.find(slot_desc->id());
+            if (it != scan_range->min_max_values.end()) {
+                MutableColumnPtr col = create_min_max_value_column(slot_desc, it->second, row_count);
+                ck->append_or_update_column(std::move(col), slot_desc->id());
+                continue;
+            }
         }
 
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
-            if (slot_desc->col_name() == kCountOptColumnName) {
-                TypeDescriptor desc;
-                desc.type = TYPE_BIGINT;
-                col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
-                col->append_datum(int64_t(1));
-                col->assign(row_count, 0);
-            } else if (auto it = materialize_slot_default_values.find(slot_desc->id());
-                       it != materialize_slot_default_values.end()) {
+            if (auto it = materialize_slot_default_values.find(slot_desc->id());
+                it != materialize_slot_default_values.end()) {
                 RETURN_IF_ERROR(fill_default_value_for_not_existed_slot(slot_desc, it->second, row_count, col.get()));
             } else {
                 col->append_default(row_count);
@@ -193,31 +181,26 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
         ck->append_or_update_column(std::move(col), slot_desc->id());
     }
     ck->set_num_rows(row_count);
+    // NOTE: set_num_rows(row_count) must be called AFTER appending columns
+    // and ONLY when not_existed_slots is non-empty.  Chunk::set_num_rows()
+    // calls resize(count) on EVERY column in the chunk, including pre-allocated
+    // stubs (e.g. lazy Parquet columns with 0 rows).  Calling it unconditionally
+    // before the empty-return corrupts those stubs and can cause physical column
+    // emission (fill_dst_column) to double the chunk's row count.
     return Status::OK();
 }
 
-void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty() || row_count < 0) return;
+void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t output_rows, int64_t value) {
+    if (!_count_slot.has_value()) return;
+    auto* slot_desc = _count_slot.value();
     ChunkPtr& ck = (*chunk);
-    auto* slot_desc = not_existed_slots[0];
-    TypeDescriptor desc;
-    desc.type = TYPE_BIGINT;
-    auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
-    col->append_datum(int64_t(row_count));
-    ck->append_or_update_column(std::move(col), slot_desc->id());
-    ck->set_num_rows(1);
-}
-
-void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    for (SlotDescriptor* slot_desc : not_existed_slots) {
-        auto it = scan_range->min_max_values.find(slot_desc->id());
-        if (it == scan_range->min_max_values.end()) {
-            continue;
-        }
-        const TExprMinMaxValue& min_max_value = it->second;
-        MutableColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
-        (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
+    auto col = Int64Column::create();
+    if (output_rows > 0) {
+        col->append(value);
+        col->assign(output_rows, 0);
     }
+    ck->append_or_update_column(std::move(col), slot_desc->id());
+    ck->set_num_rows(output_rows);
 }
 
 MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor* slot_desc,
@@ -330,6 +313,29 @@ Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Fi
     return Status::OK();
 }
 
+Status HdfsScannerContext::evaluate_all_predicates(ChunkPtr* chunk) {
+    SCOPED_RAW_TIMER(&stats->expr_filter_ns);
+    size_t chunk_size = (*chunk)->num_rows();
+    if (chunk_size > 0 && !conjunct_ctxs_by_slot.empty()) {
+        Filter filter(chunk_size, 1);
+        for (auto& it : conjunct_ctxs_by_slot) {
+            ASSIGN_OR_RETURN(chunk_size,
+                             ChunkPredicateEvaluator::eval_conjuncts_into_filter(it.second, chunk->get(), &filter));
+            if (chunk_size == 0) {
+                (*chunk)->set_num_rows(0);
+                return Status::OK();
+            }
+        }
+        if (chunk_size != (*chunk)->num_rows()) {
+            (*chunk)->filter(filter);
+        }
+    }
+    if ((*chunk)->num_rows() > 0 && !conjuncts.scanner_ctxs.empty()) {
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(conjuncts.scanner_ctxs, (*chunk).get()));
+    }
+    return Status::OK();
+}
+
 StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
 
@@ -350,6 +356,16 @@ void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* ch
 
 void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
     append_or_update_column_to_chunk(chunk, row_count, extended_columns, extended_values);
+}
+
+Status HdfsScannerContext::append_side_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(chunk, row_count));
+    append_or_update_partition_column_to_chunk(chunk, row_count);
+    append_or_update_extended_column_to_chunk(chunk, row_count);
+    if (has_count_column()) {
+        append_or_update_count_column_to_chunk(chunk, row_count, 1);
+    }
+    return Status::OK();
 }
 
 void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
