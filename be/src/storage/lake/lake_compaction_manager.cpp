@@ -25,6 +25,8 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/compaction_task_context.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 
 namespace starrocks::lake {
@@ -139,6 +141,66 @@ std::unordered_set<uint32_t> LakeCompactionManager::running_inputs(int64_t table
     auto it = _running_inputs.find(tablet_id);
     if (it == _running_inputs.end()) return {};
     return std::unordered_set<uint32_t>(it->second.begin(), it->second.end());
+}
+
+StatusOr<std::vector<RowsetPtr>> LakeCompactionManager::pick_and_reserve_inputs(CompactionTaskContext* context,
+                                                                               CompactionPolicy* policy) {
+    const int64_t tablet_id = context->tablet_id;
+
+    // Let the policy choose its natural input set. pick_rowsets() returns a
+    // CONTIGUOUS (adjacent in metadata) run of rowsets — the apply path
+    // (apply_compaction_log_single_output) requires adjacency, so we must NOT
+    // post-filter individual rowsets out of this block (that could leave a
+    // non-adjacent set that fails at publish/apply). We therefore reserve the
+    // block all-or-nothing below.
+    ASSIGN_OR_RETURN(auto picked, policy->pick_rowsets());
+
+    // Snapshot the rowset ids that are off-limits: those held by an in-flight
+    // task on this tablet (running_inputs) plus those held by a not-yet-published
+    // local result (pending_inputs). This is THE invariant that prevents the same
+    // rowsets from being compacted twice between an autonomous EXECUTE and the
+    // eventual FE COLLECT_AND_PUBLISH.
+    std::unordered_set<uint32_t> pending;
+    if (_result_mgr != nullptr) {
+        pending = _result_mgr->pending_inputs(tablet_id);
+    }
+
+    std::vector<RowsetPtr> reserved;
+    {
+        std::lock_guard<std::mutex> guard(_mu);
+        auto& running = _running_inputs[tablet_id];
+        // All-or-nothing: if ANY rowset in the picked block is already in-flight or
+        // pending, another task is (or will be) compacting an overlapping range —
+        // skip this round to keep input sets disjoint AND each block adjacent.
+        bool conflict = picked.empty();
+        for (auto& r : picked) {
+            uint32_t rid = r->id();
+            if (running.count(rid) > 0 || pending.count(rid) > 0) {
+                conflict = true;
+                break;
+            }
+        }
+        if (!conflict) {
+            reserved.reserve(picked.size());
+            for (auto& r : picked) {
+                running.insert(r->id());
+                reserved.push_back(r);
+            }
+        }
+        if (running.empty()) {
+            _running_inputs.erase(tablet_id);
+        }
+    }
+
+    // Record exactly what we reserved so finish_task releases the same set on any
+    // outcome (success or failure), making the reservation leak-proof.
+    context->autonomous_reserved_inputs.clear();
+    context->autonomous_reserved_inputs.reserve(reserved.size());
+    for (auto& r : reserved) {
+        context->autonomous_reserved_inputs.push_back(r->id());
+    }
+    context->autonomous_nothing_to_do = reserved.empty();
+    return reserved;
 }
 
 void LakeCompactionManager::dispatch_loop() {

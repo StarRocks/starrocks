@@ -17,8 +17,10 @@
 #include <butil/containers/linked_list.h>
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/lake_types.pb.h"
@@ -159,6 +161,16 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     // the task creator (compaction_scheduler / LakeCompactionManager) so the
     // task implementations stay free of global-singleton dependencies.
     CompactionResultManager* result_manager = nullptr;
+    // Autonomous compaction: the exact set of input rowset ids reserved for this
+    // task by LakeCompactionManager::pick_and_reserve_inputs (running_inputs).
+    // finish_task releases this same set regardless of success/failure so the
+    // reservation can never leak (do NOT recompute from txn_log, which is null on
+    // failure paths). Empty when no eligible rowsets were available this round.
+    std::vector<uint32_t> autonomous_reserved_inputs;
+    // Autonomous compaction: set when pick_and_reserve_inputs found nothing to do
+    // (all candidate rowsets are already in-flight or held by a pending result).
+    // do_compaction treats this as a benign no-op rather than a compaction error.
+    bool autonomous_nothing_to_do = false;
 };
 
 } // namespace starrocks::lake

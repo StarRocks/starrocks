@@ -131,19 +131,22 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         // context->txn_log could be nullptr if the task is failed before writing txn log.
         _response->add_txn_logs()->CopyFrom(*context->txn_log);
     }
-    // Autonomous compaction: release running_inputs reservation and trigger the
-    // next round for this tablet. Done outside the lock-protected fields so the
-    // notification doesn't deadlock with the dispatcher.
+    // Autonomous compaction: release the running_inputs reservation and trigger the
+    // next round for this tablet. We release exactly the set that was reserved by
+    // pick_and_reserve_inputs (NOT the set parsed from txn_log, which is null on
+    // failure paths) so the reservation can never leak and over-exclude rowsets
+    // from future picks. Done outside the lock-protected fields so the notification
+    // doesn't deadlock with the dispatcher.
     if (context->write_to_local_result) {
-        std::vector<uint32_t> consumed;
-        if (context->txn_log != nullptr && context->txn_log->has_op_compaction()) {
-            for (uint32_t rid : context->txn_log->op_compaction().input_rowsets()) {
-                consumed.push_back(rid);
-            }
+        LakeCompactionManager::instance()->notify_task_finished(context->tablet_id,
+                                                                context->autonomous_reserved_inputs);
+        // Self-continuation only when this task actually compacted something: a
+        // no-op round (nothing eligible) must not re-enqueue, or we would spin
+        // until the in-flight/pending tasks that hold the rowsets complete (which
+        // re-enqueue on their own finish).
+        if (!context->autonomous_reserved_inputs.empty()) {
+            LakeCompactionManager::instance()->update_tablet_async(context->tablet_id);
         }
-        LakeCompactionManager::instance()->notify_task_finished(context->tablet_id, consumed);
-        // Self-continuation: there might still be excluded-set-eligible rowsets.
-        LakeCompactionManager::instance()->update_tablet_async(context->tablet_id);
     }
     DCHECK(_request != nullptr);
     _status.update(context->status);
@@ -557,6 +560,12 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
             }
         }
         status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+    } else if (context->write_to_local_result && context->autonomous_nothing_to_do) {
+        // Autonomous compaction found no eligible rowsets this round (all candidates
+        // are in-flight or already held by a pending result). This is expected and
+        // not an error: treat it as a clean no-op so finish_task releases the
+        // (empty) reservation and does not log a spurious failure.
+        status = Status::OK();
     } else {
         status.update(task_or.status());
     }

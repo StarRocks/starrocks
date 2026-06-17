@@ -25,11 +25,15 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/statusor.h"
+#include "storage/lake/types_fwd.h"
 
 namespace starrocks::lake {
 
 class TabletManager;
 class CompactionResultManager;
+class CompactionPolicy;
+struct CompactionTaskContext;
 
 // Event-driven autonomous compaction scheduler (Phase 4).
 //
@@ -64,6 +68,16 @@ public:
     // Notify on task lifecycle so we can decrement counters and trigger
     // self-continuation when a task finishes.
     void notify_task_finished(int64_t tablet_id, const std::vector<uint32_t>& consumed_input_rowsets);
+
+    // Autonomous compaction rowset selection. Lets the policy pick its natural
+    // (contiguous) input block, then reserves it all-or-nothing: if any rowset in
+    // the block is already in-flight (running_inputs) or held by a pending result
+    // (result_manager->pending_inputs), the round is skipped so that concurrent /
+    // sequential tasks on the same tablet never select overlapping rowsets and
+    // each reserved block stays adjacent (required by the apply path). The
+    // reserved ids are stored in context->autonomous_reserved_inputs; an empty
+    // result sets context->autonomous_nothing_to_do (benign no-op).
+    StatusOr<std::vector<RowsetPtr>> pick_and_reserve_inputs(CompactionTaskContext* context, CompactionPolicy* policy);
 
     // Accessor for the BE-global CompactionResultManager that this manager
     // controls. Returns nullptr until start() runs. Used by compaction_scheduler

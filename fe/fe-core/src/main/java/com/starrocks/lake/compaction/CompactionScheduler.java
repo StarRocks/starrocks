@@ -163,6 +163,14 @@ public class CompactionScheduler extends Daemon {
      * reach the same new_version even when some have no local results.
      */
     private void schedulePartitionPublish() {
+        // Respect the SAME per-warehouse concurrency limit as scheduleNewCompaction.
+        // Without this, the moment the feature is enabled every eligible partition
+        // (version_delta >= threshold) would open a transaction in a single tick,
+        // i.e. a txn / RPC storm proportional to the number of partitions. We seed
+        // the running counts from jobs already in flight (legacy + PUBLISH_ONLY) and
+        // increment as we start new ones, so the two schedulers share one budget.
+        Map<ComputeResource, Integer> runningTaskInfo = getRunningTaskInfo();
+        Map<ComputeResource, Integer> limitCache = new HashMap<>();
         for (PartitionIdentifier partition : compactionManager.getAllPartitions()) {
             if (runningCompactions.containsKey(partition)) {
                 continue; // partition is busy with COMPACT_AND_PUBLISH or an earlier PUBLISH_ONLY
@@ -187,6 +195,22 @@ public class CompactionScheduler extends Daemon {
                 continue;
             }
 
+            // Enforce the concurrency budget before opening a transaction.
+            ComputeResource computeResource;
+            try {
+                computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getCompactionComputeResource(partition.getTableId());
+            } catch (ErrorReportException e) {
+                LOG.debug("Resolve warehouse for autonomous publish budget check failed partition={} err={}",
+                        partition, e.getMessage());
+                continue;
+            }
+            int limit = limitCache.computeIfAbsent(computeResource, this::compactionTaskLimit);
+            int running = runningTaskInfo.getOrDefault(computeResource, 0);
+            if (running >= limit) {
+                continue; // warehouse saturated this tick; retry on a later tick
+            }
+
             CompactionJob job = startPublishOnly(snapshot, currentVersion, reason);
             if (job != null) {
                 // NOTE: lastPublish* markers are intentionally NOT updated here. Updating
@@ -195,6 +219,7 @@ public class CompactionScheduler extends Daemon {
                 // be retried until a new visible version appears. The completion handler
                 // in scheduleNewCompaction updates these once the txn reaches VISIBLE.
                 runningCompactions.put(partition, job);
+                runningTaskInfo.put(computeResource, running + Math.max(1, job.getNumTabletCompactionTasks()));
             }
         }
     }
