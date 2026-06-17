@@ -52,6 +52,11 @@ description: "Alphabetical s"
 - 标签: `storage_type`
 - 描述: 所有溢出存储目录当前已占用的磁盘字节数。`storage_type=local` 汇总 BE 溢出 `DirManager` 管理的每个目录中正在使用的字节数。`storage_type=remote` 为对称保留，当前始终为 0，因为远端溢出存储由单独的查询实例各自管理，没有全局的聚合数据。
 
+## `spill_parked_with_uncovered_reason_total`
+
+- 单位: 个
+- 描述: pipeline driver 因溢出等待被挂起、但其声明的等待原因不在任何唤醒订阅覆盖范围内的次数。健康系统中恒为 0；非 0 表示有 driver 挂起后无人唤醒（唤醒表存在缺陷，查询可能停滞直至被取消），应当配置告警。每次发生同时会在 BE 日志输出限频 WARNING。
+
 ## `spm_baseline_count`
 
 - 单位：个

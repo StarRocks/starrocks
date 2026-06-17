@@ -45,6 +45,12 @@ namespace starrocks::spill {
 // implements for SpillerWriter
 Status SpillerWriter::_decrease_running_flush_tasks() {
     if (_running_flush_tasks.fetch_sub(1) == 1) {
+        // Flush-all completion: all flushes are done and the read phase may begin. The callback wrapper
+        // (Spiller::set_flush_all_call_back) runs the client callback, acquires the input stream and
+        // triggers the first restore. The source wakeup must fire after the whole wrapper (so a woken
+        // reader sees the stream), and on the error path too (an error is also a wakeup). That is why the
+        // notify is in a defer around the callback body, not a straight-line call.
+        auto notify = DeferOp([this]() { _spiller->notify_source_observers(); });
         if (_flush_all_callback) {
             RETURN_IF_ERROR(_flush_all_callback());
         }

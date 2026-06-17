@@ -54,6 +54,9 @@ void EventScheduler::add_blocked_driver(const DriverRawPtr driver) {
     DCHECK(runtime_state != nullptr);
     [[maybe_unused]] auto query_ctx_lifetime = runtime_state->query_ctx_lifetime().lock();
     DCHECK(query_ctx_lifetime != nullptr);
+    // BlockReason check: a wakeable edge operator (source/sink with covered_wakeups() != 0) parked here
+    // must name a reason that its declared wakeups cover, or the driver would sleep with nobody to wake it.
+    driver->verify_block_reason_covered();
     SCHEDULE_CHECK(!driver->is_in_blocked());
     driver->set_in_blocked(true);
     TRACE_SCHEDULE_LOG << "TRACE add to block queue:" << driver << "," << driver->to_readable_string();

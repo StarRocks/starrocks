@@ -52,6 +52,11 @@ description: "Alphabetical s"
 - Labels: `storage_type`
 - Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
 
+## `spill_parked_with_uncovered_reason_total`
+
+- Unit: Count
+- Description: Number of times a pipeline driver was parked on a spill wait whose declared reason is not covered by any wakeup subscription. Always 0 in a healthy system; a non-zero value means a parked driver had nobody to wake it (a wakeup-table bug; the query may stall until it is cancelled) and is worth alerting on. Each occurrence also emits a rate-limited WARNING in the BE log.
+
 ## `snmp`
 
 - Unit: -

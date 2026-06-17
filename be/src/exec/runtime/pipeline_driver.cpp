@@ -33,6 +33,7 @@
 #include "compute_env/spill/common.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/query_spill_manager.h"
+#include "compute_env/spill/spill_metrics.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/primitives/driver_queue.h"
@@ -598,6 +599,45 @@ Status PipelineDriver::check_short_circuit() {
     }
 
     return Status::OK();
+}
+
+void PipelineDriver::verify_block_reason_covered() {
+    // The natural blocker of an edge park is the stalled edge. For an operator that declares a wakeup
+    // (covered_wakeups() != 0), check that the reason it names is covered.
+    auto check_one = [this](Operator* op) -> bool {
+        const uint32_t covered = op->covered_wakeups();
+        if (covered == 0) {
+            return false;
+        }
+        const BlockReason reason = op->block_reason();
+        if (reason == BlockReason::NONE) {
+            // Legal: NONE means the operator is not parked on a spill reason.
+            return false;
+        }
+        if ((covered & block_reason_bit(reason)) != 0) {
+            return true;
+        }
+        // Uncovered: a parked driver with nobody to wake it on this reason.
+        DCHECK(false) << "operator parked with uncovered BlockReason " << block_reason_name(reason) << " (covered mask "
+                      << covered << "): " << op->get_name() << " in " << to_readable_string();
+#ifdef NDEBUG
+        if (auto* sm = SpillMetrics::instance(); sm != nullptr && sm->parked_with_uncovered_reason_total() != nullptr) {
+            sm->parked_with_uncovered_reason_total()->increment(1);
+        }
+        LOG_EVERY_SECOND(WARNING) << "operator parked with uncovered BlockReason " << block_reason_name(reason)
+                                  << " (covered mask " << covered << "): " << op->get_name() << " in "
+                                  << to_readable_string();
+#endif
+        return true;
+    };
+
+    if (_state == DriverState::OUTPUT_FULL) {
+        check_one(sink_operator());
+    } else if (_state == DriverState::INPUT_EMPTY) {
+        if (auto* src = source_operator(); src != nullptr) {
+            check_one(src);
+        }
+    }
 }
 
 bool PipelineDriver::dependencies_block() {

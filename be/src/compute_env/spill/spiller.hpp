@@ -43,6 +43,35 @@
 namespace starrocks::spill {
 DECLARE_FAIL_POINT(spill_restore_sleep);
 DECLARE_FAIL_POINT(spill_restore_error);
+DECLARE_FAIL_POINT(spill_submit_error);
+DECLARE_FAIL_POINT(spill_flush_block);
+DECLARE_FAIL_POINT(spill_restore_block);
+
+#ifdef FIU_ENABLE
+// Test-only rendezvous points. A flush/restore IO task that hits the matching fail point waits at
+// arrive_A() until a test thread calls arrive_B(). Used to hold the writer-full / no-restored-data window
+// open deterministically.
+failpoint::OneToAnyBarrier& spill_flush_block_barrier();
+failpoint::OneToAnyBarrier& spill_restore_block_barrier();
+#endif
+
+// Compile-time proof that an IO task body decided the fate of its completion. The task lambdas declare
+// CompletionDecided as their return type, so every return path must construct one: either from the live
+// IOCompletion (the completion runs at scope exit, or was deliberately cancelled for a yield-resubmit),
+// or via abandoned() on the scoped_begin-false path. scoped_begin() fails only when the spiller or the
+// query context is already destroyed; nobody reads the spiller's counters then, and touching the spiller
+// from the task would be a use-after-free, so that path must leave everything untouched. A new return
+// path that presents neither does not compile. The executor never sees this type:
+// ScanTask::WorkFunction is std::function<void(YieldContext&)>, which discards the lambda's return value.
+class CompletionDecided {
+public:
+    template <class PublishFn, class Guard>
+    explicit CompletionDecided(const IOCompletion<PublishFn, Guard>&) {}
+    static CompletionDecided abandoned() { return {}; }
+
+private:
+    CompletionDecided() = default;
+};
 
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
@@ -173,12 +202,34 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     RETURN_IF_ERROR(captured_mem_table->done());
 
     _running_flush_tasks++;
+    // Keep a shared_ptr copy so the mem-table can be returned to the pool if submit fails. It is moved into
+    // the task lambda below, which never runs on a failed submit; without this copy it would leak from the
+    // pool forever.
+    MemTablePtr compensation_mem_table = captured_mem_table;
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
-                 trace = TraceInfo(state)](auto& yield_ctx) {
+                 trace = TraceInfo(state)](auto& yield_ctx) -> CompletionDecided {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         auto yield_defer = yield_ctx.defer_finished();
-        RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
-        DEFER_GUARD_END(guard);
+        if (!guard.scoped_begin()) {
+            return CompletionDecided::abandoned();
+        }
+        // Flush completion, RAII: at scope exit the writer is freed (the mem-table returns to the pool,
+        // _decrease_running_flush_tasks publishes is_full()) and both lists are woken -- the freed writer
+        // matters to the OUTPUT_FULL sink sleeper and to the INPUT_EMPTY source-side pump. Cancelled on a
+        // yield-resubmit (the task lives on and keeps its in-flight increment), so the completion fires
+        // exactly once, when the task truly finishes.
+        auto guarded = _spiller->defer_complete_io(
+                [&]() {
+                    // Hold the flush in-flight at a rendezvous so a test thread can
+                    // observe the writer-full window before the mem-table is returned.
+                    FAIL_POINT_TRIGGER_EXECUTE(spill_flush_block, { spill_flush_block_barrier().arrive_A(); });
+                    {
+                        std::lock_guard _(_mutex);
+                        _mem_table_pool.emplace(mem_table);
+                    }
+                    _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
+                },
+                /*wake_sink=*/true, guard);
         SCOPED_TIMER(_spiller->metrics().flush_timer);
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
@@ -187,16 +238,9 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
             yield_ctx.task_context_data =
                     SpillIOTaskContextPtr(std::make_shared<FlushContext>(_spiller->shared_from_this()));
         }
-        auto defer = CancelableDefer([&]() {
-            {
-                std::lock_guard _(_mutex);
-                _mem_table_pool.emplace(mem_table);
-            }
-            _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-        });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
-            return Status::OK();
+            return CompletionDecided(guarded);
         }
 
         yield_ctx.time_spent_ns = 0;
@@ -205,18 +249,42 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         _spiller->update_spilled_task_status(yieldable_flush_task(yield_ctx, state, mem_table));
         if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
             COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
-            defer.cancel();
-            yield_defer.cancel();
+            guarded.cancel_for_yield(yield_defer);
         }
 
-        return Status::OK();
+        return CompletionDecided(guarded);
     };
 
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
     auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     io_task.set_query_type(query_type);
-    RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
+    // Increment the in-flight count before submit: incrementing after submit would race a task that
+    // completes (and decrements) before the increment lands.
+    _spiller->increase_in_flight_io();
+    // The fail point must fire before the real submit: injecting after it would run the compensation
+    // concurrently with a live task and complete it twice.
+    Status submit_st;
+    FAIL_POINT_TRIGGER_EXECUTE(spill_submit_error, { submit_st = Status::InternalError("inject spill_submit_error"); });
+    if (submit_st.ok()) {
+        submit_st = TaskExecutor::submit(std::move(io_task));
+    }
+    if (!submit_st.ok()) {
+        // Full compensation: the task lambda never runs, so none of its defers fire, but every flush
+        // attempt must still produce exactly one completion (a failed submit is itself an event). Return
+        // the mem-table to the pool, then run the standard completion.
+        _spiller->complete_io(
+                [&]() {
+                    {
+                        std::lock_guard _(_mutex);
+                        _mem_table_pool.emplace(std::move(compensation_mem_table));
+                    }
+                    _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
+                    _spiller->update_spilled_task_status(std::move(submit_st));
+                },
+                /*wake_sink=*/true);
+        return _spiller->task_status();
+    }
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks.load());
     return Status::OK();
@@ -246,49 +314,58 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             return Status::OK();
         }
         _running_restore_tasks++;
-        auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) {
+        auto restore_task = [this, guard, trace = TraceInfo(state),
+                             _stream = _stream](auto& yield_ctx) -> CompletionDecided {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
             auto yield_defer = yield_ctx.defer_finished();
-            RETURN_IF(!guard.scoped_begin(), (void)0);
-            DEFER_GUARD_END(guard);
-            {
-                auto defer = CancelableDefer([&]() { _running_restore_tasks--; });
-                if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
-                    return;
-                }
-                Status res;
-                SerdeContext serd_ctx;
-                if (!yield_ctx.task_context_data.has_value()) {
-                    yield_ctx.task_context_data = std::make_shared<SpillIOTaskContext>();
-                }
+            if (!guard.scoped_begin()) {
+                return CompletionDecided::abandoned();
+            }
+            // Restore completion, RAII: do_read has already published the stream data; at scope exit the
+            // per-reader counter drops and the source-side sleepers waiting on restore IO are woken. This
+            // is common to the main, transient and sort sub-stream readers, so they all go through here.
+            // Cancelled on a yield-resubmit, so the completion fires once, when the restore finishes.
+            auto guarded = _spiller->defer_complete_io(
+                    [&]() {
+                        FAIL_POINT_TRIGGER_EXECUTE(spill_restore_block, { spill_restore_block_barrier().arrive_A(); });
+                        _running_restore_tasks--;
+                    },
+                    /*wake_sink=*/false, guard);
+            if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
+                return CompletionDecided(guarded);
+            }
+            Status res;
+            SerdeContext serd_ctx;
+            if (!yield_ctx.task_context_data.has_value()) {
+                yield_ctx.task_context_data = std::make_shared<SpillIOTaskContext>();
+            }
 
-                auto ctx = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
-                yield_ctx.time_spent_ns = 0;
-                yield_ctx.need_yield = false;
+            auto ctx = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
+            yield_ctx.time_spent_ns = 0;
+            yield_ctx.need_yield = false;
 
-                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
+            FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
 
-                YieldableRestoreTask task(_stream);
-                res = task.do_read(yield_ctx, serd_ctx);
+            YieldableRestoreTask task(_stream);
+            res = task.do_read(yield_ctx, serd_ctx);
 
-                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
-                // Simulate a non-EOF error coming out of the restore IO task
-                // (e.g. ColumnarSerde::deserialize hitting a short read).
-                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_error,
-                                           { res = Status::InternalError("inject spill_restore_error"); });
+            FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
+            // Simulate a non-EOF error coming out of the restore IO task
+            // (e.g. ColumnarSerde::deserialize hitting a short read).
+            FAIL_POINT_TRIGGER_EXECUTE(spill_restore_error,
+                                       { res = Status::InternalError("inject spill_restore_error"); });
 
-                if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
-                    COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
-                    defer.cancel();
-                    yield_defer.cancel();
-                }
+            if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
+                COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
+                guarded.cancel_for_yield(yield_defer);
+            }
 
-                if (!res.is_ok_or_eof()) {
-                    _spiller->update_spilled_task_status(std::move(res));
-                }
-                _finished_restore_tasks += !res.ok();
-            };
+            if (!res.is_ok_or_eof()) {
+                _spiller->update_spilled_task_status(std::move(res));
+            }
+            _finished_restore_tasks += !res.ok();
+            return CompletionDecided(guarded);
         };
         auto yield_func = [&](workgroup::ScanTask&& task) {
             auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
@@ -297,7 +374,24 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
         auto query_type = spill_query_type(state);
         auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(restore_task), std::move(yield_func));
         io_task.set_query_type(query_type);
-        RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
+        _spiller->increase_in_flight_io();
+        Status submit_st;
+        FAIL_POINT_TRIGGER_EXECUTE(spill_submit_error,
+                                   { submit_st = Status::InternalError("inject spill_submit_error"); });
+        if (submit_st.ok()) {
+            submit_st = TaskExecutor::submit(std::move(io_task));
+        }
+        if (!submit_st.ok()) {
+            // Full compensation: the restore task lambda never runs, so its completion defer does not fire,
+            // but every restore attempt must still produce exactly one completion.
+            _spiller->complete_io(
+                    [&]() {
+                        _running_restore_tasks--;
+                        _spiller->update_spilled_task_status(std::move(submit_st));
+                    },
+                    /*wake_sink=*/false);
+            return _spiller->task_status();
+        }
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
         COUNTER_SET(_spiller->metrics().peak_restore_io_task_count, _running_restore_tasks.load());
     }
@@ -364,17 +458,28 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     _running_flush_tasks++;
 
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
-                 spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)](auto& yield_ctx) {
+                 spilling_partitions = std::move(spilling_partitions),
+                 trace = TraceInfo(state)](auto& yield_ctx) -> CompletionDecided {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         auto yield_defer = yield_ctx.defer_finished();
-        RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
-        DEFER_GUARD_END(guard);
+        if (!guard.scoped_begin()) {
+            return CompletionDecided::abandoned();
+        }
+        // Partitioned writer freed (the partitionwise/join flush path), RAII: is_full() reads
+        // running_flush_tasks, published by the decrement; both lists are woken, as on the single-writer
+        // flush completion above. Cancelled on a yield-resubmit, so the completion fires once, when the
+        // flush finishes.
+        auto guarded = _spiller->defer_complete_io(
+                [&]() {
+                    FAIL_POINT_TRIGGER_EXECUTE(spill_flush_block, { spill_flush_block_barrier().arrive_A(); });
+                    _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
+                },
+                /*wake_sink=*/true, guard);
         // concurrency test
         RACE_DETECT(detect_flush);
-        auto defer = CancelableDefer([&]() { _spiller->update_spilled_task_status(_decrease_running_flush_tasks()); });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
-            return Status::OK();
+            return CompletionDecided(guarded);
         }
         yield_ctx.time_spent_ns = 0;
         yield_ctx.need_yield = false;
@@ -387,16 +492,32 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
 
         if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
             COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
-            defer.cancel();
-            yield_defer.cancel();
+            guarded.cancel_for_yield(yield_defer);
         }
-        return Status::OK();
+        return CompletionDecided(guarded);
     };
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
     auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     io_task.set_query_type(query_type);
-    RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
+    _spiller->increase_in_flight_io();
+    Status submit_st;
+    FAIL_POINT_TRIGGER_EXECUTE(spill_submit_error, { submit_st = Status::InternalError("inject spill_submit_error"); });
+    if (submit_st.ok()) {
+        submit_st = TaskExecutor::submit(std::move(io_task));
+    }
+    if (!submit_st.ok()) {
+        // Full compensation: the task lambda never runs, so its completion defer does not fire, but every
+        // flush attempt must still produce exactly one completion. Partitions own their mem-tables (nothing
+        // to return to a pool here).
+        _spiller->complete_io(
+                [&]() {
+                    _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
+                    _spiller->update_spilled_task_status(std::move(submit_st));
+                },
+                /*wake_sink=*/true);
+        return _spiller->task_status();
+    }
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks.load());
 

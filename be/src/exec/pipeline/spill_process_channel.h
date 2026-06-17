@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -80,39 +81,73 @@ class SpillProcessChannel {
 public:
     SpillProcessChannel() = default;
 
-    bool add_spill_task(SpillProcessTask&& task) {
-        DCHECK(!_is_finishing);
-        _is_working = true;
-        return _spill_tasks.put(std::move(task));
-    }
+    // add_spill_task / add_last_task are called from the writer pipeline thread. They bump _task_count
+    // (queued + current) before the new task becomes visible in the queue, so the source wakeup
+    // happens-after the enqueue and the woken pump sees the task. add_last_task also sets the terminal flag
+    // here, so the enqueue and the finishing flag become visible together, before the notify. These public
+    // wrappers take the channel lock, mutate through the *_locked helpers, copy the spiller, and notify the
+    // source list outside the lock. They are not reentrant: a caller that already holds _mutex (execute())
+    // must call the *_locked helpers directly -- the public add_*/execute/close are never called from under
+    // _mutex.
+    bool add_spill_task(SpillProcessTask&& task);
 
-    bool add_last_task(SpillProcessTask&& task) {
-        DCHECK(!_is_finishing);
-        _is_working = true;
-        auto defer = DeferOp([this]() { set_finishing(); });
-        return _spill_tasks.put(std::move(task));
-    }
+    bool add_last_task(SpillProcessTask&& task);
 
-    bool acquire_spill_task() { return _spill_tasks.blocking_get(&_current_task); }
+    // Non-blocking. has_output() gates the pump, so the pump's pull_chunk only runs when a task is
+    // available, and an empty queue is only transient.
+    bool acquire_spill_task() { return _spill_tasks.try_get(&_current_task); }
 
     bool has_spill_task() { return !_spill_tasks.empty(); }
 
-    void set_finishing() { _is_finishing = true; }
-    bool is_finishing() { return _is_finishing; }
-    bool is_working() { return _is_working; }
+    // The terminal handshake. External callers (operator set_finishing paths) do not hold the channel lock,
+    // and close() may race a _spiller.reset(). So take the lock to copy the spiller and publish the flag,
+    // then notify outside the lock (try_schedule re-evaluates predicates; keeping the channel lock off the
+    // notify path keeps the lock-inversion surface small).
+    void set_finishing() {
+        std::shared_ptr<spill::Spiller> spiller_copy;
+        {
+            std::lock_guard guard(_mutex);
+            _is_finishing.store(true);
+            spiller_copy = _spiller;
+        }
+        if (spiller_copy != nullptr) {
+            spiller_copy->notify_source_observers();
+        }
+    }
+
+    bool is_finishing() { return _is_finishing.load(); }
+    bool is_working() { return _is_working.load(); }
 
     SpillProcessTask& current_task() { return _current_task; }
+
+    // Called by the spill-process source after a task drains (hits EOF): drop it from the count and wake the
+    // sink list (the writer is blocked on has_task()). Runs on the pump thread without the channel lock.
+    void on_current_task_finished() {
+        _current_task.reset();
+        _task_count.fetch_sub(1);
+        if (_spiller != nullptr) {
+            _spiller->notify_sink_observers();
+        }
+    }
 
     bool has_output() {
         if (is_finished()) {
             return false;
         }
-        return (has_spill_task() || _current_task) && !_spiller->is_full();
+        // Check _spiller for null explicitly, instead of assuming has_task() implies a live spiller:
+        // close() may reset _spiller, and the other accessors (on_current_task_finished, set_finishing)
+        // already null-check it. Do the deref after an explicit check, do not rely on && evaluation order.
+        if (_spiller == nullptr) {
+            return false;
+        }
+        return has_task() && !_spiller->is_full();
     }
 
-    bool has_task() { return has_spill_task() || _current_task; }
+    // queued + current, read as a single atomic, so has_task() stays consistent with the queue and
+    // _current_task under one-shot notify.
+    bool has_task() { return _task_count.load() > 0; }
 
-    bool is_finished() { return is_finishing() && !has_spill_task() && !_current_task; }
+    bool is_finished() { return is_finishing() && !has_task(); }
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
@@ -122,12 +157,21 @@ public:
     void close();
 
 private:
-    bool _is_finishing = false;
-    bool _is_working = false;
+    // Mutation half of add_spill_task / add_last_task: enqueue and bump the count (add_last_task also
+    // publishes the terminal flag) under an already-held _mutex, with no notify. execute() holds _mutex for
+    // its whole queueing branch and calls these directly (calling the public wrappers would re-enter the
+    // non-reentrant _mutex and deadlock); the public wrappers wrap these in lock + post-lock notify.
+    bool _add_spill_task_locked(SpillProcessTask&& task);
+    bool _add_last_task_locked(SpillProcessTask&& task);
+
+    std::atomic_bool _is_finishing = false;
+    std::atomic_bool _is_working = false;
     bool _is_closed = false;
     std::shared_ptr<spill::Spiller> _spiller;
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
+    // queued spill tasks + the one currently pulled into _current_task.
+    std::atomic<int32_t> _task_count{0};
     std::mutex _mutex;
 };
 

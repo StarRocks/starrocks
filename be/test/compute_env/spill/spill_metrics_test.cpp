@@ -71,4 +71,15 @@ TEST(SpillMetricsTest, InstallRegistersLocalAndRemoteMetrics) {
     assert_metric_value(&registry, "query_spill_trigger_total", remote_labels, "8");
 }
 
+TEST(SpillMetricsTest, InstallRegistersUncoveredReasonCounter) {
+    MetricRegistry registry("test_registry");
+    SpillMetrics metrics(&registry);
+    metrics.install(&registry);
+
+    ASSERT_NE(nullptr, metrics.parked_with_uncovered_reason_total());
+
+    metrics.parked_with_uncovered_reason_total()->increment(2);
+    assert_metric_value(&registry, "spill_parked_with_uncovered_reason_total", MetricLabels::EmptyLabels, "2");
+}
+
 } // namespace starrocks

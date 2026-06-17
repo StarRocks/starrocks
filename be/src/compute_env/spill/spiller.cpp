@@ -43,6 +43,20 @@
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);
 DEFINE_FAIL_POINT(spill_restore_error);
+DEFINE_FAIL_POINT(spill_submit_error);
+DEFINE_FAIL_POINT(spill_flush_block);
+DEFINE_FAIL_POINT(spill_restore_block);
+
+#ifdef FIU_ENABLE
+failpoint::OneToAnyBarrier& spill_flush_block_barrier() {
+    static failpoint::OneToAnyBarrier barrier;
+    return barrier;
+}
+failpoint::OneToAnyBarrier& spill_restore_block_barrier() {
+    static failpoint::OneToAnyBarrier barrier;
+    return barrier;
+}
+#endif
 
 TQueryType::type spill_query_type(RuntimeState* state) {
     return state->query_options().query_type;
@@ -182,6 +196,12 @@ void Spiller::update_spilled_task_status(Status&& st) {
 }
 
 Status Spiller::reset_state(RuntimeState* state) {
+    // prepare() reallocates the writer/reader, but in-flight flush/restore tasks captured the previous raw
+    // pointers. Refuse the reset while IO is in flight instead of swapping objects out from under a live
+    // task; the caller (query-cache refill) retries once the tasks drain.
+    if (has_running_io_tasks()) {
+        return Status::InternalError("reset_state called while spill IO tasks are still in flight");
+    }
     _spilled_append_rows = 0;
     _restore_read_rows = 0;
     RETURN_IF_ERROR(prepare(state));
