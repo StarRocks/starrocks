@@ -52,11 +52,9 @@ using Caster = NullAwareInputCheckUnaryFunction<TestToNumber, TestOverflowCheckT
 class NullAwareInputCheckUnaryFunctionTest : public ::testing::Test {
 protected:
     static constexpr int64_t kInt32Max = std::numeric_limits<int32_t>::max();
-    static constexpr int64_t kOverflow = static_cast<int64_t>(kInt32Max) + 100;  // out of INT range
+    static constexpr int64_t kOverflow = static_cast<int64_t>(kInt32Max) + 100; // out of INT range
 
-    static ColumnPtr cast(const ColumnPtr& column) {
-        return Caster::evaluate<TYPE_BIGINT, TYPE_INT>(column);
-    }
+    static ColumnPtr cast(const ColumnPtr& column) { return Caster::evaluate<TYPE_BIGINT, TYPE_INT>(column); }
 
     static ColumnPtr make_bigint(const std::vector<int64_t>& values) {
         auto col = RunTimeColumnType<TYPE_BIGINT>::create();
