@@ -22,7 +22,13 @@
 namespace starrocks {
 
 VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker) : _cache(capacity) {
-    _cache.set_mem_tracker(tracker);
+    // The HNSW/tenann index lives in the normal heap, so the global allocator hook
+    // already charges its bytes to the process tracker once during load. Accounting
+    // them additively on the vector_index tracker (a child of process) would count
+    // the same bytes a second time on process and spuriously trip the process
+    // mem_limit. Use the excluding-root variant so the vector_index tracker labels
+    // the usage without re-adding it to process.
+    _cache.set_mem_tracker_excluding_root(tracker);
 }
 
 // Drain IndexRefs outside _cache._lock before ~DynamicCache acquires it.
