@@ -414,6 +414,314 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
+                                             Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                             const std::vector<uint32_t>& insert_rowids,
+                                             const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
+    auto full_schema = ChunkHelper::convert_schema(tschema);
+    auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
+
+    {
+        FileInfo info;
+        const auto& segment_meta = op_write.rowset().segment_metas(seg);
+        info.path = segment_meta.filename();
+        if (segment_meta.has_bundle_file_offset()) {
+            info.bundle_file_offset = segment_meta.bundle_file_offset();
+            info.size = segment_meta.size();
+        }
+        if (segment_meta.has_encryption_meta()) {
+            info.encryption_meta = segment_meta.encryption_meta();
+        }
+
+        FileInfo file_info{.path = tablet->segment_location(info.path), .encryption_meta = info.encryption_meta};
+        if (info.size.has_value()) file_info.size = info.size;
+        if (info.bundle_file_offset.has_value()) file_info.bundle_file_offset = info.bundle_file_offset;
+
+        ASSIGN_OR_RETURN(auto segment, Segment::open(fs, file_info, seg, tschema));
+        RandomAccessFileOptions opts;
+        if (!file_info.encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto unwrap, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
+            opts.encryption_info = std::move(unwrap);
+        }
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        ASSIGN_OR_RETURN(auto raf, fs->new_random_access_file_with_bundling(opts, file_info));
+        iter_opts.read_file = raf.get();
+
+        for (uint32_t cid : update_cids) {
+            const TabletColumn& col = tschema->column(cid);
+            ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator_or_default(col, nullptr));
+            RETURN_IF_ERROR(col_iter->init(iter_opts));
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(insert_rowids.data(), insert_rowids.size(), mut_col));
+        }
+    }
+
+    // Fill in default values for columns not included in update_cids
+    std::set<uint32_t> upd_set(update_cids.begin(), update_cids.end());
+    for (uint32_t cid = 0; cid < tschema->num_columns(); ++cid) {
+        if (upd_set.count(cid) > 0) continue;
+        const TabletColumn& tablet_column = tschema->column(cid);
+        bool has_default_value = tablet_column.has_default_value();
+        std::string default_value = has_default_value ? tablet_column.default_value() : "";
+
+        auto it = op_write.txn_meta().column_to_expr_value().find(tablet_column.name());
+        if (it != op_write.txn_meta().column_to_expr_value().end()) {
+            has_default_value = true;
+            default_value = it->second;
+        }
+        if (has_default_value) {
+            const TypeInfoPtr& type_info = get_type_info(tablet_column);
+            std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
+                    std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),
+                                                                 type_info, tablet_column.length(),
+                                                                 (int)insert_rowids.size());
+            ColumnIteratorOptions iter_opts;
+            RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, insert_rowids.size(), mut_col));
+        } else {
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            mut_col->append_default(insert_rowids.size());
+        }
+    }
+
+    {
+        auto char_indexes = ChunkSchemaHelper::get_char_field_indexes(full_schema);
+        ChunkHelper::padding_char_columns(char_indexes, full_schema, tschema, full_chunk.get());
+    }
+
+    *out_chunk = std::move(full_chunk);
+    return Status::OK();
+}
+
+Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                                 const TabletMetadataPtr& metadata, Tablet* tablet,
+                                                 LakePrimaryIndex& index, MetaFileBuilder* builder,
+                                                 int64_t base_version, uint32_t rowset_id,
+                                                 const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                                 uint32_t* new_del_rebuild_rssid) {
+    if (op_write.txn_meta().partial_update_mode() != PartialUpdateMode::COLUMN_UPSERT_MODE) {
+        return Status::OK();
+    }
+
+    auto tschema = std::make_shared<TabletSchema>(metadata->schema());
+    std::vector<uint32_t> pk_cids;
+    pk_cids.reserve(tschema->num_key_columns());
+    for (size_t i = 0; i < tschema->num_key_columns(); i++) pk_cids.push_back((uint32_t)i);
+    Schema pkey_schema = ChunkHelper::convert_schema(tschema, pk_cids);
+
+    // Resolve cid from uid against current schema; partial_update_column_ids is stale across schema drift.
+    const auto& txn_meta = op_write.txn_meta();
+    std::vector<uint32_t> update_cids;
+    update_cids.reserve(txn_meta.partial_update_column_unique_ids_size());
+    for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
+        const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
+        const auto cid = tschema->field_index(uid);
+        if (cid == -1) {
+            return Status::InternalError(strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
+                                                             tablet->tablet_id()));
+        }
+        update_cids.push_back(static_cast<uint32_t>(cid));
+    }
+
+    int32_t ai_cid = -1;
+    for (int i = 0; i < tschema->num_columns(); ++i) {
+        if (tschema->column(i).is_auto_increment()) {
+            ai_cid = i;
+            break;
+        }
+    }
+    if (ai_cid >= 0 && std::find(update_cids.begin(), update_cids.end(), (uint32_t)ai_cid) == update_cids.end()) {
+        update_cids.push_back((uint32_t)ai_cid);
+    }
+
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet->metadata_root_location()));
+
+    TxnLogPB_OpWrite new_rows_op;
+    uint64_t total_rows = 0;
+    uint64_t total_data_size = 0;
+    std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
+
+    DCHECK_EQ(insert_rowids_by_segment.size(), op_write.rowset().segment_metas_size());
+
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tschema->primary_key_encoding_type_or_error());
+    for (uint32_t seg = 0; seg < op_write.rowset().segment_metas_size(); ++seg) {
+        // Reuse insert_rowids computed by ColumnModePartialUpdateHandler
+        const auto& insert_rowids = insert_rowids_by_segment[seg];
+        if (insert_rowids.empty()) {
+            continue;
+        }
+        const size_t batch_size =
+                static_cast<size_t>(std::max<int32_t>(1, config::column_mode_partial_update_insert_batch_size));
+
+        SegmentWriterOptions wopts;
+        WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        if (config::enable_transparent_data_encryption) {
+            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            fopts.encryption_info = pair.info;
+            wopts.encryption_meta = std::move(pair.encryption_meta);
+        }
+
+        std::string seg_name = gen_segment_filename(txn_id);
+        std::string seg_path = tablet->segment_location(seg_name);
+        ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(fopts, seg_path));
+        SegmentWriter writer(std::move(wfile), /*segment_id*/ 0, tschema, wopts);
+        RETURN_IF_ERROR(writer.init());
+
+        // RAII: Clean up incomplete segment file on error
+        bool segment_finalized = false;
+        DeferOp segment_cleanup([&]() {
+            if (!segment_finalized) {
+                // If segment was not finalized successfully, delete the incomplete file
+                auto st = fs->delete_file(seg_path);
+                if (!st.ok()) {
+                    LOG(WARNING) << "Failed to delete incomplete segment file: " << seg_path
+                                 << ", error: " << st.message();
+                }
+            }
+        });
+
+        MutableColumnPtr pk_column_for_upsert;
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column_for_upsert, pk_encoding_type));
+
+        for (size_t batch_start = 0; batch_start < insert_rowids.size(); batch_start += batch_size) {
+            size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
+            std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
+                                                      insert_rowids.begin() + batch_end);
+            ChunkPtr full_chunk;
+            RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, tablet, fs, seg, batch_insert_rowids, update_cids,
+                                                   &full_chunk));
+
+            RETURN_IF_ERROR(writer.append_chunk(*full_chunk));
+            total_rows += full_chunk->num_rows();
+
+            PrimaryKeyEncoder::encode(pkey_schema, *full_chunk, 0, full_chunk->num_rows(), pk_column_for_upsert.get(),
+                                      pk_encoding_type);
+        }
+
+        uint64_t seg_file_size = 0, idx_size = 0, footer_pos = 0;
+        RETURN_IF_ERROR(writer.finalize(&seg_file_size, &idx_size, &footer_pos));
+        segment_finalized = true; // Mark as successfully finalized
+
+        SegmentFileInfo seg_info;
+        seg_info.path = seg_name;
+        seg_info.size = seg_file_size;
+        if (config::enable_transparent_data_encryption) {
+            seg_info.encryption_meta = writer.encryption_meta();
+        }
+        seg_info.num_rows = writer.num_rows();
+        writer.write_sort_key_fields_to(seg_info);
+        total_data_size += seg_file_size;
+
+        uint32_t segment_idx = new_rows_op.rowset().segment_metas_size();
+        seg_info.to_proto(segment_idx, new_rows_op.mutable_rowset()->add_segment_metas());
+
+        uint32_t new_segment_id = get_segment_idx(new_rows_op.rowset(), static_cast<int32_t>(segment_idx));
+        PrimaryIndex::DeletesMap segment_deletes;
+        RETURN_IF_ERROR(index.upsert(rowset_id + new_segment_id, 0, *pk_column_for_upsert, 0,
+                                     pk_column_for_upsert->size(), &segment_deletes));
+
+        for (auto& [rssid, del_ids] : segment_deletes) {
+            DCHECK(del_ids.empty()) << "del_ids should be empty for new row segments, but got " << del_ids.size()
+                                    << " deletes for rssid=" << rssid;
+            if (del_ids.empty()) continue;
+            DelVectorPtr dv = std::make_shared<DelVector>();
+            dv->init(metadata->version(), del_ids.data(), del_ids.size());
+            builder->append_delvec(dv, rssid);
+            segment_id_to_add_dels_new_acc[rssid] += del_ids.size();
+        }
+    }
+
+    new_rows_op.mutable_rowset()->set_num_rows(total_rows);
+    new_rows_op.mutable_rowset()->set_data_size(total_data_size);
+    new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segment_metas_size() > 1);
+    // append del files from old op to new op
+    // Carry over the per-del shared flag populated by tablet-split cross-publish.
+    // Without this, apply_opwrite(new_rows_op) would drop the flag and the del file
+    // would be written into rowset.del_files with shared=false, exposing it to
+    // premature deletion by vacuum on sibling split tablets.
+    for (const auto& del_meta : op_write.dels_meta()) {
+        new_rows_op.add_dels_meta()->CopyFrom(del_meta);
+    }
+    if (new_rows_op.rowset().segment_metas_size() > 0 || new_rows_op.dels_meta_size() > 0) {
+        // Give the synthesized new_rows rowset a uid. In COLUMN_UPSERT_MODE the
+        // original op_write.rowset() never enters tablet metadata as a top-level
+        // rowset: its partial-column segments become DCG entries on existing rowsets
+        // (apply_column_mode_partial_update orphans them into orphan_files for GC), and
+        // only this new_rows_op is added via apply_opwrite below. So the uid here can't
+        // collide with any concurrent top-level rowset in this metadata.
+        // Reuse op_write.uid (minted by delta_writer at write time, preserved verbatim across
+        // cross-publish by proto CopyFrom) so every split sibling that re-runs this publish
+        // converges on the same identity. A legacy pre-uid op_write (rolling upgrade / pending
+        // txn log) is never range-distributed, hence never cross-published, so it is backfilled.
+        tablet_reshard_helper::inherit_or_set_uid(new_rows_op.mutable_rowset(), op_write.rowset());
+        builder->apply_opwrite(new_rows_op, {}, {});
+        if (!segment_id_to_add_dels_new_acc.empty()) {
+            (void)builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
+            segment_id_to_add_dels_new_acc.clear();
+        }
+    }
+    // set new del_rebuild_rssid via new op
+    uint32_t max_segment_id = 0;
+    for (int i = 0; i < new_rows_op.rowset().segment_metas_size(); i++) {
+        max_segment_id = std::max(max_segment_id, get_segment_idx(new_rows_op.rowset(), i));
+    }
+    *new_del_rebuild_rssid = rowset_id + max_segment_id;
+
+    return Status::OK();
+}
+
+Status UpdateManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                           const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
+                                           IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version,
+                                           uint32_t del_rebuild_rssid, const RowsetUpdateStateParams& params) {
+    if (op_write.dels_meta_size() == 0) {
+        return Status::OK();
+    }
+
+    PrimaryIndex::DeletesMap new_deletes;
+    RowsetUpdateState state;
+    auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txn_id));
+    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
+    state.init(params);
+    for (uint32_t del_id = 0; del_id < op_write.dels_meta_size(); del_id++) {
+        RETURN_IF_ERROR(state.load_delete(del_id, params));
+        DCHECK(state.deletes(del_id) != nullptr);
+        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_rebuild_rssid));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
+        state.release_delete(del_id);
+    }
+
+    // generate delvec and write to meta
+    vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs;
+    new_del_vecs.reserve(new_deletes.size());
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
+    for (auto& [rssid, del_ids] : new_deletes) {
+        if (del_ids.empty()) continue;
+        TabletSegmentId tsid;
+        tsid.tablet_id = tablet->id();
+        tsid.segment_id = rssid;
+        DelVectorPtr old_delvec;
+        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false, &old_delvec));
+        DelVectorPtr dv_new;
+        old_delvec->add_dels_as_new_version(del_ids, metadata->version(), &dv_new);
+        new_del_vecs.emplace_back(rssid, dv_new);
+        segment_id_to_add_dels[rssid] += del_ids.size();
+    }
+    for (auto&& each : new_del_vecs) {
+        builder->append_delvec(each.second, each.first);
+    }
+    RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
+
+    return Status::OK();
+}
+
+>>>>>>> 1ccf93c6fb ([BugFix] Fix lake PCU crash and silent corruption under schema drift (#74005))
 Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                          const TabletMetadataPtr& metadata, Tablet* tablet,
                                                          MetaFileBuilder* builder, int64_t base_version) {
