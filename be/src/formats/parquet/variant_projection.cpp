@@ -24,6 +24,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/type_converter.h"
 #include "column/variant_column.h"
 #include "column/variant_converter.h"
 #include "column/variant_path_parser.h"
@@ -38,7 +39,6 @@
 #include "formats/parquet/group_reader.h" // for GroupReaderParam
 #include "formats/parquet/scalar_column_reader.h"
 #include "runtime/mem_pool.h"
-#include "storage/convert_helper.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "types/type_info.h"
 

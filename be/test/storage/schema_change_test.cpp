@@ -20,6 +20,7 @@
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/datum_convert.h"
+#include "column/type_converter.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exprs/expr_factory.h"
