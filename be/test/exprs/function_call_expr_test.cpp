@@ -431,7 +431,7 @@ TEST_F(VectorizedFunctionCallExprTest, aggStateFunctionCallEvaluatesStateAndMerg
     ASSERT_OK(expr_context.prepare(&_runtime_state));
     ASSERT_OK(expr_context.open(&_runtime_state));
 
-    auto result_or = root_expr.evaluate_checked(&expr_context, nullptr);
+    auto result_or = expr_context.evaluate(nullptr);
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     assert_bigint_column_value(result_or.value(), 7);
 
@@ -460,7 +460,7 @@ TEST_F(VectorizedFunctionCallExprTest, aggStateFunctionCallEvaluatesStateUnionAn
     ASSERT_OK(expr_context.prepare(&_runtime_state));
     ASSERT_OK(expr_context.open(&_runtime_state));
 
-    auto result_or = root_expr.evaluate_checked(&expr_context, nullptr);
+    auto result_or = expr_context.evaluate(nullptr);
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     assert_bigint_column_value(result_or.value(), 12);
 
