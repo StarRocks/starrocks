@@ -330,15 +330,74 @@ class OrcStripeStatisticsReaderTest {
     }
 
     @Test
-    void timestampColumnStillFallsBackToDataTier() throws Exception {
-        // ORC TIMESTAMP stats carry reader-local-tz semantics that need separate
-        // alignment work; deferred. Falls back to data tier (NOT a load failure).
+    void readsTimestampStatistics() throws Exception {
+        // Plain ORC TIMESTAMP → StarRocks DATETIME. setIsUTC(true): time[] is UTC epoch millis, so
+        // minimumUtc == the written millis. 1000 ms = 1970-01-01 00:00:01 UTC; +1000 ms per row.
         Path orcPath = writeOrc(
                 "struct<event_ts:timestamp>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertFalse(stats.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            String minValue = stripe.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = stripe.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals("1970-01-01 00:00:01", globalMin);
+        // Whole-second max; assert the second prefix to stay robust to a sub-millisecond stats
+        // ceiling if the ORC writer leaves maxNanos at its sentinel for a 0-nanos value.
+        Assertions.assertTrue(globalMax.startsWith("1970-01-01 00:00:03"), "unexpected max " + globalMax);
+    }
+
+    @Test
+    void readsTimestampStatisticsWithMicroseconds() throws Exception {
+        // Sub-second precision must survive: BE keeps microseconds for a plain TIMESTAMP, so the
+        // boundary must too. 1.500123 s: time=1000 ms (second 1), nanos=500123000 (full sub-second).
+        // (Hive TimestampColumnVector contract: nanos[] is the full sub-second; if this ORC version
+        // instead treats nanos[] as the sub-millisecond remainder, write time=1500, nanos=123000 — the
+        // expected rendered value is the same; confirm by running.)
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = 1000L;
+                    vector.nanos[batchRow] = 500_123_000;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals("1970-01-01 00:00:01.500123",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void timestampInstantFallsBackToDataTier() throws Exception {
+        // TIMESTAMP_INSTANT (timestamp with local time zone) gets a session-tz offset at load time
+        // that this reader cannot reproduce → defer to data tier.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp with local time zone>",
                 /*rowCount=*/ 2,
                 (batch, batchRow, rowIndex) -> {
                     TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
-                    vector.time[batchRow] = rowIndex * 1000L;
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
                     vector.nanos[batchRow] = 0;
                 });
 
@@ -346,6 +405,85 @@ class OrcStripeStatisticsReaderTest {
                 OrcStripeStatisticsReader.read(
                         PresplitTestSupport.statusOf(orcPath), new Configuration(),
                         new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void timestampIntoNonDatetimeSortKeyFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void pre1970TimestampFallsBackToDataTier() throws Exception {
+        // -1000 ms = 1969-12-31 23:59:59 < 1970-01-01: outside the safe window → data tier.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = -1000L - rowIndex;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void postYear9999TimestampFallsBackToDataTier() throws Exception {
+        // 253402300800000 ms = 10000-01-01 00:00:00 UTC, year > 9999 → above the safe window.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = 253402300800000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void allNullTimestampStripeReportsAbsentStatistics() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    batch.cols[0].noNulls = false;
+                    batch.cols[0].isNull[batchRow] = true;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertFalse(stats.isEmpty());
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertNull(stripe.getMinTuple());
+            Assertions.assertNull(stripe.getMaxTuple());
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(3L, totalRowCount);
     }
 
     @Test

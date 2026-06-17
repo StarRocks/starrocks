@@ -32,10 +32,14 @@ import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
 import org.apache.orc.StripeInformation;
 import org.apache.orc.StripeStatistics;
+import org.apache.orc.TimestampColumnStatistics;
 import org.apache.orc.TypeDescription;
 
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -55,12 +59,18 @@ import java.util.Objects;
  *       rendering, pre-1582 proleptic/hybrid calendar ambiguity) fall back to data tier</li>
  *   <li>ORC DECIMAL → StarRocks DECIMAL of the SAME precision and scale (ORC orders decimal
  *       stats correctly, so footer min/max are usable). Non-matching precision/scale → data tier</li>
+ *   <li>ORC TIMESTAMP (local, no timezone) → StarRocks DATETIME, using the tz-independent UTC stat,
+ *       gated to {@code [1970-01-01, 9999-12-31]}. TIMESTAMP_INSTANT is deferred (the load applies a
+ *       session-tz offset this reader cannot reproduce).</li>
  * </ul>
  * Everything else — STRING/CHAR/VARCHAR (data-tier fallback anyway), BOOLEAN,
- * FLOAT/DOUBLE, TIMESTAMP/TIMESTAMP_INSTANT (reader-local-tz stats, deferred),
+ * FLOAT/DOUBLE, TIMESTAMP_INSTANT (load applies a session-tz offset this reader cannot reproduce),
  * non-matching-precision/scale DECIMAL, and any complex type — makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier. That is
  * NOT a load failure. Pure I/O failures surface as {@link StarRocksException}.
+ * Note: a legacy ORC file lacking modern UTC stats (pre-1.5-era footer) decodes through the JVM
+ * default timezone, which may bias or reorder cut points — the load still routes every row by its
+ * actual value, so this only mis-places the split, never loses or corrupts data.
  */
 public final class OrcStripeStatisticsReader {
 
@@ -140,9 +150,10 @@ public final class OrcStripeStatisticsReader {
      * Reject ORC/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating stripes. Anything outside the window means "fall
      * back to data tier", not "fail the load". The supported window is the unannotated
-     * integer categories, ORC DATE → StarRocks DATE, and ORC DECIMAL → a same-precision/scale
-     * StarRocks DECIMAL. String, boolean, floating-point, TIMESTAMP/TIMESTAMP_INSTANT,
-     * non-matching DECIMAL, and complex types are deferred (fall back to data tier).
+     * integer categories, ORC DATE → StarRocks DATE, ORC DECIMAL → a same-precision/scale
+     * StarRocks DECIMAL, and ORC TIMESTAMP → StarRocks DATETIME. String, boolean,
+     * floating-point, TIMESTAMP_INSTANT, non-matching DECIMAL, and complex types are deferred
+     * (fall back to data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             TypeDescription fieldType, Column sortKeyColumn) throws MetaTierUnavailableException {
@@ -155,6 +166,9 @@ public final class OrcStripeStatisticsReader {
             // ORC orders decimal stats correctly (no Parquet unsigned-byte trap), so footer
             // min/max are usable; require an exact precision/scale match with the StarRocks column.
             case DECIMAL -> decimalMatchesExactly(fieldType, sortKeyColumn);
+            // Plain ORC TIMESTAMP is local (no timezone); the BE load stores its UTC wall clock
+            // verbatim (no session-tz offset, unlike TIMESTAMP_INSTANT) → StarRocks DATETIME.
+            case TIMESTAMP -> starRocksPrimitive == PrimitiveType.DATETIME;
             default -> false;
         };
         if (!compatible) {
@@ -197,6 +211,10 @@ public final class OrcStripeStatisticsReader {
         if (sortKeyStatistics instanceof DecimalColumnStatistics decimalStatistics
                 && decimalStatistics.getNumberOfValues() > 0) {
             return convertDecimalStripe(decimalStatistics, rowCount, location);
+        }
+        if (sortKeyStatistics instanceof TimestampColumnStatistics timestampStatistics
+                && timestampStatistics.getNumberOfValues() > 0) {
+            return convertTimestampStripe(timestampStatistics, rowCount, location);
         }
         // Absent / all-null stats (no presence flag on ORC numeric/date stats, so an
         // empty stripe is detected via getNumberOfValues() == 0) → missing min/max.
@@ -278,6 +296,59 @@ public final class OrcStripeStatisticsReader {
         }
         return new RowGroupStatistics(
                 new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertTimestampStripe(
+            TimestampColumnStatistics timestampStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        Variant minVariant;
+        Variant maxVariant;
+        try {
+            // getMinimumUTC()/getMaximumUTC() return the tz-independent UTC wall clock (raw UTC
+            // millis, NOT the TimeZone.getDefault()-shifted getMinimum()). This matches what the BE
+            // load stores for a plain (non-instant) TIMESTAMP: the wall clock verbatim, no session-tz
+            // offset. getNanos() carries the full sub-second nanos (millis fraction + sub-millisecond),
+            // which BE also keeps for a plain TIMESTAMP; renderDateTime truncates to microseconds
+            // (StarRocks DATETIME precision), mirroring the Parquet reader.
+            // NOTE: a legacy ORC file carrying only pre-1.5-era stats (no minimumUtc) decodes through
+            // TimeZone.getDefault(), so getMinimumUTC() may be tz-shifted (and under DST, shifted
+            // non-uniformly so individual values can reorder); the high-level stats API exposes no flag
+            // to detect this. BoundaryPlanner still emits a SORTED boundary set and BE routes every row
+            // by its actual value, so the only effect is a possibly mis-placed / uneven split — never
+            // wrong data or wrong results (and if a conversion ever yields min > max, the downstream
+            // ParquetMetadataSampler treats the row group as fallback rather than emitting a boundary).
+            // Modern writers (StarRocks unload, Spark, Hive, ORC >= 1.5) emit minimumUtc and are unaffected.
+            LocalDateTime minDateTime = utcTimestampToDateTime(timestampStatistics.getMinimumUTC());
+            LocalDateTime maxDateTime = utcTimestampToDateTime(timestampStatistics.getMaximumUTC());
+            MetaTierTemporalWindow.rejectDateOutsideWindow(minDateTime.toLocalDate());
+            MetaTierTemporalWindow.rejectDateOutsideWindow(maxDateTime.toLocalDate());
+            minVariant = Variant.of(location.starRocksColumn.getType(), renderDateTime(minDateTime));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), renderDateTime(maxDateTime));
+        } catch (RuntimeException conversionFailure) {
+            throw new MetaTierUnavailableException(String.format(
+                    "ORC timestamp stats value not representable for sort-key column \"%s\": %s",
+                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
+        }
+        return new RowGroupStatistics(
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static LocalDateTime utcTimestampToDateTime(Timestamp utcTimestamp) {
+        // getTime() is UTC epoch millis (no TimeZone.getDefault() shift, unlike getMinimum());
+        // getNanos() is the full sub-second nanos (0..999_999_999). floorDiv keeps the whole-second
+        // part correct; ofEpochSecond combines them. The window gate rejects pre-1970 / post-9999.
+        long epochSecond = Math.floorDiv(utcTimestamp.getTime(), 1000L);
+        return LocalDateTime.ofEpochSecond(epochSecond, utcTimestamp.getNanos(), ZoneOffset.UTC);
+    }
+
+    private static String renderDateTime(LocalDateTime dateTime) {
+        // Mirrors DateVariant.getStringValue / the Parquet reader: second precision unless there is a
+        // sub-second part, then 6-digit microseconds. parseStrictDateTime round-trips both.
+        if (dateTime.getNano() == 0) {
+            return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
+        }
+        return dateTime.format(DateUtils.DATE_TIME_FORMATTER)
+                + "." + String.format("%06d", dateTime.getNano() / 1000);
     }
 
     private record SortKeyLocation(int columnId, Column starRocksColumn) {
