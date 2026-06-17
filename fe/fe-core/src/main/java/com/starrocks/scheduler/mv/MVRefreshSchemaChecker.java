@@ -136,10 +136,10 @@ public final class MVRefreshSchemaChecker {
         mvDb.map(Database::getFullName).ifPresent(context::setDatabase);
 
         QueryStatement queryStmt;
-        // isIncrementalOrAuto, not isIncremental: legacy AUTO-mode IVM MVs also carry the hidden
-        // __ROW_ID__/__AGG_STATE schema, so they must re-derive too -- else the viewDefineSql branch
-        // (fewer columns) trips the arity check and falsely inactivates them.
-        if (mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
+        // Gate on getRowIdStrategy()!=null (== has __ROW_ID__ = IVM schema), not the refresh mode: an
+        // IVM MV needs the re-derived comparison, but a non-IVM-eligible AUTO MV (plain PCT schema) must
+        // take the viewDefineSql branch -- else derive() throws and the healthy MV is falsely inactivated.
+        if (mv.getRowIdStrategy() != null) {
             queryStmt = IvmRefreshDefinition.deriveRewrittenQuery(context, mv);
         } else {
             List<StatementBase> statements = SqlParser.parse(selectSql, context.getSessionVariable());

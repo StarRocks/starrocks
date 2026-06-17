@@ -200,9 +200,9 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
     }
 
     /**
-     * Pins the AUTO-mode gap: a legacy AUTO-mode IVM MV also carries the hidden __ROW_ID__/__AGG_STATE
-     * schema, so the checker must re-derive it (isIncrementalOrAuto), not fall to the viewDefineSql
-     * branch whose fewer columns would false-trip the arity check and inactivate a healthy MV.
+     * Pins the AUTO-mode IVM case: an IVM MV (has __ROW_ID__) refreshing in AUTO mode must still
+     * re-derive (gate is getRowIdStrategy() != null), not fall to the viewDefineSql branch whose
+     * fewer columns would false-trip the arity check and inactivate a healthy MV.
      */
     @Test
     public void testCheckerOnAutoModeIvmMvDoesNotFalseDrift() throws Exception {
@@ -215,9 +215,33 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
             // AUTO is no longer creatable via SQL; promote in-memory to mimic a legacy AUTO IVM MV.
             mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
             Assertions.assertTrue(mv.getCurrentRefreshMode().isAuto());
+            Assertions.assertNotNull(mv.getRowIdStrategy(), "this MV IS an IVM MV (has __ROW_ID__)");
             MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
             Assertions.assertTrue(mv.isActive(),
                     "AUTO-mode IVM MV with unchanged external base must stay active, not false-trip schema drift");
+        });
+    }
+
+    /**
+     * Pins the non-IVM AUTO case: an AUTO-mode MV whose query was NOT materialized as IVM has a plain
+     * PCT schema (no __ROW_ID__, getRowIdStrategy() == null), so the checker must take the viewDefineSql
+     * branch, NOT re-derive (else derive trips and the healthy MV is falsely inactivated).
+     */
+    @Test
+    public void testCheckerOnAutoModeNonIvmMvIsNotReDerived() throws Exception {
+        // PCT-created => no IVM rewrite => no __ROW_ID__; then promote to AUTO to mimic a legacy /
+        // ALTER'd AUTO MV that was never IVM-eligible.
+        String ddl = "CREATE MATERIALIZED VIEW mv_checker_auto_pct "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"pct\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_checker_auto_pct");
+            Assertions.assertNull(mv.getRowIdStrategy(), "PCT-schema MV has no __ROW_ID__");
+            mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
+            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            Assertions.assertTrue(mv.isActive(),
+                    "AUTO-mode non-IVM MV (plain PCT schema) must not be re-derived / false-inactivated");
         });
     }
 }
