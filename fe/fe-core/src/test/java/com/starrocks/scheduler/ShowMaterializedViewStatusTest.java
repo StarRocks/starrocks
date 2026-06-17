@@ -255,6 +255,20 @@ public class ShowMaterializedViewStatusTest {
     }
 
     @Test
+    public void wallClockPrefersRecordedTailFinishOverEarlierRun() {
+        // The tail run has a recorded (positive) finish earlier than a prior run's (FE clock skew during the tail
+        // run); the job end must stay the recorded tail finish, not the larger earlier finish.
+        TaskRunStatus firstRun = mvTaskRun("job-s", "run-1", 1000L, 1000L, 1500L, Constants.TaskRunState.SUCCESS);
+        TaskRunStatus tailRun = mvTaskRun("job-s", "run-2", 2000L, 1300L, 1400L, Constants.TaskRunState.SUCCESS);
+
+        ShowMaterializedViewStatus.RefreshJobStatus status =
+                ShowMaterializedViewStatus.fromTaskRuns(Arrays.asList(firstRun, tailRun));
+
+        Assertions.assertEquals(1400L, status.getMvRefreshEndTime());
+        Assertions.assertEquals(400L, ShowMaterializedViewStatus.getRefreshJobWallClockDurationMs(status));
+    }
+
+    @Test
     public void toThriftIncludesLastRefreshTimeWhenPresent() {
         ShowMaterializedViewStatus viewStatus = new ShowMaterializedViewStatus(1L, "testDb", "testView");
         viewStatus.setLastRefreshTime(1735697100000L);

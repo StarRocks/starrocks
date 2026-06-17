@@ -693,11 +693,13 @@ public class ShowMaterializedViewStatus {
         if (lastTaskRunStatus.isRefreshFinished()) {
             status.setRefreshFinished(true);
 
-            // A pending follow-up run aborted by clearUnfinishedTaskRun() is marked FAILED without a finishTime,
-            // so the tail run's finishTime can be 0; take the max across the batch to keep the real job end.
-            long mvRefreshFinishTime = sorted.stream()
-                    .mapToLong(TaskRunStatus::getFinishTime)
-                    .max().orElse(lastTaskRunStatus.getFinishTime());
+            // Normally the tail run's finishTime is the job end. But a pending follow-up aborted by
+            // clearUnfinishedTaskRun() is marked FAILED without a finishTime (0); only then fall back to the
+            // batch's max finish so the completed sub-runs' elapsed work is not lost.
+            long tailFinishTime = lastTaskRunStatus.getFinishTime();
+            long mvRefreshFinishTime = tailFinishTime > 0
+                    ? tailFinishTime
+                    : sorted.stream().mapToLong(TaskRunStatus::getFinishTime).max().orElse(tailFinishTime);
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
             status.setErrorCode(String.valueOf(lastTaskRunStatus.getErrorCode()));
