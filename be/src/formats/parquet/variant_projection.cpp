@@ -39,6 +39,7 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "runtime/mem_pool.h"
 #include "storage/convert_helper.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "types/type_info.h"
 
 namespace starrocks::parquet {
@@ -135,8 +136,9 @@ StatusOr<ColumnPtr> cast_decimal_projection_column(const ColumnPtr& source_colum
 
     auto result = ColumnHelper::create_column(target_type, true);
     MemPool mem_pool;
+    TypeInfoAllocator type_info_allocator = make_type_info_allocator(&mem_pool);
     RETURN_IF_ERROR(converter->convert_column(source_type_info.get(), *source_column, target_type_info.get(),
-                                              result.get(), &mem_pool));
+                                              result.get(), &type_info_allocator));
     return result;
 }
 

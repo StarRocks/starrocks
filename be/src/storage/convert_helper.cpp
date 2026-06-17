@@ -25,7 +25,6 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_schema.h"
 #include "types/bitmap_value.h"
@@ -99,11 +98,11 @@ Status to_decimal(const SrcType* src, DstType* dst, int src_precision, int src_s
 };
 
 Status TypeConverter::convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
-                                     MemPool* mem_pool) const {
+                                     const TypeInfoAllocator* allocator) const {
     for (size_t i = 0; i < src.size(); i++) {
         Datum old_datum = src.get(i);
         Datum new_datum;
-        RETURN_IF_ERROR(convert_datum(src_type, old_datum, dst_type, &new_datum, mem_pool));
+        RETURN_IF_ERROR(convert_datum(src_type, old_datum, dst_type, &new_datum, allocator));
         dst->append_datum(new_datum);
     }
     return Status::OK();
@@ -115,12 +114,12 @@ public:
     DatetimeToDateTypeConverter() = default;
     ~DatetimeToDateTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -141,12 +140,12 @@ public:
     TimestampToDateTypeConverter() = default;
     ~TimestampToDateTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -164,12 +163,12 @@ public:
     IntToDateTypeConverter() = default;
     ~IntToDateTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -192,12 +191,12 @@ public:
     DateV2ToDateTypeConverter() = default;
     ~DateV2ToDateTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -213,13 +212,13 @@ public:
     TimestampToDateV2TypeConverter() = default;
     ~TimestampToDateV2TypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         unaligned_store<DateValue>(dst, unaligned_load<TimestampValue>(src));
         return Status::OK();
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -239,7 +238,7 @@ public:
     DatetimeToDateV2TypeConverter() = default;
     ~DatetimeToDateV2TypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         TimestampValue timestamp{0};
         timestamp.from_timestamp_literal(unaligned_load<int64_t>(src));
         unaligned_store<DateValue>(dst, timestamp);
@@ -247,7 +246,7 @@ public:
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -269,12 +268,12 @@ public:
     DateToDateV2TypeConverter() = default;
     ~DateToDateV2TypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -291,12 +290,12 @@ public:
     DateToDatetimeFieldConveter() = default;
     ~DateToDatetimeFieldConveter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -315,12 +314,12 @@ public:
     DateV2ToDatetimeFieldConveter() = default;
     ~DateV2ToDatetimeFieldConveter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -338,12 +337,12 @@ public:
     TimestampToDatetimeTypeConverter() = default;
     ~TimestampToDatetimeTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -358,7 +357,7 @@ public:
     DateToTimestampTypeConverter() = default;
     ~DateToTimestampTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         uint32_t src_value = unaligned_load<uint24_t>(src);
         int day = implicit_cast<int>(src_value & 31u);
         int month = implicit_cast<int>((src_value >> 5u) & 15u);
@@ -368,7 +367,7 @@ public:
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -387,7 +386,7 @@ public:
     DateV2ToTimestampTypeConverter() = default;
     ~DateV2ToTimestampTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         auto src_value = unaligned_load<DateValue>(src);
         int year = 0;
         int month = 0;
@@ -398,7 +397,7 @@ public:
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -418,12 +417,12 @@ public:
     DatetimeToTimestampTypeConverter() = default;
     ~DatetimeToTimestampTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -440,12 +439,12 @@ public:
     FloatToDoubleTypeConverter() = default;
     ~FloatToDoubleTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -463,12 +462,12 @@ public:
     DecimalToDecimal12TypeConverter() = default;
     ~DecimalToDecimal12TypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -484,12 +483,12 @@ public:
     Decimal12ToDecimalTypeConverter() = default;
     ~Decimal12ToDecimalTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -509,7 +508,7 @@ public:
     IntegerToDateV2TypeConverter() = default;
     ~IntegerToDateV2TypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         auto src_value = unaligned_load<CppType>(src);
         DateValue dst_val;
         if (dst_val.from_date_literal_with_check(src_value)) {
@@ -520,7 +519,7 @@ public:
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -545,12 +544,12 @@ public:
     DecimalTypeConverter() = default;
     ~DecimalTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -572,12 +571,12 @@ public:
     DecimalV3TypeConverter() = default;
     ~DecimalV3TypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -600,12 +599,12 @@ public:
     StringToOtherTypeConverter() = default;
     ~StringToOtherTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -629,12 +628,12 @@ public:
     StringToOtherTypeConverter() = default;
     ~StringToOtherTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("not supported");
     }
 
     Status convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
-                          MemPool* mem_pool) const override {
+                          const TypeInfoAllocator* allocator) const override {
         for (size_t i = 0; i < src.size(); i++) {
             Datum src_datum = src.get(i);
             if (src_datum.is_null()) {
@@ -650,7 +649,7 @@ public:
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         CHECK(false) << "unreachable";
         return Status::NotSupported("");
     }
@@ -664,12 +663,12 @@ public:
     OtherToStringTypeConverter() = default;
     ~OtherToStringTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("missing implementation");
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
@@ -678,11 +677,11 @@ public:
         std::string source = src_typeinfo->to_string(&value);
         Slice slice;
         slice.size = source.size();
-        if (mem_pool == nullptr) {
+        if (allocator == nullptr) {
             LOG(WARNING) << "no guarantee of memory security";
             slice.data = (char*)source.data();
         } else {
-            slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
+            slice.data = reinterpret_cast<char*>(allocator->allocate(slice.size));
             if (UNLIKELY(slice.data == nullptr)) {
                 return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");
             }
@@ -701,12 +700,12 @@ public:
     OtherToStringTypeConverter() = default;
     ~OtherToStringTypeConverter() override = default;
 
-    Status convert(void* dst, const void* src, MemPool* memPool) const override {
+    Status convert(void* dst, const void* src, const TypeInfoAllocator* allocator) const override {
         return Status::InternalError("not supported");
     }
 
     Status convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
-                          MemPool* mem_pool) const override {
+                          const TypeInfoAllocator* allocator) const override {
         for (size_t i = 0; i < src.size(); i++) {
             Datum src_datum = src.get(i);
             if (src_datum.is_null()) {
@@ -715,8 +714,9 @@ public:
                 const JsonValue* json = src_datum.get_json();
                 std::string json_str = json->to_string_uncheck();
                 Slice dst_slice = json_str;
-                dst_slice.data = reinterpret_cast<char*>(mem_pool->allocate(dst_slice.size));
-                RETURN_IF_UNLIKELY_NULL(dst_slice.data, Status::MemoryAllocFailed("mempool exceeded"));
+                RETURN_IF_UNLIKELY_NULL(allocator, Status::MemoryAllocFailed("missing type info allocator"));
+                dst_slice.data = reinterpret_cast<char*>(allocator->allocate(dst_slice.size));
+                RETURN_IF_UNLIKELY_NULL(dst_slice.data, Status::MemoryAllocFailed("type info allocator exceeded"));
                 memcpy(dst_slice.data, json_str.data(), dst_slice.size);
                 dst->append_datum(Datum(dst_slice));
             }
@@ -725,7 +725,7 @@ public:
     }
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src_datum, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
+                         const TypeInfoAllocator* allocator) const override {
         CHECK(false) << "unreachable";
     }
 };
