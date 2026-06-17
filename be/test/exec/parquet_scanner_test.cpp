@@ -17,7 +17,10 @@
 #include <arrow/builder.h>
 #include <arrow/io/file.h>
 #include <gtest/gtest.h>
+#include <parquet/api/schema.h>
+#include <parquet/api/writer.h>
 #include <parquet/arrow/writer.h>
+#include <parquet/types.h>
 
 #include <filesystem>
 #include <memory>
@@ -459,6 +462,139 @@ private:
         std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
 
         auto arrow_props = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(status.ok()) << status.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+
+    // Write a Parquet file whose timestamps are stored as legacy INT96 -- both top-level and
+    // nested inside ARRAY / ARRAY<ARRAY>. enable_deprecated_int96_timestamps() makes every
+    // timestamp leaf (including the nested ones) write as INT96; store_schema() is intentionally
+    // NOT set so the file reads back like a real Hive/parquet-mr file, i.e. INT96 surfaced by
+    // Arrow as timezone-naive. Every timestamp leaf holds the same UTC instant `micros`.
+    void create_nested_int96_parquet(const std::string& file_name, int64_t micros, std::string* file_path) {
+        *file_path = (_tmp_root_dir / file_name).string();
+
+        auto ts_type = arrow::timestamp(arrow::TimeUnit::MICRO); // timezone-naive
+
+        // col_dt_top : timestamp
+        arrow::TimestampBuilder top_builder(ts_type, arrow::default_memory_pool());
+        ASSERT_OK(top_builder.Append(micros));
+        std::shared_ptr<arrow::Array> top_array;
+        ASSERT_OK(top_builder.Finish(&top_array));
+
+        // col_arr_dt : list<timestamp>
+        auto arr_value_builder = std::make_shared<arrow::TimestampBuilder>(ts_type, arrow::default_memory_pool());
+        arrow::ListBuilder arr_builder(arrow::default_memory_pool(), arr_value_builder);
+        ASSERT_OK(arr_builder.Append());
+        ASSERT_OK(arr_value_builder->Append(micros));
+        std::shared_ptr<arrow::Array> arr_array;
+        ASSERT_OK(arr_builder.Finish(&arr_array));
+
+        // col_arr_arr_dt : list<list<timestamp>>
+        auto inner_ts_builder = std::make_shared<arrow::TimestampBuilder>(ts_type, arrow::default_memory_pool());
+        auto inner_list_builder = std::make_shared<arrow::ListBuilder>(arrow::default_memory_pool(), inner_ts_builder);
+        arrow::ListBuilder outer_list_builder(arrow::default_memory_pool(), inner_list_builder);
+        ASSERT_OK(outer_list_builder.Append());
+        ASSERT_OK(inner_list_builder->Append());
+        ASSERT_OK(inner_ts_builder->Append(micros));
+        std::shared_ptr<arrow::Array> arr_arr_array;
+        ASSERT_OK(outer_list_builder.Finish(&arr_arr_array));
+
+        auto schema = arrow::schema({arrow::field("col_dt_top", top_array->type(), true),
+                                     arrow::field("col_arr_dt", arr_array->type(), true),
+                                     arrow::field("col_arr_arr_dt", arr_arr_array->type(), true)});
+        auto table = arrow::Table::Make(schema, {top_array, arr_array, arr_arr_array});
+        ASSERT_NE(nullptr, table);
+
+        auto output_res = arrow::io::FileOutputStream::Open(*file_path);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().enable_deprecated_int96_timestamps()->build();
+        auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
+                                                   ::parquet::default_writer_properties(), arrow_props);
+        ASSERT_TRUE(status.ok()) << status.ToString();
+        ASSERT_TRUE(output->Close().ok());
+    }
+
+    // Write a Parquet file with one top-level STRUCT column `s` that mixes physical timestamp
+    // encodings within the same complex column: field `a` is legacy INT96 (a UTC-normalized
+    // instant that must shift with the session timezone) and field `b` is INT64 with
+    // TIMESTAMP(isAdjustedToUTC=false) (a wall-clock value that must NOT shift). The high-level
+    // Arrow writer cannot produce this -- enable_deprecated_int96_timestamps() is a global switch
+    // that would turn every timestamp leaf into INT96 -- so the low-level parquet column writers
+    // are driven directly. Both leaves store the same `micros`.
+    void create_mixed_int96_int64_struct_parquet(const std::string& file_name, int64_t micros, std::string* file_path) {
+        *file_path = (_tmp_root_dir / file_name).string();
+
+        namespace ps = ::parquet::schema;
+        auto a_node = ps::PrimitiveNode::Make("a", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT96,
+                                              ::parquet::ConvertedType::NONE);
+        auto b_node =
+                ps::PrimitiveNode::Make("b", ::parquet::Repetition::OPTIONAL,
+                                        ::parquet::LogicalType::Timestamp(/*is_adjusted_to_utc=*/false,
+                                                                          ::parquet::LogicalType::TimeUnit::MICROS),
+                                        ::parquet::Type::INT64);
+        auto s_node = ps::GroupNode::Make("s", ::parquet::Repetition::OPTIONAL, {a_node, b_node});
+        auto schema = std::static_pointer_cast<ps::GroupNode>(
+                ps::GroupNode::Make("schema", ::parquet::Repetition::REQUIRED, {s_node}));
+
+        auto output_res = arrow::io::FileOutputStream::Open(*file_path);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+
+        auto props = ::parquet::WriterProperties::Builder().disable_dictionary()->build();
+        auto file_writer = ::parquet::ParquetFileWriter::Open(output, schema, props);
+        auto* rg_writer = file_writer->AppendRowGroup();
+
+        // INT96 leaf `a`: encode `micros` as (Julian day in value[2], nanoseconds-of-day in
+        // value[0..1]), matching what a Hive/parquet-mr writer emits.
+        constexpr int64_t kMicrosPerDay = 86400LL * 1000000LL;
+        ::parquet::Int96 v96{};
+        v96.value[2] = static_cast<uint32_t>(micros / kMicrosPerDay + ::parquet::kJulianToUnixEpochDays);
+        ::parquet::Int96SetNanoSeconds(v96, (micros % kMicrosPerDay) * 1000);
+        // s present (def 1) + leaf present (def 2); no repetition.
+        int16_t def_level = 2;
+        int16_t rep_level = 0;
+        auto* a_writer = static_cast<::parquet::Int96Writer*>(rg_writer->NextColumn());
+        a_writer->WriteBatch(1, &def_level, &rep_level, &v96);
+
+        // INT64 wall-clock leaf `b`.
+        auto* b_writer = static_cast<::parquet::Int64Writer*>(rg_writer->NextColumn());
+        b_writer->WriteBatch(1, &def_level, &rep_level, &micros);
+
+        file_writer->Close();
+        ASSERT_TRUE(output->Close().ok());
+    }
+
+    // Write a Parquet file with one MAP<VARCHAR, timestamp> column whose timestamp VALUES are stored
+    // as legacy INT96. Exercises the MAP branch of rectify_int96_array_data: the INT96 instant
+    // nested as a map value must shift with the session timezone, while the VARCHAR key is untouched.
+    void create_map_int96_parquet(const std::string& file_name, int64_t micros, std::string* file_path) {
+        *file_path = (_tmp_root_dir / file_name).string();
+
+        auto ts_type = arrow::timestamp(arrow::TimeUnit::MICRO); // timezone-naive
+        auto key_builder = std::make_shared<arrow::StringBuilder>(arrow::default_memory_pool());
+        auto item_builder = std::make_shared<arrow::TimestampBuilder>(ts_type, arrow::default_memory_pool());
+        arrow::MapBuilder map_builder(arrow::default_memory_pool(), key_builder, item_builder, false);
+
+        ASSERT_OK(map_builder.Append());
+        ASSERT_OK(key_builder->Append("k"));
+        ASSERT_OK(item_builder->Append(micros));
+
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_OK(map_builder.Finish(&array));
+
+        auto schema = arrow::schema({arrow::field("col_map", array->type(), true)});
+        auto table = arrow::Table::Make(schema, {array});
+
+        auto output_res = arrow::io::FileOutputStream::Open(*file_path);
+        ASSERT_TRUE(output_res.ok()) << output_res.status().ToString();
+        std::shared_ptr<arrow::io::FileOutputStream> output = output_res.ValueOrDie();
+
+        auto arrow_props = ::parquet::ArrowWriterProperties::Builder().enable_deprecated_int96_timestamps()->build();
         auto status = ::parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), output, table->num_rows(),
                                                    ::parquet::default_writer_properties(), arrow_props);
         ASSERT_TRUE(status.ok()) << status.ToString();
@@ -1059,6 +1195,156 @@ TEST_F(ParquetScannerTest, int96_timestamp_session_timezone_shift) {
             EXPECT_NE(utc_expected[i], result)
                     << "INT96 value at row " << i << " was not shifted by the session timezone";
         }
+    }
+}
+
+// Regression for issue #11421: the INT96 session-timezone shift must also apply to INT96
+// timestamps nested inside ARRAY/MAP/STRUCT, not just top-level columns. The reader records any
+// top-level column that contains an INT96 leaf and _rectify_int96_timezone() walks the nested
+// Arrow ArrayData tree to re-tag every naive timestamp leaf as "UTC" so the arrow->starrocks
+// converter shifts it by the session timezone (matching the native parquet reader).
+//
+// The fixture stores the UTC instant 2024-06-15 12:00:00 at three nesting levels: a top-level
+// DATETIME, an ARRAY<DATETIME>, and an ARRAY<ARRAY<DATETIME>>. Under a fixed -08:00 session every
+// level must move 8 hours earlier to 04:00:00; a buggy reader that skipped the nested leaves would
+// leave the ARRAY columns at the unshifted 12:00:00 while the top-level column shifted.
+TEST_F(ParquetScannerTest, int96_timestamp_nested_session_timezone_shift) {
+    // 2024-06-15 12:00:00 UTC, in microseconds since the epoch.
+    constexpr int64_t kMicros = 1718452800000000LL;
+    std::string parquet_file_name;
+    create_nested_int96_parquet("int96_nested.parquet", kMicros, &parquet_file_name);
+
+    const SlotTypeDescInfoArray slot_infos{
+            {"col_dt_top", TypeDescriptor::from_logical_type(TYPE_DATETIME), true},
+            {"col_arr_dt", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)), true},
+            {"col_arr_arr_dt",
+             TypeDescriptor::create_array_type(
+                     TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME))),
+             true}};
+
+    auto read_first_row = [&](const std::string& timezone) -> ChunkPtr {
+        auto ranges = generate_ranges({parquet_file_name}, static_cast<int32_t>(slot_infos.size()), {});
+        auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+        auto scanner = create_parquet_scanner(timezone, desc_tbl, {}, ranges);
+        ChunkPtr result;
+        validate(scanner, 1, [&](const ChunkPtr& chunk) { result = chunk; });
+        return result;
+    };
+
+    // Baseline: a UTC session renders the raw UTC-normalized instants at every nesting level.
+    {
+        ChunkPtr chunk = read_first_row("UTC");
+        ASSERT_EQ(3, chunk->num_columns());
+        for (const auto& col : chunk->columns()) {
+            const std::string rendered = col->debug_item(0);
+            EXPECT_NE(std::string::npos, rendered.find("2024-06-15 12:00:00")) << "UTC render: " << rendered;
+        }
+    }
+
+    // Non-UTC session: the same instants must be shifted by the session offset at every level.
+    {
+        ChunkPtr chunk = read_first_row("-08:00");
+        ASSERT_EQ(3, chunk->num_columns());
+        for (const auto& col : chunk->columns()) {
+            const std::string rendered = col->debug_item(0);
+            EXPECT_NE(std::string::npos, rendered.find("2024-06-15 04:00:00")) << "shifted render: " << rendered;
+            // Regression guard: the unshifted wall-clock must NOT survive at any nesting level.
+            EXPECT_EQ(std::string::npos, rendered.find("12:00:00"))
+                    << "INT96 value was not shifted by the session timezone: " << rendered;
+        }
+    }
+}
+
+// Regression for issue #11421 (over-tagging guard): when a single complex column mixes an INT96
+// leaf with an INT64 isAdjustedToUTC=false (wall-clock) leaf, ONLY the INT96 leaf may shift with
+// the session timezone. The reader records the top-level column as INT96-bearing, but the per-leaf
+// manifest walk in _rectify_int96_timezone() must re-tag only the genuine INT96 leaf and leave the
+// INT64 wall-clock sibling alone. A coarse "re-tag every naive timestamp leaf under the column"
+// would wrongly shift the INT64 leaf too.
+//
+// The fixture stores 2024-06-15 12:00:00 in both struct fields: `a` as an INT96 instant, `b` as an
+// INT64 wall-clock value. Under -08:00 only `a` moves to 04:00:00; `b` must stay at 12:00:00.
+TEST_F(ParquetScannerTest, int96_timestamp_mixed_nested_no_over_tagging) {
+    // 2024-06-15 12:00:00 UTC, in microseconds since the epoch.
+    constexpr int64_t kMicros = 1718452800000000LL;
+    std::string parquet_file_name;
+    create_mixed_int96_int64_struct_parquet("int96_mixed_struct.parquet", kMicros, &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    auto type_struct = TypeDescriptor::create_struct_type(
+            {"a", "b"},
+            {TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME)});
+    const SlotTypeDescInfoArray slot_infos{{"s", type_struct, true}};
+
+    auto read_first_row = [&](const std::string& timezone) -> std::string {
+        auto ranges = generate_ranges({parquet_file_name}, static_cast<int32_t>(slot_infos.size()), {});
+        auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+        auto scanner = create_parquet_scanner(timezone, desc_tbl, {}, ranges);
+        std::string rendered;
+        validate(scanner, 1, [&](const ChunkPtr& chunk) {
+            ASSERT_EQ(1, chunk->num_columns());
+            rendered = chunk->columns()[0]->debug_item(0);
+        });
+        return rendered;
+    };
+
+    // UTC session: the INT96 instant `a` renders at its UTC value, the wall-clock `b` renders
+    // verbatim -- both 12:00:00.
+    {
+        const std::string rendered = read_first_row("UTC");
+        EXPECT_NE(std::string::npos, rendered.find("2024-06-15 12:00:00")) << "UTC render: " << rendered;
+    }
+
+    // -08:00 session: only the INT96 instant `a` shifts to 04:00:00; the INT64 wall-clock leaf `b`
+    // must remain 12:00:00. The struct renders as {a:...,b:...}, so both must appear.
+    {
+        const std::string rendered = read_first_row("-08:00");
+        EXPECT_NE(std::string::npos, rendered.find("2024-06-15 04:00:00"))
+                << "INT96 leaf was not shifted by the session timezone: " << rendered;
+        EXPECT_NE(std::string::npos, rendered.find("2024-06-15 12:00:00"))
+                << "INT64 wall-clock leaf was wrongly shifted (over-tagging): " << rendered;
+    }
+}
+
+// Regression for issue #11421: the INT96 session-timezone shift must also reach a timestamp nested
+// as a MAP value (exercises the MAP branch of rectify_int96_array_data, where the map's single
+// child is a struct<key,value>). The fixture stores 2024-06-15 12:00:00 as the INT96 value of a
+// MAP<VARCHAR, DATETIME>; under -08:00 the value must shift to 04:00:00 (the VARCHAR key is
+// unaffected).
+TEST_F(ParquetScannerTest, int96_timestamp_map_value_session_timezone_shift) {
+    // 2024-06-15 12:00:00 UTC, in microseconds since the epoch.
+    constexpr int64_t kMicros = 1718452800000000LL;
+    std::string parquet_file_name;
+    create_map_int96_parquet("int96_map.parquet", kMicros, &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    auto type_map = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                    TypeDescriptor::from_logical_type(TYPE_DATETIME));
+    const SlotTypeDescInfoArray slot_infos{{"col_map", type_map, true}};
+
+    auto read_first_row = [&](const std::string& timezone) -> std::string {
+        auto ranges = generate_ranges({parquet_file_name}, static_cast<int32_t>(slot_infos.size()), {});
+        auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+        auto scanner = create_parquet_scanner(timezone, desc_tbl, {}, ranges);
+        std::string rendered;
+        validate(scanner, 1, [&](const ChunkPtr& chunk) {
+            ASSERT_EQ(1, chunk->num_columns());
+            rendered = chunk->columns()[0]->debug_item(0);
+        });
+        return rendered;
+    };
+
+    // UTC session: the INT96 map value renders at its UTC value.
+    {
+        const std::string rendered = read_first_row("UTC");
+        EXPECT_NE(std::string::npos, rendered.find("2024-06-15 12:00:00")) << "UTC render: " << rendered;
+    }
+
+    // -08:00 session: the INT96 map value must shift by the session offset.
+    {
+        const std::string rendered = read_first_row("-08:00");
+        EXPECT_NE(std::string::npos, rendered.find("2024-06-15 04:00:00"))
+                << "INT96 map value was not shifted by the session timezone: " << rendered;
     }
 }
 
