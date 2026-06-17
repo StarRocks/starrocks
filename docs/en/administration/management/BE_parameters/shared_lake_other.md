@@ -120,6 +120,14 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
+### lake_vacuum_min_batch_delete_size
+
+- Default: 200
+- Type: Int64
+- Unit: Number of files
+- Is mutable: Yes
+- Description: The number of stale files Vacuum batches into a single `DeleteObjects` request on a shared-data cluster. A larger batch amortizes per-call HTTP / auth / signing overhead and reduces the prefix-level request rate against the object store, at the cost of higher single-call latency and a larger replay cost when a transient error retries. Users running on AWS S3 are encouraged to raise this further (up to the protocol cap of 1000) where per-request server time is nearly batch-size insensitive.
+
 ### loop_count_wait_fragments_finish
 
 - Default: 2
