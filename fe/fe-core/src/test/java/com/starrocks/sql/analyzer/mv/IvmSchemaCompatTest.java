@@ -35,8 +35,16 @@ public class IvmSchemaCompatTest {
         return c;
     }
 
-    private static Field field(Type type) {
-        return new Field(null, type, null, null, true, true);
+    private static Field field(String name, Type type) {
+        return new Field(name, type, null, null, true, true);
+    }
+
+    private static List<Column> storedSchema() {
+        return Arrays.asList(
+                hidden("__ROW_ID__", IntegerType.BIGINT),
+                new Column("k", IntegerType.INT),
+                new Column("cnt", IntegerType.BIGINT),
+                hidden("__AGG_STATE_count__", IntegerType.BIGINT));
     }
 
     private static MaterializedView mvWithColumns(List<Column> columns) {
@@ -47,29 +55,43 @@ public class IvmSchemaCompatTest {
 
     @Test
     public void testArityMismatchThrows() {
-        List<Column> stored = Arrays.asList(
-                hidden("__ROW_ID__", IntegerType.BIGINT),
-                new Column("k", IntegerType.INT),
-                new Column("cnt", IntegerType.BIGINT),
-                hidden("__AGG_STATE_count__", IntegerType.BIGINT));
-        MaterializedView mv = mvWithColumns(stored);
-        List<Field> derived = Arrays.asList(field(IntegerType.INT), field(IntegerType.BIGINT));
+        MaterializedView mv = mvWithColumns(storedSchema());
+        List<Field> derived = Arrays.asList(field("k", IntegerType.INT), field("cnt", IntegerType.BIGINT));
         Assertions.assertThrows(SemanticException.class, () -> IvmSchemaCompat.compare(derived, mv));
     }
 
     @Test
     public void testCompatiblePasses() {
-        List<Column> stored = Arrays.asList(
-                hidden("__ROW_ID__", IntegerType.BIGINT),
-                new Column("k", IntegerType.INT),
-                new Column("cnt", IntegerType.BIGINT),
-                hidden("__AGG_STATE_count__", IntegerType.BIGINT));
-        MaterializedView mv = mvWithColumns(stored);
+        MaterializedView mv = mvWithColumns(storedSchema());
         List<Field> derived = Arrays.asList(
-                field(IntegerType.BIGINT),
-                field(IntegerType.INT),
-                field(IntegerType.BIGINT),
-                field(IntegerType.BIGINT));
+                field("__ROW_ID__", IntegerType.BIGINT),
+                field("k", IntegerType.INT),
+                field("cnt", IntegerType.BIGINT),
+                field("__AGG_STATE_count__", IntegerType.BIGINT));
         Assertions.assertDoesNotThrow(() -> IvmSchemaCompat.compare(derived, mv));
+    }
+
+    @Test
+    public void testHiddenColumnTypeDriftThrows() {
+        // hidden __AGG_STATE_count__ drifts BIGINT -> INT: caught, not skipped
+        MaterializedView mv = mvWithColumns(storedSchema());
+        List<Field> derived = Arrays.asList(
+                field("__ROW_ID__", IntegerType.BIGINT),
+                field("k", IntegerType.INT),
+                field("cnt", IntegerType.BIGINT),
+                field("__AGG_STATE_count__", IntegerType.INT));
+        Assertions.assertThrows(SemanticException.class, () -> IvmSchemaCompat.compare(derived, mv));
+    }
+
+    @Test
+    public void testHiddenColumnIdentityDriftThrows() {
+        // the __AGG_STATE_* name encodes the agg function; count -> sum at the same type is caught
+        MaterializedView mv = mvWithColumns(storedSchema());
+        List<Field> derived = Arrays.asList(
+                field("__ROW_ID__", IntegerType.BIGINT),
+                field("k", IntegerType.INT),
+                field("cnt", IntegerType.BIGINT),
+                field("__AGG_STATE_sum__", IntegerType.BIGINT));
+        Assertions.assertThrows(SemanticException.class, () -> IvmSchemaCompat.compare(derived, mv));
     }
 }

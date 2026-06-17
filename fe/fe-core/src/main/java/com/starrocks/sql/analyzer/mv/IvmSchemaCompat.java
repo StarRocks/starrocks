@@ -33,7 +33,7 @@ public final class IvmSchemaCompat {
 
     /**
      * Position-aligned compatibility check between an analyzed query's output fields and a stored
-     * MV schema. Hidden IVM columns (__ROW_ID__, __AGG_STATE_*) keep their position but are skipped.
+     * MV schema, including hidden IVM columns (__ROW_ID__, __AGG_STATE_*).
      */
     public static void compare(List<Field> derivedFields, MaterializedView mv) {
         List<Column> orderedAll = mv.getOrderedOutputColumns(true);
@@ -43,12 +43,13 @@ public final class IvmSchemaCompat {
         }
         for (int i = 0; i < orderedAll.size(); i++) {
             Column existed = orderedAll.get(i);
-            if (existed.isHidden()) {
-                continue;
-            }
             Field derivedField = derivedFields.get(i);
             Type derivedNormalized = AnalyzerUtils.transformTableColumnType(derivedField.getType(), false);
-            if (!isColumnCompatible(existed, derivedNormalized)) {
+            // Validate hidden IVM columns (__ROW_ID__, __AGG_STATE_*) rather than skip them: a re-derived
+            // rewriter can drift a hidden column's type, or its identity -- the __AGG_STATE_* name encodes
+            // the agg function/args -- while the visible projection and arity hold.
+            if (!isColumnCompatible(existed, derivedNormalized)
+                    || (existed.isHidden() && !existed.getName().equalsIgnoreCase(derivedField.getName()))) {
                 Column derived = new Column(existed.getName(), derivedNormalized, derivedField.isNullable());
                 throw new SemanticException(MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
                         existed.toString(), derived.toString()));
