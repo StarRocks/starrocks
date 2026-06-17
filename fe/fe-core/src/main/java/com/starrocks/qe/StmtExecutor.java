@@ -1625,7 +1625,8 @@ public class StmtExecutor {
     /**
      * The query result batch will piggyback query statistics in it
      */
-    private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
+    @VisibleForTesting
+    void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {
@@ -1639,8 +1640,16 @@ public class StmtExecutor {
             }
 
             analyzePlanWithExecStats(execPlan);
-            if (context.isArrowFlightSql()) {
-                context.updateReturnRows(statisticsForAuditLog.getReturnedRows());
+            // Arrow Flight SQL and OUTFILE queries do not deliver result rows to the client through
+            // the normal row batches (the responseRowBatch path in the result loop is skipped for
+            // both), so context.returnRows is never accumulated from batch sizes for them. Take the
+            // row count from the BE-reported statistics instead. Other queries already count rows
+            // per batch in the result loop, so they must NOT enter here to avoid double counting.
+            if (context.isArrowFlightSql() || isOutfileQuery) {
+                Long returnedRows = statisticsForAuditLog.getReturnedRows();
+                if (returnedRows != null) {
+                    context.updateReturnRows(returnedRows);
+                }
             }
 
             if (null == statisticsForAuditLog.statsItems || statisticsForAuditLog.statsItems.isEmpty()) {
