@@ -362,6 +362,67 @@ public class BDBJEJournalTest {
         journal.batchWriteCommit();
     }
 
+    @Test
+    public void testBatchWriteCommitConvertsTransactionClosedToJournalException(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment,
+            @Mocked Database rawDatabase,
+            @Mocked Environment rawEnvironment,
+            @Mocked Transaction txn) throws Exception {
+        // Regression: when a journal commit's BDBJE transaction was invalidated/closed before commit()
+        // ran (e.g. it timed out during a long stall while leadership was being handed off),
+        // Transaction.commit() throws a plain java.lang.IllegalStateException ("Transaction ... has been
+        // closed") -- NOT a DatabaseException. batchWriteCommit must convert it into a JournalException;
+        // otherwise the unchecked exception escapes JournalWriter.writeOneBatch's JournalException handler,
+        // the in-flight batch's tasks are never aborted, their waiting callers block forever, the leader
+        // WAL-apply fence leaks, and demotion's awaitLeaderWalAppliesDrained times out -> System.exit(-1).
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        Text.writeString(buffer, "petals on a wet black bough");
+
+        new Expectations(database) {
+            {
+                database.getDb();
+                minTimes = 0;
+                result = rawDatabase;
+                database.put((Transaction) any, (DatabaseEntry) any, (DatabaseEntry) any);
+                minTimes = 0;
+                result = OperationStatus.SUCCESS;
+            }
+        };
+        new Expectations(rawDatabase) {
+            {
+                rawDatabase.getEnvironment();
+                minTimes = 0;
+                result = rawEnvironment;
+                rawDatabase.getDatabaseName();
+                minTimes = 0;
+                result = "fakeDb";
+            }
+        };
+        new Expectations(rawEnvironment) {
+            {
+                rawEnvironment.beginTransaction(null, (TransactionConfig) any);
+                minTimes = 0;
+                result = txn;
+            }
+        };
+        new Expectations(txn) {
+            {
+                txn.commit();
+                result = new IllegalStateException("Transaction Id -1 has been closed");
+            }
+        };
+
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(1, buffer);
+        // shouldRetry=false simulates a sealing/demoting writer (fail fast, no retry): the commit failure
+        // must surface as a JournalException, not let the unchecked IllegalStateException escape.
+        JournalException e = assertThrows(JournalException.class, () -> journal.batchWriteCommit(() -> false));
+        Assertions.assertTrue(e.getCause() instanceof IllegalStateException,
+                "the JE 'Transaction has been closed' ISE must be wrapped as the JournalException cause");
+    }
+
     // retry 1: commit fails
     // retry 2: begin txn with exception
     // retry 3: put return error
