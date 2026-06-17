@@ -95,6 +95,8 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
             RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold), parent)
 #define ADD_CHILD_TIMER(profile, name, parent) \
     (profile)->add_child_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS), parent)
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) \
+    (profile)->add_derived_counter(name, type, __VA_ARGS__, parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
     ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
@@ -109,6 +111,7 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
       MACRO_CONCAT(SCOPED_THREAD_COUNTER_MEASUREMENT, __COUNTER__)(c)*/
 #else
 #define ADD_COUNTER(profile, name, type) NULL
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) (RuntimeProfile::DerivedCounter*)NULL
 #define ADD_TIMER(profile, name) NULL
 #define SCOPED_TIMER(c)
 #define SCOPED_RAW_TIMER(c)
