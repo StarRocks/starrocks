@@ -131,6 +131,7 @@ set(EXEC_FILES
         ./exprs/bitmap_functions_test.cpp
         ./exprs/case_expr_test.cpp
         ./exprs/cast_expr_test.cpp
+        ./exprs/unary_function_test.cpp
         ./exprs/decimal_cast_expr_decimal_test.cpp
         ./exprs/decimal_cast_expr_integer_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
