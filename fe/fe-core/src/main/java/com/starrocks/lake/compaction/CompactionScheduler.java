@@ -435,6 +435,19 @@ public class CompactionScheduler extends Daemon {
             }
         }
 
+        // When autonomous compaction is enabled, the BE drives compaction and FE only
+        // publishes via schedulePartitionPublish(). Starting NEW legacy FE-driven
+        // compaction jobs here would race autonomous on the same tablets: legacy could
+        // compact+publish first and orphan an autonomous pending local result (whose
+        // input rowsets then no longer exist), and legacy aggregate jobs would abort
+        // with "empty CombinedTxnLogPB" once autonomous already drained the work. So
+        // we stop scheduling new legacy jobs — but only AFTER the loop above, which
+        // still drives the lifecycle of in-flight legacy jobs and of PUBLISH_ONLY jobs
+        // (both live in runningCompactions).
+        if (Config.enable_lake_autonomous_compaction) {
+            return;
+        }
+
         List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
                 runningCompactions.keySet(), disabledIds);
 

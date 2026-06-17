@@ -19,6 +19,9 @@
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
 
+#include <unordered_set>
+#include <vector>
+
 #include "agent/agent_server.h"
 #include "base/brpc/brpc.h"
 #include "base/concurrency/countdown_latch.h"
@@ -1480,6 +1483,56 @@ void LakeServiceImpl::compact_collect_and_publish(::google::protobuf::RpcControl
             ++without_compaction;
             continue;
         }
+
+        // Defensive GC: drop any local result whose input rowsets no longer exist in
+        // the tablet's current visible metadata (e.g. a stale result left by a crash,
+        // an external/manual compaction, or any prior interference). Such a result can
+        // never publish — non-PK apply fails "input rowset not found" and would wedge
+        // the whole partition — so we delete it here instead of merging it. Only run
+        // this when we can actually read the metadata, so a transient read failure
+        // never drops a valid result.
+        {
+            auto tablet_or = _tablet_mgr->get_tablet(tablet_id, base_version);
+            if (tablet_or.ok()) {
+                std::unordered_set<uint32_t> existing_rowsets;
+                for (const auto& rs : tablet_or.value().metadata()->rowsets()) {
+                    existing_rowsets.insert(rs.id());
+                }
+                std::vector<int64_t> stale_ids;
+                std::vector<CompactionResultPB> valid;
+                valid.reserve(results.size());
+                for (auto& r : results) {
+                    bool all_present = true;
+                    for (uint32_t rid : r.op_compaction().input_rowsets()) {
+                        if (existing_rowsets.count(rid) == 0) {
+                            all_present = false;
+                            break;
+                        }
+                    }
+                    if (all_present) {
+                        valid.push_back(std::move(r));
+                    } else {
+                        stale_ids.push_back(r.result_id());
+                    }
+                }
+                if (!stale_ids.empty()) {
+                    LOG(WARNING) << "compact_collect_and_publish dropping " << stale_ids.size()
+                                 << " stale local result(s) for tablet=" << tablet_id
+                                 << " (input rowsets absent from visible metadata v=" << base_version << ")";
+                    (void)result_mgr->delete_results(tablet_id, stale_ids);
+                }
+                results.swap(valid);
+            } else {
+                LOG(WARNING) << "compact_collect_and_publish: get_tablet failed tablet=" << tablet_id
+                             << " v=" << base_version << ": " << tablet_or.status()
+                             << " (skipping stale-result GC this round)";
+            }
+        }
+        if (results.empty()) {
+            ++without_compaction;
+            continue;
+        }
+
         std::vector<int64_t> consumed_result_ids;
         consumed_result_ids.reserve(results.size());
         for (const auto& r : results) {
