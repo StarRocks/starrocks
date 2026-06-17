@@ -83,9 +83,20 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
     auto meta_copy = meta;
     apply_index_reader_cache_options(&meta_copy);
 
-    // Loader runs under vector_index mem tracker and opens the remote file
-    // lazily, so warm-path cache hits skip the OSS/S3 round-trip entirely.
-    auto* tracker = GlobalEnv::GetInstance()->vector_index_mem_tracker();
+    // Loader opens the remote file lazily, so warm-path cache hits skip the OSS/S3
+    // round-trip entirely.
+    //
+    // Charge the load to the process tracker (not the vector_index tracker): the
+    // index lives in the heap, so the allocator hook already accounts these bytes
+    // to process exactly once here. The VectorIndexCache then labels the same bytes
+    // on the vector_index tracker via consume_without_root (see its ctor), which
+    // does NOT re-add to process. Pointing the hook at the vector_index tracker
+    // instead would double the vector_index label (hook + cache) and leak it on
+    // eviction (the eventual tenann free runs on whatever thread drops the last
+    // IndexRef, not necessarily under this tracker). Routing through process keeps
+    // the load off the originating query's mem limit while leaving the deterministic
+    // cache consume/release as the sole source of the vector_index label.
+    auto* tracker = GlobalEnv::GetInstance()->process_mem_tracker();
 
     // Loader catches its own failures (incl. tenann::Error, which inherits
     // privately from std::exception and would otherwise escape GetOrCreate)
