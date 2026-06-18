@@ -234,7 +234,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     public void testConstQueryJobSkipsPartitionWithZeroRowCount() {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c4", "c5", "c6"));
         for (Partition partition : ((OlapTable) table).getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(0);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(0);
         }
         try {
             List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(1L, connectContext, db, table, pair.first,
@@ -250,7 +250,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
             Assertions.assertTrue(constQueryJob.getStatisticsData().isEmpty());
         } finally {
             for (Partition partition : ((OlapTable) table).getAllPartitions()) {
-                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
+                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
             }
         }
     }
