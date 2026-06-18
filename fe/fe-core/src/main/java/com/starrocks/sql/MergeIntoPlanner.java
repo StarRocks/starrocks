@@ -211,7 +211,7 @@ public class MergeIntoPlanner {
         // conflict filter. A self-merge source may also scan the target table and
         // project _file/_pos, so table id plus usedForDelete is not enough to
         // identify the scan being modified.
-        if (mergeTargetContext != null) {
+        if (mergeTargetContext != null && mergeTargetContext.targetScan != null) {
             icebergSinkExtra.setBaseSnapshotId(mergeTargetContext.targetScan.getBaseSnapshotId().orElse(null));
         }
         dataSink.setSinkExtraInfo(icebergSinkExtra);
@@ -261,11 +261,11 @@ public class MergeIntoPlanner {
     }
 
     /**
-     * Locate the physical MERGE join and its target scan from the row-locator slots.
-     * The analyzer emits source LEFT JOIN target, so the MERGE target lives in child
-     * 1 of that join. Source subqueries can contain their own joins and can even scan
-     * the same Iceberg table with _file/_pos projected; those must not be mistaken for
-     * the MERGE target side.
+     * Locate the physical MERGE join from the row-locator slots. The analyzer emits
+     * source LEFT JOIN target, so the MERGE target lives in child 1 of that join.
+     * Source subqueries can contain their own joins and can even scan the same
+     * Iceberg table with _file/_pos projected; those must not be mistaken for the
+     * MERGE target side.
      */
     private static MergeTargetContext findMergeTargetContext(ExecPlan execPlan, IcebergTable targetTable) {
         RowLocatorSlotIds rowLocatorSlotIds = tryExtractRowLocatorSlotIds(execPlan);
@@ -279,35 +279,39 @@ public class MergeIntoPlanner {
         queue.add(root);
         while (!queue.isEmpty()) {
             PlanNode node = queue.poll();
-            if (node instanceof JoinNode joinNode && joinNode.getChildren().size() > 1) {
-                // MergeIntoAnalyzer constructs source LEFT JOIN target. The target
-                // side is child 1; searching there avoids picking a source-subquery
-                // self-scan as the MERGE target.
+            if (node instanceof JoinNode joinNode
+                    && joinNode.getChildren().size() > 1
+                    && joinNode.getJoinOp().isAnyLeftOuterJoin()) {
+                // MergeIntoAnalyzer constructs source LEFT JOIN target. If that
+                // contract changes, this MERGE-join locator must be updated too.
+                // The target side is child 1; bind the check to that side rather
+                // than to a global scan list, where source self-scans are
+                // indistinguishable.
                 PlanNode targetSubtree = joinNode.getChild(1);
-                IcebergScanNode targetScan = findTargetScan(
-                        targetSubtree, targetTable, rowLocatorSlotIds, descTbl);
-                if (targetScan != null) {
+                IcebergScanNode targetScan = findTargetScan(targetSubtree, targetTable);
+                if (targetScan != null || producesRowLocatorSlots(targetSubtree, rowLocatorSlotIds, descTbl)) {
                     return new MergeTargetContext(joinNode, targetScan, rowLocatorSlotIds);
                 }
             }
             queue.addAll(node.getChildren());
         }
-        if (!hasTargetScanProducingRowLocatorSlots(execPlan, targetTable, rowLocatorSlotIds, descTbl)) {
-            return null;
-        }
-        throw new IllegalStateException("MERGE INTO physical plan contains target row-locator slots "
-                + "but no target Iceberg scan was found on the right side of the MERGE join");
+        return null;
     }
 
-    private static IcebergScanNode findTargetScan(PlanNode root, IcebergTable targetTable,
-                                                  RowLocatorSlotIds rowLocatorSlotIds,
-                                                  DescriptorTable descTbl) {
+    private static boolean producesRowLocatorSlots(PlanNode root, RowLocatorSlotIds rowLocatorSlotIds,
+                                                   DescriptorTable descTbl) {
+        var slotIds = root.getSlotIds(descTbl);
+        return slotIds.contains(rowLocatorSlotIds.fileSlotId.asInt())
+                && slotIds.contains(rowLocatorSlotIds.posSlotId.asInt());
+    }
+
+    private static IcebergScanNode findTargetScan(PlanNode root, IcebergTable targetTable) {
         Queue<PlanNode> queue = new ArrayDeque<>();
         queue.add(root);
         while (!queue.isEmpty()) {
             PlanNode node = queue.poll();
             if (node instanceof IcebergScanNode scanNode
-                    && isTargetScan(scanNode, targetTable, rowLocatorSlotIds, descTbl)) {
+                    && isTargetScan(scanNode, targetTable)) {
                 return scanNode;
             }
             queue.addAll(node.getChildren());
@@ -315,27 +319,12 @@ public class MergeIntoPlanner {
         return null;
     }
 
-    private static boolean hasTargetScanProducingRowLocatorSlots(ExecPlan execPlan, IcebergTable targetTable,
-                                                                 RowLocatorSlotIds rowLocatorSlotIds,
-                                                                 DescriptorTable descTbl) {
-        if (execPlan.getScanNodes() == null) {
-            return false;
-        }
-        for (PlanNode node : execPlan.getScanNodes()) {
-            if (node instanceof IcebergScanNode scanNode
-                    && isTargetScan(scanNode, targetTable, rowLocatorSlotIds, descTbl)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isTargetScan(IcebergScanNode scanNode, IcebergTable targetTable,
-                                        RowLocatorSlotIds rowLocatorSlotIds, DescriptorTable descTbl) {
-        return scanNode.isUsedForDelete()
-                && scanNode.getIcebergTable().getId() == targetTable.getId()
-                && scanNode.getSlotIds(descTbl).contains(rowLocatorSlotIds.fileSlotId.asInt())
-                && scanNode.getSlotIds(descTbl).contains(rowLocatorSlotIds.posSlotId.asInt());
+    private static boolean isTargetScan(IcebergScanNode scanNode, IcebergTable targetTable) {
+        // The row-locator SlotRefs can be carried by Exchange/Project nodes above the scan,
+        // and IcebergScanNode may not be marked usedForDelete at this point. External
+        // Iceberg tables can be represented by different FE table objects, so compare
+        // their catalog/db/table identity instead of the transient Table id.
+        return scanNode.getIcebergTable().equals(targetTable);
     }
 
     /**

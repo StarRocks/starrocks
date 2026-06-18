@@ -356,6 +356,38 @@ public class MergeIntoPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testDuplicateConstantSourceMergeContainsEnforceUnique() throws Exception {
+        int previousPipelineDop = connectContext.getSessionVariable().getPipelineDop();
+        int previousPipelineSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
+        connectContext.getSessionVariable().setPipelineDop(4);
+        connectContext.getSessionVariable().setPipelineSinkDop(4);
+        try {
+            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                    "USING (" +
+                    "  SELECT 1 AS id, 'a' AS data, '2024-01-01' AS date " +
+                    "  UNION ALL SELECT 1 AS id, 'b' AS data, '2024-01-01' AS date " +
+                    ") AS s " +
+                    "ON t.id = s.id " +
+                    "WHEN MATCHED THEN UPDATE SET data = s.data";
+            ExecPlan execPlan = getMergeExecPlan(sql);
+            assertNotNull(execPlan);
+
+            String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+            EnforceUniqueRowLocatorNode enforceNode = findNode(execPlan, EnforceUniqueRowLocatorNode.class);
+            assertNotNull(enforceNode, "Plan must contain an EnforceUniqueRowLocatorNode:\n" + explainString);
+            assertTrue(explainString.contains("ENFORCE UNIQUE"),
+                    "Explain plan should contain ENFORCE UNIQUE:\n" + explainString);
+            HashJoinNode joinNode = findNode(execPlan, HashJoinNode.class);
+            assertNotNull(joinNode, "Plan must contain the merge HashJoinNode:\n" + explainString);
+            assertEquals(JoinNode.DistributionMode.PARTITIONED, joinNode.getDistrMode(),
+                    "Merge join must be a shuffle join");
+        } finally {
+            connectContext.getSessionVariable().setPipelineDop(previousPipelineDop);
+            connectContext.getSessionVariable().setPipelineSinkDop(previousPipelineSinkDop);
+        }
+    }
+
+    @Test
     public void testMergeRejectsNonEquiOnClause() {
         // Without a target-source equality predicate the join degrades to a
         // (broadcast-only) nestloop join. With a SCANNED source that replicates
