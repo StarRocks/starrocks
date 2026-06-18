@@ -377,34 +377,15 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     DCHECK_EQ(txn_meta.partial_update_column_ids_size(), txn_meta.partial_update_column_unique_ids_size());
     std::vector<ColumnId> update_column_ids;
     std::vector<ColumnUID> unique_update_column_ids;
-<<<<<<< HEAD
-    for (ColumnId cid : txn_meta.partial_update_column_ids()) {
-        if (cid >= params.tablet_schema->num_key_columns()) {
-            update_column_ids.push_back(cid);
-        }
-    }
-    for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
-        auto cid = params.tablet_schema->field_index(uid);
-=======
     for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
         const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
         const auto cid = params.tablet_schema->field_index(uid);
->>>>>>> 1ccf93c6fb ([BugFix] Fix lake PCU crash and silent corruption under schema drift (#74005))
         if (cid == -1) {
             std::string msg = strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
                                                   params.tablet->tablet_id());
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-<<<<<<< HEAD
-        if (!params.tablet_schema->column(cid).is_key()) {
-            unique_update_column_ids.push_back(uid);
-        }
-    }
-
-    DCHECK(update_column_ids.size() == unique_update_column_ids.size());
-    const size_t BATCH_HANDLE_COLUMN_CNT = config::vertical_compaction_max_columns_per_group;
-=======
         const auto& col = params.tablet_schema->column(cid);
         if (col.is_key() || col.is_auto_increment()) {
             continue;
@@ -419,17 +400,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         }
     }
 
-    // When condition update is enabled together with column-mode PCU, delta_writer has validated
-    // that the condition column is part of the partial column set; we force a single column batch
-    // so the condition column and the rest of the partial columns share one `partial_schema` (and
-    // one .col file), and compare_at is then performed inline inside _update_source_chunk_by_upt
-    // against the already-read source/upt chunks.
-    ASSIGN_OR_RETURN(int32_t condition_cid, _resolve_condition_cid(txn_meta, *params.tablet_schema));
-    const size_t BATCH_HANDLE_COLUMN_CNT =
-            (condition_cid >= 0 && !update_column_ids.empty())
-                    ? update_column_ids.size()
-                    : static_cast<size_t>(config::vertical_compaction_max_columns_per_group);
->>>>>>> 1ccf93c6fb ([BugFix] Fix lake PCU crash and silent corruption under schema drift (#74005))
+    const size_t BATCH_HANDLE_COLUMN_CNT = config::vertical_compaction_max_columns_per_group;
 
     // 2. getter all rss_rowid_to_update_rowid, and prepare .col writer by the way
     // rss_id -> update file id -> <rowid, update rowid>
