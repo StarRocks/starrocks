@@ -255,7 +255,8 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     clone_req.__set_tablet_id(_tablet_id);
     auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
     tablet->set_is_dropping(true);
-    EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, nullptr);
+    Status clone_status;
+    EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, &clone_status);
     Status st = task.execute();
     ASSERT_TRUE(st.is_corruption());
     tablet->set_is_dropping(false);
