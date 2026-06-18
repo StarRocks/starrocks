@@ -46,17 +46,10 @@ class ReflectionTableDefaults(ReflectionDefaults):
 
         # for following properties, they won't explicitly set in the 'properties' field of the table.
         'enable_persistent_index': 'true',
-        # `enable_statistic_collect_on_first_load` is recorded in information_schema.tables_config
-        # ONLY when the table has an explicit `false` override; a `true` override or an unset
-        # value is never reported (verified on 3.5.16, independent of the FE-level global
-        # default, which tables_config does not reflect). So this dict value is a *decoder* for
-        # an absent entry, not a mirror of the cluster default. It must be 'true' because that is
-        # the only loop-safe fixpoint: `ALTER ... SET (...='true')` clears the false override
-        # (-> absent), and an absent entry decodes back to 'true', so the comparison converges.
-        # Populating it from the live global default would break this (absent != global) and
-        # could cause a never-converging phantom migration. See _compare_table_properties_impl
-        # (compares effective value-or-default) and skip_implicit_reset_properties (which keeps
-        # an unmanaged-in-metadata property from being reset).
+        # tables_config only records this when explicitly set to false; absent means true.
+        # Must be 'true' here: ALTER SET true clears the override (→ absent) → decodes back
+        # to 'true', converging. Also in _SKIP_IMPLICIT_RESET_PROPERTIES so an unmanaged
+        # DB value never triggers a spurious reset.
         'enable_statistic_collect_on_first_load': 'true',
         # 'bloom_filter_columns': None,
         # 'colocate_with': None,
@@ -69,13 +62,9 @@ class ReflectionTableDefaults(ReflectionDefaults):
         'replication_num': '1',  # Different for shared-data
     }, **_DEFAULT_PROPERTIES}
 
-    # Properties that must NOT be implicitly reset to their default when they are absent from
-    # the metadata. For most properties, an absent-from-metadata property with a non-default
-    # database value triggers an implicit "reset to default" ALTER. That behavior is wrong for
-    # properties like `enable_statistic_collect_on_first_load`: StarRocks only reports it in
-    # information_schema.tables_config when it is falsy, so it has a meaningful database value
-    # only when explicitly set false. When the user does not manage it in their model, we must
-    # leave the database value untouched rather than generate a spurious reset to 'true'.
+    # Properties never implicitly reset when absent from metadata. Needed for properties
+    # whose DB representation is asymmetric (e.g. only stored when false), so a missing
+    # metadata entry should leave the DB value alone rather than reset it to the default.
     _SKIP_IMPLICIT_RESET_PROPERTIES = {
         'enable_statistic_collect_on_first_load',
     }

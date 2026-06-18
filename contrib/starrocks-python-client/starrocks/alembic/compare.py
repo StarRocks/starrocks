@@ -536,17 +536,6 @@ def compare_view(
 def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[str]:
     """Canonicalize SQL by round-tripping it through a temporary VIEW.
 
-    StarRocks rewrites a view's SELECT into its own canonical form when storing it
-    (adds INNER/OUTER JOIN keywords, fully qualifies column references, injects CTE
-    column lists, wraps predicates in parentheses, etc.).  By creating a throw-away
-    VIEW and immediately reflecting its stored definition we get that canonical form
-    without any regex processing.
-
-    Both sides of the comparison are passed through this function, so the result is
-    a comparison between two StarRocks-canonical strings.  Syntactic differences are
-    erased automatically; real semantic changes (e.g. swapping ``a.id`` and ``b.id``)
-    survive because the full qualified column names differ.
-
     Returns the reflected canonical SQL, or ``None`` if the temp VIEW could not be
     created (e.g. a referenced table does not exist yet in this migration), in which
     case the caller falls back to the regex-based normalizer.
@@ -604,15 +593,6 @@ def _compare_view_definition_and_columns(
     meta_definition = metadata_view.info.get(TableObjectInfoKey.DEFINITION, "")
     logger.debug("Compare view definition: conn_definition=%s, meta_definition=%s", conn_definition, meta_definition)
 
-    # Preferred path: canonicalize both sides through a temporary VIEW so StarRocks'
-    # own SQL rewriter reconciles syntactic differences (JOIN keywords, column
-    # qualification, CTE column lists, predicate parentheses, etc.).  The conn side
-    # is already in canonical form (reflected from the database), so we only need to
-    # canonicalize the meta side.  No qualifier removal or regex rewrites are needed
-    # because both strings are in the same StarRocks-canonical form.
-    #
-    # Falls back to the regex-based normalizer when the temp VIEW cannot be created
-    # (e.g. a base table referenced by the view doesn't exist yet in this migration).
     if conn is not None and schema is not None:
         canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_definition)
         if canonical_meta is not None:
@@ -1048,11 +1028,6 @@ def _compare_mv_definition(
     logger.debug("Compare mv definition: conn_def_raw=%s, meta_def_raw=%s", conn_def_raw, meta_def_raw)
 
     # Preferred path: canonicalize both sides through temporary VIEWs.
-    # The MV stores its SELECT with 2-part column qualifiers (alias.col) while a VIEW of
-    # the same SQL stores 3-part (db.alias.col).  By creating a temp VIEW from each side
-    # both are brought to the same 3-part form, making the comparison qualifier-depth
-    # agnostic without discarding qualifier information (which would hide alias swaps).
-    # `schema` here is the resolved (non-None) schema passed in by the caller.
     if conn is not None and schema is not None:  # schema is already resolved by _compare_mv
         canonical_conn = _get_canonical_sql_via_temp_view(conn, schema, conn_def_raw)
         canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_def_raw)
