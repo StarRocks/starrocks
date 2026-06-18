@@ -33,7 +33,7 @@ public:
               _scan_stats(std::make_shared<FormatScannerStats>()) {
         _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         _scanner_ctx->timezone = "Asia/Shanghai";
-        _scanner_ctx->stats = _scan_stats.get();
+        _scanner_ctx->format_scan_context.stats = _scan_stats.get();
     }
     ~ParquetCLIReader() {
         _file_reader = nullptr;
@@ -54,7 +54,7 @@ public:
         const FileMetaData* file_metadata = nullptr;
         HdfsScannerContext ctx;
         FormatScannerStats stats;
-        ctx.stats = &stats;
+        ctx.format_scan_context.stats = &stats;
         ctx.scan_range = scan_range;
         ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         std::shared_ptr<FileReader> reader =

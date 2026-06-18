@@ -29,6 +29,7 @@
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/split_context.h"
 #include "gen_cpp/parquet_types.h"
 
 namespace tparquet {
@@ -54,18 +55,6 @@ class ObjectCache;
 } // namespace starrocks
 
 namespace starrocks::parquet {
-
-struct SplitContext : public FileScanSplitContext {
-    FileMetaDataPtr file_metadata;
-    SkipRowsContextPtr skip_rows_ctx;
-
-    FileScanSplitContextPtr clone() override {
-        auto ctx = std::make_unique<SplitContext>();
-        ctx->file_metadata = file_metadata;
-        ctx->skip_rows_ctx = skip_rows_ctx;
-        return ctx;
-    }
-};
 
 class FileReader {
 public:
