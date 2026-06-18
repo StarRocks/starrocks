@@ -36,6 +36,7 @@
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/task/engine_clone_task.h"
+#include "testutil/local_snapshot_client.h"
 
 namespace starrocks {
 
@@ -44,6 +45,10 @@ public:
     AgentTaskTest() = default;
     ~AgentTaskTest() override = default;
     void SetUp() override {
+        _previous_snapshot_client =
+                StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                        local_snapshot_client_for_test());
+
         TCreateTabletReq create_tablet_req = get_create_tablet_request(_tablet_id, _schema_hash, _version);
         Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
                 create_tablet_req, StorageEngine::instance()->get_stores());
@@ -66,6 +71,8 @@ public:
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                _previous_snapshot_client);
     }
 
     TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash, int64_t version) {
@@ -102,6 +109,7 @@ protected:
     int32_t _schema_hash = 368169781;
     int64_t _version = 2;
     int64_t _src_version = 10;
+    RemoteSnapshotClient* _previous_snapshot_client = nullptr;
 };
 
 TEST_F(AgentTaskTest, test_replication_txn) {
@@ -120,7 +128,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
     remote_snapshot_request.__set_src_visible_version(_src_version);
     agent_task_request.__set_remote_snapshot_req(remote_snapshot_request);
 
