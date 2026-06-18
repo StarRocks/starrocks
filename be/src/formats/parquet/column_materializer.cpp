@@ -22,11 +22,7 @@
 #include "common/config.h"
 #include "exec/exec_node.h"
 #include "exprs/expr.h"
-<<<<<<< HEAD
-=======
 #include "formats/parquet/read_range_planner.h"
-#include "runtime/chunk_helper.h"
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
 #include "runtime/descriptors.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -247,12 +243,8 @@ StatusOr<size_t> ColumnMaterializer::eval_slot_conjuncts(const std::vector<ExprC
     temp_chunk->columns().reserve(1);
     ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
     temp_chunk->append_column(column, slot_id);
-<<<<<<< HEAD
-    return ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter);
-=======
     temp_chunk->set_missing_column_provider((*chunk)->missing_column_provider());
-    return ChunkPredicateEvaluator::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter);
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
+    return ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter);
 }
 
 Status ColumnMaterializer::read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range,
@@ -393,9 +385,6 @@ Status ColumnMaterializer::emit_physical_columns(ChunkPtr& active_chunk, ChunkPt
     return Status::OK();
 }
 
-<<<<<<< HEAD
-void ColumnMaterializer::classify_columns(bool* out_has_reserved_field_filter) {
-=======
 Status ColumnMaterializer::finalize_active_slot(SlotId slot_id, ChunkPtr& active_chunk) {
     auto& col = active_chunk->get_column_by_slot_id(slot_id);
     return (*_column_readers)[slot_id]->finalize_lazy_state(col);
@@ -403,7 +392,6 @@ Status ColumnMaterializer::finalize_active_slot(SlotId slot_id, ChunkPtr& active
 
 void ColumnMaterializer::classify_columns(const std::unordered_set<SlotId>& deferred_source_slots,
                                           bool* out_has_reserved_field_filter) {
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
     *out_has_reserved_field_filter = false;
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
     int read_col_idx = 0;

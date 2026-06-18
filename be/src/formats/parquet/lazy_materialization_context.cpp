@@ -18,7 +18,6 @@
 
 #include "column/chunk.h"
 #include "formats/parquet/column_materializer.h"
-#include "formats/parquet/variant_projection.h"
 
 namespace starrocks::parquet {
 
@@ -34,24 +33,10 @@ bool LazyMaterializationContext::can_materialize(SlotId slot_id) const {
     if (std::find(lazy_slots.begin(), lazy_slots.end(), slot_id) != lazy_slots.end()) {
         return true;
     }
-    if (_variant != nullptr) {
-        const auto& hidden_lazy = _variant->lazy_hidden_slot_ids();
-        return std::find(hidden_lazy.begin(), hidden_lazy.end(), slot_id) != hidden_lazy.end();
-    }
     return false;
 }
 
 Status LazyMaterializationContext::materialize_slot(SlotId slot_id) {
-    // Variant lazy hidden sources are dispatched to VariantProjectionHandler
-    // before checking has_slot(), because they live outside the regular
-    // slot_cache / slot_id_index.  materialize_hidden_source() own dedup
-    // via _fetched_hidden_slots.
-    if (_variant != nullptr) {
-        const auto& hidden_lazy = _variant->lazy_hidden_slot_ids();
-        if (std::find(hidden_lazy.begin(), hidden_lazy.end(), slot_id) != hidden_lazy.end()) {
-            return _variant->materialize_hidden_source(slot_id, _range, _filter, _active_chunk);
-        }
-    }
     if (has_slot(slot_id)) {
         return Status::OK();
     }
@@ -69,10 +54,6 @@ StatusOr<ColumnPtr> LazyMaterializationContext::provide(SlotId slot_id) {
     const auto* entry = _materializer->get_slot_cache(slot_id);
     if (entry != nullptr) {
         return entry->values;
-    }
-    // Variant lazy hidden source slot: result is in active_chunk.
-    if (_active_chunk->is_slot_exist(slot_id)) {
-        return _active_chunk->get_column_by_slot_id(slot_id);
     }
     return Status::InternalError(fmt::format("provide: slot {} not found after materialize", slot_id));
 }
@@ -92,14 +73,9 @@ ColumnPtr LazyMaterializationContext::get_column(SlotId slot_id) {
     if (!st.ok()) {
         return nullptr;
     }
-    // Physical lazy slot: result lands in slot_cache.
     entry = _materializer->get_slot_cache(slot_id);
     if (entry != nullptr) {
         return entry->values;
-    }
-    // Variant lazy hidden source slot: result lands in active_chunk.
-    if (_active_chunk->is_slot_exist(slot_id)) {
-        return _active_chunk->get_column_by_slot_id(slot_id);
     }
     return nullptr;
 }

@@ -253,12 +253,12 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
                 first_read = false;
             }
         } else {
-            return Status::InternalError(strings::Substitute("there is no match subfield reader for $1", field_name));
+            return Status::InternalError(strings::Substitute("there is no match subfield reader for $0", field_name));
         }
     }
 
     if (UNLIKELY(first_read)) {
-        return Status::InternalError(strings::Substitute("All used subfield of struct type $1 is not exist",
+        return Status::InternalError(strings::Substitute("All used subfield of struct type $0 is not exist",
                                                          get_column_parquet_field()->name));
     }
 
@@ -355,7 +355,7 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
                 RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(dst_field, src_field));
             }
         } else {
-            return Status::InternalError(strings::Substitute("there is no match subfield reader for $1", field_name));
+            return Status::InternalError(strings::Substitute("there is no match subfield reader for $0", field_name));
         }
     }
     return Status::OK();
@@ -450,7 +450,7 @@ StatusOr<bool> StructColumnReader::page_index_zone_map_filter(const std::vector<
         auto ret = column_reader->page_index_zone_map_filter({rewrite_subfield_predicate}, cur_row_ranges,
                                                              pred_relation, rg_first_row, rg_num_rows);
         // page_index_zone_map_filter failed, always return false, no page index filter happened
-        RETURN_IF(!res.ok(), false);
+        RETURN_IF(!ret.ok(), false);
 
         return ret.value();
     };

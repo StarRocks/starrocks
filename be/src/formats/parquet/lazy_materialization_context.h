@@ -23,12 +23,11 @@
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "storage/primitive/range.h"
+#include "storage/range.h"
 
 namespace starrocks::parquet {
 
 class ColumnMaterializer;
-class VariantProjectionHandler;
 
 // Expression-facing facade over ColumnMaterializer.  Scoped to a single
 // get_next() iteration: created before predicate evaluation, destroyed
@@ -53,14 +52,9 @@ class VariantProjectionHandler;
 //   ColumnMaterializer).
 class LazyMaterializationContext : public MissingColumnProvider {
 public:
-    // variant may be nullptr when no variant columns are present.
-    LazyMaterializationContext(ColumnMaterializer* materializer, VariantProjectionHandler* variant,
-                               const Range<uint64_t>& range, const Filter* filter, ChunkPtr& active_chunk)
-            : _materializer(materializer),
-              _variant(variant),
-              _range(range),
-              _filter(filter),
-              _active_chunk(active_chunk) {}
+    LazyMaterializationContext(ColumnMaterializer* materializer, const Range<uint64_t>& range, const Filter* filter,
+                               ChunkPtr& active_chunk)
+            : _materializer(materializer), _range(range), _filter(filter), _active_chunk(active_chunk) {}
 
     LazyMaterializationContext(const LazyMaterializationContext&) = delete;
     LazyMaterializationContext& operator=(const LazyMaterializationContext&) = delete;
@@ -91,7 +85,6 @@ public:
 
 private:
     ColumnMaterializer* _materializer;
-    VariantProjectionHandler* _variant;
     Range<uint64_t> _range;
     const Filter* _filter;
     ChunkPtr& _active_chunk;

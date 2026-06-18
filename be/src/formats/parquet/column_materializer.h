@@ -19,7 +19,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -27,6 +26,7 @@
 #include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/group_reader.h"
+#include "io/shared_buffered_input_stream.h"
 #include "storage/range.h"
 
 namespace starrocks::parquet {
@@ -41,7 +41,7 @@ public:
     ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers);
 
     ReadRangePlanner* read_range_planner() const { return _read_range_planner.get(); }
-    FormatScannerStats* stats() const { return _param.stats; }
+    HdfsScannerStats* stats() const { return _param.stats; }
 
     void clear_classification();
     void add_active_column(int col_idx);
@@ -52,7 +52,7 @@ public:
 
     // Classify physical read_cols as active/lazy and populate dict-filter /
     // post-read conjunct buckets.
-    void classify_columns(bool* out_has_reserved_field_filter);
+    void classify_columns(const std::unordered_set<SlotId>& deferred_source_slots, bool* out_has_reserved_field_filter);
 
     const std::vector<int>& active_column_indices() const { return _active_column_indices; }
     const std::vector<int>& lazy_column_indices() const { return _lazy_column_indices; }

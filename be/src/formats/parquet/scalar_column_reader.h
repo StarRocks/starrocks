@@ -170,20 +170,9 @@ public:
     Status prepare() override {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
                                                                  _opts.timezone, &_converter));
-<<<<<<< HEAD
-=======
-        // Adaptive lazy dict-decode (_can_lazy_dict_decode) is disabled when a
-        // converter exists, because the automatic decode-on-first-touch path
-        // would materialise values directly into dst, bypassing conversion.
-        //
-        // Dict-filter forced dict-code reads (via _dict_filter_ctx) are NOT
-        // affected: finalize_lazy_state() / fill_dst_column() perform a
-        // two-step decode → intermediate → convert, so dict-code + converter
-        // pairs work correctly for filter-only scenarios.
         if (_can_lazy_dict_decode && _converter->need_convert) {
             _can_lazy_dict_decode = false;
         }
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
         return RawColumnReader::prepare();
     }
 

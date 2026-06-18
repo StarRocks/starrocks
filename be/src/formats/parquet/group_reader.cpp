@@ -25,13 +25,8 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
-<<<<<<< HEAD
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-=======
-#include "common/system/master_info.h"
-#include "exprs/chunk_predicate_evaluator.h"
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_materializer.h"
@@ -52,44 +47,7 @@
 
 namespace starrocks::parquet {
 
-<<<<<<< HEAD
-namespace {
-
-void deduplicate_io_ranges(std::vector<starrocks::io::SharedBufferedInputStream::IORange>* ranges) {
-    if (ranges == nullptr || ranges->size() <= 1) {
-        return;
-    }
-
-    std::sort(ranges->begin(), ranges->end(), [](const auto& lhs, const auto& rhs) {
-        if (lhs.offset != rhs.offset) {
-            return lhs.offset < rhs.offset;
-        }
-        if (lhs.size != rhs.size) {
-            return lhs.size < rhs.size;
-        }
-        return lhs.is_active < rhs.is_active;
-    });
-
-    size_t write_idx = 0;
-    for (size_t read_idx = 1; read_idx < ranges->size(); ++read_idx) {
-        auto& current = (*ranges)[write_idx];
-        const auto& next = (*ranges)[read_idx];
-        if (current.offset == next.offset && current.size == next.size) {
-            current.is_active = current.is_active || next.is_active;
-            continue;
-        }
-        ++write_idx;
-        if (write_idx != read_idx) {
-            (*ranges)[write_idx] = next;
-        }
-    }
-    ranges->erase(ranges->begin() + static_cast<std::ptrdiff_t>(write_idx + 1), ranges->end());
-}
-
-} // namespace
-=======
 // ── GroupReader: construction / destruction ─────────────────────────────────
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                          int64_t row_group_first_row)
@@ -123,7 +81,7 @@ GroupReader::~GroupReader() {
         // was triggered during predicate evaluation.  A consistently high count
         // suggests the active/lazy classification (Phase 3b) would help.
         if (_param.stats) {
-            size_t total_lazy = _column_materializer->lazy_slot_ids().size() + _variant->lazy_hidden_slot_ids().size();
+            size_t total_lazy = _column_materializer->lazy_slot_ids().size();
             size_t triggered = _column_materializer->lazy_triggered_count();
             if (total_lazy > 0 && static_cast<size_t>(triggered) >= total_lazy) {
                 _param.stats->parquet_lazy_full_trigger_count++;
@@ -155,17 +113,10 @@ Status GroupReader::prepare() {
         }
     }
 
-<<<<<<< HEAD
     // if coalesce read enabled, we have to
     // 1. allocate shared buffered input stream and
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
-=======
-    // Promote variant virtual columns to typed-value proxy readers.
-    _variant->try_promote();
-
-    // Coalesce IO ranges using ReadRangePlanner's staged planning.
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
     if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
         std::vector<starrocks::io::SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
@@ -220,20 +171,6 @@ const tparquet::RowGroup* GroupReader::get_row_group_metadata() const {
     return _row_group_metadata;
 }
 
-<<<<<<< HEAD
-=======
-// ── get_next: materialise one chunk from the current row group ──────────────
-//
-// Pipeline (7 stages):
-//   1. Prune deleted rows           — deletion bitmap
-//   2. Read & filter active columns — dict / expression predicate pushdown
-//   3. Evaluate compound predicates — multi-slot conjuncts from scanner_ctxs
-//   4. Evaluate variant predicates  — fetch sources + deferred subfield conjuncts
-//   5. Filter & backfill lazy       — apply combined filter + lazy column backfill
-//   6. Append output side columns   — partition / not-existed / extended / count
-//   7. Emit output                  — variant projections + physical columns
-
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
 Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
     if (_is_group_filtered) {
@@ -241,12 +178,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         return Status::EndOfFile("");
     }
 
-<<<<<<< HEAD
-    _column_materializer->reset_read_chunk();
-    ChunkPtr active_chunk = _column_materializer->create_active_chunk();
-
-=======
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
     while (true) {
         if (!_range_iter.has_more()) {
             *row_count = 0;
@@ -256,22 +187,14 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         auto r = _range_iter.next(*row_count);
         _param.stats->raw_rows_read += r.span_size();
 
-<<<<<<< HEAD
-        active_chunk->reset();
-
-        bool has_filter = false;
-        Filter chunk_filter(count, 1);
-=======
         _column_materializer->reset_read_chunk();
-        _variant->reset_iteration_state();
 
         RowGroupScanState state;
         state.active_chunk = _column_materializer->create_active_chunk();
         state.row_count = r.span_size();
         state.chunk_filter = Filter(state.row_count, 1);
 
-        LazyMaterializationContext lazy_ctx(_column_materializer.get(), _variant.get(), r, nullptr, state.active_chunk);
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
+        LazyMaterializationContext lazy_ctx(_column_materializer.get(), r, nullptr, state.active_chunk);
 
         // 1. Prune deleted rows
         ASSIGN_OR_RETURN(bool rows_survive, _prune_deleted_rows(r, state));
@@ -290,57 +213,16 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         state.active_chunk->set_missing_column_provider(nullptr);
         if (!rows_survive) continue;
 
-<<<<<<< HEAD
-        // Apply combined chunk_filter to physically reduce active_chunk.
-        if (has_filter) {
-            active_chunk->filter(chunk_filter);
-            if (active_chunk->num_rows() == 0) {
-                continue;
-            }
-        }
-
-        // Compute post-filter range for lazy reads (Phase 5/6).
-        Range<uint64_t> post_filter_range;
-        Filter post_filter;
-        if (has_filter) {
-            post_filter_range = r.filter(&chunk_filter);
-            DCHECK(post_filter_range.span_size() > 0);
-            post_filter = {chunk_filter.begin() + post_filter_range.begin() - r.begin(),
-                           chunk_filter.begin() + post_filter_range.end() - r.begin()};
-        }
-
-        // 5. Backfill lazy physical columns
-        if (!_column_materializer->lazy_column_indices().empty()) {
-            RETURN_IF_ERROR(_column_materializer->read_lazy_columns(r, post_filter_range, post_filter, has_filter,
-                                                                    active_chunk));
-        }
-
-        // 7. Emit output
-        {
-            SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
-            *row_count = active_chunk->num_rows();
-            RETURN_IF_ERROR(_column_materializer->emit_physical_columns(active_chunk, chunk));
-=======
-        // 4. Evaluate variant predicates
-        ASSIGN_OR_RETURN(rows_survive, _evaluate_variant_predicates(r, state));
-        if (!rows_survive) continue;
-
-        // 5. Apply combined filter and backfill lazy columns
+        // 4. Apply combined filter and backfill lazy columns
         ASSIGN_OR_RETURN(rows_survive, _filter_and_backfill_lazy(r, state));
         if (!rows_survive) continue;
 
-        // 6. Emit output
+        // 5. Emit output
         RETURN_IF_ERROR(_emit_output_columns(state, chunk, row_count));
 
-        // 7. Append output side columns AFTER emit.
-        //    Use *row_count (captured before emit swaps columns out of
-        //    active_chunk) rather than (*chunk)->num_rows() — the latter
-        //    reads the first column's size, which can be 0 when the first
-        //    slot is a partition/not-existed/extended side column that
-        //    hasn't been populated yet.
+        // 6. Append output side columns AFTER emit.
         if ((*row_count) > 0) {
             RETURN_IF_ERROR(_param.scanner_ctx->append_side_columns_to_chunk(chunk, (*row_count)));
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
         }
         break;
     }
@@ -390,19 +272,6 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
         return true;
     }
 
-    // VARIANT virtual projection slots must be materialised before compound
-    // conjuncts are evaluated.  When a compound conjunct references a variant
-    // virtual slot, fetch the needed hidden sources and project the virtual
-    // slots early.  active_chunk is rebuilt per range so stale slots cannot leak.
-    if (!_variant->empty()) {
-        auto early_projected =
-                _variant->referenced_variant_virtual_slot_ids(_param.scanner_ctx->conjuncts.scanner_ctxs);
-        if (!early_projected.empty()) {
-            RETURN_IF_ERROR(_variant->fetch_and_project_virtual_slots(early_projected, r, state.active_chunk,
-                                                                      _variant->projection_timezone()));
-        }
-    }
-
     // Append side columns to active_chunk so compound conjuncts referencing
     // partition / not-existed / extended slots can be evaluated correctly.
     if (state.active_chunk->num_rows() > 0) {
@@ -416,42 +285,14 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
         RETURN_IF_ERROR(_column_materializer->finalize_active_slot(slot_id, state.active_chunk));
     }
 
-    ASSIGN_OR_RETURN(size_t compound_hit, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
-                                                  _param.scanner_ctx->conjuncts.scanner_ctxs, state.active_chunk.get(),
-                                                  &state.chunk_filter));
+    ASSIGN_OR_RETURN(size_t compound_hit,
+                     ExecNode::eval_conjuncts_into_filter(_param.scanner_ctx->conjuncts.scanner_ctxs,
+                                                          state.active_chunk.get(), &state.chunk_filter));
     if (compound_hit == 0) {
         _param.stats->late_materialize_skip_rows += state.row_count;
         return false;
     }
     state.has_filter = true;
-    return true;
-}
-
-// ── 4. Evaluate variant predicates ──────
-
-StatusOr<bool> GroupReader::_evaluate_variant_predicates(const Range<uint64_t>& r, RowGroupScanState& state) {
-    // fetch_sources() runs unconditionally: active variant hidden sources are
-    // needed for output even when no deferred conjuncts exist.
-    // _fetched_hidden_slots tracks already-populated columns from any early
-    // fetch during compound eval; fetch_sources() skips those.
-    RETURN_IF_ERROR(_variant->fetch_sources(r, state.active_chunk));
-
-    if (!_variant->has_deferred_conjuncts()) {
-        return true;
-    }
-
-    ASSIGN_OR_RETURN(Filter vr, _variant->filter_subfields(state.active_chunk, state.row_count, _param.stats,
-                                                           _variant->projection_timezone()));
-    if (!vr.empty()) {
-        if (SIMD::count_nonzero(vr.data(), vr.size()) == 0) {
-            return false;
-        }
-        DCHECK_EQ(vr.size(), state.row_count);
-        for (size_t i = 0; i < state.row_count; i++) {
-            state.chunk_filter[i] &= vr[i];
-        }
-        state.has_filter = true;
-    }
     return true;
 }
 
@@ -466,7 +307,6 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
         if (state.active_chunk->num_rows() == 0) {
             return false;
         }
-        RETURN_IF_ERROR(_variant->align_after_combined_filter(state.active_chunk, state.chunk_filter, state.row_count));
 
         post_filter_range = r.filter(&state.chunk_filter);
         DCHECK(post_filter_range.span_size() > 0);
@@ -474,8 +314,7 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
                        state.chunk_filter.begin() + post_filter_range.end() - r.begin()};
     }
 
-    bool has_any_lazy =
-            !_column_materializer->lazy_column_indices().empty() || !_variant->lazy_hidden_slot_ids().empty();
+    bool has_any_lazy = !_column_materializer->lazy_column_indices().empty();
     if (has_any_lazy) {
         _param.stats->parquet_lazy_col_skip_rows += state.row_count - state.active_chunk->num_rows();
     }
@@ -484,9 +323,6 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
                                                                 state.has_filter, state.active_chunk));
     }
 
-    RETURN_IF_ERROR(_variant->backfill_sources(r, state.has_filter ? &post_filter_range : nullptr,
-                                               state.has_filter ? &post_filter : nullptr, state.has_filter,
-                                               state.active_chunk));
     return true;
 }
 
@@ -495,14 +331,7 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
 Status GroupReader::_emit_output_columns(RowGroupScanState& state, ChunkPtr* chunk, size_t* row_count) {
     SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
     *row_count = state.active_chunk->num_rows();
-
-    if (_variant->has_projections()) {
-        RETURN_IF_ERROR(_variant->emit_projections(state.active_chunk, chunk, _variant->projection_timezone()));
-    }
-    {
-        auto skip_slots = _variant->projection_slot_ids();
-        RETURN_IF_ERROR(_column_materializer->emit_physical_columns(state.active_chunk, chunk, &skip_slots));
-    }
+    RETURN_IF_ERROR(_column_materializer->emit_physical_columns(state.active_chunk, chunk));
     return Status::OK();
 }
 
@@ -698,21 +527,12 @@ Status GroupReader::_prepare_column_readers() const {
 void GroupReader::_process_columns_and_conjunct_ctxs() {
     // ── Classify physical columns and conjuncts ───────────────────────────────
     bool has_reserved_field_filter = false;
-<<<<<<< HEAD
-    _column_materializer->classify_columns(&has_reserved_field_filter);
-=======
+    std::unordered_set<SlotId> deferred_slots;
     _column_materializer->classify_columns(deferred_slots, &has_reserved_field_filter);
 
-    // ── Variant hidden source classification ──────────────────────────────────
-    _variant->classify_hidden_sources();
-    for (SlotId sid : _variant->active_hidden_slot_ids()) {
-        _column_materializer->add_active_slot(sid);
-    }
     if (!config::parquet_late_materialization_enable) {
         _column_materializer->promote_lazy_to_active();
-        _variant->promote_lazy_to_active();
     }
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
 
     // ── Promote lazy to active when no active columns exist ───────────────────
     if (_column_materializer->active_slot_ids().empty() && !has_reserved_field_filter) {
@@ -726,12 +546,7 @@ void GroupReader::collect_io_ranges(std::vector<starrocks::io::SharedBufferedInp
                                     int64_t* end_offset, ColumnIOTypeFlags types) {
     int64_t end = 0;
     _column_materializer->collect_io_ranges(ranges, &end, types);
-<<<<<<< HEAD
-    deduplicate_io_ranges(ranges);
-=======
-    _variant->collect_io_ranges(ranges, &end, types);
     ReadRangePlanner::deduplicate(ranges);
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
     *end_offset = end;
 }
 

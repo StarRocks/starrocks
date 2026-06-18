@@ -47,11 +47,7 @@ class THdfsScanRange;
 namespace parquet {
 class ColumnMaterializer;
 class FileMetaData;
-<<<<<<< HEAD
-=======
 class LazyMaterializationContext;
-class VariantProjectionHandler;
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
 } // namespace parquet
 struct TypeDescriptor;
 } // namespace starrocks
@@ -178,16 +174,12 @@ private:
     //    lazy_ctx must still be attached.  Returns true if rows survive.
     StatusOr<bool> _evaluate_compound_predicates(const Range<uint64_t>& r, RowGroupScanState& state);
 
-    // 4. Fetch variant sources (unconditional) and evaluate deferred variant
-    //    conjuncts (conditional).  Returns true if rows survive.
-    StatusOr<bool> _evaluate_variant_predicates(const Range<uint64_t>& r, RowGroupScanState& state);
-
-    // 5. Apply combined chunk_filter, compute post-filter range (internal),
-    //    and backfill lazy physical columns + lazy variant sources.
+    // 4. Apply combined chunk_filter, compute post-filter range (internal),
+    //    and backfill lazy physical columns.
     //    Returns true if rows survive filtering; false to skip this range.
     StatusOr<bool> _filter_and_backfill_lazy(const Range<uint64_t>& r, RowGroupScanState& state);
 
-    // 6. Emit output: variant projections → physical columns into destination chunk.
+    // 5. Emit output: physical columns into destination chunk.
     Status _emit_output_columns(RowGroupScanState& state, ChunkPtr* chunk, size_t* row_count);
 
     // ── Member variables ─────────────────────────────────────────────────────

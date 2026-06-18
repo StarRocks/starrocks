@@ -602,14 +602,7 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
             src->as_mutable_raw_ptr()->reset_column();
         } else {
             static_assert(!LAZY_CONVERT, "LAZY_DICT_DECODE && LAZY_CONVERT == true is not supported by now");
-<<<<<<< HEAD
-            RETURN_IF_ERROR(_dict_decode(dst, src));
-=======
             if (_converter->need_convert) {
-                // Decode dict codes to physical values in an intermediate column (e.g. raw 16-byte
-                // UUID bytes), then apply the converter to produce the logical values in dst
-                // (e.g. canonical 36-char UUID strings).  Direct _dict_decode into dst would write
-                // unconverted physical bytes, producing wrong output for columns like UUID.
                 if (_tmp_intermediate_column == nullptr) {
                     _tmp_intermediate_column = _converter->create_src_column();
                 }
@@ -624,7 +617,6 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
                 dst->as_mutable_raw_ptr()->reset_column();
                 RETURN_IF_ERROR(_dict_decode(dst, src));
             }
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
         }
         src = _logical_dst;
         _logical_dst = nullptr;
@@ -655,9 +647,6 @@ bool ScalarColumnReader::_is_intermediate_column(const ColumnPtr& column) const 
     return _tmp_intermediate_column != nullptr && column.get() == _tmp_intermediate_column.get();
 }
 
-<<<<<<< HEAD
-void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-=======
 Status ScalarColumnReader::finalize_lazy_state(ColumnPtr& col) {
     if (_logical_dst != nullptr) {
         if (col.get() == _code_column.get()) {
@@ -692,8 +681,7 @@ Status ScalarColumnReader::finalize_lazy_state(ColumnPtr& col) {
     return Status::OK();
 }
 
-void ScalarColumnReader::collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges,
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
+void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
     RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
     const auto& column = *get_chunk_metadata();

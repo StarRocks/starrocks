@@ -144,27 +144,10 @@ public:
         return Status::OK();
     }
 
-<<<<<<< HEAD
-    virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                         int64_t* end_offset, ColumnIOTypeFlags types, bool active) = 0;
-=======
-    // Finalize a column that may be in lazy physical state (dict codes or
-    // intermediate / non-converted values) back to StarRocks logical type.
-    //
-    // This is the evaluate-line boundary: after read_range() may return
-    // Parquet-native physical columns for dict-filter / lazy-convert
-    // performance, but before any StarRocks expression evaluator (ExprContext,
-    // ChunkPredicateEvaluator, compound conjunct) consumes a column, it MUST
-    // be finalized to logical form.  Idempotent / no-op when the column is
-    // already logical.
-    //
-    // Not to be confused with fill_dst_column() which is the emit-time
-    // boundary and may skip decode for predicate-only columns.
     virtual Status finalize_lazy_state(ColumnPtr& col) { return Status::OK(); }
 
-    virtual void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                         ColumnIOTypeFlags types, bool active) = 0;
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
+    virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                         int64_t* end_offset, ColumnIOTypeFlags types, bool active) = 0;
 
     // For field which type is complex, the filed physical_column_index in file meta is not same with the column index
     // in row_group's column metas

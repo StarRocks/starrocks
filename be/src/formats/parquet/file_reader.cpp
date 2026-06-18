@@ -28,12 +28,8 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
-<<<<<<< HEAD
+#include "exec/exec_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-=======
-#include "compute_env/runtime_range_pruner.hpp"
-#include "exprs/chunk_predicate_evaluator.h"
->>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/utils.h"
@@ -428,8 +424,7 @@ Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
         }
         _scan_row_count += read_size;
         if (!_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
-            RETURN_IF_ERROR(
-                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
         }
         return Status::OK();
     }

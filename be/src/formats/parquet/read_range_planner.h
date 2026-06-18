@@ -19,10 +19,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "formats/parquet/utils.h"
+#include "io/shared_buffered_input_stream.h"
 
 namespace starrocks::parquet {
 
@@ -41,7 +41,7 @@ class ColumnReader;
 class ReadRangePlanner {
 public:
     using ColumnReaderMap = std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>;
-    using IORange = SharedBufferedInputStream::IORange;
+    using IORange = io::SharedBufferedInputStream::IORange;
 
     ReadRangePlanner(const GroupReaderParam& param, ColumnReaderMap* column_readers);
 
