@@ -4500,6 +4500,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 } else {
                     tableProperty.modifyTableProperties(properties);
                     tableProperty.buildProperty(opCode);
+                    if (opCode == OperationType.OP_ALTER_TABLE_PROPERTIES &&
+                            properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                        tableProperty.setEnableStatisticCollectOnFirstLoad(
+                                Boolean.parseBoolean(properties.get(
+                                        PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)));
+                    }
                 }
 
                 if (StringUtils.isNotEmpty(comment)) {
