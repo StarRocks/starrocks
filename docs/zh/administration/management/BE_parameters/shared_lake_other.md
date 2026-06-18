@@ -568,13 +568,31 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：rocksdb中write buffer可以使用的内存占比。默认值是百分之5，最终取值不会小于64MB，也不会大于1GB。
 - 引入版本：v3.5.0
 
-### enable_connector_footer_prefetch_on_stall
+### enable_connector_footer_prefetch
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否在外部表扫描等待时预取 Parquet 文件的 footer（文件元数据）。当外部（数据湖）表的扫描需要等待时——例如下游的 Join 仍在构建、无法接收更多数据行——BE 会利用这段空闲时间，提前将后续文件的 footer 读入缓存。当扫描到达这些文件时，其元数据已在缓存中，从而避免对每个文件单独发起一次远程读取。`true` 表示启用该行为，`false` 表示禁用。仅预取由 native reader 读取的 Parquet 文件的 footer。
+- 描述：是否在外部（数据湖）表扫描进行时，提前预取后续 Parquet 文件的 footer（文件元数据）。扫描运行期间，BE 利用扫描执行器空闲的 io-task 槽位，提前将即将读取的文件的 footer 读入缓存。当扫描到达某个文件时，其 footer 已在缓存中，从而避免在扫描关键路径上为该文件单独发起一次远程 footer 读取。`true` 表示启用该行为，`false` 表示禁用。仅预取由 native reader 读取的 Parquet 文件的 footer。
+- 引入版本：-
+
+### connector_footer_prefetch_max_inflight
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个 connector 扫描算子并发执行的 footer 预取任务数上限。预取任务与数据任务共享每个算子的 io-task 预算（数据任务与预取任务之和不超过 `connector_io_tasks_per_scan_operator`），因此该参数限制了提前预热 footer 的激进程度。仅当 `enable_connector_footer_prefetch` 为 `true` 时生效。
+- 引入版本：-
+
+### connector_footer_prefetch_lead_multiplier
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 footer 预取相对扫描游标提前的距离（以文件数计）：提前窗口 = `scan_dop * connector_footer_prefetch_max_inflight * 该值`。该值越大，预取可以运行得越靠前，footer 缓存命中率越高，但也可能预热到提前结束的扫描永远不会读取的文件的 footer。仅当 `enable_connector_footer_prefetch` 为 `true` 时生效。
 - 引入版本：-
 
 ## 其他

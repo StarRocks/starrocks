@@ -22,6 +22,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -45,21 +46,23 @@ struct FooterPrefetchItem {
     std::shared_ptr<const FooterOpenContext> open_ctx;
 };
 
-// Shared, factory-owned state for stall-time footer prefetch. Tracks an explicit
-// contiguous frontier of root files the real scan has started, how far the prefetcher has
-// submitted ahead, the in-flight task count, and a cancel flag. Every method is per-file
-// (root start, task submit/finish, incremental append) -- never per-row -- so a single
-// mutex is cheap. See handbook/plans/local/scan-footer-prefetch.md.
+// Shared, factory-owned state for footer prefetch. Tracks an explicit contiguous frontier of
+// root files the real scan has started, how far the prefetcher has submitted ahead, and a
+// cancel flag. Concurrency is bounded by each operator's free io-task slots, not here. Every
+// method is per-file (root start, submit, incremental append) -- never per-row -- so a single
+// mutex is cheap.
 class FooterPrefetchState {
 public:
-    // lead_distance = scan_dop * connector_io_tasks_per_scan_operator * 2 (files ahead).
-    // max_in_flight = connector_io_tasks_per_scan_operator (concurrent warm tasks per node).
+    // lead_distance (files ahead) bounds how far the warm cursor may run past the real-scan frontier
+    // -- cache footprint / wasted reads if the scan terminates early. The scan node derives it as
+    // scan_dop * connector_footer_prefetch_max_inflight * connector_footer_prefetch_lead_multiplier.
+    // Concurrency is NOT bounded here -- each operator caps its own warm tasks against its free
+    // io-task slots (data + warm <= connector_io_tasks_per_scan_operator).
     // metacache_on / datacache_populate_on: which caches can hold a warmed footer; if neither
     // is set the prefetcher never warms.
-    FooterPrefetchState(std::vector<FooterPrefetchItem> files, int lead_distance, int max_in_flight, bool metacache_on,
+    FooterPrefetchState(std::vector<FooterPrefetchItem> files, int lead_distance, bool metacache_on,
                         bool datacache_populate_on)
             : _lead_distance(lead_distance < 0 ? 0 : static_cast<size_t>(lead_distance)),
-              _max_in_flight(max_in_flight < 1 ? 1 : max_in_flight),
               _metacache_on(metacache_on),
               _datacache_populate_on(datacache_populate_on) {
         _set_files(std::move(files));
@@ -69,12 +72,17 @@ public:
     bool metacache_on() const { return _metacache_on; }
     bool datacache_populate_on() const { return _datacache_populate_on; }
 
-    // The real scan started a root file (split_context == nullptr): mark it Started and
-    // advance the contiguous Started prefix. No-op if the key is unknown. O(1) amortized.
+    // The real scan started a root file (split_context == nullptr): mark it Started and advance the
+    // contiguous Started prefix. If the key is not in the sidecar yet (its range has not reached
+    // append()), remember it so append() applies the start. O(1) amortized.
     void mark_started(const std::string& key) {
         std::lock_guard<std::mutex> l(_mu);
         auto it = _index_of.find(key);
         if (it == _index_of.end()) {
+            // Incremental delivery can publish a morsel (and start its file) before that range
+            // reaches append(). Remember the start so append() applies it, instead of dropping it and
+            // freezing the frontier behind a file the scan already started.
+            _pending_started.insert(key);
             return;
         }
         _started[it->second] = 1;
@@ -93,20 +101,32 @@ public:
         _files.reserve(_files.size() + more.size());
         for (auto& item : more) {
             if (_index_of.emplace(item.key, _files.size()).second) {
+                // Apply a start the scan recorded before this range arrived (see mark_started).
+                uint8_t started = 0;
+                auto pit = _pending_started.find(item.key);
+                if (pit != _pending_started.end()) {
+                    started = 1;
+                    _pending_started.erase(pit);
+                }
                 _files.emplace_back(std::move(item));
-                _started.emplace_back(0);
+                _started.emplace_back(started);
             }
+        }
+        // A pending start may have landed at the frontier; extend the contiguous Started prefix.
+        while (_frontier < _started.size() && _started[_frontier] != 0) {
+            ++_frontier;
         }
     }
 
-    // Pick the next file to warm within (frontier, frontier + lead_distance], if under the
-    // in-flight cap and not cancelled. On success copies it into *out, increments in_flight,
-    // and returns true. The caller loops until this returns false. The submit cursor never
-    // falls behind the real-scan frontier, and already-Started files are skipped, so a file
-    // the scan overtook during an unblock is never re-warmed.
+    // Pick the next file to warm within (frontier, frontier + lead_distance], if not cancelled. On
+    // success copies it into *out, advances the submit cursor, and returns true. The caller (one per
+    // scan operator) loops until this returns false or it runs out of free io-task slots. The submit
+    // cursor never falls behind the real-scan frontier, and already-Started files are skipped, so a
+    // file the scan overtook is never re-warmed. Shared across operators; the mutex + monotonic
+    // cursor hand each concurrent caller a distinct file.
     bool try_take_next(FooterPrefetchItem* out) {
         std::lock_guard<std::mutex> l(_mu);
-        if (_cancelled.load(std::memory_order_relaxed) || _in_flight >= _max_in_flight) {
+        if (_cancelled.load(std::memory_order_relaxed)) {
             return false;
         }
         if (_submit_cursor < _frontier) {
@@ -121,14 +141,18 @@ public:
         }
         *out = _files[_submit_cursor];
         ++_submit_cursor;
-        ++_in_flight;
         return true;
     }
 
-    void on_task_done() {
+    // Give a taken file back when its warm task could not be submitted (executor backpressure), so
+    // the prefetcher re-offers it. Best-effort: rolls back only if no other caller took past it (the
+    // cursor still sits just after this key). If it cannot roll back, only the footer PREFETCH for
+    // that file is skipped -- the real scan still opens the file and reads its footer normally, so no
+    // query data is lost (a missed prefetch just means one cold footer read).
+    void untake(const std::string& key) {
         std::lock_guard<std::mutex> l(_mu);
-        if (_in_flight > 0) {
-            --_in_flight;
+        if (_submit_cursor > _frontier && _submit_cursor <= _files.size() && _files[_submit_cursor - 1].key == key) {
+            --_submit_cursor;
         }
     }
 
@@ -136,13 +160,6 @@ public:
     // removed from the scan executor, so they drain by observing this flag and returning.
     void cancel() { _cancelled.store(true, std::memory_order_relaxed); }
     bool cancelled() const { return _cancelled.load(std::memory_order_relaxed); }
-
-    // Stall gate: the prefetch loop only runs while the scan is back-pressured (row buffer full).
-    // The operator sets this from is_buffer_full() at its scheduling points; the self-sustaining
-    // loop stops re-submitting once it clears, so prefetch does not contend with row io-tasks
-    // after the scan resumes.
-    void set_stalled(bool v) { _stalled.store(v, std::memory_order_relaxed); }
-    bool stalled() const { return _stalled.load(std::memory_order_relaxed); }
 
     // Per-query (node-wide) counts of footers this prefetcher actually wrote into each cache;
     // surfaced on the scan profile at close.
@@ -171,15 +188,13 @@ private:
     std::vector<FooterPrefetchItem> _files;            // append-only
     std::vector<uint8_t> _started;                     // per-file STARTED flag, parallel to _files
     std::unordered_map<std::string, size_t> _index_of; // key -> file index
+    std::unordered_set<std::string> _pending_started;  // started before their range reached append()
     size_t _frontier = 0;                              // contiguous Started prefix
     size_t _submit_cursor = 0;                         // how far we have submitted
-    int _in_flight = 0;
     const size_t _lead_distance;
-    const int _max_in_flight;
     const bool _metacache_on;
     const bool _datacache_populate_on;
     std::atomic<bool> _cancelled{false};
-    std::atomic<bool> _stalled{false};
     std::atomic<int64_t> _warmed_pagecache{0};
     std::atomic<int64_t> _warmed_blockcache{0};
 };

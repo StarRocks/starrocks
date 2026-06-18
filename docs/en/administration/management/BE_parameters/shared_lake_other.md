@@ -580,13 +580,31 @@ This topic introduces the following types of BE configurations:
 - Description: It is the memory percent of write buffer for meta in rocksdb. default is 5% of system memory. However, aside from this, the final calculated size of the write buffer memory will not be less than 64MB nor exceed 1G (rocksdb_max_write_buffer_memory_bytes)
 - Introduced in: v3.5.0
 
-### enable_connector_footer_prefetch_on_stall
+### enable_connector_footer_prefetch
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to prefetch Parquet file footers when an external table scan is waiting. When a scan over external (data lake) tables has to wait — for example, because a downstream join is still building and cannot accept more rows — the BE uses that idle time to read the footers (file metadata) of the upcoming files into cache. By the time the scan reaches those files, their metadata is already cached, so it avoids a separate remote read for each file. `true` enables this behavior; `false` disables it. Only the footers of Parquet files read by the native reader are prefetched.
+- Description: Whether to prefetch the footers (file metadata) of upcoming Parquet files ahead of an external (data lake) table scan. While the scan runs, the BE warms the footers of files it is about to read into cache, using the scan executor's spare io-task slots. By the time the scan reaches a file, its footer is already cached, which avoids a separate remote footer read on the scan's critical path. `true` enables this behavior; `false` disables it. Only the footers of Parquet files read by the native reader are prefetched.
+- Introduced in: -
+
+### connector_footer_prefetch_max_inflight
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of concurrent footer-prefetch tasks per connector scan operator. Prefetch tasks share the per-operator io-task budget (data tasks plus prefetch tasks do not exceed `connector_io_tasks_per_scan_operator`), so this caps how aggressively footers are warmed ahead of the data scan. Only takes effect when `enable_connector_footer_prefetch` is `true`.
+- Introduced in: -
+
+### connector_footer_prefetch_lead_multiplier
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls how far ahead of the scan cursor footers are prefetched, measured in files: the lead window equals `scan_dop * connector_footer_prefetch_max_inflight * this value`. A larger value lets the prefetcher run further ahead and raises the footer cache-hit rate, at the cost of possibly warming footers that an early-terminating scan never reaches. Only takes effect when `enable_connector_footer_prefetch` is `true`.
 - Introduced in: -
 
 ## Other

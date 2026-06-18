@@ -170,10 +170,10 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
     scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this,
                                                                        runtime_state(), dop, std::move(buffer_limiter));
 
-    // Install the stall-time footer prefetcher (Parquet connector scans only). Built here
-    // because the node holds the scan ranges, dop, runtime state, and the freshly created
-    // factory. Disabled scans / non-Hive providers / no warmable cache yield an empty plan.
-    if (config::enable_connector_footer_prefetch_on_stall) {
+    // Install the footer prefetcher (Parquet connector scans only). Built here because the node
+    // holds the scan ranges, dop, runtime state, and the freshly created factory. Disabled scans /
+    // non-Hive providers / no warmable cache yield an empty plan.
+    if (config::enable_connector_footer_prefetch) {
         if (auto* hive_provider = dynamic_cast<connector::HiveDataSourceProvider*>(_data_source_provider.get())) {
             connector::FooterPrefetchPlan plan =
                     hive_provider->build_footer_prefetch_items(runtime_state(), _scan_ranges);
@@ -182,10 +182,10 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
             // state starts empty and is fed by append_footer_prefetch_ranges -- initial ranges after
             // prepare_all_pipelines, plus incremental batches per RPC.
             if (plan.metacache_on || plan.datacache_populate_on) {
-                const int io_tasks = io_tasks_per_scan_operator();
-                const int lead_distance = static_cast<int>(dop) * io_tasks * 2;
+                const int lead_distance = static_cast<int>(dop) * config::connector_footer_prefetch_max_inflight *
+                                          config::connector_footer_prefetch_lead_multiplier;
                 scan_op->set_footer_prefetch_state(std::make_shared<pipeline::FooterPrefetchState>(
-                        std::move(plan.items), lead_distance, io_tasks, plan.metacache_on, plan.datacache_populate_on));
+                        std::move(plan.items), lead_distance, plan.metacache_on, plan.datacache_populate_on));
             }
         }
     }

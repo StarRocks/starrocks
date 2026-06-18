@@ -2053,9 +2053,18 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.05");
 // Whether enable spill intermediate data for connector sink.
 CONF_mBool(enable_connector_sink_spill, "true");
 
-// Kill-switch for stall-time Parquet footer prefetch (warm upcoming files' footers into cache on
-// idle scan-executor tasks while a connector scan is back-pressured). Bounds derive from scan dop.
-CONF_mBool(enable_connector_footer_prefetch_on_stall, "true");
+// Kill-switch for Parquet footer prefetch: warm upcoming files' footers into cache on the scan
+// executor using io-task slots the data scan leaves spare (adaptive-governor throttle) or while a
+// downstream build stall parks the scan. Per-operator concurrency is capped by
+// connector_footer_prefetch_max_inflight; how far ahead it runs derives from scan dop.
+CONF_mBool(enable_connector_footer_prefetch, "true");
+
+// Max concurrent footer-warm tasks per connector scan operator.
+CONF_mInt32(connector_footer_prefetch_max_inflight, "4");
+
+// Footer-prefetch lead window, in files each in-flight warm task may run ahead of the scan cursor:
+// lead_distance = scan_dop * connector_footer_prefetch_max_inflight * this.
+CONF_mInt32(connector_footer_prefetch_lead_multiplier, "16");
 
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);

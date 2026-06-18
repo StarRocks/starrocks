@@ -116,6 +116,11 @@ public:
     }
 
     int available_pickup_morsel_count() override;
+    // The adaptive governor's current data-io-task target (expected_io_tasks), read without the side
+    // effects of available_pickup_morsel_count(). Footer warm uses the cap - target slots the
+    // governor holds back from data (capped further by connector_footer_prefetch_max_inflight).
+    // Returns the cap when adaptive io-tasks are off (no spare).
+    int current_io_task_target() const;
     void begin_driver_process() override;
     void end_driver_process(DriverState driver_state) override;
     bool is_running_all_io_tasks() const override;

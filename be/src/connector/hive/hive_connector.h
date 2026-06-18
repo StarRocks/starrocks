@@ -57,10 +57,10 @@ public:
     void prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
 
-    // Build the stall-time footer-prefetch sidecar for these (Parquet) scan ranges: resolve
-    // each root file's native path the same way the real scan does, share one FileSystem and
-    // datacache policy. Empty if no cache can hold a warmed footer. Reusable for incremental
-    // batches (tail-append into FooterPrefetchState).
+    // Build the footer-prefetch sidecar for these (Parquet) scan ranges: resolve each root file's
+    // native path the same way the real scan does, share one FileSystem and datacache policy. Empty
+    // if no cache can hold a warmed footer. Reusable for incremental batches (tail-append into
+    // FooterPrefetchState).
     FooterPrefetchPlan build_footer_prefetch_items(RuntimeState* state,
                                                    const std::vector<TScanRangeParams>& scan_ranges);
 

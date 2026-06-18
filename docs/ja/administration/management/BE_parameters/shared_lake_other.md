@@ -571,13 +571,31 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでのワーカー間の tablet バランスを判断するためにシステムが使用するしきい値。アンバランスファクターは次のように計算されます: `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。ファクターが `lake_balance_tablets_threshold` を超える場合、tablet バランスがトリガーされます。この項目は `lake_enable_balance_tablets_between_workers` が `true` に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.4
 
-### enable_connector_footer_prefetch_on_stall
+### enable_connector_footer_prefetch
 
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 外部テーブルのスキャンが待機している間に Parquet ファイルの footer（ファイルメタデータ）をプリフェッチするかどうか。外部（データレイク）テーブルのスキャンが待機する必要がある場合（たとえば、下流の Join がまだ構築中で、これ以上の行を受け取れない場合）、BE はそのアイドル時間を利用して、後続ファイルの footer をキャッシュに先読みします。スキャンがそれらのファイルに到達したときには、メタデータはすでにキャッシュされているため、ファイルごとに個別のリモート読み取りを行う必要がなくなります。`true` は有効、`false` は無効を示します。native reader で読み取られる Parquet ファイルの footer のみがプリフェッチされます。
+- 説明: 外部（データレイク）テーブルのスキャンの進行中に、後続の Parquet ファイルの footer（ファイルメタデータ）を先読み（プリフェッチ）するかどうか。スキャンの実行中、BE はスキャンエグゼキューターの空いている io-task スロットを利用して、これから読み取るファイルの footer をキャッシュに先読みします。スキャンがファイルに到達したときには、その footer はすでにキャッシュされているため、スキャンのクリティカルパス上でファイルごとに個別のリモート footer 読み取りを行う必要がなくなります。`true` は有効、`false` は無効を示します。native reader で読み取られる Parquet ファイルの footer のみがプリフェッチされます。
+- 導入バージョン: -
+
+### connector_footer_prefetch_max_inflight
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: connector スキャンオペレーターごとに同時実行できる footer プリフェッチタスクの最大数。プリフェッチタスクはオペレーターごとの io-task 予算をデータタスクと共有し（データタスクとプリフェッチタスクの合計が `connector_io_tasks_per_scan_operator` を超えない）、この値によって footer をどの程度積極的に先読みするかが制限されます。`enable_connector_footer_prefetch` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### connector_footer_prefetch_lead_multiplier
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: footer をスキャンカーソルのどれだけ先まで先読みするかを、ファイル数で制御します。先読みウィンドウ = `scan_dop * connector_footer_prefetch_max_inflight * この値`。値が大きいほどプリフェッチはより先まで進み、footer のキャッシュヒット率が高くなりますが、早期に終了するスキャンが到達しないファイルの footer まで先読みする可能性があります。`enable_connector_footer_prefetch` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ## その他
