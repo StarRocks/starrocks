@@ -96,8 +96,8 @@ Status CacheSelectScanner::_fetch_orc() {
     {
         std::unordered_set<std::string> known_column_names;
         OrcChunkReader::build_column_name_set(&known_column_names, &_scanner_ctx->hive_column_names, reader->getType(),
-                                              _scanner_ctx->options.case_sensitive,
-                                              _scanner_ctx->options.orc_use_column_names);
+                                              _scanner_ctx->format_scan_context.options.case_sensitive,
+                                              _scanner_ctx->format_scan_context.options.orc_use_column_names);
         RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(known_column_names));
         ASSIGN_OR_RETURN(auto skip, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
         if (skip) {
@@ -106,7 +106,8 @@ Status CacheSelectScanner::_fetch_orc() {
         }
 
         for (const auto& column : _scanner_ctx->materialized_columns) {
-            const auto col_name = Utils::format_name(column.name(), _scanner_ctx->options.case_sensitive);
+            const auto col_name =
+                    Utils::format_name(column.name(), _scanner_ctx->format_scan_context.options.case_sensitive);
             if (known_column_names.contains(col_name)) {
                 slot_descriptors.emplace_back(column.slot_desc);
             }
@@ -118,13 +119,14 @@ Status CacheSelectScanner::_fetch_orc() {
     {
         std::list<uint64_t> selected_leaf_column_ids{};
         OrcMappingOptions orc_mapping_options{};
-        orc_mapping_options.case_sensitive = _scanner_ctx->options.case_sensitive;
+        orc_mapping_options.case_sensitive = _scanner_ctx->format_scan_context.options.case_sensitive;
         orc_mapping_options.filename = _file->filename();
         orc_mapping_options.invalid_as_null = true;
-        ASSIGN_OR_RETURN(std::unique_ptr<OrcMapping> orc_mapping,
-                         OrcMappingFactory::build_mapping(slot_descriptors, reader->getType(),
-                                                          _scanner_ctx->options.orc_use_column_names,
-                                                          &_scanner_ctx->hive_column_names, orc_mapping_options));
+        ASSIGN_OR_RETURN(
+                std::unique_ptr<OrcMapping> orc_mapping,
+                OrcMappingFactory::build_mapping(slot_descriptors, reader->getType(),
+                                                 _scanner_ctx->format_scan_context.options.orc_use_column_names,
+                                                 &_scanner_ctx->hive_column_names, orc_mapping_options));
 
         for (size_t i = 0; i < slot_descriptors.size(); i++) {
             SlotDescriptor* desc = slot_descriptors[i];

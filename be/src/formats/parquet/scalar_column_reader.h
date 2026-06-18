@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/global_dict/types.h"
 #include "common/util/thrift_util.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"

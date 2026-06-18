@@ -125,15 +125,14 @@ struct HdfsScannerContext {
     int64_t file_size = -1;
     bool is_first_split = false;
     std::string table_location;
-    const FileScanSplitContext* split_context = nullptr;
     DataCacheOptions datacache_options{};
     TableSpecificData table_specific;
 
     // ===== shared scan fields =====
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
     const TupleDescriptor* tuple_desc = nullptr;
+    FormatScanContext format_scan_context;
     FormatScannerConjuncts conjuncts;
-    FormatScannerOptions options;
     HdfsScannerProfile profile;
 
     // ===== column descriptors =====
@@ -195,8 +194,6 @@ struct HdfsScannerContext {
 
     std::string timezone;
 
-    FormatScannerStats* stats = nullptr;
-
     std::vector<SlotDescriptor*> not_existed_slots;
 
     // for iceberg reserved fields
@@ -240,7 +237,7 @@ struct HdfsScannerContext {
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     std::string formatted_name(const std::string& name) const {
-        return options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+        return format_scan_context.options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
     bool can_use_count_optimization() const;

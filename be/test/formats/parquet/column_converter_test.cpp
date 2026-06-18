@@ -49,7 +49,7 @@ protected:
 
         ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
         ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &g_hdfs_stats;
+        ctx->format_scan_context.stats = &g_hdfs_stats;
         return ctx;
     }
 

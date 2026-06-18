@@ -406,8 +406,8 @@ Status GroupReader::_create_column_readers() {
         return Status::InternalError("GroupReader: scanner_ctx must not be null");
     }
     opts.timezone = _param.scanner_ctx->timezone;
-    opts.case_sensitive = _param.scanner_ctx->options.case_sensitive;
-    opts.use_file_pagecache = _param.scanner_ctx->options.use_file_pagecache;
+    opts.case_sensitive = _param.scanner_ctx->format_scan_context.options.case_sensitive;
+    opts.use_file_pagecache = _param.scanner_ctx->format_scan_context.options.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;

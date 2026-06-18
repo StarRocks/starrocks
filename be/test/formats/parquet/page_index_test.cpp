@@ -75,9 +75,9 @@ HdfsScannerContext* PageIndexTest::_create_scan_context() {
     ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
     ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_stats;
-    ctx->options.parquet_page_index_enable = true;
-    ctx->options.parquet_bloom_filter_enable = true;
+    ctx->format_scan_context.stats = &g_hdfs_stats;
+    ctx->format_scan_context.options.parquet_page_index_enable = true;
+    ctx->format_scan_context.options.parquet_bloom_filter_enable = true;
     return ctx;
 }
 
