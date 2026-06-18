@@ -27,7 +27,8 @@
 
 namespace starrocks {
 
-Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t num_columns) {
+Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, const std::vector<TypeDescriptor>& key_types) {
+    const size_t num_columns = key_types.size();
     const size_t num_ranges = tablet_ranges.size();
     if (num_ranges == 0) {
         return Status::InternalError("no tablet ranges for RangeRouter init");
@@ -38,6 +39,30 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
     }
 
     RETURN_IF_ERROR(_validate_range(tablet_ranges, num_columns));
+
+    // Validate that the declared boundary type of each column is compatible with the
+    // expected routing-key type. The boundary type is taken from the first concrete
+    // lower/upper TVariant for that column.
+    for (size_t i = 0; i < num_columns; ++i) {
+        for (const auto& range : tablet_ranges) {
+            const TVariant* boundary = nullptr;
+            if (range.__isset.lower_bound) {
+                boundary = &range.lower_bound.values[i];
+            } else if (range.__isset.upper_bound) {
+                boundary = &range.upper_bound.values[i];
+            }
+            if (boundary == nullptr || !boundary->__isset.type) {
+                continue;
+            }
+            TypeDescriptor boundary_type = TypeDescriptor::from_thrift(boundary->type);
+            if (boundary_type.type != key_types[i].type) {
+                return Status::InternalError(fmt::format(
+                        "routing key type mismatch at column {}: key type {} incompatible with boundary type {}", i,
+                        key_types[i].debug_string(), boundary_type.debug_string()));
+            }
+            break;
+        }
+    }
 
     _upper_boundaries.resize(num_columns);
     for (size_t i = 0; i < num_ranges - 1; ++i) {
@@ -114,6 +139,25 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
 Status RangeRouter::route_chunk_rows(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
                                      const std::vector<uint16_t>& row_indices,
                                      const std::vector<int64_t>& candidate_dest, std::vector<int64_t>* target_dest) {
+    MutableColumns columns(slot_descs.size());
+    for (size_t i = 0; i < slot_descs.size(); ++i) {
+        columns[i] = chunk->get_column_by_slot_id(slot_descs[i]->id())->as_mutable_ptr();
+    }
+    return _route_rows(columns, row_indices, candidate_dest, target_dest);
+}
+
+Status RangeRouter::route_chunk_rows(const std::vector<ColumnPtr>& key_columns,
+                                     const std::vector<uint16_t>& row_indices,
+                                     const std::vector<int64_t>& candidate_dest, std::vector<int64_t>* target_dest) {
+    MutableColumns columns(key_columns.size());
+    for (size_t i = 0; i < key_columns.size(); ++i) {
+        columns[i] = key_columns[i]->as_mutable_ptr();
+    }
+    return _route_rows(columns, row_indices, candidate_dest, target_dest);
+}
+
+Status RangeRouter::_route_rows(const MutableColumns& key_columns, const std::vector<uint16_t>& row_indices,
+                                const std::vector<int64_t>& candidate_dest, std::vector<int64_t>* target_dest) {
     if (row_indices.empty()) {
         return Status::OK();
     }
@@ -134,12 +178,7 @@ Status RangeRouter::route_chunk_rows(Chunk* chunk, const std::vector<SlotDescrip
         return Status::OK();
     }
 
-    MutableColumns columns(slot_descs.size());
-    for (size_t i = 0; i < slot_descs.size(); ++i) {
-        columns[i] = chunk->get_column_by_slot_id(slot_descs[i]->id())->as_mutable_ptr();
-    }
-
-    ChunkRow cur_check_row(&columns, 0);
+    ChunkRow cur_check_row(&key_columns, 0);
     for (uint16_t row_idx : row_indices) {
         cur_check_row.index = row_idx;
         size_t t_idx = _find_tablet_index_for_row(cur_check_row);
