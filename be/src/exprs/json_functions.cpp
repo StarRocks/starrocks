@@ -444,8 +444,30 @@ static NativeJsonState* get_native_json_state(FunctionContext* context) {
     return reinterpret_cast<NativeJsonState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 }
 
-static JsonGetThreadState* get_json_thread_state(FunctionContext* context) {
-    return reinterpret_cast<JsonGetThreadState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+static JsonGetThreadState* get_json_thread_state(FunctionContext* /*context*/) {
+    // The fused fast path keeps reusable MUTABLE scratch here (a simdjson ondemand parser + buffers).
+    // FunctionContext::THREAD_LOCAL state is NOT per-pipeline-driver: a pipeline ProjectOperator (and the
+    // scan operators) share one ExprContext -- hence one FunctionContext -- across all `pipeline_dop` drivers
+    // (project_operator.h: `_expr_ctxs` is a reference handed to every per-driver operator; the operator never
+    // clones it). simdjson's ondemand parser is not thread-safe, so a shared instance is raced by concurrent
+    // drivers and scrambles string values across rows. Use a genuine per-OS-thread instance instead: a driver
+    // runs a chunk to completion without preemption, and concurrent drivers are on different threads.
+    thread_local JsonGetThreadState ts;
+    // Bound pathological growth: being thread_local, ts persists for the thread's lifetime and its simdjson
+    // parser + scratch buffers grow to the largest document seen on this thread. Once they exceed a cap, reset
+    // them at this chunk boundary (this accessor runs once per chunk, not per row), so a one-off huge document
+    // does not pin memory. The reset fires only after an oversized document; the check itself is trivial.
+    constexpr size_t kRetainCapBytes = 1 << 20; // 1 MB
+    if (ts.parser.capacity() > kRetainCapBytes) {
+        ts.parser = simdjson::ondemand::parser{};
+        ts.padded_scratch.clear();
+        ts.padded_scratch.shrink_to_fit();
+        ts.unescape_scratch.clear();
+        ts.unescape_scratch.shrink_to_fit();
+        ts.key_scratch.clear();
+        ts.key_scratch.shrink_to_fit();
+    }
+    return &ts;
 }
 
 void JsonFunctions::_plan_fast_moves(const JsonPath& path, NativeJsonState* state) {
@@ -505,17 +527,10 @@ static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice
 }
 
 Status JsonFunctions::native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        // Per-driver mutable state for the fused fast path. simdjson::ondemand::parser is
-        // NOT thread-safe; ExprContext::clone (be/src/exprs/expr_context.cpp:140) opens
-        // each cloned context with THREAD_LOCAL scope, giving us a distinct instance per
-        // driver. The parser is created with default capacity; simdjson lazily grows its
-        // internal buffers on the first iterate() call, so no explicit allocate() is needed.
-        auto* tstate = new JsonGetThreadState();
-        context->set_function_state(scope, tstate);
-        return Status::OK();
-    }
-
+    // The fused fast path's mutable scratch (simdjson parser + buffers) lives in a per-OS-thread thread_local
+    // (see get_json_thread_state), NOT in FunctionContext THREAD_LOCAL state: pipeline operators share one
+    // ExprContext across drivers, so THREAD_LOCAL function state is not per-driver and a shared simdjson parser
+    // would be raced. Hence nothing to allocate at THREAD_LOCAL scope here.
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -554,9 +569,6 @@ Status JsonFunctions::native_json_path_close(FunctionContext* context, FunctionC
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<NativeJsonState*>(context->get_function_state(scope));
         delete state;
-    } else if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* tstate = reinterpret_cast<JsonGetThreadState*>(context->get_function_state(scope));
-        delete tstate;
     }
     return Status::OK();
 }
