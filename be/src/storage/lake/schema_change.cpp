@@ -18,7 +18,6 @@
 
 #include <memory>
 
-#include "agent/agent_metrics.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
@@ -40,6 +39,7 @@
 #include "storage/metadata_util.h"
 #include "storage/schema_change_utils.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_reader_params.h"
 
@@ -652,7 +652,7 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 // failures here represent real BE-side errors that should cancel the
 // alter, not silently land in an unsupported fallback shape.
 Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
-    AgentMetrics::instance()->lake_add_index_requests_total.increment(1);
+    StorageMetrics::instance()->lake_add_index_requests_total.increment(1);
     if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
         // The fast-path request shape (base_tablet_id == new_tablet_id, no
         // tablet_schema diff) is incompatible with the legacy rewrite path:
@@ -660,11 +660,11 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
         // append duplicate rowsets. FE's classifier guarantees this branch
         // is unreachable in practice, so fail loudly instead of falling
         // back.
-        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
         return Status::InvalidArgument("ADD INDEX fast path called with empty indexes_to_add");
     }
     if (!request.__isset.txn_id) {
-        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
         return Status::InvalidArgument("txn_id not set for ADD INDEX fast path");
     }
 
@@ -708,7 +708,7 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
                 // See note above: do not fall back to do_process_alter_tablet
                 // — the request shape would cause the legacy path to
                 // re-write the tablet against itself and duplicate rows.
-                AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+                StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
                 return Status::InternalError(
                         strings::Substitute("ADD INDEX fast path: column $0 not found in new schema. tablet=$1",
                                             col_name, request.new_tablet_id));
@@ -736,14 +736,14 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
         // .idx files have already been cleaned up by the run() failure
         // branch (cleanup_written_idx_files()).
         LOG(WARNING) << "ADD INDEX fast path failed: " << run_st << " tablet=" << request.new_tablet_id;
-        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
         return run_st;
     }
 
     LOG(INFO) << "ADD INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id
               << " segment_entries=" << op_add_index->segment_entries_size()
               << " new_indexes=" << op_add_index->new_indexes_size();
-    AgentMetrics::instance()->lake_idg_files_written_total.increment(op_add_index->segment_entries_size());
+    StorageMetrics::instance()->lake_idg_files_written_total.increment(op_add_index->segment_entries_size());
     return _tablet_manager->put_txn_log(std::move(txn_log));
 }
 
@@ -757,7 +757,7 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
 // when compaction later rebuilds the segment (keys absent from the inlined
 // footer, the .idx file becomes unreferenced and gets vacuumed).
 Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& request) {
-    AgentMetrics::instance()->lake_drop_index_requests_total.increment(1);
+    StorageMetrics::instance()->lake_drop_index_requests_total.increment(1);
     if (!request.__isset.drop_indexes || request.drop_indexes.empty()) {
         LOG(WARNING) << "DROP INDEX fast path called with empty drop_indexes list; tablet=" << request.new_tablet_id;
         return Status::InvalidArgument("drop_indexes is empty for DROP INDEX fast path");
