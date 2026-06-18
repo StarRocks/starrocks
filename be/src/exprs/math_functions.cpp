@@ -312,6 +312,264 @@ DEFINE_MATH_BINARY_FN(round_up_to, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
 DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::pow);
 DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::atan2);
 
+<<<<<<< HEAD
+=======
+// Iceberg truncate/bucket transforms use the second argument (truncate width /
+// number of buckets) directly as a modulo divisor. Iceberg requires it to be a
+// positive number; reject width <= 0 here so a width of 0 returns a normal error
+// instead of raising SIGFPE on the integer idiv.
+static Status check_iceberg_transform_width(int64_t width) {
+    if (width <= 0) {
+        return Status::InvalidArgument(
+                fmt::format("The width/num_buckets of iceberg transform must be greater than 0, but got: {}", width));
+    }
+    return Status::OK();
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    const int32_t original_scale = viewer.column()->scale();
+    const int32_t original_precision = viewer.column()->precision();
+    RunTimeCppType<Type> max_val = 1;
+    for (int32_t p = original_precision; p > 0; p--) {
+        max_val *= 10;
+    }
+
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+    ColumnBuilder<Type> builder(size, original_precision, original_scale);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            RunTimeCppType<Type> val = viewer.value(i);
+            RunTimeCppType<Type> res = val - ((val % width) + width) % width;
+            if (ABS(res) >= max_val) {
+                std::stringstream error;
+                error << "Truncate to decimal(" << original_precision << ", " << original_scale
+                      << ") failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
+            builder.append(res);
+        }
+    }
+#undef ABS
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL128>(FunctionContext*, const Columns&);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+#define haveDifferentSigns(x, y) (((x) ^ (y)) < 0)
+    ColumnBuilder<Type> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            RunTimeCppType<Type> val = viewer.value(i);
+            RunTimeCppType<Type> res = val - ((val % width) + width) % width;
+            if (haveDifferentSigns(res, val)) {
+                std::stringstream error;
+                error << "Truncate to integer failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
+            builder.append(res);
+        }
+    }
+#undef haveDifferentSigns
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_INT>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = viewer.value(i);
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(val), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_INT>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            auto val = viewer.value(i);
+            int32_t hash;
+            murmur_hash3_x86_32(val.data, val.size, 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATE> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = viewer.value(i).julian() - date::UNIX_EPOCH_JULIAN;
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = iceberg_datetime_to_epoch_microseconds(viewer.value(i));
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionContext* context,
+                                                                       const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val;
+            if (!iceberg_timestamptz_to_epoch_microseconds(context, viewer.value(i), &val)) {
+                builder.append_null();
+                continue;
+            }
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template <typename T>
+vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
+    std::vector<uint8_t> byteArray(sizeof(value));
+    memcpy(byteArray.data(), &value, sizeof(value));
+    if (value < 0) {
+        value = ~value;
+    }
+    int bitLength = 0;
+    while (value > 0) {
+        value >>= 1;
+        bitLength++;
+    }
+    // Convert the integer to its byte representation (Big Endian)
+    byteArray.resize(bitLength / 8 + 1);
+    std::reverse(byteArray.begin(), byteArray.end());
+    return byteArray;
+}
+
+template vector<uint8_t> MathFunctions::int_to_byte_array<int32_t>(int32_t value);
+template vector<uint8_t> MathFunctions::int_to_byte_array<int64_t>(int64_t value);
+template vector<uint8_t> MathFunctions::int_to_byte_array<int128_t>(int128_t value);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            auto val = viewer.value(i);
+            auto byte_array = int_to_byte_array(val);
+            int32_t hash;
+            murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>(FunctionContext*, const Columns&);
+
+>>>>>>> 7b6ca15e90 ([BugFix] Fix SIGFPE crash in iceberg truncate/bucket transforms on zero width (#74998))
 #undef DEFINE_MATH_UNARY_FN
 #undef DEFINE_MATH_UNARY_FN_WITH_IMPL
 #undef DEFINE_MATH_BINARY_FN
