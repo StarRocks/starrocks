@@ -25,7 +25,7 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "gutil/strings/split.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"

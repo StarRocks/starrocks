@@ -47,7 +47,7 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/runtime_state.h"
 #include "segment_options.h"
 #include "storage/base/merge_iterator.h"

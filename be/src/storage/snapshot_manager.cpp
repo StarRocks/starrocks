@@ -45,7 +45,7 @@
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
 

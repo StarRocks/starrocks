@@ -26,7 +26,7 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"

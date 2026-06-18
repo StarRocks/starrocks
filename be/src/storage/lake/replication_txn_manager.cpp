@@ -40,7 +40,6 @@
 #include "http/http_client.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_file_stream_converter.h"
 #include "storage/delete_handler.h"

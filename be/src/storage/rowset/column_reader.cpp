@@ -55,7 +55,7 @@
 #include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_file_reader.h"

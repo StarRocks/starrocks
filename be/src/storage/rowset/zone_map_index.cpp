@@ -42,7 +42,7 @@
 #include "column/column_viewer.h"
 #include "common/config_rowset_fwd.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/encoding_info.h"

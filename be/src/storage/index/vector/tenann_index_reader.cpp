@@ -42,7 +42,7 @@
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_file_reader.h"

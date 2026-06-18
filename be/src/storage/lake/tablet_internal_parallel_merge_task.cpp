@@ -24,7 +24,7 @@
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"

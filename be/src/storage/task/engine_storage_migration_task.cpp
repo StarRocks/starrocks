@@ -36,8 +36,8 @@
 
 #include <fmt/format.h>
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "runtime/exec_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_metrics.h"

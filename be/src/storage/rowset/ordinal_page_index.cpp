@@ -39,7 +39,7 @@
 #include "cache/mem_cache/page_handle.h"
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/primitive/key_coder.h"
 #include "storage/rowset/page_io.h"
 

@@ -41,7 +41,6 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_reader.h"
 

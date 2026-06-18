@@ -44,7 +44,7 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/primitive/bitmap_range_iterator.h"

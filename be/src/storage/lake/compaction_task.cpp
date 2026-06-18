@@ -17,7 +17,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"

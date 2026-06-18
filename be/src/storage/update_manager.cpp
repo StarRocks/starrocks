@@ -26,7 +26,7 @@
 #include "fs/fs_factory.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"

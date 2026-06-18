@@ -39,7 +39,7 @@
 
 #include "base/format.h"
 #include "base/uid_util.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_common.h"
