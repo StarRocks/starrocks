@@ -43,6 +43,20 @@ struct FormatScannerStats {
     int64_t rows_read = 0;
     int64_t late_materialize_skip_rows = 0;
 
+    // Parquet lazy materialization: rows filtered before lazy columns were read.
+    int64_t parquet_lazy_col_skip_rows = 0;
+    // Parquet lazy materialization: number of lazy slots triggered via MissingColumnProvider.
+    int64_t parquet_lazy_slot_triggered = 0;
+    // Parquet lazy materialization: number of lazy column read operations.
+    int64_t parquet_lazy_read_count = 0;
+    // Parquet lazy materialization: time spent reading lazy columns.
+    int64_t parquet_lazy_read_ns = 0;
+    // Parquet dict-code predicate evaluation count.
+    int64_t parquet_dict_code_predicate_eval_count = 0;
+    // Parquet lazy materialization: row groups where every lazy slot was triggered
+    // on-demand (suggests active/lazy classification could be improved).
+    int64_t parquet_lazy_full_trigger_count = 0;
+
     int64_t io_ns = 0;
     int64_t io_count = 0;
     int64_t bytes_read = 0;

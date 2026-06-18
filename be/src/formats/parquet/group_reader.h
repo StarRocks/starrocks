@@ -51,6 +51,7 @@ class THdfsScanRange;
 namespace parquet {
 class ColumnMaterializer;
 class FileMetaData;
+class LazyMaterializationContext;
 class VariantProjectionHandler;
 } // namespace parquet
 struct TypeDescriptor;
@@ -157,16 +158,41 @@ private:
     Status _prepare_column_readers() const;
 
     // ── get_next() pipeline phases ───────────────────────────────────────────
-    //
+
+    // Bundles the per-range mutable state that flows through the filter pipeline.
+    struct RowGroupScanState {
+        ChunkPtr active_chunk;
+        Filter chunk_filter;
+        bool has_filter = false;
+        size_t row_count = 0;
+    };
+
     // 1. Prune deleted rows: applies deletion bitmap to produce chunk_filter.
     //    Returns true if rows survive; false to skip this range entirely.
-    StatusOr<bool> _prune_deleted_rows(const Range<uint64_t>& r, Filter& chunk_filter, bool& has_filter, size_t count);
+    StatusOr<bool> _prune_deleted_rows(const Range<uint64_t>& r, RowGroupScanState& state);
 
     // 2. Read & filter active columns: reads active physical columns and
     //    evaluates dict / expression filters.  Populates chunk_filter and
     //    fills active_chunk.  Returns true if rows survive.
-    StatusOr<bool> _read_and_filter_active_columns(const Range<uint64_t>& r, Filter& chunk_filter,
-                                                   ChunkPtr& active_chunk, bool& has_filter, size_t count);
+    StatusOr<bool> _read_and_filter_active_columns(const Range<uint64_t>& r, RowGroupScanState& state,
+                                                   LazyMaterializationContext* lazy_ctx);
+
+    // 3. Evaluate compound (multi-slot) conjuncts via scanner_ctxs.
+    //    Side columns are appended to active_chunk for predicate evaluation.
+    //    lazy_ctx must still be attached.  Returns true if rows survive.
+    StatusOr<bool> _evaluate_compound_predicates(const Range<uint64_t>& r, RowGroupScanState& state);
+
+    // 4. Fetch variant sources (unconditional) and evaluate deferred variant
+    //    conjuncts (conditional).  Returns true if rows survive.
+    StatusOr<bool> _evaluate_variant_predicates(const Range<uint64_t>& r, RowGroupScanState& state);
+
+    // 5. Apply combined chunk_filter, compute post-filter range (internal),
+    //    and backfill lazy physical columns + lazy variant sources.
+    //    Returns true if rows survive filtering; false to skip this range.
+    StatusOr<bool> _filter_and_backfill_lazy(const Range<uint64_t>& r, RowGroupScanState& state);
+
+    // 6. Emit output: variant projections → physical columns into destination chunk.
+    Status _emit_output_columns(RowGroupScanState& state, ChunkPtr* chunk, size_t* row_count);
 
     // ── Member variables ─────────────────────────────────────────────────────
 
