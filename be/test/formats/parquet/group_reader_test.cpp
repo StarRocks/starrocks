@@ -22,6 +22,7 @@
 
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/expr.h"
 #include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/complex_column_reader.h"
@@ -29,7 +30,6 @@
 #include "formats/parquet/read_range_planner.h"
 #include "formats/parquet/utils.h"
 #include "formats/reserved_columns.h"
-#include "exprs/expr.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/global_dict/parser.h"
