@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "common/config_agent_fwd.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -235,6 +236,15 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .build(&_lake_metadata_fetch_thread_pool));
     REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
 
+    const int lake_sc_pool_max =
+            std::max(1, config::alter_tablet_worker_count * config::lake_schema_change_per_tablet_parallelism);
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_schema_change")
+                            .set_min_threads(0)
+                            .set_max_threads(lake_sc_pool_max)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_schema_change_thread_pool));
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_schema_change, _lake_schema_change_thread_pool);
+
     int nproc = CpuInfo::num_cores();
     int budget = std::max(2, static_cast<int>(nproc * config::vector_index_build_max_cpu_ratio));
     int configured_omp = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
@@ -251,10 +261,22 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
     return Status::OK();
 }
 
+Status GlobalThreadPools::update_lake_schema_change_thread_pool_max() const {
+    if (_lake_schema_change_thread_pool == nullptr) {
+        return Status::OK();
+    }
+    const int new_max =
+            std::max(1, config::alter_tablet_worker_count * config::lake_schema_change_per_tablet_parallelism);
+    Status st = _lake_schema_change_thread_pool->update_max_threads(new_max);
+    LOG_IF(ERROR, !st.ok()) << "Failed to update lake_schema_change pool max_threads to " << new_max << ": " << st;
+    return st;
+}
+
 void GlobalThreadPools::shutdown() {
     if (_pipeline_sink_io_pool) _pipeline_sink_io_pool->shutdown();
     if (_put_aggregate_metadata_thread_pool) _put_aggregate_metadata_thread_pool->shutdown();
     if (_lake_metadata_fetch_thread_pool) _lake_metadata_fetch_thread_pool->shutdown();
+    if (_lake_schema_change_thread_pool) _lake_schema_change_thread_pool->shutdown();
     if (_lake_vector_index_build_thread_pool) _lake_vector_index_build_thread_pool->shutdown();
     if (_pk_index_execution_thread_pool) _pk_index_execution_thread_pool->shutdown();
     if (_pk_index_memtable_flush_thread_pool) _pk_index_memtable_flush_thread_pool->shutdown();
@@ -291,6 +313,7 @@ void GlobalThreadPools::destroy() {
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
     _lake_metadata_fetch_thread_pool.reset();
+    _lake_schema_change_thread_pool.reset();
     _lake_vector_index_build_thread_pool.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();

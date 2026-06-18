@@ -174,6 +174,7 @@ void ExecEnv::_refresh_service_contexts() {
     _lake_services.lake_replication_txn_manager = _lake_replication_txn_manager;
     _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
     _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
+    _lake_services.lake_schema_change_thread_pool = global_env->lake_schema_change_thread_pool();
     _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
     _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
     _lake_services.pk_index_execution_thread_pool = global_env->pk_index_execution_thread_pool();
@@ -510,6 +511,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         global_env->lake_metadata_fetch_thread_pool()->shutdown();
         component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (global_env->lake_schema_change_thread_pool()) {
+        start = MonotonicMillis();
+        global_env->lake_schema_change_thread_pool()->shutdown();
+        component_times.emplace_back("lake_schema_change_thread_pool", MonotonicMillis() - start);
     }
 
     if (global_env->lake_vector_index_build_thread_pool()) {

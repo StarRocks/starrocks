@@ -97,6 +97,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(merge_commit);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
     METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
+    METRICS_DEFINE_THREAD_POOL(lake_schema_change);
     METRICS_DEFINE_THREAD_POOL(lake_vi_build);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);

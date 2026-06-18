@@ -35,11 +35,11 @@ namespace starrocks::lake {
 // (LinkedSchemaChange, DirectSchemaChange, SortedSchemaChange) and the DROP
 // INDEX fast path remain single-threaded and do not use this runner.
 //
-// The runner wraps a CONCURRENT ThreadPoolToken bound to the dedicated
-// _thread_pool_lake_schema_change pool, with a per-job concurrency cap from
+// The runner wraps a CONCURRENT ThreadPoolToken bound to the lake_schema_change
+// pool, with a per-job concurrency cap from
 // `config::lake_schema_change_per_tablet_parallelism`. It collects the first
-// failure across all sub-tasks (fail-fast: subsequent tasks short-circuit
-// once a failure is observed) and exposes that error from `wait()`.
+// failure across all sub-tasks (fail-fast: subsequent tasks short-circuit once a
+// failure is observed) and exposes that error from `wait()`.
 //
 // Lifetime: construct one per job; submit() returns immediately on enqueue
 // failure (e.g. token shutdown). Always call wait() before destruction so

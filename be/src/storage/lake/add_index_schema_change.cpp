@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "agent/agent_server.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
@@ -153,10 +152,7 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     }
 
     auto* exec_env = ExecEnv::GetInstance();
-    if (exec_env == nullptr || exec_env->agent_server() == nullptr) {
-        return Status::InternalError("AddIndexSchemaChange: ExecEnv or agent_server not available");
-    }
-    auto* pool = exec_env->agent_server()->get_lake_schema_change_thread_pool();
+    auto* pool = exec_env == nullptr ? nullptr : exec_env->lake_services().lake_schema_change_thread_pool;
     SegmentTaskRunner runner(pool, config::lake_schema_change_per_tablet_parallelism);
 
     auto base_metadata = _base_tablet.metadata();

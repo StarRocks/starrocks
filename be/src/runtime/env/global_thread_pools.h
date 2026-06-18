@@ -35,6 +35,7 @@ public:
 
     Status init_execution_thread_pools(MetricRegistry* metrics);
     Status init_lake_thread_pools(MetricRegistry* metrics);
+    Status update_lake_schema_change_thread_pool_max() const;
 
     void shutdown();
     void destroy();
@@ -57,6 +58,7 @@ public:
 
     ThreadPool* put_aggregate_metadata_thread_pool() const { return _put_aggregate_metadata_thread_pool.get(); }
     ThreadPool* lake_metadata_fetch_thread_pool() const { return _lake_metadata_fetch_thread_pool.get(); }
+    ThreadPool* lake_schema_change_thread_pool() const { return _lake_schema_change_thread_pool.get(); }
     ThreadPool* lake_vector_index_build_thread_pool() const { return _lake_vector_index_build_thread_pool.get(); }
     ThreadPool* pk_index_execution_thread_pool() const { return _pk_index_execution_thread_pool.get(); }
     ThreadPool* pk_index_memtable_flush_thread_pool() const { return _pk_index_memtable_flush_thread_pool.get(); }
@@ -83,6 +85,7 @@ private:
 
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool;
     std::unique_ptr<ThreadPool> _lake_metadata_fetch_thread_pool;
+    std::unique_ptr<ThreadPool> _lake_schema_change_thread_pool;
     std::unique_ptr<ThreadPool> _lake_vector_index_build_thread_pool;
     std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool;
     std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool;

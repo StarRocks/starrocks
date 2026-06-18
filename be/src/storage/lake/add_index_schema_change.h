@@ -46,9 +46,10 @@ class IndexFileWriter;
 // whose SegmentEntries reference the .idx files by relative path.
 //
 // Per-segment work is submitted to SegmentTaskRunner (which runs on the
-// dedicated lake_schema_change pool). Errors propagate through the runner's
-// fail-fast mechanism; on failure the half-written .idx files become orphans
-// reachable through the txn abort path.
+// lake_schema_change pool when available, or inline in tests/minimal
+// environments). Errors propagate through the runner's fail-fast mechanism; on
+// failure the half-written .idx files become orphans reachable through the txn
+// abort path.
 //
 // Currently supported index types: BITMAP. Other types (NGRAMBF / GIN) return
 // Status::NotSupported and should be added incrementally; the framework is

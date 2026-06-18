@@ -46,9 +46,9 @@ private:
 
     // ADD INDEX fast path (lake-only). Skips data rewrite: builds standalone
     // .idx files (Index Delta Group) per segment and emits an OpAddIndex
-    // TxnLog. Per-segment work runs in parallel on
-    // _thread_pool_lake_schema_change. Caller is expected to have already
-    // validated `request.only_add_index` and the index list.
+    // TxnLog. Per-segment work runs in parallel on the lake_schema_change pool
+    // when available. Caller is expected to have already validated
+    // `request.only_add_index` and the index list.
     Status do_process_add_index_only(const TAlterTabletReqV2& request);
 
     // DROP INDEX fast path (lake-only). Pure metadata mutation: writes an

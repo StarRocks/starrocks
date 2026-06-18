@@ -18,15 +18,21 @@
 
 #include <utility>
 
+#include "agent/agent_server.h"
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "common/config_agent_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_update_registry.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "gen_cpp/Types_types.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
+#include "service/service_be/config_update_hooks.h"
 
 namespace starrocks {
 
@@ -91,6 +97,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
 
     EXPECT_EQ(env.lake_services().lake_tablet_manager, env._lake_tablet_manager);
+    EXPECT_EQ(env.lake_services().lake_schema_change_thread_pool, global_env->lake_schema_change_thread_pool());
     EXPECT_EQ(env.lake_services().lake_vector_index_build_thread_pool,
               global_env->lake_vector_index_build_thread_pool());
 
@@ -121,6 +128,42 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     env.compute_env()->stop_workgroup();
     env.compute_env()->destroy();
+}
+
+TEST(ExecEnvTest, lake_schema_change_pool_resizes_from_config_hooks) {
+    auto* exec_env = ExecEnv::GetInstance();
+    auto* global_env = GlobalEnv::GetInstance();
+    auto* thread_pool = global_env->lake_schema_change_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    ASSERT_NE(nullptr, exec_env->agent_server());
+    auto* alter_pool = exec_env->agent_server()->get_thread_pool(TTaskType::ALTER);
+    ASSERT_NE(nullptr, alter_pool);
+
+    ConfigUpdateRegistry::instance()->TEST_reset();
+    register_config_update_hooks(exec_env, *global_env);
+    ConfigUpdateRegistry::instance()->set_ready();
+    DeferOp reset_registry([]() { ConfigUpdateRegistry::instance()->TEST_reset(); });
+
+    const auto saved_alter = config::alter_tablet_worker_count;
+    const auto saved_parallelism = config::lake_schema_change_per_tablet_parallelism;
+    DeferOp restore_config([saved_alter, saved_parallelism]() {
+        (void)ConfigUpdateRegistry::instance()->update_config("lake_schema_change_per_tablet_parallelism",
+                                                              std::to_string(saved_parallelism));
+        (void)ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count", std::to_string(saved_alter));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count", "2"));
+    ASSERT_EQ(2, alter_pool->max_threads());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_schema_change_per_tablet_parallelism", "5"));
+    ASSERT_EQ(10, thread_pool->max_threads());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count", "3"));
+    ASSERT_EQ(3, alter_pool->max_threads());
+    ASSERT_EQ(15, thread_pool->max_threads());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_schema_change_per_tablet_parallelism", "0"));
+    ASSERT_EQ(1, thread_pool->max_threads());
 }
 
 } // namespace starrocks

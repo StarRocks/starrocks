@@ -38,6 +38,9 @@ public:
     ~GlobalEnv();
 
     Status init(MetricRegistry* metrics);
+    Status update_lake_schema_change_thread_pool_max() const {
+        return _thread_pools.update_lake_schema_change_thread_pool_max();
+    }
     void stop();
 
     static bool is_init();
@@ -108,6 +111,7 @@ public:
         return _thread_pools.put_aggregate_metadata_thread_pool();
     }
     ThreadPool* lake_metadata_fetch_thread_pool() const { return _thread_pools.lake_metadata_fetch_thread_pool(); }
+    ThreadPool* lake_schema_change_thread_pool() const { return _thread_pools.lake_schema_change_thread_pool(); }
     ThreadPool* lake_vector_index_build_thread_pool() const {
         return _thread_pools.lake_vector_index_build_thread_pool();
     }
