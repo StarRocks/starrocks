@@ -19,7 +19,9 @@
 #include <gtest/gtest.h>
 #include <velocypack/vpack.h>
 
+#include <atomic>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -2459,6 +2461,72 @@ TEST_F(JsonFunctionsTest, diff_get_json_string_bare_scalar_inputs) {
         SCOPED_TRACE(tc.name);
         assert_diff_get_json_string(tc);
     }
+}
+
+// Regression for the fused get_json fast path under pipeline parallelism. A pipeline ProjectOperator hands the
+// SAME ExprContext (hence the same FunctionContext) to every per-`pipeline_dop` driver without cloning, so the
+// fast path's reusable simdjson parser + scratch buffers must be per-OS-thread (thread_local), not shared
+// FunctionContext state. A shared parser is raced by concurrent drivers and scrambles string values across rows.
+// This test shares one context across threads and asserts each thread reads back only its own values.
+TEST_F(JsonFunctionsTest, get_json_string_concurrent_shared_context) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Constant path -> the fused fast path is planned once at FRAGMENT_LOCAL prepare.
+    auto seed_json = BinaryColumn::create();
+    seed_json->append(R"({"k":"seed"})");
+    auto seed_path = BinaryColumn::create();
+    seed_path->append("$.k");
+    Columns const_cols;
+    const_cols.emplace_back(seed_json);
+    const_cols.emplace_back(seed_path);
+    ctx->set_constant_columns(const_cols);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    constexpr int kThreads = 8;
+    constexpr int kIters = 1000;
+    constexpr int kRows = 16;
+    std::atomic<bool> failed{false};
+
+    std::vector<std::thread> workers;
+    workers.reserve(kThreads);
+    for (int t = 0; t < kThreads; ++t) {
+        workers.emplace_back([&, t]() {
+            // A value unique to this thread, so any cross-thread contamination is detectable.
+            const std::string expected = "val_" + std::to_string(t);
+            auto json_col = BinaryColumn::create();
+            auto path_col = BinaryColumn::create();
+            for (int r = 0; r < kRows; ++r) {
+                json_col->append(R"({"k":")" + expected + R"("})");
+                path_col->append("$.k");
+            }
+            Columns cols;
+            cols.emplace_back(json_col);
+            cols.emplace_back(path_col);
+
+            for (int it = 0; it < kIters && !failed.load(std::memory_order_relaxed); ++it) {
+                auto res = JsonFunctions::get_json_string(ctx.get(), cols);
+                if (!res.ok()) {
+                    failed.store(true);
+                    return;
+                }
+                auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(res.value());
+                for (int r = 0; r < kRows; ++r) {
+                    if (v->get_slice(r).to_string() != expected) {
+                        failed.store(true);
+                        return;
+                    }
+                }
+            }
+        });
+    }
+    for (auto& w : workers) {
+        w.join();
+    }
+    ASSERT_FALSE(failed.load()) << "fused get_json scrambled values across concurrent drivers sharing one context";
+
+    ASSERT_TRUE(
+            JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
 
 } // namespace starrocks
