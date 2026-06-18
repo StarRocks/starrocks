@@ -332,12 +332,32 @@ class TestStarRocksCanonicalization:
             "select x from t where (a > 1) and (b < 2)",
         )
 
-    def test_cte_column_list_injected(self):
-        """StarRocks injects a CTE column list after the CTE name."""
-        self._assert_equivalent(
-            "with cat as (select category, c from t) select category from cat",
-            "with cat (category, c) as (select category, c from t) select category from cat",
+    def test_cte_column_list_not_stripped_in_fallback(self):
+        """The regex fallback does NOT strip StarRocks-injected CTE column lists.
+
+        Stripping the column list wholesale would cause definitions with different column
+        lists (e.g. WITH c(a) vs WITH c(b)) to normalize to the same string, silently
+        missing a real schema change. The trade-off is that the fallback path may emit a
+        phantom diff when StarRocks injects a column list the user did not write; that case
+        is handled correctly by the preferred temp-view path.
+        """
+        model = TableAttributeNormalizer.normalize_sql(
+            "with cat as (select category, c from t) select category from cat"
         )
+        stored = TableAttributeNormalizer.normalize_sql(
+            "with cat (category, c) as (select category, c from t) select category from cat"
+        )
+        assert model != stored
+
+    def test_cte_different_column_lists_detected(self):
+        """Two definitions that differ only in CTE column names are not equal after normalization."""
+        a = TableAttributeNormalizer.normalize_sql(
+            "with c(a) as (select 1) select * from c"
+        )
+        b = TableAttributeNormalizer.normalize_sql(
+            "with c(b) as (select 1) select * from c"
+        )
+        assert a != b
 
     def test_comma_spacing_normalized(self):
         """Comma spacing differences are normalized."""

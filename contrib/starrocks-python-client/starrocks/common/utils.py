@@ -147,18 +147,15 @@ class TableAttributeNormalizer:
     _OUTER_JOIN_PATTERN = re.compile(r'\b(left|right|full)\s+outer\s+join\b', re.IGNORECASE)
     # StarRocks may add or drop LATERAL before unnest / table functions.
     _LATERAL_PATTERN = re.compile(r'\blateral\s+', re.IGNORECASE)
-    # The optional AS keyword (column alias "x AS y", table alias "t AS a", CAST(x AS int),
-    # "WITH cte AS (...)") is removed entirely. StarRocks is inconsistent about emitting it
-    # (e.g. on 3.5.x it stores "src AS a" but "unnest(x) k(c)"), and AS is never semantically
-    # meaningful, so dropping it symmetrically on both sides reconciles the difference without
-    # ever hiding a real change. Must run AFTER the CTE column-list rewrite below, which needs AS.
-    # Alternation skips single- and double-quoted strings so that ' as ' inside a literal is
-    # not touched; group(1) is non-None only for the real alias match outside a string.
+    # The optional AS keyword (column alias "x AS y", table alias "t AS a", CAST(x AS int))
+    # is removed entirely. StarRocks is inconsistent about emitting it (e.g. on 3.5.x it
+    # stores "src AS a" but "unnest(x) k(c)"), and AS is never semantically meaningful, so
+    # dropping it symmetrically on both sides reconciles the difference without ever hiding a
+    # real change. Alternation skips single- and double-quoted strings so that ' as ' inside a
+    # literal is not touched; group(1) is non-None only for the real alias match outside a string.
     _ALIAS_AS_PATTERN = re.compile(
         r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\s+as\s+)""", re.IGNORECASE
     )
-    # StarRocks injects a CTE column list: "WITH cat (category, c) AS (" -> "WITH cat AS (".
-    _CTE_COLUMN_LIST_PATTERN = re.compile(r'\b(\w+)\s*\([^()]*\)\s+as\s*\(', re.IGNORECASE)
     # StarRocks wraps simple predicates in redundant parentheses: "(x > 100)" -> "x > 100".
     # Restricted to a single flat comparison (no nested parens, no commas, no AND/OR) so the
     # removed parentheses are guaranteed redundant and grouping is never altered.
@@ -283,10 +280,7 @@ class TableAttributeNormalizer:
         sql = TableAttributeNormalizer._OUTER_JOIN_PATTERN.sub(r'\1 join', sql)
         # Drop LATERAL before unnest / table functions.
         sql = TableAttributeNormalizer._LATERAL_PATTERN.sub('', sql)
-        # Remove injected CTE column lists: "with cat (category, c) as (" -> "with cat as (".
-        # Runs before AS removal because the pattern relies on the AS keyword.
-        sql = TableAttributeNormalizer._CTE_COLUMN_LIST_PATTERN.sub(r'\1 as (', sql)
-        # Drop the optional AS keyword for all aliases (column, table, CAST, CTE).
+        # Drop the optional AS keyword for all aliases (column, table, CAST).
         # group(1) is None when the alternation matched a string literal (skip it).
         sql = TableAttributeNormalizer._ALIAS_AS_PATTERN.sub(
             lambda m: m.group(0) if m.group(1) is None else ' ', sql
