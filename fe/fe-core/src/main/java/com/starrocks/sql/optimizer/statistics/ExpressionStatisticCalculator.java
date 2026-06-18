@@ -18,23 +18,29 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
@@ -76,6 +82,9 @@ public class ExpressionStatisticCalculator {
         return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
     }
 
+    private record NullableBooleanProbabilities(double pTrue, double pFalse, double pNull) {
+    }
+
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
         private final Statistics inputStatistics;
         // Some functions estimate need plan node row count, such as COUNT
@@ -92,10 +101,22 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visit(ScalarOperator operator, Void context) {
             if (operator.getChildren().size() > 1) {
-                return operator.getChild(0).accept(this, context);
+                ColumnStatistic firstChildStat = operator.getChild(0).accept(this, context);
+                // Predicates without a dedicated visitor (IN, LIKE, BETWEEN, EXISTS, MULTI_IN, MATCH, ...)
+                // fall through to here. Returning the first operand's stats MCV for a boolean expression is potentially
+                // dangerous, so we are removing histograms here.
+                if (!firstChildStat.isUnknown() && firstChildStat.getHistogram() != null
+                        && isBooleanPredicate(operator)) {
+                    return ColumnStatistic.buildFrom(firstChildStat).setHistogram(null).build();
+                }
+                return firstChildStat;
             } else {
                 return ColumnStatistic.unknown();
             }
+        }
+
+        private static boolean isBooleanPredicate(ScalarOperator operator) {
+            return operator instanceof PredicateOperator || operator instanceof MatchExprOperator;
         }
 
         @Override
@@ -143,7 +164,224 @@ public class ExpressionStatisticCalculator {
             }
             return builder.build();
         }
+        @Override
+        public ColumnStatistic visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
 
+            if (operator.isNot()) {
+                // not just swaps pTrue and pFalse, pNull stays the same.
+                return computeBooleanProbabilities(operator.getChild(0), context)
+                        .map(p -> buildCompoundResult(operator, p.pFalse(), p.pTrue(), p.pNull()))
+                        .orElseGet(ColumnStatistic::unknown);
+            }
+
+            var left = computeBooleanProbabilities(operator.getChild(0), context);
+            var right = computeBooleanProbabilities(operator.getChild(1), context);
+
+            if (left.isEmpty() || right.isEmpty()) {
+                return ColumnStatistic.unknown();
+            }
+
+            double pTrue;
+            double pFalse;
+            var l = left.get();
+            var r = right.get();
+            if (operator.isAnd()) {
+                pTrue = l.pTrue() * r.pTrue();
+                pFalse = (l.pFalse() + r.pFalse()) - (l.pFalse() * r.pFalse());
+            } else {
+                pTrue = (l.pTrue() + r.pTrue()) - (l.pTrue() * r.pTrue());
+                pFalse = l.pFalse() * r.pFalse();
+            }
+            double pNull = clampFraction(1.0 - pTrue - pFalse);
+
+            return buildCompoundResult(operator, pTrue, pFalse, pNull);
+        }
+
+        private Optional<NullableBooleanProbabilities> computeBooleanProbabilities(ScalarOperator child, Void context) {
+            ColumnStatistic childStat = child.accept(this, context);
+            double pNull = childStat.isUnknown() ? 0.0 : clampFraction(childStat.getNullsFraction());
+            double nonNullMass = 1.0 - pNull;
+
+            // Extract from boolean MCV histogram if available. This is the most accurate strategy since it reflects the actual
+            // boolean value distribution. The MCV's true/false counts are treated as the conditional distribution among
+            // non-null rows and scaled by (1 - pNull), so pTrue + pFalse + pNull == 1 by construction (independent of how
+            // the MCV counts relate to rowCount).
+
+            if (!childStat.isUnknown() && childStat.getHistogram() != null && child.getType().isBoolean()) {
+                Map<String, Long> mcv = childStat.getHistogram().getMCV();
+                if (mcv != null && (!mcv.isEmpty())) {
+                    String trueKey = booleanToMcvValue(true);
+                    String falseKey = booleanToMcvValue(false);
+
+                    if (mcv.containsKey(trueKey) || mcv.containsKey(falseKey)) {
+                        long trueCount = mcv.getOrDefault(trueKey, 0L);
+                        long falseCount = mcv.getOrDefault(falseKey, 0L);
+                        long mcvTotal = trueCount + falseCount;
+                        double pTrue = mcvTotal > 0 ? nonNullMass * trueCount / mcvTotal : 0.0;
+                        double pFalse = mcvTotal > 0 ? nonNullMass - pTrue : 0.0;
+                        return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                    }
+                }
+            }
+
+            // Use PredicateStatisticsCalculator selectivity as a fallback. A predicate evaluates to UNKNOWN (not TRUE) on NULL
+            // inputs, so pTrue is capped at the non-null mass and pFalse takes the remainder, again keeping the sum at 1.
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(child, inputStatistics);
+            if (predicateStatistics != null && !Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                double inputStatisticsRows = inputStatistics.getOutputRowCount();
+                if (!Double.isNaN(inputStatisticsRows) && inputStatisticsRows > 0) {
+                    double pTrueRaw = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
+                    double pTrue = Math.min(pTrueRaw, nonNullMass);
+                    double pFalse = nonNullMass - pTrue;
+                    return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        private ColumnStatistic buildCompoundResult(CompoundPredicateOperator operator, double pTrue, double pFalse,
+                                                    double pNull) {
+            long trueRows = Math.round(rowCount * pTrue);
+            long falseRows = Math.round(rowCount * pFalse);
+
+            Map<String, Long> mcvs = new java.util.LinkedHashMap<>();
+            if (trueRows > 0) {
+                mcvs.put(booleanToMcvValue(true), trueRows);
+            }
+            if (falseRows > 0) {
+                mcvs.put(booleanToMcvValue(false), falseRows);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1).setNullsFraction(pNull)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2);
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+
+
+        private static double clampFraction(double value) {
+            if (Double.isNaN(value)) {
+                return 0.0;
+            }
+            return Math.max(0.0, Math.min(1.0, value));
+        }
+        @Override
+        public ColumnStatistic visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+            // Constant binary predicates can be introduced after the normal scalar constant-folding pass,
+            // for example `(SELECT 'season') > (SELECT 'a.season')` becomes `'season' > 'a.season'`
+            // when uncorrelated scalar subqueries are rewritten and merged into projections.
+            Optional<ConstantOperator> constantResult = evaluateConstantBinaryPredicate(operator);
+            if (constantResult.isPresent()) {
+                return constantResult.get().accept(this, context);
+            }
+
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            ColumnStatistic leftStat = operator.getChild(0).accept(this, context);
+            ColumnStatistic rightStat = operator.getChild(1).accept(this, context);
+
+            // For non-null-safe predicates (=, <, >, <=, >=, !=), if either operand is NULL
+            // the result is NULL (SQL three-valued logic). Only <=> is guaranteed non-null.
+            // An unknown operand is treated as contributing no nulls so a known operand's null mass survives.
+            double nullsFraction = 0.0;
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL) {
+                double leftNullFrac = leftStat.isUnknown() ? 0.0 : leftStat.getNullsFraction();
+                double rightNullFrac = rightStat.isUnknown() ? 0.0 : rightStat.getNullsFraction();
+                // Probability that at least one operand is NULL
+                nullsFraction = 1.0 - (1.0 - leftNullFrac) * (1.0 - rightNullFrac);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2);
+
+            if (leftStat.isUnknown() || rightStat.isUnknown()) {
+                return builder.build();
+            }
+
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(operator, inputStatistics);
+            if (predicateStatistics == null || Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            long inputRows = Math.max(1L, Math.round(inputStatistics.getOutputRowCount()));
+            long nullRows = Math.round(inputRows * nullsFraction);
+            long nonNullRows = Math.max(0L, inputRows - nullRows);
+            long nonNullTrueRows = Math.min(inputRows, Math.round(predicateStatistics.getOutputRowCount()));
+            long trueRows = Math.min(Math.max(0L, nonNullTrueRows), nonNullRows);
+            long falseRows = nonNullRows - trueRows;
+            Map<String, Long> mcvs = new HashMap<>();
+            if (trueRows > 0) {
+                ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR)
+                        .ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
+            }
+            if (falseRows > 0) {
+                ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR)
+                        .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
+            }
+
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+        private Optional<ConstantOperator> evaluateConstantBinaryPredicate(BinaryPredicateOperator operator) {
+            if (!operator.getChild(0).isConstantRef() || !operator.getChild(1).isConstantRef()) {
+                return Optional.empty();
+            }
+
+            ConstantOperator left = (ConstantOperator) operator.getChild(0);
+            ConstantOperator right = (ConstantOperator) operator.getChild(1);
+
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL && (left.isNull() || right.isNull())) {
+                return Optional.of(ConstantOperator.createNull(BooleanType.BOOLEAN));
+            }
+
+            switch (operator.getBinaryType()) {
+                case EQ:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                case NE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) != 0));
+                case EQ_FOR_NULL:
+                    if (left.isNull() && right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(true));
+                    } else if (!left.isNull() && !right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                    } else {
+                        return Optional.of(ConstantOperator.createBoolean(false));
+                    }
+                case GE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) >= 0));
+                case GT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) > 0));
+                case LE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) <= 0));
+                case LT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) < 0));
+                default:
+                    return Optional.empty();
+            }
+        }
         @Override
         public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
             // 1. compute children column statistics
@@ -181,6 +419,7 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
             final var inputStat = operator.getChild(0).accept(this, context);
+
 
             Map<String, Long> mcvs = new HashMap<>();
             if (!inputStat.isUnknown()) {
