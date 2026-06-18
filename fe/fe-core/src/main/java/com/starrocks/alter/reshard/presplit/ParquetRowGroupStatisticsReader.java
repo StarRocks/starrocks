@@ -304,7 +304,7 @@ public final class ParquetRowGroupStatisticsReader {
             // rejected here, which also keeps the floorDiv/floorMod conversion above in the range
             // where it is provably identical to BE's signed division.
             MetaTierTemporalWindow.rejectDateOutsideWindow(dateTime.toLocalDate());
-            return Variant.of(location.starRocksColumn.getType(), renderDateTime(dateTime));
+            return Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(dateTime));
         }
         if (location.logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation) {
             // Reconstruct the signed unscaled integer at the source scale; the exact precision/scale
@@ -349,16 +349,6 @@ public final class ParquetRowGroupStatisticsReader {
         long epochSecond = Math.floorDiv(ticks, ticksPerSecond);
         long nanoOfSecond = Math.floorMod(ticks, ticksPerSecond) * nanosPerTick;
         return LocalDateTime.ofEpochSecond(epochSecond, (int) nanoOfSecond, ZoneOffset.UTC);
-    }
-
-    private static String renderDateTime(LocalDateTime dateTime) {
-        // Mirrors DateVariant.getStringValue: second precision unless there is a
-        // sub-second part, then 6-digit microseconds. parseStrictDateTime round-trips both.
-        if (dateTime.getNano() == 0) {
-            return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
-        }
-        return dateTime.format(DateUtils.DATE_TIME_FORMATTER)
-                + "." + String.format("%06d", dateTime.getNano() / 1000);
     }
 
     private static ColumnChunkMetaData findColumnChunk(BlockMetaData block, ColumnPath path) {
