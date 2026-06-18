@@ -89,7 +89,6 @@ TEST_F(OperatorMemoryResourceManagerTest, test_compute_available_memory_bytes_ma
     EXPECT_EQ(expected, OperatorMemoryResourceManager::compute_available_memory_bytes(_dummy_state));
 }
 
-
 // Regression for a heap-use-after-free during fragment teardown.
 //
 // OperatorMemoryResourceManager stores a RAW pointer to the QueryContext-owned
