@@ -351,6 +351,29 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testCreateDbTranslatesConnectorAlreadyExists(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        new Expectations() {
+            {
+                icebergHiveCatalog.listAllDatabases();
+                result = Lists.newArrayList();
+                minTimes = 0;
+
+                icebergHiveCatalog.createDB("TEST_PROBE", (Map<String, String>) any);
+                result = new org.apache.iceberg.exceptions.AlreadyExistsException(
+                        "Namespace already exists: TEST_PROBE");
+                times = 1;
+            }
+        };
+
+        AlreadyExistsException e = assertThrows(AlreadyExistsException.class,
+                () -> metadata.createDb("TEST_PROBE", new HashMap<>()));
+        Assertions.assertTrue(e.getMessage().contains("TEST_PROBE"),
+                "translated message should carry the database name, but was: " + e.getMessage());
+    }
+
+    @Test
     public void testCreateDbWithErrorConfig() {
         assertThrows(IllegalArgumentException.class, () -> {
             IcebergHiveCatalog hiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), new HashMap<>());
