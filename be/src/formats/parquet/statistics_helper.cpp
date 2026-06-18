@@ -175,6 +175,13 @@ Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, co
 
     DCHECK_EQ(field->physical_type, column_meta->type);
     auto sort_order = sort_order_of_logical_type(type.type);
+    // A Parquet unsigned integer is compared with unsigned ordering, but its StarRocks
+    // destination type (e.g. BIGINT) is signed. Derive the order from the Parquet
+    // annotation so legacy footer stats written with signed ordering are rejected
+    // instead of being trusted and decoded as unsigned (which could invert min/max).
+    if (is_unsigned_integer(field->schema_element)) {
+        sort_order = SortOrder::UNSIGNED;
+    }
 
     if (!has_correct_min_max_stats(file_metadata, *column_meta, sort_order)) {
         return Status::Aborted("The file has incorrect order");
