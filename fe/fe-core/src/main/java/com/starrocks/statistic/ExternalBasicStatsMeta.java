@@ -51,6 +51,13 @@ public class ExternalBasicStatsMeta implements Writable {
     @SerializedName("columnStats")
     private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
 
+    // The table UUID resolved on the leader at analyze time. It is the key used by the connector
+    // statistics cache, so persisting it lets followers invalidate the cache during journal replay
+    // without resolving external table metadata (which may block on HMS/object storage).
+    // May be null for journals written before this field was introduced (see replay fallback).
+    @SerializedName("tableUUID")
+    private String tableUUID;
+
     public ExternalBasicStatsMeta() {}
 
     public ExternalBasicStatsMeta(String catalogName, String dbName, String tableName, List<String> columns,
@@ -76,6 +83,14 @@ public class ExternalBasicStatsMeta implements Writable {
 
     public String getTableName() {
         return tableName;
+    }
+
+    public String getTableUUID() {
+        return tableUUID;
+    }
+
+    public void setTableUUID(String tableUUID) {
+        this.tableUUID = tableUUID;
     }
 
     public List<String> getColumns() {

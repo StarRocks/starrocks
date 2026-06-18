@@ -318,10 +318,12 @@ public class StatisticsMetaManager extends FrontendDaemon {
         for (Map.Entry<AnalyzeMgr.StatsMetaColumnKey, ExternalHistogramStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().entrySet()) {
             ExternalHistogramStatsMeta histogramStatsMeta = entry.getValue();
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(
+            ExternalHistogramStatsMeta reInitMeta =
                     new ExternalHistogramStatsMeta(histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
                             histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn(),
-                            histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties()));
+                            histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties());
+            reInitMeta.setTableUUID(histogramStatsMeta.getTableUUID());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(reInitMeta);
         }
         return checkTableExist(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
     }
