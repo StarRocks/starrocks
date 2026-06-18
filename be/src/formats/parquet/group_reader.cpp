@@ -28,7 +28,6 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_materializer.h"
@@ -42,6 +41,7 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/variant_projection.h"
+#include "formats/reserved_columns.h"
 #include "gen_cpp/Exprs_types.h"
 #include "types/type_descriptor.h"
 #include "utils.h"
@@ -449,12 +449,13 @@ Status GroupReader::_create_column_readers() {
     if (!reserved_slots.empty()) {
         bool use_legacy_lookup_row_id =
                 std::any_of(reserved_slots.begin(), reserved_slots.end(), [](const SlotDescriptor* slot) {
-                    return slot->col_name() == "_row_source_id" || slot->col_name() == "_scan_range_id";
+                    return slot->col_name() == formats::kRowSourceIdColumnName ||
+                           slot->col_name() == formats::kScanRangeIdColumnName;
                 });
         for (const auto* slot : reserved_slots) {
-            if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
+            if (slot->col_name() == formats::kIcebergRowIdColumnName) {
                 ASSIGN_OR_RETURN(auto reader,
-                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
+                                 _create_reserved_iceberg_column_reader(slot, formats::kIcebergRowIdColumnId));
                 std::optional<int64_t> first_row_id = std::nullopt;
                 if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
                     first_row_id = std::optional<int64_t>(_row_group_first_row_id);
@@ -465,10 +466,9 @@ Status GroupReader::_create_column_readers() {
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
                 _column_readers.emplace(slot->id(), std::move(row_id_reader));
-            } else if (slot->col_name() == HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
-                ASSIGN_OR_RETURN(auto reader,
-                                 _create_reserved_iceberg_column_reader(
-                                         slot, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID));
+            } else if (slot->col_name() == formats::kIcebergLastUpdatedSequenceNumberColumnName) {
+                ASSIGN_OR_RETURN(auto reader, _create_reserved_iceberg_column_reader(
+                                                      slot, formats::kIcebergLastUpdatedSequenceNumberColumnId));
                 Datum sequence_number = kNullDatum;
                 bool can_use_fallback = false;
                 auto sequence_number_or = _get_extended_bigint_value(slot->id());
@@ -483,15 +483,15 @@ Status GroupReader::_create_column_readers() {
                                                     std::move(reader), can_use_fallback, sequence_number)
                                           : std::make_unique<IcebergLastUpdatedSequenceNumberReader>(sequence_number);
                 _column_readers.emplace(slot->id(), std::move(seq_reader));
-            } else if (slot->col_name() == "_row_source_id") {
+            } else if (slot->col_name() == formats::kRowSourceIdColumnName) {
                 if (auto opt = get_backend_id(); opt.has_value()) {
                     _column_readers.emplace(slot->id(), std::make_unique<RowSourceReader>(opt.value()));
                 } else {
                     return Status::InternalError("get_backend_id failed");
                 }
-            } else if (slot->col_name() == "_scan_range_id") {
+            } else if (slot->col_name() == formats::kScanRangeIdColumnName) {
                 _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(_param.scan_range_id));
-            } else if (slot->col_name() == HdfsScanner::ICEBERG_ROW_POSITION) {
+            } else if (slot->col_name() == formats::kIcebergRowPositionColumnName) {
                 _column_readers.emplace(slot->id(), std::make_unique<ParquetPosReader>());
             }
         }

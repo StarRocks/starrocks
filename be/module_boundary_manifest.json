@@ -319,6 +319,7 @@
         "be/src/formats/disk_range.hpp",
         "be/src/formats/file_writer.*",
         "be/src/formats/io/**",
+        "be/src/formats/reserved_columns.h",
         "be/src/formats/scan_context.h",
         "be/src/formats/utils.h"
       ],
@@ -328,6 +329,7 @@
         "formats/disk_range.hpp",
         "formats/file_writer.h",
         "formats/io/",
+        "formats/reserved_columns.h",
         "formats/scan_context.h",
         "formats/utils.h",
         "exprs/",
