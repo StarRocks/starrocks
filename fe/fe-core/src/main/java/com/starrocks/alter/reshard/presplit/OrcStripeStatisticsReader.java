@@ -260,8 +260,8 @@ public final class OrcStripeStatisticsReader {
             // uncaught exception that would skip pre-split entirely.
             MetaTierTemporalWindow.rejectDateOutsideWindow(minDate);
             MetaTierTemporalWindow.rejectDateOutsideWindow(maxDate);
-            minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER));
-            maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER));
+            minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER_UNIX));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER_UNIX));
         } catch (RuntimeException conversionFailure) {
             throw new MetaTierUnavailableException(String.format(
                     "ORC date stats value not representable for sort-key column \"%s\": %s",

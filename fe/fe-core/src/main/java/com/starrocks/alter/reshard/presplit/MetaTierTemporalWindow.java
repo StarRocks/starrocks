@@ -63,15 +63,21 @@ final class MetaTierTemporalWindow {
     /**
      * Render a decoded UTC {@link LocalDateTime} as StarRocks canonical datetime text
      * ("yyyy-MM-dd HH:mm:ss[.ffffff]"): second precision unless there is a sub-second part,
-     * then 6-digit microseconds. {@link DateUtils#parseStrictDateTime} round-trips both, as
-     * does the BE {@code datum_from_string} parser. Shared by the Parquet and ORC footer
+     * then a fixed 6-digit microsecond fraction. {@link DateUtils#parseStrictDateTime} and the
+     * BE {@code datum_from_string} parser round-trip both. Shared by the Parquet and ORC footer
      * readers (mirrors {@code DateVariant.getStringValue}).
+     *
+     * <p>Both branches use the {@code %Y}-based {@code *_UNIX} formatters (the same family
+     * {@code parseStrictDateTime} uses), not the deprecated {@code yyyy} ones: a
+     * {@link java.time.format.DateTimeFormatter} renders numeric fields as ASCII via
+     * DecimalStyle.STANDARD, so the output is locale-independent — unlike {@code String.format("%06d", …)},
+     * whose digits would follow the FE JVM's default locale and emit non-ASCII digits
+     * (Arabic/Persian), breaking {@code parseStrictDateTime} / BE boundary parsing.
      */
     static String renderDateTime(LocalDateTime dateTime) {
         if (dateTime.getNano() == 0) {
-            return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
+            return dateTime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
         }
-        return dateTime.format(DateUtils.DATE_TIME_FORMATTER)
-                + "." + String.format("%06d", dateTime.getNano() / 1000);
+        return dateTime.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
     }
 }

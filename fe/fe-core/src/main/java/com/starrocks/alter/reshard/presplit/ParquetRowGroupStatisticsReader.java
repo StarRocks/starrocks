@@ -295,7 +295,7 @@ public final class ParquetRowGroupStatisticsReader {
             // INT32 days since 1970-01-01 → canonical "yyyy-MM-dd".
             LocalDate date = LocalDate.ofEpochDay(((Number) parquetValue).longValue());
             MetaTierTemporalWindow.rejectDateOutsideWindow(date);
-            return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER));
+            return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER_UNIX));
         }
         if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
             long ticks = ((Number) parquetValue).longValue();
