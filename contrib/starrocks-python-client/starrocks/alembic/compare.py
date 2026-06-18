@@ -14,6 +14,7 @@
 
 from functools import wraps
 import logging
+import uuid
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 import warnings
 
@@ -503,8 +504,11 @@ def compare_view(
 
     # Compare each view attribute using dedicated functions
     # Order: definition+columns -> comment -> security
+    resolved_schema = schema or autogen_context.dialect.default_schema_name
     definition_changed = _compare_view_definition_and_columns(
-        alter_view_op, view_fqn, conn_view, metadata_view
+        alter_view_op, view_fqn, conn_view, metadata_view,
+        conn=autogen_context.connection,
+        schema=resolved_schema,
     )
     comment_changed = _compare_view_comment(
         alter_view_op, view_fqn, conn_view, metadata_view
@@ -529,11 +533,53 @@ def compare_view(
 
         logger.debug(f"Detected changed view attributes ({', '.join(changed_attrs)}) on {view_fqn!r}")
 
+def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[str]:
+    """Canonicalize SQL by round-tripping it through a temporary VIEW.
+
+    StarRocks rewrites a view's SELECT into its own canonical form when storing it
+    (adds INNER/OUTER JOIN keywords, fully qualifies column references, injects CTE
+    column lists, wraps predicates in parentheses, etc.).  By creating a throw-away
+    VIEW and immediately reflecting its stored definition we get that canonical form
+    without any regex processing.
+
+    Both sides of the comparison are passed through this function, so the result is
+    a comparison between two StarRocks-canonical strings.  Syntactic differences are
+    erased automatically; real semantic changes (e.g. swapping ``a.id`` and ``b.id``)
+    survive because the full qualified column names differ.
+
+    Returns the reflected canonical SQL, or ``None`` if the temp VIEW could not be
+    created (e.g. a referenced table does not exist yet in this migration), in which
+    case the caller falls back to the regex-based normalizer.
+    """
+    temp_name = f"_alembic_cmp_{uuid.uuid4().hex[:12]}"
+    quoted = f"`{schema}`.`{temp_name}`"
+    try:
+        conn.exec_driver_sql(f"CREATE OR REPLACE VIEW {quoted} AS {sql}")
+        row = conn.exec_driver_sql(
+            "SELECT view_definition FROM information_schema.views "
+            "WHERE table_schema = %s AND table_name = %s",
+            (schema, temp_name),
+        ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+    finally:
+        try:
+            conn.exec_driver_sql(f"DROP VIEW IF EXISTS {quoted}")
+        except Exception as e:
+            logger.warning(
+                "Failed to drop temp canonicalization view %s; it may need to be dropped manually: %s",
+                quoted, e,
+            )
+
+
 def _compare_view_definition_and_columns(
     alter_view_op: AlterViewOp,
     view_fqn: str,
     conn_view: View,
     metadata_view: View,
+    conn=None,
+    schema: Optional[str] = None,
 ) -> bool:
     """
     Compare view definition and columns, and update AlterViewOp if changed.
@@ -558,8 +604,28 @@ def _compare_view_definition_and_columns(
     meta_definition = metadata_view.info.get(TableObjectInfoKey.DEFINITION, "")
     logger.debug("Compare view definition: conn_definition=%s, meta_definition=%s", conn_definition, meta_definition)
 
-    conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, remove_qualifiers=True)
-    meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_definition, remove_qualifiers=True)
+    # Preferred path: canonicalize both sides through a temporary VIEW so StarRocks'
+    # own SQL rewriter reconciles syntactic differences (JOIN keywords, column
+    # qualification, CTE column lists, predicate parentheses, etc.).  The conn side
+    # is already in canonical form (reflected from the database), so we only need to
+    # canonicalize the meta side.  No qualifier removal or regex rewrites are needed
+    # because both strings are in the same StarRocks-canonical form.
+    #
+    # Falls back to the regex-based normalizer when the temp VIEW cannot be created
+    # (e.g. a base table referenced by the view doesn't exist yet in this migration).
+    if conn is not None and schema is not None:
+        canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_definition)
+        if canonical_meta is not None:
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, canonicalize=False)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta, canonicalize=False)
+            logger.debug("View definition comparison via temp-view canonicalization.")
+        else:
+            logger.debug("Temp-view canonicalization failed for %r; falling back to regex normalizer.", view_fqn)
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, remove_qualifiers=True)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_definition, remove_qualifiers=True)
+    else:
+        conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, remove_qualifiers=True)
+        meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_definition, remove_qualifiers=True)
     definition_changed = conn_def_norm != meta_def_norm
 
     # Compare columns (if metadata specifies columns explicitly)
@@ -967,7 +1033,8 @@ def _compare_mv_definition(
     schema: Optional[str],
     mv_name: str,
     conn_mv: Union[MaterializedView, Table],
-    metadata_mv: Union[MaterializedView, Table]
+    metadata_mv: Union[MaterializedView, Table],
+    conn=None,
 ) -> None:
     """
     Compare MV definition and raise error if changed.
@@ -980,9 +1047,27 @@ def _compare_mv_definition(
     meta_def_raw = getattr(metadata_mv, "definition", None) or metadata_mv.info.get(TableObjectInfoKey.DEFINITION, "")
     logger.debug("Compare mv definition: conn_def_raw=%s, meta_def_raw=%s", conn_def_raw, meta_def_raw)
 
-    # Normalize and remove qualifiers (schema/table) to avoid false diffs on equivalent SQL
-    conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_def_raw, remove_qualifiers=True)
-    meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_def_raw, remove_qualifiers=True)
+    # Preferred path: canonicalize both sides through temporary VIEWs.
+    # The MV stores its SELECT with 2-part column qualifiers (alias.col) while a VIEW of
+    # the same SQL stores 3-part (db.alias.col).  By creating a temp VIEW from each side
+    # both are brought to the same 3-part form, making the comparison qualifier-depth
+    # agnostic without discarding qualifier information (which would hide alias swaps).
+    # `schema` here is the resolved (non-None) schema passed in by the caller.
+    if conn is not None and schema is not None:  # schema is already resolved by _compare_mv
+        canonical_conn = _get_canonical_sql_via_temp_view(conn, schema, conn_def_raw)
+        canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_def_raw)
+        if canonical_conn is not None and canonical_meta is not None:
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(canonical_conn, canonicalize=False)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta, canonicalize=False)
+            logger.debug("MV definition comparison via temp-view canonicalization.")
+        else:
+            logger.debug("Temp-view canonicalization failed for MV %r; falling back to regex normalizer.", mv_name)
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_def_raw, remove_qualifiers=True)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_def_raw, remove_qualifiers=True)
+    else:
+        # Normalize and remove qualifiers (schema/table) to avoid false diffs on equivalent SQL
+        conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_def_raw, remove_qualifiers=True)
+        meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_def_raw, remove_qualifiers=True)
 
     if conn_def_norm != meta_def_norm:
         check_similar_string_and_warn(
@@ -1156,7 +1241,9 @@ def _compare_mv(
     # Compare each MV attribute using dedicated functions
     # Order: immutable attributes first (will raise error if changed), then mutable attributes
     # Immutable attributes (will raise NotImplementedError if changed):
-    _compare_mv_definition(upgrade_ops.ops, schema, mv_name, conn_mv, metadata_mv)
+    resolved_schema = schema or autogen_context.dialect.default_schema_name
+    _compare_mv_definition(upgrade_ops.ops, resolved_schema, mv_name, conn_mv, metadata_mv,
+                           conn=autogen_context.connection)
     _compare_table_partition(
         upgrade_ops.ops,
         schema,

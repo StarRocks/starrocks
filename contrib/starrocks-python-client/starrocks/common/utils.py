@@ -208,7 +208,7 @@ class TableAttributeNormalizer:
         return ''.join(result)
 
     @staticmethod
-    def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False) -> Optional[str]:
+    def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False, canonicalize: bool = True) -> Optional[str]:
         """
         Normalize an SQL string for comparison.
         - Converts to lowercase
@@ -220,12 +220,15 @@ class TableAttributeNormalizer:
         - Canonicalizes StarRocks' own view/MV definition rewrites (INNER/OUTER JOIN,
           LATERAL, the optional AS keyword, CTE column lists, redundant predicate
           parentheses) so that semantically equivalent definitions compare equal. See
-          ``_canonicalize_statement``.
+          ``_canonicalize_statement``. Controlled by the ``canonicalize`` parameter —
+          set to False when both sides have already been canonicalized by the database
+          (e.g. via the temp-view round-trip) and regex rewrites are not needed.
 
         Args:
             sql: The SQL string to normalize.
             lowercase: Whether to convert the SQL string to lowercase.
             remove_qualifiers: Whether to remove all qualifiers (e.g., ``schema.table.``) from identifiers.
+            canonicalize: Whether to apply ``_canonicalize_statement`` regex rewrites.
         """
         if sql is None:
             return None
@@ -248,7 +251,8 @@ class TableAttributeNormalizer:
         sql = TableAttributeNormalizer.strip_identifier_backticks(sql)
 
         sql = re.sub(r"\s+", " ", sql).strip()
-        sql = TableAttributeNormalizer._canonicalize_statement(sql)
+        if canonicalize:
+            sql = TableAttributeNormalizer._canonicalize_statement(sql)
         # Strip trailing semicolons together with any surrounding whitespace.
         sql = sql.rstrip(" ;").rstrip(";")
         return sql

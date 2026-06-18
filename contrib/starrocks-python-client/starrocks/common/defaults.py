@@ -46,11 +46,17 @@ class ReflectionTableDefaults(ReflectionDefaults):
 
         # for following properties, they won't explicitly set in the 'properties' field of the table.
         'enable_persistent_index': 'true',
-        # StarRocks only records `enable_statistic_collect_on_first_load` in
-        # information_schema.tables_config when it is set to a falsy value. A truthy (or unset)
-        # value is never reported, so an absent value must be treated as 'true' to avoid a
-        # spurious diff when the metadata sets it to true. See _compare_table_properties_impl,
-        # which compares effective (value-or-default) values.
+        # `enable_statistic_collect_on_first_load` is recorded in information_schema.tables_config
+        # ONLY when the table has an explicit `false` override; a `true` override or an unset
+        # value is never reported (verified on 3.5.16, independent of the FE-level global
+        # default, which tables_config does not reflect). So this dict value is a *decoder* for
+        # an absent entry, not a mirror of the cluster default. It must be 'true' because that is
+        # the only loop-safe fixpoint: `ALTER ... SET (...='true')` clears the false override
+        # (-> absent), and an absent entry decodes back to 'true', so the comparison converges.
+        # Populating it from the live global default would break this (absent != global) and
+        # could cause a never-converging phantom migration. See _compare_table_properties_impl
+        # (compares effective value-or-default) and skip_implicit_reset_properties (which keeps
+        # an unmanaged-in-metadata property from being reset).
         'enable_statistic_collect_on_first_load': 'true',
         # 'bloom_filter_columns': None,
         # 'colocate_with': None,
