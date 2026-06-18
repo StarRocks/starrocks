@@ -27,6 +27,7 @@
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "formats/reserved_columns.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "storage/primitive/predicate_parser.h"
@@ -124,9 +125,7 @@ Status HdfsScanner::_build_scanner_context() {
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_ctx->materialize_slots.size(); i++) {
         auto* slot = _scanner_ctx->materialize_slots[i];
-        if (slot->col_name() == ICEBERG_ROW_ID || slot->col_name() == "_row_source_id" ||
-            slot->col_name() == "_scan_range_id" || slot->col_name() == ICEBERG_ROW_POSITION ||
-            slot->col_name() == ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
+        if (formats::is_reserved_scan_column_name(slot->col_name())) {
             ctx.reserved_field_slots.emplace_back(slot);
         } else {
             FormatColumnInfo column;

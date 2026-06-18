@@ -25,7 +25,7 @@
 #include "column/variant_encoder.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/global_dict/parser.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -34,6 +34,7 @@
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/utils.h"
 #include "formats/parquet/variant_projection.h"
+#include "formats/reserved_columns.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
@@ -2320,7 +2321,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
     ASSERT_OK(group_reader->init());
 
     SlotDescriptor slot(0, "_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
-    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, formats::kIcebergRowIdColumnId);
     ASSERT_OK(result);
     ASSERT_EQ(result.value(), nullptr);
 }
@@ -2328,7 +2329,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
 TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
     param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -2351,7 +2352,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
     param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -2380,7 +2381,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLookupPath) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     auto* scan_range_id_slot = _pool.add(
             new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
@@ -2416,7 +2417,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
     param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -2453,7 +2454,7 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralReturnsNull) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
     param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -2519,13 +2520,13 @@ static tparquet::FileMetaData build_t_filemeta_with_iceberg_columns(ObjectPool* 
         schema_elements.push_back(elem);
     }
 
-    // _row_id column with ICEBERG_ROW_ID_COLUMN_ID field_id
+    // _row_id column with the Iceberg reserved row-id field id.
     if (include_row_id) {
         tparquet::SchemaElement elem;
         elem.__set_type(tparquet::Type::INT64);
-        elem.__set_name(HdfsScanner::ICEBERG_ROW_ID);
+        elem.__set_name(formats::kIcebergRowIdColumnName);
         elem.__set_num_children(0);
-        elem.__set_field_id(HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+        elem.__set_field_id(formats::kIcebergRowIdColumnId);
         schema_elements.push_back(elem);
     }
 
@@ -2533,9 +2534,9 @@ static tparquet::FileMetaData build_t_filemeta_with_iceberg_columns(ObjectPool* 
     if (include_seq_num) {
         tparquet::SchemaElement elem;
         elem.__set_type(tparquet::Type::INT64);
-        elem.__set_name(HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER);
+        elem.__set_name(formats::kIcebergLastUpdatedSequenceNumberColumnName);
         elem.__set_num_children(0);
-        elem.__set_field_id(HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID);
+        elem.__set_field_id(formats::kIcebergLastUpdatedSequenceNumberColumnId);
         schema_elements.push_back(elem);
     }
 
@@ -2651,8 +2652,9 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
     ASSERT_OK(group_reader->init());
 
-    SlotDescriptor slot(200, HdfsScanner::ICEBERG_ROW_ID, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
-    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+    SlotDescriptor slot(200, formats::kIcebergRowIdColumnName,
+                        TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, formats::kIcebergRowIdColumnId);
     ASSERT_OK(result);
     // Physical column found -> non-null reader
     ASSERT_NE(result.value(), nullptr);
@@ -2663,7 +2665,7 @@ TEST_F(GroupReaderTest, TestIcebergRowIdPhysicalColumnReaderCreation) {
 
     // Set up reserved_field_slots with _row_id
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
     param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -2692,7 +2694,7 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation
 
     // Set up reserved_field_slots with _last_updated_sequence_number
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
     param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
@@ -3166,9 +3168,9 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
 
     // Set up reserved_field_slots with both _row_id and _last_updated_sequence_number
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(seq_slot);
