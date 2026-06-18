@@ -152,7 +152,11 @@ class TableAttributeNormalizer:
     # (e.g. on 3.5.x it stores "src AS a" but "unnest(x) k(c)"), and AS is never semantically
     # meaningful, so dropping it symmetrically on both sides reconciles the difference without
     # ever hiding a real change. Must run AFTER the CTE column-list rewrite below, which needs AS.
-    _ALIAS_AS_PATTERN = re.compile(r'\s+as\s+', re.IGNORECASE)
+    # Alternation skips single- and double-quoted strings so that ' as ' inside a literal is
+    # not touched; group(1) is non-None only for the real alias match outside a string.
+    _ALIAS_AS_PATTERN = re.compile(
+        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\s+as\s+)""", re.IGNORECASE
+    )
     # StarRocks injects a CTE column list: "WITH cat (category, c) AS (" -> "WITH cat AS (".
     _CTE_COLUMN_LIST_PATTERN = re.compile(r'\b(\w+)\s*\([^()]*\)\s+as\s*\(', re.IGNORECASE)
     # StarRocks wraps simple predicates in redundant parentheses: "(x > 100)" -> "x > 100".
@@ -283,7 +287,10 @@ class TableAttributeNormalizer:
         # Runs before AS removal because the pattern relies on the AS keyword.
         sql = TableAttributeNormalizer._CTE_COLUMN_LIST_PATTERN.sub(r'\1 as (', sql)
         # Drop the optional AS keyword for all aliases (column, table, CAST, CTE).
-        sql = TableAttributeNormalizer._ALIAS_AS_PATTERN.sub(' ', sql)
+        # group(1) is None when the alternation matched a string literal (skip it).
+        sql = TableAttributeNormalizer._ALIAS_AS_PATTERN.sub(
+            lambda m: m.group(0) if m.group(1) is None else ' ', sql
+        )
         # Remove redundant parentheses around simple predicates: "(x > 100)" -> "x > 100".
         sql = TableAttributeNormalizer._strip_redundant_predicate_parens(sql)
         return sql

@@ -393,3 +393,25 @@ class TestStarRocksCanonicalization:
         """Parentheses of a function call must not be stripped even with '=' inside."""
         result = TableAttributeNormalizer.normalize_sql("select array_map(x -> x = 1, arr) from t")
         assert "array_map(x -> x = 1, arr)" in result
+
+
+    def test_alias_as_not_fired_inside_string_literal(self):
+        """_ALIAS_AS_PATTERN skips single- and double-quoted strings, so ' as ' inside a
+        quoted value is preserved unchanged.
+        """
+        sql = "select id from t where status = 'pending as review'"
+        result = TableAttributeNormalizer.normalize_sql(sql)
+        assert "pending as review" in result
+
+    def test_alias_as_not_fired_inside_double_quoted_string(self):
+        """Double-quoted string literals are also skipped by _ALIAS_AS_PATTERN."""
+        sql = 'select id from t where label = "listed as active"'
+        result = TableAttributeNormalizer.normalize_sql(sql)
+        assert "listed as active" in result
+
+    def test_alias_as_still_fires_outside_strings(self):
+        """AS is still removed for aliases that appear outside any string literal."""
+        self._assert_equivalent(
+            "select x y, t.* from src t",
+            "select x as y, t.* from src as t",
+        )

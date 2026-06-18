@@ -65,9 +65,9 @@ class ReflectionTableDefaults(ReflectionDefaults):
     # Properties never implicitly reset when absent from metadata. Needed for properties
     # whose DB representation is asymmetric (e.g. only stored when false), so a missing
     # metadata entry should leave the DB value alone rather than reset it to the default.
-    _SKIP_IMPLICIT_RESET_PROPERTIES = {
+    _SKIP_IMPLICIT_RESET_PROPERTIES: frozenset = frozenset({
         'enable_statistic_collect_on_first_load',
-    }
+    })
 
     # Default table options
     # engine -> key -> comment -> partition -> distribution -> order by -> properties
