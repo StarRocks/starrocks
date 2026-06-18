@@ -13,14 +13,32 @@ insert into t0 values (5, 5, 10.65, 'abc', '2024-01-01', '2024-01-01 12:00:00');
 -- result:
 -- !result
 [UC] select __iceberg_transform_truncate(i32, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_truncate(i64, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_truncate(d32, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_bucket(i32, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_bucket(i64, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_bucket(d32, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_bucket(s, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_bucket(dt, 0) from t0;
+-- result:
+-- !result
 [UC] select __iceberg_transform_bucket(ts, 0) from t0;
+-- result:
+-- !result
 select count(*) from t0;
 -- result:
 1
