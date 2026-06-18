@@ -28,7 +28,6 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

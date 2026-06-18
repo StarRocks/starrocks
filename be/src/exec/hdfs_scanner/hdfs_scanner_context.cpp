@@ -314,7 +314,7 @@ Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Fi
 }
 
 Status HdfsScannerContext::evaluate_all_predicates(ChunkPtr* chunk) {
-    SCOPED_RAW_TIMER(&stats->expr_filter_ns);
+    SCOPED_RAW_TIMER(&format_scan_context.stats->expr_filter_ns);
     size_t chunk_size = (*chunk)->num_rows();
     if (chunk_size > 0 && !conjunct_ctxs_by_slot.empty()) {
         Filter filter(chunk_size, 1);

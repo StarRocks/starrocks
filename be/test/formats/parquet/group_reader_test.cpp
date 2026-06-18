@@ -5070,7 +5070,7 @@ TEST_F(GroupReaderTest, LateMaterializeSkipRowsCompoundConjunctFiltersAll) {
 //         scanner_ctxs when slot-by-slot conjuncts are absent.
 TEST_F(GroupReaderTest, EvaluateAllPredicatesWithScannerCtxs) {
     auto* scanner_ctx = _pool.add(new HdfsScannerContext());
-    scanner_ctx->stats = &g_hdfs_stats;
+    scanner_ctx->format_scan_context.stats = &g_hdfs_stats;
 
     // Create a BIGINT chunk with 2 rows: values [0, 1].
     auto chunk = std::make_shared<Chunk>();
