@@ -764,10 +764,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         if (auto eit = sidx_enforced_cids.find(rowset->id());
             eit != sidx_enforced_cids.end() && !eit->second.empty() && !rs_opts.pred_tree.empty()) {
             const auto& enforced = eit->second;
-            auto cond = [&enforced](const auto& node) {
-                return node.visit(SidxEnforcedColumnChecker{&enforced});
-            };
-            PredicateAndNode keep_root, drop_root;       // true=enforced(drop), false=residual(keep)
+            auto cond = [&enforced](const auto& node) { return node.visit(SidxEnforcedColumnChecker{&enforced}); };
+            PredicateAndNode keep_root, drop_root; // true=enforced(drop), false=residual(keep)
             rs_opts.pred_tree.root().partition_copy(cond, &drop_root, &keep_root);
             PredicateAndNode keep_zm, drop_zm;
             rs_opts.pred_tree_for_zone_map.root().partition_copy(cond, &drop_zm, &keep_zm);
