@@ -18,10 +18,10 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/rowset/base_rowset.h"
 
 namespace starrocks {
-struct TabletBasicInfo;
 class TabletSchema;
 class TabletMetadataPB;
 class Schema;

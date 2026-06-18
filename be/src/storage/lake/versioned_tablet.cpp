@@ -14,12 +14,12 @@
 
 #include "storage/lake/versioned_tablet.h"
 
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/tablet_schema_map.h"
 
 namespace starrocks::lake {

@@ -15,28 +15,26 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
+#include <string>
 
-#include "exec/schema_scanner.h"
-#include "storage/primitive/txn_info.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 
-class SchemaBeTxnsScanner : public SchemaScanner {
-public:
-    SchemaBeTxnsScanner();
-    ~SchemaBeTxnsScanner() override;
-
-    Status start(RuntimeState* state) override;
-    Status get_next(ChunkPtr* chunk, bool* eos) override;
-
-private:
-    Status fill_chunk(ChunkPtr* chunk);
-
-    int64_t _be_id{0};
-    std::vector<TxnInfo> _infos;
-    size_t _cur_idx{0};
-    static SchemaScanner::ColumnDesc _s_columns[];
+struct TxnInfo {
+    UniqueId load_id;
+    int64_t txn_id{0};
+    int64_t partition_id{0};
+    int64_t tablet_id{0};
+    int64_t create_time{0};
+    int64_t commit_time{0};
+    int64_t publish_time{0};
+    std::string rowset_id;
+    int64_t num_segment{0};
+    int64_t num_delfile{0};
+    int64_t num_row{0};
+    int64_t data_size{0};
+    int64_t version{0};
 };
 
 } // namespace starrocks
