@@ -32,6 +32,8 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
+    Status finalize_lazy_state(ColumnPtr& col) override;
+
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
     }
@@ -199,7 +201,13 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
+<<<<<<< HEAD
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+=======
+    Status finalize_lazy_state(ColumnPtr& col) override;
+
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+>>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
                                  ColumnIOTypeFlags types, bool active) override {
         for (const auto& pair : _child_readers) {
             if (pair.second != nullptr) {
@@ -296,7 +304,25 @@ public:
         }
     }
 
+<<<<<<< HEAD
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+=======
+    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
+                                              const size_t& layer) override {
+        return _reader->rewrite_conjunct_ctxs_to_predicate(is_group_filtered, sub_field_path, layer);
+    }
+
+    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                              const size_t& layer) override {
+        return _reader->filter_dict_column(column, filter, sub_field_path, layer);
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override { return _reader->fill_dst_column(dst, src); }
+
+    Status finalize_lazy_state(ColumnPtr& col) override { return _reader->finalize_lazy_state(col); }
+
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+>>>>>>> b083761f5f ([Enhancement] Expression-driven on-demand lazy column loading for parquet scanner (#74886))
                                  ColumnIOTypeFlags types, bool active) override {
         if (_metadata_reader != nullptr) {
             _metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
