@@ -70,6 +70,26 @@ using Field = starrocks::Field;
 using PredicateParser = starrocks::PredicateParser;
 using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
+namespace {
+// partition_copy condition used to split the base-scan predicate tree into the
+// part already enforced exactly by a secondary-index rowid bitmap (dropped from
+// the base scan) and the residual part the base scan must still evaluate. A
+// column predicate is enforced iff its column id is in `enforced`; an OR subtree
+// is enforced only when every leaf column is enforced (otherwise it is kept).
+struct SidxEnforcedColumnChecker {
+    const std::unordered_set<ColumnId>* enforced;
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* p = node.col_pred();
+        return p != nullptr && enforced->count(p->column_id()) > 0;
+    }
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::all_of(node.children().begin(), node.children().end(),
+                           [this](const auto& child) { return child.visit(*this); });
+    }
+};
+} // namespace
+
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema)
         : ChunkIterator(std::move(schema)), _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(metadata)) {}
 
@@ -412,6 +432,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // moment get_segment_iterators() returns.
     auto& sidx_per_rowset = _sidx_per_rowset;
     sidx_per_rowset.clear();
+    // For each rowset whose candidate bitmap was produced by one or more
+    // secondary indexes, the set of source column-ids whose predicates those
+    // indexes enforce EXACTLY (the .idx lookup applies them row-precisely). The
+    // base scan can drop these predicates entirely and read only the remaining
+    // (output / residual-predicate) columns -- this is the readback speedup.
+    std::unordered_map<uint32_t /*rowset_id*/, std::unordered_set<ColumnId>> sidx_enforced_cids;
     // Rowsets whose index fully covers the query (predicate + output cols):
     // these are served entirely from the .idx (covering fast path), bypassing
     // the base-table scan. Maps rowset id -> the covering index reader.
@@ -483,6 +509,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         for (auto& rowset : _rowsets) {
             const auto& meta = rowset->metadata();
             if (meta.secondary_indexes_size() == 0) continue;
+
+            // Source column-ids whose predicates the applied indexes enforce
+            // exactly for this rowset's candidate bitmap.
+            std::unordered_set<ColumnId> enforced;
 
             // Covering fast path: if an index covers BOTH the predicate and all
             // output columns, serve this rowset entirely from the .idx and skip
@@ -557,6 +587,19 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     continue;
                 }
 
+                // This index will be applied to the candidate bitmap. The .idx
+                // lookup pushes the (remapped) predicate on every column this
+                // index covers and filters row-precisely, so the resulting
+                // bitmap already enforces those columns' predicates exactly --
+                // record the ones the query actually predicates so the base
+                // scan can drop them.
+                for (const auto& nm : file_pb.index_col_names()) {
+                    const size_t ci = _tablet_schema->field_index(nm);
+                    if (ci != static_cast<size_t>(-1) && queried_col_ids.count(static_cast<ColumnId>(ci))) {
+                        enforced.insert(static_cast<ColumnId>(ci));
+                    }
+                }
+
                 secondary_sorted::SecondaryIndexReader::OpenInput open_in;
                 open_in.fs = sidx_fs;
                 open_in.tablet_mgr = _tablet_mgr;
@@ -593,6 +636,20 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             }
             for (auto& [seg_id, bitmap] : merged) {
                 _stats.secondary_index_candidate_rows += static_cast<int64_t>(bitmap.cardinality());
+            }
+            // When we will strip the enforced predicates from the base scan, a
+            // segment absent from `merged` (zero index matches) must be SKIPPED
+            // rather than full-scanned -- otherwise, with the predicate gone,
+            // it would return all of its rows. Insert an explicit empty bitmap
+            // for every such segment so SegmentIterator clears its scan range.
+            // (This also turns the prior full-scan of zero-match segments into a
+            // cheap skip, which helps the sparse tiers.)
+            if (!enforced.empty()) {
+                const int nseg = meta.segment_metas_size();
+                for (int s = 0; s < nseg; ++s) {
+                    merged.try_emplace(static_cast<uint32_t>(s));
+                }
+                sidx_enforced_cids[rowset->id()] = std::move(enforced);
             }
             sidx_per_rowset[rowset->id()] = std::move(merged);
         }
@@ -691,6 +748,41 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         } else {
             rs_opts.presupplied_rowid_filter_per_segment = nullptr;
         }
+
+        // Readback speedup: the candidate bitmap already enforces the
+        // index-covered predicates exactly (and every zero-match segment now
+        // carries an explicit empty bitmap, so it is skipped). Strip those
+        // predicates from this rowset's base scan so it materializes only the
+        // residual / output columns -- e.g. for `MAX(amount) WHERE user_id=...`
+        // the base segments read `amount` alone, not `user_id`. Restored after
+        // read() so a later non-indexed rowset keeps the full predicate. Only
+        // the serial read path runs when a secondary index is active, so this
+        // per-iteration mutation of rs_opts is safe.
+        PredicateTree saved_pred_tree;
+        PredicateTree saved_zonemap_tree;
+        bool stripped = false;
+        if (auto eit = sidx_enforced_cids.find(rowset->id());
+            eit != sidx_enforced_cids.end() && !eit->second.empty() && !rs_opts.pred_tree.empty()) {
+            const auto& enforced = eit->second;
+            auto cond = [&enforced](const auto& node) {
+                return node.visit(SidxEnforcedColumnChecker{&enforced});
+            };
+            PredicateAndNode keep_root, drop_root;       // true=enforced(drop), false=residual(keep)
+            rs_opts.pred_tree.root().partition_copy(cond, &drop_root, &keep_root);
+            PredicateAndNode keep_zm, drop_zm;
+            rs_opts.pred_tree_for_zone_map.root().partition_copy(cond, &drop_zm, &keep_zm);
+            saved_pred_tree = std::move(rs_opts.pred_tree);
+            saved_zonemap_tree = std::move(rs_opts.pred_tree_for_zone_map);
+            rs_opts.pred_tree = PredicateTree::create(std::move(keep_root));
+            rs_opts.pred_tree_for_zone_map = PredicateTree::create(std::move(keep_zm));
+            stripped = true;
+        }
+        DeferOp restore_pred_tree([&] {
+            if (stripped) {
+                rs_opts.pred_tree = std::move(saved_pred_tree);
+                rs_opts.pred_tree_for_zone_map = std::move(saved_zonemap_tree);
+            }
+        });
 
         // Parallel load captures rs_opts by reference; mutating
         // presupplied_rowid_filter_per_segment per iteration would race.
