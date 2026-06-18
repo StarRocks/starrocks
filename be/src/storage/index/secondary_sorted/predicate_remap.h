@@ -16,9 +16,9 @@
 
 #include <vector>
 
-#include "storage/column_predicate.h"
+#include "storage/primitive/column_predicate.h"
 #include "storage/olap_common.h"
-#include "storage/predicate_tree/predicate_tree.h"
+#include "storage/primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 class ObjectPool;

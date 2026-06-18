@@ -42,7 +42,7 @@
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
+#include "storage/primitive/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/index/secondary_sorted/secondary_index_reader.h"
