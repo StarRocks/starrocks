@@ -75,6 +75,7 @@ import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -1238,9 +1239,17 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                        Expression icebergPredicate,
                                                        TvrVersionRange tvrVersionRange,
                                                        GetRemoteFilesParams params) {
+        ConnectContext connectContext = ConnectContext.get();
         CloseableIterator<FileScanTask> iterator =
-                buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
+                buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, connectContext,
                         params.isEnableColumnStats(), params.getFieldNames());
+        AtomicBoolean closed = new AtomicBoolean(false);
+        AutoCloseable closeIterator = () -> {
+            if (closed.compareAndSet(false, true)) {
+                iterator.close();
+            }
+        };
+        AutoCloseable unregister = registerCancellablePlanningResource(connectContext, closeIterator);
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
@@ -1257,11 +1266,26 @@ public class IcebergMetadata implements ConnectorMetadata {
             @Override
             public void close() {
                 try {
-                    iterator.close();
+                    closeIterator.close();
                 } catch (Exception ignore) {
+                } finally {
+                    try {
+                        unregister.close();
+                    } catch (Exception ignore) {
+                    }
                 }
             }
         };
+    }
+
+    private AutoCloseable registerCancellablePlanningResource(ConnectContext connectContext, AutoCloseable resource) {
+        if (connectContext == null || connectContext.getExecutor() == null) {
+            return () -> {
+            };
+        }
+
+        StmtExecutor executor = connectContext.getExecutor();
+        return executor.registerCancellablePlanningResource(resource);
     }
 
     private RemoteFileInfoSource buildRemoteInfoSource(List<FileScanTask> tasks, GetRemoteFilesParams params) {

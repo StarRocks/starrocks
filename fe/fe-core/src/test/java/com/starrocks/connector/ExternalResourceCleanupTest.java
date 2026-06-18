@@ -46,6 +46,10 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
@@ -86,8 +90,10 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -365,6 +371,92 @@ public class ExternalResourceCleanupTest {
     }
 
     @Test
+    public void testStmtExecutorCancelClosesCancellablePlanningResource() throws Exception {
+        ConnectContext context = new ConnectContext();
+        StmtExecutor executor = newStmtExecutor(context);
+        context.setExecutor(executor);
+
+        CountDownLatch closed = new CountDownLatch(1);
+        AtomicInteger closeCount = new AtomicInteger();
+        executor.registerCancellablePlanningResource(() -> {
+            closeCount.incrementAndGet();
+            closed.countDown();
+        });
+
+        executor.cancel("cancelled");
+
+        Assertions.assertTrue(closed.await(5, TimeUnit.SECONDS));
+        Assertions.assertEquals(1, closeCount.get());
+    }
+
+    @Test
+    public void testIcebergRemoteInfoSourceClosesPlanningIteratorOnCancel() throws Exception {
+        ConnectContext context = new ConnectContext();
+        StmtExecutor executor = newStmtExecutor(context);
+        context.setExecutor(executor);
+
+        ExecutorService exec = Executors.newSingleThreadExecutor();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
+                java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
+        IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
+                icebergCatalog, exec, exec, catalogProps);
+
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
+        org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
+        IcebergMetricsReporter reporter = new IcebergMetricsReporter();
+        Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(nativeTbl.properties()).thenReturn(Map.of());
+        Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
+        Mockito.when(table.getIcebergMetricsReporter()).thenReturn(reporter);
+        Mockito.when(table.getCatalogDBName()).thenReturn("db");
+        Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
+
+        StarRocksIcebergTableScan tableScan = Mockito.mock(StarRocksIcebergTableScan.class);
+        Mockito.when(icebergCatalog.getTableScan(Mockito.eq(nativeTbl), Mockito.any())).thenReturn(tableScan);
+        Mockito.when(tableScan.useSnapshot(Mockito.anyLong())).thenReturn(tableScan);
+        Mockito.when(tableScan.metricsReporter(Mockito.any())).thenReturn(tableScan);
+        Mockito.when(tableScan.planWith(Mockito.any())).thenReturn(tableScan);
+        Mockito.when(tableScan.targetSplitSize()).thenReturn(128L);
+        Mockito.when(tableScan.getMetricsReporter()).thenReturn(reporter);
+
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        Mockito.when(task.deletes()).thenReturn(List.of());
+        CountingFileScanTaskIterable plannedTasks = new CountingFileScanTaskIterable(task);
+        Mockito.when(tableScan.planFiles()).thenReturn(plannedTasks);
+
+        IcebergGetRemoteFilesParams.Builder builder = IcebergGetRemoteFilesParams.newBuilder();
+        builder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+        builder.setPredicate(ConstantOperator.TRUE);
+        builder.setAllParams(IcebergTableMORParams.EMPTY);
+        builder.setParams(IcebergMORParams.EMPTY);
+        IcebergGetRemoteFilesParams params = (IcebergGetRemoteFilesParams) builder.build();
+
+        Method sourceMethod = IcebergMetadata.class.getDeclaredMethod(
+                "buildRemoteInfoSource", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
+                TvrVersionRange.class, GetRemoteFilesParams.class);
+        sourceMethod.setAccessible(true);
+
+        try (MockedStatic<TableScanUtil> tableScanUtilMock = Mockito.mockStatic(TableScanUtil.class);
+                ConnectContext.ScopeGuard ignored = context.bindScope()) {
+            tableScanUtilMock.when(() -> TableScanUtil.splitFiles(Mockito.any(), Mockito.anyLong()))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            RemoteFileInfoSource source = (RemoteFileInfoSource) sourceMethod.invoke(
+                    metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
+                    TvrTableSnapshot.of(Optional.of(1L)), params);
+
+            Assertions.assertTrue(source.hasMoreOutput());
+            executor.cancel("cancelled");
+
+            Assertions.assertTrue(plannedTasks.closed.await(5, TimeUnit.SECONDS));
+            Assertions.assertTrue(plannedTasks.closeCount.get() >= 1);
+            source.close();
+        }
+    }
+
+    @Test
     public void testDeltaLakeMetadataIteratorAndCollect() throws Exception {
         // Prepare metadata with mocked delta ops and statistic provider.
         DeltaMetastoreOperations deltaOps = Mockito.mock(DeltaMetastoreOperations.class);
@@ -618,6 +710,54 @@ public class ExternalResourceCleanupTest {
         Mockito.when(icebergCatalog.getTableScan(Mockito.eq(nativeTbl), Mockito.any())).thenReturn(scan);
 
         Assertions.assertTrue(metadata.getDeleteFiles(table, 1L, ConstantOperator.TRUE, FileContent.EQUALITY_DELETES).isEmpty());
+    }
+
+    private static StmtExecutor newStmtExecutor(ConnectContext context) {
+        StatementBase stmt = Mockito.mock(StatementBase.class);
+        Mockito.when(stmt.getOrigStmt()).thenReturn(new OriginStatement("select 1", 0));
+        return new StmtExecutor(context, stmt);
+    }
+
+    private static class CountingFileScanTaskIterable implements CloseableIterable<FileScanTask> {
+        private final FileScanTask task;
+        private final AtomicInteger closeCount = new AtomicInteger();
+        private final CountDownLatch closed = new CountDownLatch(1);
+
+        CountingFileScanTaskIterable(FileScanTask task) {
+            this.task = task;
+        }
+
+        @Override
+        public void close() {
+            closeCount.incrementAndGet();
+            closed.countDown();
+        }
+
+        @Override
+        public org.apache.iceberg.io.CloseableIterator<FileScanTask> iterator() {
+            return new org.apache.iceberg.io.CloseableIterator<>() {
+                private boolean used = false;
+
+                @Override
+                public void close() {
+                    // no-op
+                }
+
+                @Override
+                public boolean hasNext() {
+                    return !used;
+                }
+
+                @Override
+                public FileScanTask next() {
+                    if (!hasNext()) {
+                        throw new NoSuchElementException();
+                    }
+                    used = true;
+                    return task;
+                }
+            };
+        }
     }
 
     private static class CountingRemoteFileInfoSource implements RemoteFileInfoSource {
