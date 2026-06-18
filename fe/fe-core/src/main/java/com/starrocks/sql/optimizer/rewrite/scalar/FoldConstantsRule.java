@@ -43,6 +43,16 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+>>>>>>> 90c227b19a ([BugFix] Fix LIKE escaping mismatch with MySQL in constant folding (#74814))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,6 +62,8 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -529,9 +541,58 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
                                                      ScalarOperatorRewriteContext context) {
         if (hasNull(predicate.getChildren())) {
+<<<<<<< HEAD
             return ConstantOperator.createNull(Type.BOOLEAN);
+=======
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
+        }
+        if (notAllConstant(predicate.getChildren()) || predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
+            return predicate;
+        }
+
+        String text = ((ConstantOperator) predicate.getChild(0)).getVarchar();
+        String pattern = ((ConstantOperator) predicate.getChild(1)).getVarchar();
+
+        // Group 1 captures the literal body; %-wildcards are matched outside the group so an
+        // escaped \% inside the body is never mistaken for a trailing/leading wildcard.
+        Matcher equals = LIKE_EQUALS.matcher(pattern);
+        if (equals.matches()) {
+            return ConstantOperator.createBoolean(text.equals(removeLikeEscape(equals.group(1))));
+        }
+        Matcher endsWith = LIKE_ENDS_WITH.matcher(pattern);
+        if (endsWith.matches()) {
+            return ConstantOperator.createBoolean(text.endsWith(removeLikeEscape(endsWith.group(1))));
+        }
+        Matcher startsWith = LIKE_STARTS_WITH.matcher(pattern);
+        if (startsWith.matches()) {
+            return ConstantOperator.createBoolean(text.startsWith(removeLikeEscape(startsWith.group(1))));
+        }
+        Matcher substring = LIKE_SUBSTRING.matcher(pattern);
+        if (substring.matches()) {
+            return ConstantOperator.createBoolean(text.contains(removeLikeEscape(substring.group(1))));
+>>>>>>> 90c227b19a ([BugFix] Fix LIKE escaping mismatch with MySQL in constant folding (#74814))
         }
         return predicate;
+    }
+
+    // LIKE body token = an escaped sequence \x (atomic) or a plain char that is not %, _ or \
+    private static final String LIKE_BODY = "((?:\\\\.|[^%_\\\\])+)";
+    private static final Pattern LIKE_EQUALS = Pattern.compile("^" + LIKE_BODY + "$");
+    private static final Pattern LIKE_ENDS_WITH = Pattern.compile("^%+" + LIKE_BODY + "$");
+    private static final Pattern LIKE_STARTS_WITH = Pattern.compile("^" + LIKE_BODY + "%+$");
+    private static final Pattern LIKE_SUBSTRING = Pattern.compile("^%+" + LIKE_BODY + "%+$");
+
+    // Strips LIKE-layer escape sequences: \\ -> \, \% -> %, \_ -> _, \x -> x
+    private static String removeLikeEscape(String s) {
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == '\\' && i + 1 < s.length()) {
+                sb.append(s.charAt(++i));
+            } else {
+                sb.append(s.charAt(i));
+            }
+        }
+        return sb.toString();
     }
 
     private boolean notAllConstant(List<ScalarOperator> operators) {
