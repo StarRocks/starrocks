@@ -29,7 +29,6 @@
 namespace starrocks {
 
 class DataDir;
-class ExecEnv;
 class MemTracker;
 class SegmentPB;
 class PTabletInfo;

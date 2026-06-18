@@ -21,7 +21,6 @@
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/pk_tablet_sst_writer.h"

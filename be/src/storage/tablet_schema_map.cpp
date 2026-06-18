@@ -16,7 +16,7 @@
 
 #include <bvar/bvar.h>
 
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {

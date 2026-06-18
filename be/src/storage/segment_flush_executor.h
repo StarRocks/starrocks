@@ -34,7 +34,6 @@ class Closure;
 namespace starrocks {
 
 class DataDir;
-class ExecEnv;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
 class ThreadPoolToken;

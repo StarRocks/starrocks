@@ -67,7 +67,7 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"

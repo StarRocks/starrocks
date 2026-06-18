@@ -32,7 +32,7 @@
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"

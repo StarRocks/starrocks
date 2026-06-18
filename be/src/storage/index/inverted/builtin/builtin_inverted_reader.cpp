@@ -16,7 +16,7 @@
 
 #include <fmt/format.h>
 
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"

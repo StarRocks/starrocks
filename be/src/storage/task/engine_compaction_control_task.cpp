@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "runtime/exec_env.h"
 #include "storage/compaction_manager.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
