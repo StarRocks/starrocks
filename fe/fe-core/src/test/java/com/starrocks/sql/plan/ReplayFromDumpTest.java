@@ -1102,4 +1102,20 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertContains(replayPair.second, "5:OlapScanNode\n" +
                 "     TABLE: tbl_5");
     }
+
+    @Test
+    public void testPushDownDistinctBelowWindowNoEmptyAnalytic() throws Exception {
+        String dumpString = getDumpInfoFromFile(
+                "query_dump/push_down_distinct_below_window_empty_analytic");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragmentWithAggPushdown(
+                dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        // Without the fix, plan contains "functions: \n" — an analytic node with empty functions list.
+        // With the fix, PruneEmptyWindowRule removes the empty window before physical planning,
+        // so no analytic node with empty functions is ever generated.
+        Assertions.assertFalse(plan.contains("functions: \n"),
+                "Plan contains empty analytic functions — PruneEmptyWindowRule was not called after "
+                        + "PRUNE_COLUMNS_RULES in pushDownAggregation:\n" + plan);
+    }
 }
