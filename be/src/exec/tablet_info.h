@@ -54,6 +54,14 @@ struct OlapTableIndexSchema {
     std::map<std::string, std::string> column_to_expr_value;
     bool is_shadow = false;
 
+    // Per-index distribution expressions for range tables. `has_distributed_exprs`
+    // distinguishes "unset" (fall back to partition-level routing) from "set but empty"
+    // (K=1, no per-index route). When set and non-empty, `distributed_expr_ctxs` holds
+    // the parsed ExprContexts; their prepare/open/close lifecycle is driven by
+    // OlapTablePartitionParam.
+    bool has_distributed_exprs = false;
+    std::vector<ExprContext*> distributed_expr_ctxs;
+
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
 

@@ -37,6 +37,9 @@
 #include <gtest/gtest.h>
 
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -193,6 +196,81 @@ TEST_F(OlapTablePartitionParamTest, NodesInfo) {
         auto node = nodes.find_node(2);
         ASSERT_TRUE(node == nullptr);
     }
+}
+
+// Build a single slot-ref TExpr referencing slot 0 of tuple 0, typed INT.
+static TExpr make_slot_ref_texpr() {
+    TExpr texpr;
+    TExprNode node;
+    node.node_type = TExprNodeType::SLOT_REF;
+    node.type = gen_type_desc(TPrimitiveType::INT);
+    node.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 0;
+    t_slot_ref.tuple_id = 0;
+    node.__set_slot_ref(t_slot_ref);
+    node.is_nullable = true;
+    texpr.nodes.emplace_back(node);
+    return texpr;
+}
+
+static RuntimeState* make_runtime_state(ObjectPool* pool) {
+    TUniqueId query_id;
+    TQueryOptions query_options;
+    TQueryGlobals query_globals;
+    TUniqueId fragment_id;
+    auto* exec_env = ExecEnv::GetInstance();
+    auto* state = pool->add(new RuntimeState(query_id, fragment_id, query_options, query_globals,
+                                             &exec_env->query_execution_services(), exec_env));
+    state->init_mem_trackers(query_id);
+    return state;
+}
+
+TEST_F(OlapTablePartitionParamTest, per_index_distributed_exprs_parsed) {
+    ObjectPool pool;
+    TDescriptorTable t_desc_tbl;
+    auto t_schema = get_schema(&t_desc_tbl);
+    t_schema.indexes[0].__set_distributed_exprs({make_slot_ref_texpr()});
+
+    auto* state = make_runtime_state(&pool);
+    std::shared_ptr<OlapTableSchemaParam> schema(new OlapTableSchemaParam());
+    auto st = schema->init(t_schema, state);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // index_id 4 == indexes[0]
+    const OlapTableIndexSchema* idx = nullptr;
+    for (auto* i : schema->indexes()) {
+        if (i->index_id == 4) {
+            idx = i;
+        }
+    }
+    ASSERT_TRUE(idx != nullptr);
+    ASSERT_TRUE(idx->has_distributed_exprs);
+    ASSERT_EQ(1u, idx->distributed_expr_ctxs.size());
+}
+
+TEST_F(OlapTablePartitionParamTest, per_index_distributed_exprs_unset_falls_back) {
+    TDescriptorTable t_desc_tbl;
+    auto t_schema = get_schema(&t_desc_tbl);
+    // no distributed_exprs set on any index
+    std::shared_ptr<OlapTableSchemaParam> schema(new OlapTableSchemaParam());
+    auto st = schema->init(t_schema, nullptr);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    for (auto* idx : schema->indexes()) {
+        ASSERT_FALSE(idx->has_distributed_exprs);
+        ASSERT_TRUE(idx->distributed_expr_ctxs.empty());
+    }
+}
+
+TEST_F(OlapTablePartitionParamTest, per_index_distributed_exprs_nonempty_requires_state) {
+    TDescriptorTable t_desc_tbl;
+    auto t_schema = get_schema(&t_desc_tbl);
+    t_schema.indexes[0].__set_distributed_exprs({make_slot_ref_texpr()});
+
+    std::shared_ptr<OlapTableSchemaParam> schema(new OlapTableSchemaParam());
+    auto st = schema->init(t_schema, nullptr);
+    ASSERT_FALSE(st.ok());
 }
 
 TEST_F(OlapTablePartitionParamTest, removePartition) {

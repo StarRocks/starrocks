@@ -215,6 +215,16 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
                 _shadow_indexes++;
             }
         }
+        if (t_index.__isset.distributed_exprs) {
+            index->has_distributed_exprs = true;
+            if (!t_index.distributed_exprs.empty()) {
+                if (state == nullptr) {
+                    return Status::InternalError("RuntimeState required to build per-index distributed_exprs");
+                }
+                RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_obj_pool, t_index.distributed_exprs,
+                                                               &index->distributed_expr_ctxs, state));
+            }
+        }
         _indexes.emplace_back(index);
     }
 
@@ -362,16 +372,25 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
 
 Status OlapTablePartitionParam::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExprExecutor::prepare(_partitions_expr_ctxs, state));
+    for (auto* index : _schema->indexes()) {
+        RETURN_IF_ERROR(ExprExecutor::prepare(index->distributed_expr_ctxs, state));
+    }
     return Status::OK();
 }
 
 Status OlapTablePartitionParam::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExprExecutor::open(_partitions_expr_ctxs, state));
+    for (auto* index : _schema->indexes()) {
+        RETURN_IF_ERROR(ExprExecutor::open(index->distributed_expr_ctxs, state));
+    }
     return Status::OK();
 }
 
 void OlapTablePartitionParam::close(RuntimeState* state) {
     ExprExecutor::close(_partitions_expr_ctxs, state);
+    for (auto* index : _schema->indexes()) {
+        ExprExecutor::close(index->distributed_expr_ctxs, state);
+    }
 }
 
 Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key) {

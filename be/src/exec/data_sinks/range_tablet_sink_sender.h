@@ -39,6 +39,11 @@ public:
                       std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunk) override;
 
 private:
+    // Routing-key column types used to initialize a partition's RangeRouter. For an index with
+    // per-index distributed_exprs, the types come from the expr roots; otherwise we fall back to
+    // the shared partition distribution slots. Types are stable across chunks for a given index.
+    std::vector<TypeDescriptor> routing_key_types(const OlapTableIndexSchema* index_schema) const;
+
     // index_id -> partition_id -> range router
     std::unordered_map<int64_t, std::unordered_map<int64_t, std::unique_ptr<RangeRouter>>> _range_routers;
     std::vector<int64_t> _cur_result_tablet_ids;
