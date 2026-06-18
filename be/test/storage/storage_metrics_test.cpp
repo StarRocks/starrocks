@@ -95,6 +95,21 @@ TEST(StorageMetricsTest, InstallRegistersLoadMetrics) {
     metrics.delete_requests_failed.increment(9);
     assert_metric_value(&registry, "engine_requests_total",
                         MetricLabels().add("type", "delete").add("status", "failed"), "9");
+
+    metrics.lake_add_index_requests_total.increment(44);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "lake_add_index").add("status", "total"), "44");
+
+    metrics.lake_add_index_requests_failed.increment(45);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "lake_add_index").add("status", "failed"), "45");
+
+    metrics.lake_drop_index_requests_total.increment(46);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "lake_drop_index").add("status", "total"), "46");
+
+    metrics.lake_idg_files_written_total.increment(47);
+    assert_metric_value(&registry, "lake_idg_files_written_total", "47");
 }
 
 TEST(StorageMetricsTest, InstallRegistersCompactionMetrics) {
