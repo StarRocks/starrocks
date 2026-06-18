@@ -513,12 +513,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
     }
 
-    if (global_env->lake_schema_change_thread_pool()) {
-        start = MonotonicMillis();
-        global_env->lake_schema_change_thread_pool()->shutdown();
-        component_times.emplace_back("lake_schema_change_thread_pool", MonotonicMillis() - start);
-    }
-
     if (global_env->lake_vector_index_build_thread_pool()) {
         start = MonotonicMillis();
         global_env->lake_vector_index_build_thread_pool()->shutdown();
@@ -553,6 +547,16 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _agent_server->stop();
         component_times.emplace_back("agent_server", MonotonicMillis() - start);
+    }
+
+    // ADD INDEX ALTER tasks running in AgentServer use this pool for inner
+    // per-segment work. Shut it down only after the ALTER pool is drained;
+    // otherwise queued inner tasks can be dropped without surfacing an error
+    // to the outer SegmentTaskRunner.
+    if (global_env->lake_schema_change_thread_pool()) {
+        start = MonotonicMillis();
+        global_env->lake_schema_change_thread_pool()->shutdown();
+        component_times.emplace_back("lake_schema_change_thread_pool", MonotonicMillis() - start);
     }
 
     if (_runtime_filter_worker) {
