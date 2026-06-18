@@ -299,7 +299,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Centiscore (raw score × 100)
 - Type: Gauge
-- Description: Centiscore of the most recent partition that triggered a lake compaction job. The value is the partition's *max* tablet-level score (`Quantiles.getMax()`), matching the criterion the scheduler uses to pick partitions for compaction; multiplied by 100 to preserve two decimal places of precision in a long-valued gauge — dashboards should divide by 100 to recover the raw score. Updated once per partition per trigger; the gauge holds the value of the most recent update. Carries an `is_leader` label; follower FEs export `is_leader="false"` and return 0, so dashboards should filter on `is_leader="true"`.
+- Description: Centiscore of the most recent partition that triggered a lake compaction job. The value is the partition's *max* tablet-level score (`Quantiles.getMax()`), matching the criterion the scheduler uses to pick partitions for compaction; multiplied by 100 to preserve two decimal places of precision in a long-valued gauge — dashboards should divide by 100 to recover the raw score. Updated once per partition per trigger; the gauge holds the value of the most recent update. This gauge does not decay: when no compactions are running it retains the last trigger's value (it is not reset to 0), and the value persists across FE leader changes until the next trigger overwrites it — so alert on it together with `lake_compaction_running > 0` rather than reading it in isolation. Carries an `is_leader` label; follower FEs export `is_leader="false"` and return 0, so dashboards should filter on `is_leader="true"`.
 
 ## `lake_compaction_success`
 

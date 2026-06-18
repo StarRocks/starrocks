@@ -299,7 +299,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：Centiscore（原始分数 × 100）
 - 类型：Gauge
-- 描述：最近一次触发存算分离（lake）压缩任务的分区的 Centiscore。取值为该分区下各 Tablet 分数的 *最大值*（`Quantiles.getMax()`），与调度器选择压缩分区所用的判据一致；并乘以 100 以在 long 型 Gauge 中保留两位小数精度，面板需将值除以 100 以恢复原始分数。每次触发每个分区更新一次；Gauge 持有最近一次更新的值。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出并返回 0，因此面板应通过 `is_leader="true"` 进行筛选。
+- 描述：最近一次触发存算分离（lake）压缩任务的分区的 Centiscore。取值为该分区下各 Tablet 分数的 *最大值*（`Quantiles.getMax()`），与调度器选择压缩分区所用的判据一致；并乘以 100 以在 long 型 Gauge 中保留两位小数精度，面板需将值除以 100 以恢复原始分数。每次触发每个分区更新一次；Gauge 持有最近一次更新的值。该 Gauge 不会衰减：当没有压缩任务运行时，它会保留上一次触发的值（不会重置为 0），且该值会跨 FE Leader 切换持续保留，直到下一次触发将其覆盖——因此应将其与 `lake_compaction_running > 0` 结合起来设置告警，而非单独读取该指标。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出并返回 0，因此面板应通过 `is_leader="true"` 进行筛选。
 
 ## `lake_compaction_success`
 

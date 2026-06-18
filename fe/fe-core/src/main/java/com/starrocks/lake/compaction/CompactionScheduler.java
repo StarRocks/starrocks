@@ -661,8 +661,11 @@ public class CompactionScheduler extends Daemon {
     // Total number of tablets currently being compacted across all running jobs. This is the
     // same unit the scheduler caps with Config.lake_compaction_max_tasks (see the per-warehouse
     // taskRunning accounting and getRunningTaskInfo()), i.e. one running compaction "task" == one
-    // tablet still awaiting its BE/CN response. Strictly >= the running-job count, which counts
-    // partitions. Weakly-consistent read over the ConcurrentHashMap; no locking needed.
+    // tablet still awaiting its BE/CN response. getNumTabletCompactionTasks() counts only
+    // not-yet-done tasks, so a job in its commit/visibility phase (all responses in, not yet
+    // removed from runningCompactions) contributes 0; this count can therefore be either above
+    // or below the running-job count. Weakly-consistent read over the ConcurrentHashMap; no
+    // locking needed.
     public int getRunningTabletCompactionTaskCount() {
         return getRunningCompactions().values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
     }
