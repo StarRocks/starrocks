@@ -81,3 +81,65 @@ SELECT 'abc\\' LIKE 'abc\\\\';
 SELECT 'abcdef' LIKE 'abc%';
 SELECT 'xyzabc' LIKE '%abc';
 SELECT 'xyzabcdef' LIKE '%abc%';
+
+-- ============================================================================
+-- FE-vs-BE consistency: each row stores the text in a column. For every case we
+-- run the constant LIKE (folded in FE) side by side with the column LIKE (executed
+-- on BE). fe_fold and be_exec MUST be equal -- that is exactly the invariant this
+-- bug broke. The pattern stays a literal so the constant side is still folded.
+-- ============================================================================
+
+DROP TABLE IF EXISTS t_like_cmp;
+
+CREATE TABLE IF NOT EXISTS t_like_cmp (
+    id INT NOT NULL,
+    txt VARCHAR(64) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_like_cmp (id, txt) VALUES
+(1,  'a\\b'),
+(2,  '100%'),
+(3,  '100abc'),
+(4,  'a_b'),
+(5,  'aXb'),
+(6,  'abc%xyz'),
+(7,  'abcXyz'),
+(8,  'xyz%abc'),
+(9,  'xa%by'),
+(10, 'xaXby'),
+(11, 'a\\xyz'),
+(12, 'abc\\'),
+(13, 'abcdef'),
+(14, 'xyzabc'),
+(15, 'xyzabcdef');
+
+-- D1: two-layer escaping
+SELECT ('a\\b' LIKE 'a\\\\b') AS fe_fold, (txt LIKE 'a\\\\b') AS be_exec FROM t_like_cmp WHERE id = 1;
+SELECT ('a\\b' LIKE 'a\\b')   AS fe_fold, (txt LIKE 'a\\b')   AS be_exec FROM t_like_cmp WHERE id = 1;
+
+-- D2: escaped wildcard as literal
+SELECT ('100%' LIKE '100\\%')   AS fe_fold, (txt LIKE '100\\%') AS be_exec FROM t_like_cmp WHERE id = 2;
+SELECT ('100abc' LIKE '100\\%') AS fe_fold, (txt LIKE '100\\%') AS be_exec FROM t_like_cmp WHERE id = 3;
+SELECT ('a_b' LIKE 'a\\_b')     AS fe_fold, (txt LIKE 'a\\_b')  AS be_exec FROM t_like_cmp WHERE id = 4;
+SELECT ('aXb' LIKE 'a\\_b')     AS fe_fold, (txt LIKE 'a\\_b')  AS be_exec FROM t_like_cmp WHERE id = 5;
+
+-- D3: escaped wildcard adjacent to a real wildcard (the boundary bug)
+SELECT ('abc%xyz' LIKE 'abc\\%%') AS fe_fold, (txt LIKE 'abc\\%%') AS be_exec FROM t_like_cmp WHERE id = 6;
+SELECT ('abcXyz' LIKE 'abc\\%%')  AS fe_fold, (txt LIKE 'abc\\%%') AS be_exec FROM t_like_cmp WHERE id = 7;
+SELECT ('xyz%abc' LIKE '%\\%abc') AS fe_fold, (txt LIKE '%\\%abc') AS be_exec FROM t_like_cmp WHERE id = 8;
+SELECT ('xa%by' LIKE '%a\\%b%')   AS fe_fold, (txt LIKE '%a\\%b%') AS be_exec FROM t_like_cmp WHERE id = 9;
+SELECT ('xaXby' LIKE '%a\\%b%')   AS fe_fold, (txt LIKE '%a\\%b%') AS be_exec FROM t_like_cmp WHERE id = 10;
+
+-- D4: double backslash + wildcard / trailing escaped backslash
+SELECT ('a\\xyz' LIKE 'a\\\\%') AS fe_fold, (txt LIKE 'a\\\\%')  AS be_exec FROM t_like_cmp WHERE id = 11;
+SELECT ('abc\\' LIKE 'abc\\\\') AS fe_fold, (txt LIKE 'abc\\\\') AS be_exec FROM t_like_cmp WHERE id = 12;
+
+-- D5: plain wildcards
+SELECT ('abcdef' LIKE 'abc%')    AS fe_fold, (txt LIKE 'abc%')   AS be_exec FROM t_like_cmp WHERE id = 13;
+SELECT ('xyzabc' LIKE '%abc')    AS fe_fold, (txt LIKE '%abc')   AS be_exec FROM t_like_cmp WHERE id = 14;
+SELECT ('xyzabcdef' LIKE '%abc%') AS fe_fold, (txt LIKE '%abc%') AS be_exec FROM t_like_cmp WHERE id = 15;
+
+DROP TABLE t_like_cmp;

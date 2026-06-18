@@ -142,3 +142,100 @@ SELECT 'xyzabcdef' LIKE '%abc%';
 -- result:
 1
 -- !result
+DROP TABLE IF EXISTS t_like_cmp;
+-- result:
+-- !result
+CREATE TABLE IF NOT EXISTS t_like_cmp (
+    id INT NOT NULL,
+    txt VARCHAR(64) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_like_cmp (id, txt) VALUES
+(1,  'a\\b'),
+(2,  '100%'),
+(3,  '100abc'),
+(4,  'a_b'),
+(5,  'aXb'),
+(6,  'abc%xyz'),
+(7,  'abcXyz'),
+(8,  'xyz%abc'),
+(9,  'xa%by'),
+(10, 'xaXby'),
+(11, 'a\\xyz'),
+(12, 'abc\\'),
+(13, 'abcdef'),
+(14, 'xyzabc'),
+(15, 'xyzabcdef');
+-- result:
+-- !result
+SELECT ('a\\b' LIKE 'a\\\\b') AS fe_fold, (txt LIKE 'a\\\\b') AS be_exec FROM t_like_cmp WHERE id = 1;
+-- result:
+1	1
+-- !result
+SELECT ('a\\b' LIKE 'a\\b')   AS fe_fold, (txt LIKE 'a\\b')   AS be_exec FROM t_like_cmp WHERE id = 1;
+-- result:
+0	0
+-- !result
+SELECT ('100%' LIKE '100\\%')   AS fe_fold, (txt LIKE '100\\%') AS be_exec FROM t_like_cmp WHERE id = 2;
+-- result:
+1	1
+-- !result
+SELECT ('100abc' LIKE '100\\%') AS fe_fold, (txt LIKE '100\\%') AS be_exec FROM t_like_cmp WHERE id = 3;
+-- result:
+0	0
+-- !result
+SELECT ('a_b' LIKE 'a\\_b')     AS fe_fold, (txt LIKE 'a\\_b')  AS be_exec FROM t_like_cmp WHERE id = 4;
+-- result:
+1	1
+-- !result
+SELECT ('aXb' LIKE 'a\\_b')     AS fe_fold, (txt LIKE 'a\\_b')  AS be_exec FROM t_like_cmp WHERE id = 5;
+-- result:
+0	0
+-- !result
+SELECT ('abc%xyz' LIKE 'abc\\%%') AS fe_fold, (txt LIKE 'abc\\%%') AS be_exec FROM t_like_cmp WHERE id = 6;
+-- result:
+1	1
+-- !result
+SELECT ('abcXyz' LIKE 'abc\\%%')  AS fe_fold, (txt LIKE 'abc\\%%') AS be_exec FROM t_like_cmp WHERE id = 7;
+-- result:
+0	0
+-- !result
+SELECT ('xyz%abc' LIKE '%\\%abc') AS fe_fold, (txt LIKE '%\\%abc') AS be_exec FROM t_like_cmp WHERE id = 8;
+-- result:
+1	1
+-- !result
+SELECT ('xa%by' LIKE '%a\\%b%')   AS fe_fold, (txt LIKE '%a\\%b%') AS be_exec FROM t_like_cmp WHERE id = 9;
+-- result:
+1	1
+-- !result
+SELECT ('xaXby' LIKE '%a\\%b%')   AS fe_fold, (txt LIKE '%a\\%b%') AS be_exec FROM t_like_cmp WHERE id = 10;
+-- result:
+0	0
+-- !result
+SELECT ('a\\xyz' LIKE 'a\\\\%') AS fe_fold, (txt LIKE 'a\\\\%')  AS be_exec FROM t_like_cmp WHERE id = 11;
+-- result:
+1	1
+-- !result
+SELECT ('abc\\' LIKE 'abc\\\\') AS fe_fold, (txt LIKE 'abc\\\\') AS be_exec FROM t_like_cmp WHERE id = 12;
+-- result:
+1	1
+-- !result
+SELECT ('abcdef' LIKE 'abc%')    AS fe_fold, (txt LIKE 'abc%')   AS be_exec FROM t_like_cmp WHERE id = 13;
+-- result:
+1	1
+-- !result
+SELECT ('xyzabc' LIKE '%abc')    AS fe_fold, (txt LIKE '%abc')   AS be_exec FROM t_like_cmp WHERE id = 14;
+-- result:
+1	1
+-- !result
+SELECT ('xyzabcdef' LIKE '%abc%') AS fe_fold, (txt LIKE '%abc%') AS be_exec FROM t_like_cmp WHERE id = 15;
+-- result:
+1	1
+-- !result
+DROP TABLE t_like_cmp;
+-- result:
+-- !result
