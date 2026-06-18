@@ -31,10 +31,12 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
+#include "storage/task/engine_batch_load_task.h"
 #include "storage/task/engine_clone_task.h"
 
 namespace starrocks {
@@ -260,6 +262,18 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     Status st = task.execute();
     ASSERT_TRUE(st.is_corruption());
     tablet->set_is_dropping(false);
+}
+
+TEST_F(AgentTaskTest, batch_load_task_reports_invalid_push_type_through_storage_engine) {
+    TPushReq push_req;
+    push_req.__set_push_type(static_cast<TPushType::type>(-1));
+
+    std::vector<TTabletInfo> tablet_infos;
+    EngineBatchLoadTask task(push_req, &tablet_infos, 1, GlobalEnv::GetInstance()->load_mem_tracker());
+    Status st = StorageEngine::instance()->execute_task(&task);
+
+    ASSERT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_NE(std::string::npos, st.message().find("invalid push type")) << st;
 }
 
 TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
