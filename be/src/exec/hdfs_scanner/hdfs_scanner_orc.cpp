@@ -615,7 +615,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
 
     if (!st.is_end_of_file()) return st;
     if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
-    _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_num_values);
+    _scanner_ctx->append_or_update_count_column_to_chunk(chunk, 1, read_num_values);
     return 1;
 }
 
@@ -696,6 +696,9 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
 
             if (rows_read != 0 && rows_read != ck->num_rows()) {
                 ck->filter(_chunk_filter);
+            }
+            if (_scanner_ctx->has_count_column()) {
+                _scanner_ctx->append_or_update_count_column_to_chunk(chunk, rows_read, 1);
             }
         }
 

@@ -384,8 +384,8 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
-    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
-    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, rows_read);
+    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, rows_read));
+    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
 
     // Check chunk's row number for each column
     chunk->get()->check_or_die();

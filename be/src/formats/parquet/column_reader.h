@@ -144,6 +144,8 @@ public:
         return Status::OK();
     }
 
+    virtual Status finalize_lazy_state(ColumnPtr& col) { return Status::OK(); }
+
     virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                          int64_t* end_offset, ColumnIOTypeFlags types, bool active) = 0;
 

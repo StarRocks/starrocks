@@ -126,14 +126,26 @@ protected:
                                            CompoundNodeType pred_relation, const TypeDescriptor& col_type,
                                            const uint64_t rg_first_row, const uint64_t rg_num_rows) const;
 
-    // If `column` still refers to one of this reader's internal temporary columns, a previous
-    // fill_dst_column() was skipped (e.g. the whole range was filtered out and
-    // GroupReader::get_next() continued without filling). Restore the caller-visible column to the
-    // original destination column so that no temporary column can leak out of the reader.
-    Status _restore_tmp_column(ColumnPtr& column);
-    // Whether `column` is one of this reader's internal temporary columns. Overridden by readers
-    // that swap in a temporary column (dict-code / intermediate / low-rows string) during read.
-    virtual bool _is_tmp_column(const ColumnPtr& column) const { return false; }
+    // ── Physical ↔ Logical column swap machinery ──
+    //
+    // Convention: after read_range(), a slot holds a PHYSICAL column
+    // (_code_column / _raw_string_column / _tmp_intermediate_column).
+    // The caller's original LOGICAL destination is parked in _logical_dst.
+    //
+    // finalize_lazy_state() converts PHYSICAL → LOGICAL.
+    // fill_dst_column() consumes the PHYSICAL column and restores _logical_dst.
+    //
+    // If fill_dst_column() is skipped (e.g. the range was filtered out),
+    // _restore_physical_column() at the top of the next read_range() detects
+    // the leftover via _is_physical_column() and restores _logical_dst.
+
+    // If `column` is a PHYSICAL column owned by this reader, a previous fill
+    // was skipped.  Restore the slot to _logical_dst so the reader can install
+    // a fresh PHYSICAL column for the next range.
+    Status _restore_physical_column(ColumnPtr& column);
+    // Whether `column` is a PHYSICAL column owned by this reader
+    // (dict codes, intermediate, or raw strings — not yet LOGICAL).
+    virtual bool _is_physical_column(const ColumnPtr& column) const { return false; }
 
     const ColumnReaderOptions& _opts;
 
@@ -141,9 +153,11 @@ protected:
 
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
-    // Original destination column saved when a temporary column is swapped in during read_range();
-    // restored by _restore_tmp_column()/fill_dst_column() once the temporary column is consumed.
-    ColumnPtr _ori_column = nullptr;
+
+    // LOGICAL column saved when a PHYSICAL column is swapped into the slot
+    // during read_range().  Restored by _restore_physical_column() or at
+    // the end of a successful fill_dst_column().
+    ColumnPtr _logical_dst = nullptr;
 };
 
 class ScalarColumnReader final : public RawColumnReader {
@@ -156,6 +170,9 @@ public:
     Status prepare() override {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
                                                                  _opts.timezone, &_converter));
+        if (_can_lazy_dict_decode && _converter->need_convert) {
+            _can_lazy_dict_decode = false;
+        }
         return RawColumnReader::prepare();
     }
 
@@ -182,6 +199,8 @@ public:
     }
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -217,7 +236,7 @@ private:
 
     bool _is_dict_code_column(const ColumnPtr& column) const;
     bool _is_intermediate_column(const ColumnPtr& column) const;
-    bool _is_tmp_column(const ColumnPtr& column) const override {
+    bool _is_physical_column(const ColumnPtr& column) const override {
         return _is_dict_code_column(column) || _is_intermediate_column(column);
     }
 
@@ -226,13 +245,14 @@ private:
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
     const TypeDescriptor* _col_type = nullptr;
 
-    // _can_lazy_dict_decode means string type and all page dict code
     bool _can_lazy_dict_decode = false;
     bool _can_lazy_convert = false;
-    // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;
-    // dict code
-    ColumnPtr _tmp_code_column = nullptr;
+    // PHYSICAL columns used during lazy-decode / lazy-convert paths.
+    // _code_column stores Parquet dict codes (Int32); _tmp_intermediate_column
+    // stores decoded-but-unconverted raw values.  At most one is installed
+    // in the caller slot at any time — dispatch is by col.get() pointer identity.
+    ColumnPtr _code_column = nullptr;
     ColumnPtr _tmp_intermediate_column = nullptr;
 };
 
@@ -259,6 +279,8 @@ public:
     }
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -287,7 +309,6 @@ public:
 private:
     Status _check_current_dict();
     bool _is_dict_code_column(const ColumnPtr& column) const;
-    bool _is_tmp_column(const ColumnPtr& column) const override { return _is_dict_code_column(column); }
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
 
@@ -296,7 +317,11 @@ private:
 
     std::optional<std::vector<int16_t>> _code_convert_map;
 
-    ColumnPtr _dict_code = nullptr;
+    bool _is_physical_column(const ColumnPtr& column) const override { return column.get() == _code_column.get(); }
+    // PHYSICAL column: Parquet dict codes (Int32).  read_range() swaps this
+    // into the slot; fill_dst_column() decodes it to global-dict IDs
+    // (LOGICAL LowCardDictColumn).
+    ColumnPtr _code_column = nullptr;
 };
 
 class LowRowsColumnReader final : public RawColumnReader {
@@ -307,6 +332,8 @@ public:
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
 
     Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+
+    Status finalize_lazy_state(ColumnPtr& col) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -326,12 +353,14 @@ public:
                                  ColumnIOTypeFlags types, bool active) override;
 
 private:
-    bool _is_tmp_column(const ColumnPtr& column) const override;
-
     const GlobalDictMap* _dict = nullptr;
     const SlotId _slot_id;
 
-    ColumnPtr _tmp_column = nullptr;
+    bool _is_physical_column(const ColumnPtr& column) const override {
+        return _raw_string_column != nullptr && column.get() == _raw_string_column.get();
+    }
+    // PHYSICAL column: raw VARCHAR strings read from non-dict-encoded pages.
+    ColumnPtr _raw_string_column = nullptr;
 };
 
 } // namespace starrocks::parquet
