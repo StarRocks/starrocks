@@ -360,7 +360,6 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::CLONE);
     AgentMetrics::instance()->clone_requests_total.increment(1);
     const TCloneReq& clone_req = agent_task_req->task_req;
-    AgentStatus status = STARROCKS_SUCCESS;
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, clone_req.tablet_id);
 
@@ -416,8 +415,9 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             }
         }
     } else {
+        Status clone_status;
         EngineCloneTask engine_task(GlobalEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
-                                    &error_msgs, &tablet_infos, &status);
+                                    &error_msgs, &tablet_infos, &clone_status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
             AgentMetrics::instance()->clone_requests_failed.increment(1);
@@ -425,13 +425,13 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req->signature;
             error_msgs.emplace_back("clone failed.");
         } else {
-            if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
+            if (!clone_status.ok()) {
                 AgentMetrics::instance()->clone_requests_failed.increment(1);
                 status_code = TStatusCode::RUNTIME_ERROR;
-                LOG(WARNING) << "clone failed. signature: " << agent_task_req->signature;
+                LOG(WARNING) << "clone failed. status:" << clone_status << ", signature:" << agent_task_req->signature;
                 error_msgs.emplace_back("clone failed.");
             } else {
-                LOG(INFO) << "clone success, set tablet infos. status:" << status
+                LOG(INFO) << "clone success, set tablet infos. status:" << clone_status
                           << ", signature:" << agent_task_req->signature;
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
 
