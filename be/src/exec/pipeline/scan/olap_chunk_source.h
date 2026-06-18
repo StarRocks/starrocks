@@ -26,8 +26,8 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/conjunctive_predicates.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/conjunctive_predicates.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 
@@ -108,7 +108,7 @@ private:
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     bool _use_vector_index = false;
-    bool _use_ivfpq = false;
+    bool _refine_distance = false;
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id;
 

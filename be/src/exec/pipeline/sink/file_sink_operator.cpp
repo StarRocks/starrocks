@@ -21,6 +21,7 @@
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exprs/expr.h"
@@ -90,8 +91,10 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     if (_sender != nullptr) {
         auto query_statistic = std::make_shared<QueryStatistics>();
         QueryContext* query_ctx = state->query_ctx();
-        query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
-        query_statistic->add_cpu_costs(query_ctx->cpu_cost());
+        auto* query_runtime_state = state->query_runtime_state();
+        query_statistic->add_scan_stats(query_runtime_state->cur_scan_rows_num(),
+                                        query_runtime_state->get_scan_bytes());
+        query_statistic->add_cpu_costs(query_runtime_state->cpu_cost());
         query_statistic->add_mem_costs(query_ctx->mem_cost_bytes());
         query_statistic->set_returned_rows(num_written_rows);
         _sender->set_query_statistics(query_statistic);
@@ -115,7 +118,7 @@ void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
         if (Status status = _writer->open(_state); !status.ok()) {
             status = status.clone_and_prepend("open file writer failed, error");
             LOG(WARNING) << status;
-            _fragment_ctx->cancel(status);
+            cancel_fragment_context(_fragment_ctx, status);
             close(_state);
             return;
         }
@@ -125,7 +128,7 @@ void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
         status = status.clone_and_prepend("add chunk to file writer failed, error");
         LOG(WARNING) << status;
-        _fragment_ctx->cancel(status);
+        cancel_fragment_context(_fragment_ctx, status);
         close(_state);
         return;
     }

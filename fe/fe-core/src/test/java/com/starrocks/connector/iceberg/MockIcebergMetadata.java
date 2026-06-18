@@ -53,6 +53,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.types.Types;
@@ -641,6 +642,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, com.starrocks.catalog.Table table) {
         return TvrTableSnapshot.of(TvrVersion.of(1L));
+    }
+
+    @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, com.starrocks.catalog.Table table, long version) {
+        Snapshot snapshot = ((IcebergTable) table).getNativeTable().snapshot(version);
+        return snapshot == null ? Optional.empty() : Optional.of(snapshot.timestampMillis());
     }
 
     // ConnectorMetadata's default returns TvrTableSnapshot.empty(), which leaves the planned scan

@@ -16,16 +16,18 @@
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/query_context_manager.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
@@ -96,16 +98,18 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
 
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
     _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
     _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
+    ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _query_ctx->attach_to_runtime_state(_runtime_state);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     std::vector<TExpr> t_output_expr;
@@ -125,7 +129,9 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     auto exec_group = ExecutionGroupBuilder::create_normal_exec_group();
     auto pipeline = std::make_shared<Pipeline>(0, OpFactories(), exec_group.get());
     MockDriverObserver observer;
-    auto driver = std::make_shared<PipelineDriver>(ops, _query_ctx, _fragment_ctx, pipeline.get(), &observer, 0);
+    auto driver = std::make_shared<PipelineDriver>(ops, &_query_ctx->query_runtime_state(),
+                                                   &_fragment_ctx->fragment_runtime_state(), pipeline->pipeline_event(),
+                                                   &observer, nullptr, 0);
 
     driver->prepare(_runtime_state);
     driver->prepare_local_state(_runtime_state);
@@ -148,7 +154,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     EXPECT_EQ(_runtime_state, observer.last_state);
 
     _query_ctx->fragment_mgr()->unregister(fragment_id);
-    _exec_env->query_context_mgr()->count_down_fragments(_query_ctx);
+    _query_ctx->count_down_fragment();
 }
 
 } // namespace starrocks::pipeline

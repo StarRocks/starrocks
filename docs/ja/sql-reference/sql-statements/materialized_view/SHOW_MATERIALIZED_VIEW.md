@@ -77,6 +77,9 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | refresh_trigger            | リフレッシュがトリガーされる方法。有効な値: `NONE` (同期マテリアライズドビュー)、`MANUAL` (REFRESH MATERIALIZED VIEW 経由のみ)、`SCHEDULED` (EVERY 間隔による定期実行)、`ON_BASE_TABLE_CHANGE` (ベーステーブルのロードまたは変更時に自動実行)。 |
 | refresh_policy             | 人間が読めるリフレッシュポリシー。有効な値: `NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`、または `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` のようなスケジュール (`START` 句は開始時刻が定義されている場合にのみ含まれます)。 |
 | resource_group             | マテリアライズドビューのリフレッシュタスクに使用されるリソースグループ (マテリアライズドビューの `resource_group` プロパティから)。設定されていない場合は `default_mv_wg` がデフォルトです。 |
+| query_rewrite_status_reason | `query_rewrite_status` の理由。有効な値: `OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION`、`UNKNOWN`。 |
+| last_freshness_confirmed_at | 最後に成功した更新の開始時刻。更新全体（そのすべてのタスク実行）が完了した時点で記録されます。ベーステーブルに変更がなく更新不要と確認された場合も新鮮さが確認されます。マテリアライズドビューはこの時点のベーステーブルのデータを反映します。`last_refresh_time`（ベーステーブルのデータバージョン時刻）とは異なり、これは実時刻です。最初の更新が成功するまで、および同期マテリアライズドビューの場合は空です。パーティション範囲を指定した REFRESH（部分更新）では値は進みません。 |
+| base_table_refresh_version_times | 各ベーステーブルのデータバージョン時刻を、ベーステーブルの `catalog.database.table` 名から観測された最新のデータバージョン時刻へのマッピングとして JSON オブジェクトで示します。これは `last_refresh_time`（それらの単一の最大値）の背後にあるテーブルごとの内訳です。外部/データレイクのベーステーブルはパーティションのソース更新時刻を、OLAP（内部）ベーステーブルは可視バージョンのコミット時刻を報告します。記録された時刻を持つベーステーブルがない場合は `{}` です。 |
 
 ## 例
 

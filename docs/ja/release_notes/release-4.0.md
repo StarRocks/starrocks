@@ -25,6 +25,76 @@ description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、
 
 :::
 
+## 4.0.11
+
+リリース日：2026 年 6 月 5 日
+
+### 動作変更
+
+- `ALLOW_THROW_EXCEPTION` モードで `get_json_string` およびその他の `get_json_*` 関数が暗黙的な VARCHAR から JSON への解析に失敗した場合、NULL ではなく JSON 解析エラーを返すようになりました。モードが無効な場合は NULL を返す既定の動作のままです。[#73199](https://github.com/StarRocks/starrocks/pull/73199)
+- 設定項目 `pipeline_enable_large_column_checker` が既定で有効になりました。[#72798](https://github.com/StarRocks/starrocks/pull/72798)
+
+### 改善点
+
+- 共有データ書き込みパスの Load Spill ファイルが、トランザクション ID をファイル名に含めたフラットな単一階層のディレクトリ構成になり、トランザクション ID ベースの Vacuum によって回収されるようになりました。これにより一括削除が書き込みのホットパスから外れ、BE のクラッシュでリークした Spill ファイルも Vacuum で回収できます。[#73064](https://github.com/StarRocks/starrocks/pull/73064)
+- 明示的トランザクション内で SHOW 文（`SHOW GRANTS`、`SHOW WAREHOUSES` など）を実行できるようになり、SHOW を自動的に発行する BI/JDBC クライアントがトランザクションフローを中断しなくなりました。[#72954](https://github.com/StarRocks/starrocks/pull/72954)
+- Java UDAF および UDTF が STRUCT 型の引数と戻り値をサポートするようになりました。[#72911](https://github.com/StarRocks/starrocks/pull/72911)
+- スカラー Java UDF が STRUCT 型の引数をサポートするようになりました。[#72620](https://github.com/StarRocks/starrocks/pull/72620)
+- Java UDF が DATE 型および DATETIME 型をサポートするようになりました。[#72337](https://github.com/StarRocks/starrocks/pull/72337)
+- Java UDF がネストされた ARRAY/MAP 型をサポートするようになりました。[#72283](https://github.com/StarRocks/starrocks/pull/72283)
+- FE 設定項目 `deploy_serialization_min_thread_pool_size` を追加しました。[#72274](https://github.com/StarRocks/starrocks/pull/72274)
+- `add_partition_value` の重複排除がヒットした際に、冗長なパーティションキー式の構築をスキップするようにしました。[#73156](https://github.com/StarRocks/starrocks/pull/73156)
+- `PaimonMetadata#getTableVersionRange` における冗長な `latestSnapshot()` 呼び出しを回避しました。[#72892](https://github.com/StarRocks/starrocks/pull/72892)
+- スカラー演算子の共通部分式除去で、可換な AND/OR 式を重複排除するようにしました。[#72823](https://github.com/StarRocks/starrocks/pull/72823)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- UDAF キャッシュによって発生したメモリリーク。[#74025](https://github.com/StarRocks/starrocks/pull/74025)
+- 集計組み合わせ関数における実装の誤り。[#74169](https://github.com/StarRocks/starrocks/pull/74169)
+- 共有データ combined txn log モードで、各 Sender のオープン時にパーティション単位のコーディネーター取得が再記録されず、トランザクションログが失われる可能性があった問題。[#73962](https://github.com/StarRocks/starrocks/pull/73962)
+- カスタム `LocationProvider` を使用する Iceberg テーブルの読み取り失敗を、`SerializableTable` 内で `LocationProvider` を遅延初期化することで修正しました。[#73482](https://github.com/StarRocks/starrocks/pull/73482)
+- `de.javakaffee` の `UnmodifiableCollectionsSerializer` によるシリアライズ失敗を、Java 17 互換版に置き換えて修正しました。[#73458](https://github.com/StarRocks/starrocks/pull/73458)
+- `HdfsFsManager` のコピーエラーメッセージに根本原因が含まれるようになりました。[#73414](https://github.com/StarRocks/starrocks/pull/73414)
+- `DeltaWriter::commit()` における並行 `SegmentFlushTask` の競合。[#73371](https://github.com/StarRocks/starrocks/pull/73371)
+- ソートマージプロバイダのエラーが失われず、フラグメントコンテキストに伝播されるようになりました。[#73337](https://github.com/StarRocks/starrocks/pull/73337)
+- Hive ビューに対する Ranger の行フィルタ/マスキングポリシーがスキップされ、ビューやその基底テーブルのポリシーが適用されなかった問題。[#73265](https://github.com/StarRocks/starrocks/pull/73265)
+- セキュリティ脆弱性（CVE）に対応するため libthrift を 0.23.0 にアップグレードしました。[#73243](https://github.com/StarRocks/starrocks/pull/73243)
+- `HttpClient` インスタンスを再利用して FE のファイルディスクリプタリークを修正しました。[#73239](https://github.com/StarRocks/starrocks/pull/73239)
+- Parquet broker load のエラーメッセージにファイル/列/行のコンテキストが含まれるようになりました。[#73236](https://github.com/StarRocks/starrocks/pull/73236)
+- Spark コネクタの外部スキャンで、`col_name` が空の出力スロットのスロット検索が失敗する問題。[#73225](https://github.com/StarRocks/starrocks/pull/73225)
+- グレースフルシャットダウン時の `SinkBuffer` のクラッシュ。[#73202](https://github.com/StarRocks/starrocks/pull/73202)
+- クエリキャッシュと Local Shuffle 集計の競合。[#73194](https://github.com/StarRocks/starrocks/pull/73194)
+- フラグメントのティアダウンをまたいだ Hive パーティションディスクリプタの解放後使用（UAF）。[#73176](https://github.com/StarRocks/starrocks/pull/73176)
+- `localtime_r` を使用して Lake Vacuum のスレッドセーフティ問題を修正しました。[#73088](https://github.com/StarRocks/starrocks/pull/73088)
+- クエリコンテキスト破棄中の `PipelineTimerTask` の `doRun` とスケジュール解除との間の競合状態。[#73082](https://github.com/StarRocks/starrocks/pull/73082)
+- DB ロックを緩和して、読み取り専用のクエリエンジンパスにおけるロック競合を軽減しました。[#73067](https://github.com/StarRocks/starrocks/pull/73067)
+- JDBC カタログ内の SQL Server テーブルに対するマテリアライズドビューのリフレッシュ失敗。[#72962](https://github.com/StarRocks/starrocks/pull/72962)
+- `JDBCScanner::_init_jdbc_scanner` における JNI ローカル参照リーク。[#72913](https://github.com/StarRocks/starrocks/pull/72913)
+- パーティション TopN が子ノードの出力列を失う可能性があった問題。[#72848](https://github.com/StarRocks/starrocks/pull/72848)
+- INSERT OVERWRITE の再プランニング前に `LambdaArgument.transformedOp` がクリアされず、誤った実行プランが生成される問題。[#72832](https://github.com/StarRocks/starrocks/pull/72832)
+- 外部リソースのクリーンアップ中にコーディネーターロックを保持していた問題。[#72830](https://github.com/StarRocks/starrocks/pull/72830)
+- `Locker` のロールバックが例外安全になり、アンロック順序を修正しました。[#72789](https://github.com/StarRocks/starrocks/pull/72789)
+- `ColumnDict.merge` のバイト順の誤りを、符号なしバイト順を使用するよう修正しました。[#72778](https://github.com/StarRocks/starrocks/pull/72778)
+- 一時的な `std::string` へのフォーマット時のスタックバッファオーバーフロー。[#72728](https://github.com/StarRocks/starrocks/pull/72728)
+- 小さい LIMIT で集計スピルを無効化する際に HAVING 句をチェックするようにしました。[#72705](https://github.com/StarRocks/starrocks/pull/72705)
+- runtime_filter ワーカーをドレインする際に転送済み RPC を待機することで発生していたハング。[#72626](https://github.com/StarRocks/starrocks/pull/72626)
+- アウタージョイン上のマテリアライズドビューにおける遅延マテリアライズスロットの NULL 許容性が正しくなかった問題。[#72621](https://github.com/StarRocks/starrocks/pull/72621)
+- 通常の Rowset コミット適用時に `merge_condition` が保持されなかった問題。[#72542](https://github.com/StarRocks/starrocks/pull/72542)
+- DB ロックを緩和して、Clone 中の `TabletScheduler` / `TabletSchedCtx` ホットパスにおけるロック競合を軽減しました。[#72475](https://github.com/StarRocks/starrocks/pull/72475)
+- `Locker` が部分的に取得した集中ロックをロールバックしなかった問題。[#72423](https://github.com/StarRocks/starrocks/pull/72423)
+- スピル可能なハッシュジョイン Probe のクラッシュ。[#72397](https://github.com/StarRocks/starrocks/pull/72397)
+- JOIN USING トランスフォーマで COALESCE の子を共通の型にキャストするようにしました。[#72338](https://github.com/StarRocks/starrocks/pull/72338)
+- 単一テーブルの proc ディレクトリで保持していた DB READ ロックの範囲が広すぎたため、テーブル単位に緩和しました。[#72334](https://github.com/StarRocks/starrocks/pull/72334)
+- マテリアライズドビューのプランコンテキストをキャッシュする際のメモリリーク。[#72300](https://github.com/StarRocks/starrocks/pull/72300)
+- 共有データのソート済みスキーマ変更時に FSE-v2 がスキーマを設定しなかった問題。[#72235](https://github.com/StarRocks/starrocks/pull/72235)
+- `ConsistencyChecker` が周期スキャンで保持していた DB READ ロックの範囲が広すぎたため、テーブル単位の READ に緩和しました。[#72218](https://github.com/StarRocks/starrocks/pull/72218)
+- `information_schema.warehouse_queries` のクエリ時に BE がクラッシュする問題。[#72019](https://github.com/StarRocks/starrocks/pull/72019)
+- CRLF 形式の CSV 入力で、閉じ enclose の前に末尾の `\r` が除去されなかった問題。[#71866](https://github.com/StarRocks/starrocks/pull/71866)
+- 外部カタログのクエリ時に Paimon の主キー列が誤って非 NULL とマークされる問題。[#71660](https://github.com/StarRocks/starrocks/pull/71660)
+- URI が既にスラッシュで終わっている場合に JDBC URL の構築で余分な二重スラッシュが生成され、ClickHouse などの厳格なドライバでエラーになる問題。[#70992](https://github.com/StarRocks/starrocks/pull/70992)
+
 ## 4.0.10
 
 リリース日：2026 年 5 月 9 日

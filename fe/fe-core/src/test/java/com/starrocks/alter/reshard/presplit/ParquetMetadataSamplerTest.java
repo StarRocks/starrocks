@@ -14,10 +14,12 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -300,6 +302,43 @@ public class ParquetMetadataSamplerTest {
         Assertions.assertFalse(exception instanceof MetaTierUnavailableException);
         Assertions.assertTrue(exception.getMessage().contains("null"),
                 "expected null in message, got: " + exception.getMessage());
+    }
+
+    // --- DATE integration test ---
+
+    private static SampleRequest dateSampleRequest() {
+        return new SampleRequest(
+                DUMMY_CONTEXT,
+                List.of(new Column("event_day", DateType.DATE)),
+                1024L, 0L);
+    }
+
+    private static RowGroupStatistics dateRowGroup(String minDate, String maxDate, long rowCount) {
+        return new RowGroupStatistics(
+                new Tuple(List.of(Variant.of(DateType.DATE, minDate))),
+                new Tuple(List.of(Variant.of(DateType.DATE, maxDate))),
+                rowCount, /*truncated=*/ false);
+    }
+
+    @Test
+    public void placesDateQuantileBoundaries() throws Exception {
+        // Three non-overlapping row groups, 100 rows each, covering Jan/Feb/Mar 2024.
+        // Requesting 3 tablets (= 2 boundaries) should land at 2024-02-01 and 2024-03-01.
+        // This test proves the sampler pipeline is type-agnostic: DateVariant.compareTo
+        // drives correct quantile placement with zero sampler changes.
+        List<RowGroupStatistics> rowGroups = List.of(
+                dateRowGroup("2024-01-01", "2024-01-31", 100L),
+                dateRowGroup("2024-02-01", "2024-02-29", 100L),
+                dateRowGroup("2024-03-01", "2024-03-31", 100L));
+        ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(rowGroups));
+
+        BoundaryPlannerResult result = sampler.tryPlan(dateSampleRequest(), /*requestedTabletCount=*/ 3);
+
+        Assertions.assertFalse(result.isNoSplit());
+        List<Tuple> boundaries = result.getBoundaries();
+        Assertions.assertEquals(2, boundaries.size());
+        Assertions.assertEquals("2024-02-01", boundaries.get(0).getValues().get(0).getStringValue());
+        Assertions.assertEquals("2024-03-01", boundaries.get(1).getValues().get(0).getStringValue());
     }
 
     @Test

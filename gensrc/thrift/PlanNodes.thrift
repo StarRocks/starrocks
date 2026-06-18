@@ -461,6 +461,11 @@ struct THdfsScanRange {
 
     // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
     38: optional bool use_avro_jni_reader
+
+    // whether to use JNI scanner to read data of lance table
+    39: optional bool use_lance_jni_reader
+    // lance split info (serialized fragment metadata)
+    40: optional binary lance_split_info
 }
 
 struct TBinlogScanRange {
@@ -619,10 +624,13 @@ struct TVectorSearchOptions {
   5: optional map<string, string> query_params;
   6: optional double vector_range;
   7: optional i32 result_order;
-  8: optional bool use_ivfpq;
+  8: optional bool use_ivfpq; // DEPRECATED: superseded by refine_distance; ordinal kept reserved.
   9: optional double pq_refine_factor;
   10: optional double k_factor;
   11: optional i32 vector_slot_id;
+  // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
+  // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
+  12: optional bool refine_distance;
 }
 
 enum SampleMethod {
@@ -634,8 +642,8 @@ struct TTableSampleOptions {
   1: optional bool enable_sampling;
   2: optional SampleMethod sample_method;
   3: optional i64 random_seed;
-  4: optional i64 probability_percent;
-
+  4: optional i64 probability_percent;       // kept for backward compatibility with old BE/FE; integer percent in (0, 100)
+  5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode

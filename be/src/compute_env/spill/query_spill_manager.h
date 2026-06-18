@@ -37,6 +37,9 @@ public:
 
     void inc_reserve_bytes(size_t bytes) { _global_spill_manager->inc_reserve_bytes(bytes); }
     void dec_reserve_bytes(size_t bytes) { _global_spill_manager->dec_reserve_bytes(bytes); }
+    size_t spill_expected_reserved_bytes() const {
+        return _global_spill_manager == nullptr ? 0 : _global_spill_manager->spill_expected_reserved_bytes();
+    }
 
     BlockManager* block_manager() const { return _block_manager.get(); }
 

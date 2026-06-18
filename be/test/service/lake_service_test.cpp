@@ -714,12 +714,15 @@ TEST_F(LakeServiceTest, test_publish_version_vector_index_dispatch_gate) {
                 << "async-mode tablet with new vector_index_ids must be reported";
         EXPECT_EQ(async_tablet_id, response.vector_index_build_infos(0).tablet_id());
         EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+        EXPECT_TRUE(response.vector_index_build_infos(0).build_needed())
+                << "a new rowset carrying vector_index_ids needs a real .vi build";
     }
 }
 
-// Async-mode table whose new rowset has no vector_index_ids (segment under
-// threshold) should also not appear in vector_index_build_infos.
-TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_skipped) {
+// Async-mode table whose new rowset has no vector_index_ids (segment under threshold, or a
+// bundle segment) is still reported on every version-advancing publish, tagged
+// build_needed=false so the FE advances built_version directly without dispatching a CN build.
+TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_reports_no_build) {
     auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
     auto* schema = metadata->mutable_schema();
     auto* idx = schema->add_table_indices();
@@ -753,8 +756,12 @@ TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_skipped) {
     PublishVersionResponse response;
     _lake_service.publish_version(nullptr, &request, &response, nullptr);
     ASSERT_EQ(0, response.failed_tablets_size());
-    EXPECT_EQ(0, response.vector_index_build_infos_size())
-            << "async-mode tablet without vector_index_ids must not be reported";
+    ASSERT_EQ(1, response.vector_index_build_infos_size())
+            << "async-mode tablet must be reported on every version advance for frontier tracking";
+    EXPECT_EQ(tablet_id, response.vector_index_build_infos(0).tablet_id());
+    EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+    EXPECT_FALSE(response.vector_index_build_infos(0).build_needed())
+            << "no vector_index_ids -> nothing to build this version -> build_needed=false";
 }
 
 TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
@@ -4098,6 +4105,68 @@ TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
     t.join();
 
     ASSERT_TRUE(duplicate);
+}
+
+TEST_F(LakeServiceTest, test_vacuum_task_deadline_exceeded) {
+    // Make every deadline check observe a clock far past the deadline. The callback only
+    // fires when the handler threads a positive deadline into the vacuum task, so this also
+    // guards against regressions where the handler stops passing the deadline down.
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline",
+                                          [](void* arg) { *(int64_t*)arg = int64_t{1} << 62; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        // A request carrying timeout_ms aborts with TIMEOUT once the deadline passes.
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        request.set_timeout_ms(60 * 60 * 1000L);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().status_code();
+    }
+
+    {
+        // A request without timeout_ms (older FE versions) carries no deadline: even with the
+        // mocked clock the task runs to completion as before.
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.status().status_code()) << response.status().status_code();
+    }
+
+    {
+        // Setting lake_vacuum_enable_task_timeout to false disables the deadline: a request
+        // carrying timeout_ms still runs to completion.
+        bool old_value = config::lake_vacuum_enable_task_timeout;
+        config::lake_vacuum_enable_task_timeout = false;
+        DeferOp restore_config([old_value] { config::lake_vacuum_enable_task_timeout = old_value; });
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        request.set_timeout_ms(60 * 60 * 1000L);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.status().status_code()) << response.status().status_code();
+    }
 }
 
 TEST_F(LakeServiceTest, test_lock_and_unlock_tablet_metadata) {

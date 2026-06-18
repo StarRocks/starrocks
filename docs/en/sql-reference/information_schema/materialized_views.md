@@ -22,7 +22,7 @@ The following fields are provided in `materialized_views`:
 | TASK_NAME                            | Name of the task responsible for refreshing the materialized view. |
 | LAST_REFRESH_START_TIME              | Start time of the most recent refresh task.                  |
 | LAST_REFRESH_FINISHED_TIME           | End time of the most recent refresh task.                    |
-| LAST_REFRESH_DURATION                | Duration of the most recent refresh task.                    |
+| LAST_REFRESH_DURATION                | Wall-clock duration of the most recent refresh, in seconds (the last task run's finish time minus the first task run's process-start time). Matches `materialized_view_refresh_jobs.DURATION_TIME` for that job. |
 | LAST_REFRESH_STATE                   | State of the most recent refresh task.                       |
 | LAST_REFRESH_FORCE_REFRESH           | Indicates whether the most recent refresh task was a force refresh. |
 | LAST_REFRESH_START_PARTITION         | Starting partition for the most recent refresh task.         |
@@ -44,3 +44,6 @@ The following fields are provided in `materialized_views`:
 | REFRESH_TRIGGER                      | How a refresh is triggered. Valid values: `NONE` (synchronous materialized view), `MANUAL` (only via REFRESH MATERIALIZED VIEW), `SCHEDULED` (periodic, via an EVERY interval), and `ON_BASE_TABLE_CHANGE` (automatically when a base table loads or changes). |
 | REFRESH_POLICY                       | Human-readable refresh policy. Valid values: `NONE`, `MANUAL`, `ON_BASE_TABLE_CHANGE`, or a schedule such as `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` (the `START` clause is present only if a start time was defined). |
 | RESOURCE_GROUP                       | Resource group used for the materialized view's refresh tasks (from the materialized view's `resource_group` property). Defaults to `default_mv_wg` when not set. |
+| QUERY_REWRITE_STATUS_REASON          | The reason behind `QUERY_REWRITE_STATUS`. Valid values: `OK`, `MV_INACTIVE`, `QUERY_REWRITE_DISABLED`, `UNSUPPORTED_DEFINITION`, and `UNKNOWN`. |
+| LAST_FRESHNESS_CONFIRMED_AT          | Start time of the most recent successful refresh, recorded once the entire refresh (all of its task runs) completes; a refresh that found no base-table changes to apply also confirms freshness. The materialized view reflects base-table data as of this moment. Unlike `LAST_REFRESH_TIME` (the base-table data version), this is wall-clock time. `NULL` until the first successful refresh, and for synchronous materialized views. A partition-scoped (partial) REFRESH does not advance it. |
+| BASE_TABLE_REFRESH_VERSION_TIMES     | Per-base-table data version time, as a JSON object mapping each base table's `catalog.database.table` name to the latest data version time observed for it. This is the per-table detail behind `LAST_REFRESH_TIME` (their single maximum): external/data lake base tables report the partition source modified time, and OLAP (internal) base tables report the visible-version commit time. `{}` when no base table has a recorded time. |

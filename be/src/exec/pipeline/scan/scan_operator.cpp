@@ -14,8 +14,6 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
-#include <fmt/printf.h>
-
 #include "base/concurrency/race_detect.h"
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
@@ -30,16 +28,16 @@
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/schedule/common.h"
+#include "exec/runtime/query_context_manager.h"
+#include "exec/runtime/schedule/common.h"
 #include "exprs/expr_executor.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "util/debug/query_trace.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -444,8 +442,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
-    starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
-    query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
@@ -455,8 +451,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
-    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
-                          io_task_start_nano](auto& ctx) {
+    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, driver_id, io_task_start_nano](auto& ctx) {
         if (auto sp = wp.lock()) {
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
@@ -468,9 +463,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             auto chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
 
-            [[maybe_unused]] std::string category;
-            category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
-            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
@@ -510,10 +502,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                       chunk_source->get_scan_rows() - prev_scan_rows,
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
-
-            QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
-            // make clang happy
-            (void)query_trace_ctx;
         }
     };
 
@@ -561,20 +549,20 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
 
-    if (_lane_arbiter != nullptr) {
+    if (_cache_context != nullptr) {
         while (morsel != nullptr) {
             auto [lane_owner, version] = morsel->get_lane_owner_and_version();
-            auto acquire_result = _lane_arbiter->try_acquire_lane(lane_owner);
+            auto acquire_result = _cache_context->try_acquire_lane(lane_owner);
             if (acquire_result == query_cache::AR_BUSY) {
                 _morsel_queue->unget(std::move(morsel));
                 return Status::OK();
             } else if (acquire_result == query_cache::AR_PROBE) {
-                auto hit = _cache_operator->probe_cache(lane_owner, version);
-                RETURN_IF_ERROR(_cache_operator->reset_lane(state, lane_owner));
+                auto hit = _cache_context->probe_cache(lane_owner, version);
+                RETURN_IF_ERROR(_cache_context->reset_lane(state, lane_owner));
                 if (!hit) {
                     break;
                 }
-                auto [delta_version, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
+                auto [delta_version, delta_rowsets] = _cache_context->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
                     // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
                     // created from rowsets passed in to itself instead of capturing it from TabletManager again.
@@ -595,7 +583,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 // When both intra-tablet parallelism and multi-version cache mechanisms take effects, we must
                 // use delta rowsets instead of the ensemble of rowsets to fetch rows from disk for all of the
                 // morsels originated from the identical tablet.
-                auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
+                auto [delta_verrsion, delta_rowsets] = _cache_context->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
                     morsel->set_from_version(delta_verrsion);
                     std::vector<BaseRowsetSharedPtr> drs;
@@ -639,7 +627,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         query_ctx = query_execution_services->runtime->query_context_mgr->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
-    if (!query_ctx->enable_profile()) {
+    auto* query_runtime_state = &query_ctx->query_runtime_state();
+    if (!query_runtime_state->enable_profile()) {
         return;
     }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
@@ -721,7 +710,8 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
         pipeline::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
-    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), scan_node->id(), ops);
+    ops = ::starrocks::pipeline::builder::maybe_interpolate_collect_stats(context, context->runtime_state(),
+                                                                          scan_node->id(), ops);
 
     return ops;
 }

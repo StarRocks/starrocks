@@ -3657,6 +3657,139 @@ TEST_P(LakeVacuumTest, full_vacuum_drops_local_cache_for_active_idx) {
     EXPECT_NE(std::find(dropped.begin(), dropped.end(), std::string("8003_active.idx")), dropped.end());
 }
 
+// A deadline that expires while walking the version chain must stop the walk early without
+// deleting anything; the next run (no deadline pressure) completes normally.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_deadline_expired_mid_walk) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 2,
+            "prev_garbage_version": 0,
+            "commit_time": 1687331159
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 3,
+            "prev_garbage_version": 2,
+            "commit_time": 1687331160
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 4,
+            "prev_garbage_version": 3,
+            "commit_time": 1687331161
+        }
+        )DEL")));
+
+    // The first checks (request entry, first two walk iterations) observe a mocked clock
+    // before the deadline, every later check observes one far past it, so the deadline
+    // expires in the middle of the version chain walk.
+    int64_t check_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline", [&](void* arg) {
+        check_count++;
+        *(int64_t*)arg = (check_count > 3) ? (int64_t{1} << 62) : 0;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(20002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331162);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response, /*deadline_ms=*/1);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_GT(check_count, 3);
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 4)));
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(20002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331162);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(4, response.vacuumed_version());
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(20002, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(20002, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 4)));
+    }
+}
+
+// A task that reaches the BE with less than 1/10 of the FE timeout window left must abort at the
+// entry, before walking any metadata: the walk could not finish in the time remaining and would
+// only end in a mid-walk timeout that advances nothing, so it should never start.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_deadline_window_too_small_to_start) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20003,
+            "version": 2,
+            "prev_garbage_version": 0,
+            "commit_time": 1687331159
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20003,
+            "version": 3,
+            "prev_garbage_version": 2,
+            "commit_time": 1687331160
+        }
+        )DEL")));
+
+    // Pin the clock to a moment that is still before the real deadline (1000000) but inside the
+    // minimum start window. With timeout_ms=600000 that window is min(5min, 600000/10)=60000ms, so
+    // the entry brings the effective deadline forward to 940000 and 950000 >= 940000 fails fast,
+    // even though the strict "now >= 1000000" test would not.
+    int64_t check_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline", [&](void* arg) {
+        check_count++;
+        *(int64_t*)arg = 950000;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.add_tablet_ids(20003);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(1687331162);
+    request.set_min_active_txn_id(12344);
+    request.set_timeout_ms(600000);
+    vacuum(_tablet_mgr.get(), request, &response, /*deadline_ms=*/1000000);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+    // Aborted at the entry: the version chain was never walked.
+    EXPECT_EQ(1, check_count);
+    EXPECT_EQ(0, response.vacuumed_files());
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(20003, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(20003, 3)));
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 
@@ -5771,6 +5904,71 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_handles_invalid_hex_prefix) {
     EXPECT_TRUE(path_exists(zero_txn));
     EXPECT_TRUE(path_exists(non_hex));
     EXPECT_EQ(0, deleted);
+}
+
+// Regression test: a PhysicalPartition.metadataSwitchVersion can be permanently stranded when the
+// switch version's tablet metadata (and everything at or below it) has already been vacuumed away
+// before the FE managed to clear the switch (e.g. an in-memory clear lost across an FE failover).
+// In that state collect_files_to_vacuum used to report `min_retain_version - 1`, which is below the
+// switch version, so the FE never clears it (it only clears once vacuumed_version >= switch_version).
+// The vacuum must instead report the real cleaned watermark so the switch can be cleared.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_min_retain_below_min_version) {
+    // Case 1: the tablet's lowest existing version has already advanced past min_retain_version, so
+    // the metadata walk never runs. Only the visible version (5) metadata remains.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5200,
+            "version": 5,
+            "commit_time": 1
+        }
+        )DEL")));
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5200);
+        // Versions <= 4 are already gone; the lowest existing version is 5.
+        info->set_min_version(5);
+        // min_retain_version is pinned to a switch version (3) whose metadata no longer exists.
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 60);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // Before the fix: min_retain_version - 1 == 2 (< switch version 3 -> stranded forever).
+        // After the fix: max(min_retain_version, min_version - 1) == 4 (>= switch version 3).
+        EXPECT_EQ(4, response.vacuumed_version());
+    }
+
+    // Case 2: the retain-boundary metadata read itself returns NotFound (the boundary version is
+    // gone while the FE still believes min_version is low). The watermark must not drop below the
+    // retain boundary so the switch version can still be cleared.
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        *res = Status::NotFound("injected: retain-boundary metadata already vacuumed");
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5200);
+        info->set_min_version(1);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(::time(nullptr) + 60);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // Before the fix: min_retain_version - 1 == 2 (< switch version 3). After the fix: 3.
+        EXPECT_EQ(3, response.vacuumed_version());
+    }
+    SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::lake

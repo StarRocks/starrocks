@@ -16,7 +16,7 @@
 
 #include <fmt/format.h>
 
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
@@ -36,9 +36,9 @@ BuiltinInvertedReader::~BuiltinInvertedReader() {
 
 Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> index_meta,
                                            InvertedIndexIterator** iterator, const IndexReadOptions& index_opt) {
-    BitmapIndexIterator* iter;
+    SegmentBitmapIndexIterator* iter;
     RETURN_IF_ERROR(_bitmap_index->new_iterator(index_opt, &iter));
-    std::unique_ptr<BitmapIndexIterator> bitmap_itr;
+    std::unique_ptr<SegmentBitmapIndexIterator> bitmap_itr;
     bitmap_itr.reset(iter);
     if (!index_opt.segment_rows.has_value()) {
         return Status::InvalidArgument(fmt::format("No segment rows specified"));

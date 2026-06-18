@@ -481,7 +481,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
         const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
-        const std::vector<SparseRangePtr>* rowid_range_per_segment) {
+        const std::vector<SparseRangePtr>* rowid_range_per_segment,
+        const std::vector<OlapReaderStatistics*>* per_segment_stats) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
     {
@@ -489,8 +490,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         RETURN_IF_ERROR(load_segments(&segments, false));
     }
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-    std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
+    // Size the result up front so each iterator is written to its segment's position. The returned
+    // vector must stay positionally aligned with `segments`: callers index it by segment position to
+    // derive the rssid (rowset id + segment idx), skip null entries, and assert the size equals the
+    // segment count. A segment that produces no iterator (e.g. fully pruned by zonemap predicate
+    // filtering) is left as the default null, never compacting away its slot.
+    std::vector<ChunkIteratorPtr> seg_iterators(segments.size());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
@@ -509,6 +514,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
+        // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
+        // shared stats object; otherwise all segments share `stats`.
+        if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {
+            seg_options.stats = (*per_segment_stats)[i];
+        }
         seg_options.tablet_range = std::nullopt;
         if (i < _metadata->segment_metas_size() && _metadata->segment_metas(i).shared() &&
             shared_segment_range.has_value()) {
@@ -522,12 +532,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            // Leave seg_iterators[i] as the default null placeholder, preserving alignment.
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        seg_iterators.push_back(std::move(res).value());
+        seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
 }

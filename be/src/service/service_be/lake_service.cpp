@@ -439,11 +439,17 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
                             }
                         }
-                        // Report tablet for async VI build only on async-mode tables
-                        // whose new rowset(s) have vector_index_ids. Sync-mode tables
-                        // build VI inline on write/compaction, so FE dispatch is unneeded.
-                        bool new_rowset_has_vi = false;
-                        if (is_async_vector_index_table(*metadata)) {
+                        // Report tablet for async VI build-frontier tracking on async-mode
+                        // tables. We report whenever this publish advanced the tablet version,
+                        // even when the new rowset carries no vector_index_ids (bundle /
+                        // below-threshold segments skip the inline .vi). build_needed lets the
+                        // FE tell the two apart:
+                        //   true  -> a new segment needs a real .vi build; FE dispatches to CN.
+                        //   false -> nothing to build this version; FE advances built_version
+                        //            directly (no CN round-trip), so observability isn't stuck.
+                        // Sync-mode tables build VI inline, so no FE dispatch is needed.
+                        if (is_async_vector_index_table(*metadata) && metadata->version() > base_version) {
+                            bool new_rowset_has_vi = false;
                             for (const auto& rowset : metadata->rowsets()) {
                                 int64_t rv = rowset.has_version() ? rowset.version() : 0;
                                 if (rv <= base_version) continue; // existing rowset, not from this publish
@@ -455,12 +461,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 }
                                 if (new_rowset_has_vi) break;
                             }
-                        }
-                        if (new_rowset_has_vi) {
                             std::lock_guard l(response_mtx);
                             auto* info = response->add_vector_index_build_infos();
                             info->set_tablet_id(metadata->id());
                             info->set_version(metadata->version());
+                            info->set_build_needed(new_rowset_has_vi);
                         }
                     } else {
                         if (res.status().is_resource_busy()) {
@@ -1719,11 +1724,22 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
 
     TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
 
+    // Anchor the deadline at the time the request is received: the FE caller waits at most
+    // |timeout_ms| from now, so once the deadline passes (whether the task waited in the
+    // thread pool queue or is in the middle of vacuuming) the task aborts itself instead of
+    // keeping a vacuum worker occupied for a response nobody reads. Requests without the
+    // field (older FE versions) carry no deadline and run to completion as before, and
+    // setting |lake_vacuum_enable_task_timeout| to false disables the deadline entirely.
+    int64_t deadline_ms = 0;
+    if (config::lake_vacuum_enable_task_timeout && request->has_timeout_ms() && request->timeout_ms() > 0) {
+        deadline_ms = butil::gettimeofday_ms() + request->timeout_ms();
+    }
+
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
                 DeferOp defer([&] { latch.count_down(); });
-                lake::vacuum(_tablet_mgr, *request, response);
+                lake::vacuum(_tablet_mgr, *request, response, deadline_ms);
             },
             [&] {
                 Status st = Status::Cancelled("vacuum task has been cancelled");

@@ -52,6 +52,11 @@ description: "Alphabetical s"
 - 标签: `storage_type`
 - 描述: 所有溢出存储目录当前已占用的磁盘字节数。`storage_type=local` 汇总 BE 溢出 `DirManager` 管理的每个目录中正在使用的字节数。`storage_type=remote` 为对称保留，当前始终为 0，因为远端溢出存储由单独的查询实例各自管理，没有全局的聚合数据。
 
+## `spill_parked_with_uncovered_reason_total`
+
+- 单位: 个
+- 描述: pipeline driver 因溢出等待被挂起、但其声明的等待原因不在任何唤醒订阅覆盖范围内的次数。健康系统中恒为 0；非 0 表示有 driver 挂起后无人唤醒（唤醒表存在缺陷，查询可能停滞直至被取消），应当配置告警。每次发生同时会在 BE 日志输出限频 WARNING。
+
 ## `spm_baseline_count`
 
 - 单位：个
@@ -543,13 +548,13 @@ description: "Alphabetical s"
 
 - 单位：毫秒
 - 类型：直方图
-- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。在两条生产路径上均触发 —— INSERT-from-FILES 的 hook（在 `StmtExecutor` 中、`StatementPlanner.plan` 打开导入 txn 之前调用）与 Broker Load 的 hook（在 `BrokerLoadJob.createLoadingTask` 中、`beginTxn` 打开 `T_load` 之前调用）；测试用的 `runPreSplit` 同步包装路径也触发。两种路径下触发导入本身均按分裂后的 tablet 布局做计划。
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。在所有生产导入类型上均触发 —— INSERT-from-FILES 与 INSERT-from-table（均经由 `InsertPreSplitHook`，在 `StmtExecutor` 中、`StatementPlanner.plan` 打开导入 txn 之前调用）以及 Broker Load（经由 `BrokerLoadPreSplitHook`，在 `BrokerLoadJob.createLoadingTask` 中、`beginTxn` 打开 `T_load` 之前调用），三者均通过共享的 `PreSplitFlow` 同步等待；测试用的 `runPreSplit` 同步包装路径也触发。所有路径下触发导入本身均按分裂后的 tablet 布局做计划。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - 单位：计数
 - 类型：累计
-- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。INSERT-from-FILES 生产路径超时后会触发（INSERT 此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划 —— 守护线程还未推进则仍为原单 tablet 布局，若守护线程在我们放弃等待之后才完成则可能已部分／完全分裂；**不**递增 `tablet_pre_split_load_abort`，因为 INSERT 本身未被中止）；测试用的 `runPreSplit` 同步包装路径也会触发。Broker Load 生产路径不等待，因此不会更新此计数器。
+- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。所有生产导入类型超时后均会触发 —— INSERT-from-FILES、INSERT-from-table 与 Broker Load（三者均通过共享的 `PreSplitFlow` 同步等待）；测试用的 `runPreSplit` 同步包装路径也会触发。导入此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划（守护线程还未推进则仍为原单 tablet 布局，若守护线程在放弃等待之后才完成则可能已部分／完全分裂）；**不**递增 `tablet_pre_split_load_abort`，因为导入本身未被中止。
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 

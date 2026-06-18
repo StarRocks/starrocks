@@ -20,6 +20,7 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
+#include "exprs/dictmapping_expr_interface.h"
 #include "exprs/expr.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
@@ -34,7 +35,7 @@ class RuntimeState;
 // in Global Dictionary Optimization. The process of constructing a dictionary mapping requires
 // a new dictionary to be constructed using the origin global dictionary columns as input columns.
 // So BE needs to know the original expressions.
-class DictMappingExpr final : public Expr {
+class DictMappingExpr final : public Expr, public DictMappingExprInterface {
 public:
     DictMappingExpr(const TExprNode& node);
 
@@ -60,7 +61,7 @@ public:
         return _rewrite_status;
     }
 
-    SlotId slot_id() {
+    SlotId slot_id() const {
         DCHECK_GE(children().size(), 2);
         return down_cast<const ColumnRef*>(get_child(0))->slot_id();
     }
@@ -72,6 +73,21 @@ public:
     SlotId get_output_id() const { return _output_id; }
 
     void disable_open_rewrite() { _open_rewrite = false; }
+
+    SlotId dict_mapping_slot_id() const override { return slot_id(); }
+
+    Expr* dict_mapping_origin_expr() const override {
+        DCHECK_GE(children().size(), 2);
+        return get_child(1);
+    }
+
+    Status rewrite_dict_mapping_expr(const std::function<StatusOr<Expr*>()>& rewriter) override {
+        return rewrite(rewriter);
+    }
+
+    void set_dict_mapping_output_id(SlotId id) override { set_output_id(id); }
+
+    void disable_dict_mapping_open_rewrite() override { disable_open_rewrite(); }
 
 private:
     std::shared_ptr<std::once_flag> _rewrite_once_flag = std::make_shared<std::once_flag>();

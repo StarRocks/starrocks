@@ -23,12 +23,12 @@
 #include "common/metrics/process_metrics_registry.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 
@@ -153,7 +153,7 @@ void HdfsScanNodeTest::_create_runtime_state() {
     _runtime_state->init_mem_trackers(id);
     pipeline::FragmentContext* fragment_context = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
-    _runtime_state->set_fragment_ctx(fragment_context);
+    _runtime_state->set_fragment_ctx(fragment_context, &fragment_context->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
 }
 

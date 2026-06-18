@@ -41,6 +41,7 @@ import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider;
 import software.amazon.awssdk.profiles.ProfileFile;
 import software.amazon.awssdk.profiles.ProfileFileSystemSetting;
 import software.amazon.awssdk.regions.Region;
@@ -202,9 +203,9 @@ public class AwsCloudCredential implements CloudCredential {
         } else if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (useWebIdentityProfile) {
-            // Reads AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN from env vars via the default chain,
-            // mirroring BE's STSAssumeRoleWebIdentityCredentialsProvider behaviour.
-            return DefaultCredentialsProvider.builder().build();
+            return WebIdentityTokenFileCredentialsProvider.builder()
+                    .asyncCredentialUpdateEnabled(true)
+                    .build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
                 return StaticCredentialsProvider.create(

@@ -20,6 +20,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 
 namespace starrocks {
 
@@ -30,12 +31,13 @@ StatusOr<pipeline::OpFactories> AggregateStreamingNode::decompose_to_pipeline(
     ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     size_t degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
 
-    auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
+    auto should_cache =
+            ::starrocks::pipeline::builder::should_interpolate_cache_operator(context, id(), ops_with_sink[0]);
     bool could_local_shuffle = !should_cache && !context->enable_group_execution();
     if (could_local_shuffle && _tnode.agg_node.__isset.interpolate_passthrough &&
         _tnode.agg_node.interpolate_passthrough && context->could_local_shuffle(ops_with_sink)) {
-        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink,
-                                                                              degree_of_parallelism, true);
+        ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state(), id(), ops_with_sink, degree_of_parallelism, true);
     }
 
     auto* upstream_source_op = context->source_operator(ops_with_sink);
@@ -65,12 +67,13 @@ StatusOr<pipeline::OpFactories> AggregateStreamingNode::decompose_to_pipeline(
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
-        ops_with_source =
-                context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
+        ops_with_source = ::starrocks::pipeline::builder::interpolate_cache_operator(
+                context, id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
 
-    ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
+    ops_with_source =
+            ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, ops_with_source);
     return ops_with_source;
 }
 

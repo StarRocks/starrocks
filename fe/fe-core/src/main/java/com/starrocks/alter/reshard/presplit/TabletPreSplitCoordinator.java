@@ -148,6 +148,7 @@ public final class TabletPreSplitCoordinator {
         boolean configEnabled = switch (loadKind) {
             case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
             case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
+            case INSERT_FROM_TABLE -> Config.enable_tablet_pre_split_for_insert_from_table;
         };
         if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
@@ -205,9 +206,8 @@ public final class TabletPreSplitCoordinator {
      * {@link SkipReason#TIMEOUT_PRE_SUBMIT}, {@link SkipReason#SAMPLE_FAILED},
      * {@link SkipReason#NO_USEFUL_CUTS}, {@link SkipReason#SUBMIT_FAILED}.
      *
-     * @param activeComputeNodeCount compute nodes available to the load after
-     *                               warehouse/blocklist filtering (passed to the
-     *                               pipeline's internal tablet-count selector).
+     * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse
+     *                               (passed to the pipeline's internal tablet-count selector).
      */
     public static PreSplitOutcome submitAsynchronously(
             Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext,
@@ -317,7 +317,7 @@ public final class TabletPreSplitCoordinator {
      * Block on {@link PreSplitPipeline#awaitFinished} for the admitted reshard job
      * and record the latency histogram + post-submit hard-cap counter consistently
      * across the two callers ({@link #runPreSplit} for abort-on-timeout semantics,
-     * {@link com.starrocks.alter.reshard.presplit.InsertFromFilesPreSplitHook} for
+     * {@link com.starrocks.alter.reshard.presplit.InsertPreSplitHook} for
      * fail-safe semantics). Translates the generic {@link TimeoutException} the
      * pipeline declares into the package-typed
      * {@link PreSplitPostSubmitTimeoutException}; callers decide whether to abort
@@ -352,9 +352,9 @@ public final class TabletPreSplitCoordinator {
      * the inner helper still updates the latency histogram and bumps the
      * hard-cap counter on timeout.
      *
-     * <p>Used by both load-kind hooks ({@link InsertFromFilesPreSplitHook} and
-     * {@link BrokerLoadPreSplitHook}). Sync-await is deadlock-safe in both
-     * cases — INSERT-from-FILES runs the hook before {@code StatementPlanner.plan()}
+     * <p>Used by both load-kind hooks ({@link InsertPreSplitHook} for INSERT and
+     * {@link BrokerLoadPreSplitHook} for Broker Load). Sync-await is deadlock-safe in both
+     * cases — INSERT runs the hook before {@code StatementPlanner.plan()}
      * begins the load txn; Broker Load defers {@code BrokerLoadJob.beginTxn}
      * until after the hook returns. In neither case can the reshard daemon's
      * cleanup-phase {@code isPreviousTransactionsFinished} wait include the
@@ -482,8 +482,8 @@ public final class TabletPreSplitCoordinator {
      *
      * @param estimates              full-input estimates from the sampler. Only
      *                               {@link Estimates#totalBytes} is read.
-     * @param activeComputeNodeCount compute nodes available to the load, after
-     *                               warehouse/blocklist filtering. Must be {@code >= 1}.
+     * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
+     *                               Must be {@code >= 1}.
      */
     static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
         Objects.requireNonNull(estimates, "estimates");

@@ -21,7 +21,6 @@
 #include <unistd.h>
 
 #include <cinttypes>
-#include <limits>
 
 #include "base/uid_util.h"
 #include "common/process_exit.h"
@@ -43,7 +42,6 @@
 #include <memory>
 #include <mutex>
 
-#include "base/process/lite_exec.h"
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_diagnostic_fwd.h"
@@ -53,7 +51,6 @@
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/logconfig.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -144,6 +141,7 @@ static void dump_trace_info() {
     std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());                                        \
     mbuffer.clear();
 
+#ifndef __APPLE__
 #define JEMALLOC_CTL je_mallctl
 
 static int jemalloc_purge() {
@@ -160,7 +158,6 @@ static int jemalloc_dontdump() {
     return JEMALLOC_CTL(buffer, nullptr, nullptr, nullptr, 0);
 }
 
-#ifndef __APPLE__
 static void dontdump_unused_pages() {
     size_t prev_allocate_size = CurrentThread::current().get_consumed_bytes();
     static bool start_dump = false;
@@ -222,31 +219,6 @@ static void failure_function() {
     dump_trace_info();
     failure_handler_after_output_log();
     std::abort();
-}
-
-static std::mutex gcore_mutex;
-static bool gcore_done = false;
-void hook_on_query_timeout(const TUniqueId& query_id, size_t timeout_seconds) {
-    if (config::pipeline_gcore_timeout_threshold_sec > 0 &&
-        timeout_seconds > static_cast<size_t>(config::pipeline_gcore_timeout_threshold_sec)) {
-        std::unique_lock<std::mutex> lock(gcore_mutex);
-        if (gcore_done) {
-            return;
-        }
-
-        if (config::enable_core_file_size_optimization) {
-            jemalloc_purge();
-            jemalloc_dontdump();
-        }
-
-        std::string core_file = config::pipeline_gcore_output_dir + "/core-" + print_id(query_id);
-        LOG(WARNING) << "dump gcore via query timeout:" << timeout_seconds;
-        pid_t pid = getpid();
-        // gcore have too many verbose output. skip them
-        (void)lite_exec({"gcore", "-o", core_file, std::to_string(pid)}, std::numeric_limits<int>::max());
-        LOG(WARNING) << "gcore finished ";
-        gcore_done = true;
-    }
 }
 
 // Calculate timezone offset string dynamically with caching (thread-safe)

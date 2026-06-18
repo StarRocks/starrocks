@@ -282,7 +282,7 @@ public:
                 cnt += !is_nulls[i];
             }
         } else {
-            _temp_read_data.resize(read_count);
+            _temp_read_data.resize(read_count + 1);
             auto ret =
                     _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _temp_read_data.data(), read_count);
             if (UNLIKELY(ret <= 0)) {
@@ -504,7 +504,11 @@ private:
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
         // resize data
-        auto* binary_column = ColumnHelper::get_binary_column(dst);
+        auto* data_column = ColumnHelper::get_data_column(dst);
+        if (UNLIKELY(!data_column->is_binary())) {
+            return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+        }
+        auto* binary_column = down_cast<BinaryColumn*>(data_column);
         size_t read_count = count - null_cnt;
 
         if (read_count == 0) {
@@ -521,7 +525,6 @@ private:
             if (UNLIKELY(indices_out_of_bounds(_indexes.data(), read_count, _dict.size()))) {
                 return Status::InternalError("Index not in dictionary bounds");
             }
-            auto* binary_column = ColumnHelper::get_binary_column(dst);
             size_t cnt = 0;
             for (int i = 0; i < count; ++i) {
                 if (filter[i] && !is_nulls[i]) {
@@ -585,7 +588,11 @@ private:
             if (dst->is_nullable()) {
                 down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
-            auto* binary_column = ColumnHelper::get_binary_column(dst);
+            auto* data_column = ColumnHelper::get_data_column(dst);
+            if (UNLIKELY(!data_column->is_binary())) {
+                return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+            }
+            auto* binary_column = down_cast<BinaryColumn*>(data_column);
             for (int i = 0; i < count; ++i) {
                 if (filter[i]) {
                     binary_column->append(_dict[_indexes[i]]);

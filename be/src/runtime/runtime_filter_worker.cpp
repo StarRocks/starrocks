@@ -29,10 +29,10 @@
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/runtime_filter_hub.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_registry.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
@@ -961,7 +961,7 @@ static inline void receive_total_runtime_filter_pipeline(const RuntimeServices* 
             continue;
         }
         // FragmentContext is already destructed or invalid, so do nothing.
-        if (fragment_ctx->is_canceled()) {
+        if (fragment_ctx->runtime_state()->is_cancelled()) {
             continue;
         }
         fragment_ctx->runtime_filter_port()->receive_shared_runtime_filter(params.filter_id(), shared_rf);

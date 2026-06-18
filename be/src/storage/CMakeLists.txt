@@ -22,12 +22,26 @@ add_subdirectory(rowset)
 ADD_BE_LIB(StoragePrimitive
     primitive/aggregate_type.cpp
     primitive/chunk_iterator.cpp
+    primitive/column_and_predicate.cpp
+    primitive/column_expr_predicate.cpp
+    primitive/column_in_predicate.cpp
+    primitive/column_not_in_predicate.cpp
+    primitive/column_or_predicate.cpp
+    primitive/column_null_predicate.cpp
+    primitive/column_placeholder_predicate.cpp
+    primitive/column_predicate_cmp.cpp
+    primitive/column_predicate_dict_conjuct.cpp
+    primitive/column_value_range.cpp
+    primitive/conjunctive_predicates.cpp
+    primitive/disjunctive_predicates.cpp
     primitive/edit_version.cpp
     primitive/empty_iterator.cpp
     primitive/flat_json_config.cpp
     primitive/key_coder.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/predicate_parser.cpp
+    primitive/predicate_tree/predicate_tree.cpp
     primitive/storage_ids.cpp
     primitive/union_iterator.cpp
 )
@@ -172,19 +186,9 @@ set(STORAGE_FILES
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_variant_helper.cpp
-    column_predicate_cmp.cpp
-    column_in_predicate.cpp
-    column_not_in_predicate.cpp
-    column_null_predicate.cpp
-    column_or_predicate.cpp
-    column_and_predicate.cpp
-    column_expr_predicate.cpp
-    conjunctive_predicates.cpp
     runtime_filter_predicate.cpp
-    predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
-    disjunctive_predicates.cpp
     predicate_parser.cpp
     push_handler.cpp
     row_store_encoder.cpp
@@ -209,7 +213,6 @@ set(STORAGE_FILES
     compaction.cpp
     rowset_merger.cpp
     column_predicate_rewriter.cpp
-    column_predicate_dict_conjuct.cpp
     column_predicate_inverted_index_fallback.cpp
     compaction_task.cpp
     compaction_utils.cpp

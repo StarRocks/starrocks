@@ -16,11 +16,12 @@
 
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
-#include "storage/conjunctive_predicates.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/conjunctive_predicates.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class TabletSchema;
@@ -135,7 +136,7 @@ private:
 
     // Vector index search
     bool _use_vector_index = false;
-    bool _use_ivfpq = false;
+    bool _refine_distance = false;
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id = 0;
 

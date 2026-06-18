@@ -35,20 +35,20 @@
 #include "storage/rowset/scalar_column_iterator.h"
 
 #include "base/bit/bitmap.h"
+#include "cache/mem_cache/page_handle_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
-#include "storage/column_predicate.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
-#include "storage/rowset/page_handle_fwd.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

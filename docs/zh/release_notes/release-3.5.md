@@ -27,6 +27,48 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 
 :::
 
+## 3.5.18
+
+发布日期：2026 年 6 月 5 日
+
+### 行为变更
+
+- 显式事务中现在允许执行 `SHOW` 语句。 [#72954](https://github.com/StarRocks/starrocks/pull/72954)
+- `get_json_string` 现在会在处理 JSON 解析错误时遵循 `ALLOW_THROW_EXCEPTION`。 [#73199](https://github.com/StarRocks/starrocks/pull/73199)
+- 当窗口函数参数为表达式时，视图定义中现在会保留 `IGNORE NULLS`。 [#69971](https://github.com/StarRocks/starrocks/pull/69971)
+- Ranger 行过滤和列脱敏策略现在可以正确应用到 Hive 视图以及从 Hive 视图定义展开出的基表。 [#73265](https://github.com/StarRocks/starrocks/pull/73265)
+- Hive 分区统计信息不再按分区自动刷新。表级异步刷新会分批更新缓存，并在刷新期间保留已有缓存统计信息。 [#73563](https://github.com/StarRocks/starrocks/pull/73563)
+
+### 功能优化
+
+- 支持缓存 Java UDAF 的类级初始化，使 shared UDAF 可以在多个聚合和窗口函数实例之间复用已加载的类和生成的 Stub。 [#72038](https://github.com/StarRocks/starrocks/pull/72038)
+- 支持 Paimon 时间类型，并改进了 Paimon 物化视图处理。 [#58292](https://github.com/StarRocks/starrocks/pull/58292)
+- 在分区导入时为 shadowed `PartitionData` 增加了 Avro Schema 缓存。 [#72215](https://github.com/StarRocks/starrocks/pull/72215)
+- 为 MySQL 结果发送路径新增可配置 FE 写超时 `mysql_send_packet_timeout_ms`，避免向慢客户端发送结果时无限阻塞。 [#73646](https://github.com/StarRocks/starrocks/pull/73646)
+- 优化了 `CatalogRecycleBin` 中调整回收时间戳的查找逻辑。 [#72128](https://github.com/StarRocks/starrocks/pull/72128)
+- 降低了负载均衡、Compaction 调度、一致性检查和 StarMgr 元数据同步路径中的元数据和锁开销。 [#73555](https://github.com/StarRocks/starrocks/pull/73555) [#72218](https://github.com/StarRocks/starrocks/pull/72218) [#72178](https://github.com/StarRocks/starrocks/pull/72178) [#72108](https://github.com/StarRocks/starrocks/pull/72108)
+- 通过暴露底层原因以及文件、列、行上下文，改进了文件系统复制失败和 Parquet Broker Load 错误的诊断信息。 [#73414](https://github.com/StarRocks/starrocks/pull/73414) [#73236](https://github.com/StarRocks/starrocks/pull/73236)
+- 通过延迟获取 JDBC REMARKS、避免重复调用 Paimon Snapshot，以及为 `information_schema.tables_config` 下推 `table_name` 谓词，降低了外部 Catalog 和 Information Schema 元数据开销。 [#73488](https://github.com/StarRocks/starrocks/pull/73488) [#72892](https://github.com/StarRocks/starrocks/pull/72892) [#73210](https://github.com/StarRocks/starrocks/pull/73210)
+- 通过直接使用 `merge()` 简化了标量函数的 merge 实现。 [#69575](https://github.com/StarRocks/starrocks/pull/69575)
+
+### 问题修复
+
+修复了以下问题：
+
+- 空 `ALTER TABLE` 语句可能被解析为 OPTIMIZE 子句，以及回放异常 OPTIMIZE Job 时可能清空表默认分布信息的问题。 [#73352](https://github.com/StarRocks/starrocks/pull/73352)
+- Runtime Profile 中带小数的 Unit Counter 可能导致查询进度解析失败并产生 FE 告警日志的问题。 [#73683](https://github.com/StarRocks/starrocks/pull/73683)
+- `DeltaWriter::commit()` 中 `SegmentFlushTask` 的并发竞争问题，以及普通 Rowset Commit 过程中 `merge_condition` 丢失的问题。 [#73371](https://github.com/StarRocks/starrocks/pull/73371) [#72542](https://github.com/StarRocks/starrocks/pull/72542)
+- `SinkBuffer` 优雅退出、`PipelineTimerTask`、Runtime Filter Worker、Spillable Hash Join Probe、`information_schema.warehouse_queries`、Lake Vacuum、HTTP 连接注销以及 Query Queue 超时处理路径中的崩溃、卡住或清理不安全问题。 [#73202](https://github.com/StarRocks/starrocks/pull/73202) [#73082](https://github.com/StarRocks/starrocks/pull/73082) [#72058](https://github.com/StarRocks/starrocks/pull/72058) [#72626](https://github.com/StarRocks/starrocks/pull/72626) [#72397](https://github.com/StarRocks/starrocks/pull/72397) [#72019](https://github.com/StarRocks/starrocks/pull/72019) [#73088](https://github.com/StarRocks/starrocks/pull/73088) [#72006](https://github.com/StarRocks/starrocks/pull/72006) [#65802](https://github.com/StarRocks/starrocks/pull/65802)
+- 涉及 JDBC SQL Server 表、索引属性丢失、Plan Context 缓存内存泄漏、Paimon 表以及 MV Rewrite 后 Shuffle 分布错误的物化视图问题。 [#72962](https://github.com/StarRocks/starrocks/pull/72962) [#69187](https://github.com/StarRocks/starrocks/pull/69187) [#72300](https://github.com/StarRocks/starrocks/pull/72300) [#58292](https://github.com/StarRocks/starrocks/pull/58292) [#71075](https://github.com/StarRocks/starrocks/pull/71075)
+- Spark Connector 外表扫描、`INSERT OVERWRITE` 重规划、小 LIMIT 聚合 Spill 以及 `UNNEST` 生成列相关的查询规划和 Rewrite 问题。 [#73225](https://github.com/StarRocks/starrocks/pull/73225) [#72832](https://github.com/StarRocks/starrocks/pull/72832) [#72705](https://github.com/StarRocks/starrocks/pull/72705) [#72027](https://github.com/StarRocks/starrocks/pull/72027)
+- 查询 External Catalog 时 Paimon 主键列可能被错误标记为不可空。 [#71660](https://github.com/StarRocks/starrocks/pull/71660)
+- 主键表和 Tablet 元数据相关问题，包括 Partial Tablet Schema 中 Short Key 数量不一致、Rowset 元数据缓存预热死锁、磁盘 Data Cache 无法扩容、Starlet 中 Azure 文件系统客户端缓存问题，以及 StarOS 在 Colocate-heavy 集群均衡场景下的性能问题。 [#70586](https://github.com/StarRocks/starrocks/pull/70586) [#71459](https://github.com/StarRocks/starrocks/pull/71459) [#58206](https://github.com/StarRocks/starrocks/pull/58206) [#73145](https://github.com/StarRocks/starrocks/pull/73145) [#72391](https://github.com/StarRocks/starrocks/pull/72391)
+- 部分 Intensive Lock 获取过程中的 Locker 回滚和解锁顺序问题。 [#72789](https://github.com/StarRocks/starrocks/pull/72789) [#72423](https://github.com/StarRocks/starrocks/pull/72423)
+- 依赖安全漏洞以及 Broker 依赖回退问题。 [#72905](https://github.com/StarRocks/starrocks/pull/72905) [#72797](https://github.com/StarRocks/starrocks/pull/72797) [#72184](https://github.com/StarRocks/starrocks/pull/72184) [#72191](https://github.com/StarRocks/starrocks/pull/72191)
+- JDBC Scanner 初始化中的 JNI 局部引用泄漏问题。 [#72913](https://github.com/StarRocks/starrocks/pull/72913)
+- Parquet Scanner 对 Arrow Dictionary Values 的处理问题，以及 Scanner 构建中的 Apache Parquet 命名空间歧义问题。 [#71855](https://github.com/StarRocks/starrocks/pull/71855) [#72284](https://github.com/StarRocks/starrocks/pull/72284)
+- Iceberg Snapshot 过期时 `getPartitionLastUpdatedTime` 出现 NPE 的问题。 [#68925](https://github.com/StarRocks/starrocks/pull/68925)
+
 ## 3.5.17
 
 发布日期：2026 年 5 月 13 日
@@ -145,6 +187,7 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 - 表达式分区生成列现在在 `DESC` 和 `SHOW CREATE TABLE` 的输出中被隐藏。[#69793](https://github.com/StarRocks/starrocks/pull/69793)
 - 审计日志中不再包含 Client ID 信息。[#69383](https://github.com/StarRocks/starrocks/pull/69383)
 - `REFRESH EXTERNAL TABLE` 的 `FORCE` 选项已回滚，不再支持。[#70428](https://github.com/StarRocks/starrocks/pull/70428)
+- 将 LIKE 谓词中反斜杠转义序列的使用方式与 MySQL 保持一致。用户需要在 LIKE 谓词中连续指定四个反斜杠 `\\\\` 才能匹配数据中的单个反斜杠 `\`，或在谓词中指定八个反斜杠 `\\\\\\\\` 才能匹配两个连续的反斜杠 `\\`。
 
 ### 功能优化
 

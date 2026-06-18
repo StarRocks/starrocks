@@ -26,6 +26,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
@@ -47,6 +48,7 @@ import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -54,6 +56,7 @@ import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -133,6 +136,24 @@ public class IVMAnalyzer {
 
     private static boolean isTemporal(Type t) {
         return t.isDate() || t.isDatetime();
+    }
+
+    // Mirror QueryTransformer.aggregate's grouping-key derivation: dedup, and drop constant keys
+    // unless every key is constant (then keep the first, like aggregate()'s groupAllConst). The
+    // synthesized DISTINCT GROUP BY and the encoded __ROW_ID__ must use the same keys the refresh
+    // aggregate groups by, or the merge join probes a different key set (no-match / duplicate rows).
+    private static List<Expr> normalizeGroupKeys(List<Expr> keys) {
+        boolean allConstant = keys.stream().allMatch(Expr::isConstant);
+        List<Expr> normalized = Lists.newArrayList();
+        for (Expr key : keys) {
+            if (key.isConstant() && !(allConstant && normalized.isEmpty())) {
+                continue;
+            }
+            if (!normalized.contains(key)) {
+                normalized.add(key);
+            }
+        }
+        return normalized;
     }
 
     private final ConnectContext connectContext;
@@ -271,6 +292,14 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support HAVING with aggregate functions, " +
                     "but got: %s", ExprToSql.toSql(selectRelation.getHaving()));
         }
+        // GROUPING SETS / ROLLUP / CUBE have no IVM delta rule (they lower to a Repeat operator), and
+        // GROUP BY ALL would fold the prepended __ROW_ID__ output into the grouping keys and double-encode
+        // the row id at refresh. Only plain GROUP BY keeps the encoded __ROW_ID__ aligned with the keys.
+        GroupByClause groupByClause = selectRelation.getGroupByClause();
+        if (groupByClause != null && groupByClause.getGroupingType() != GroupByClause.GroupingType.GROUP_BY) {
+            throw new SemanticException("IVMAnalyzer does not support %s for incremental view maintenance",
+                    groupByClause.getGroupingType());
+        }
         boolean isRetractable = checkAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
         isRetractable |= checkRelation(innerRelation);
@@ -323,6 +352,23 @@ public class IVMAnalyzer {
         List<FunctionCallExpr> aggregateExprs = selectRelation.getAggregate();
         List<Expr> groupByExprs = selectRelation.getGroupBy();
 
+        // SELECT DISTINCT <outputs> is GROUP BY <outputs> with no aggregates, but the optimizer only
+        // lowers DISTINCT to a group-by at refresh. Rewrite it to a real GROUP BY so CREATE and refresh
+        // share the QUERY_COMPUTED path with a matching __ROW_ID__ join key. Re-analysis re-derives
+        // isDistinct from the SelectList and groupBy from the GroupByClause, so set both at the source.
+        if (selectRelation.isDistinct() && CollectionUtils.isEmpty(groupByExprs)) {
+            List<Expr> distinctKeys = normalizeGroupKeys(selectRelation.getOutputExpression());
+            // normalizeGroupKeys keeps a lone constant only when every output is constant
+            // (SELECT DISTINCT 1) -- that has no real grouping key, so leave it to the gate below
+            // (AUTO_INCREMENT) rather than synthesizing a constant GROUP BY (an ordinal on re-parse).
+            if (distinctKeys.stream().anyMatch(expr -> !expr.isConstant())) {
+                selectRelation.getSelectList().setIsDistinct(false);
+                selectRelation.setGroupByClause(new GroupByClause(
+                        ExprUtils.cloneAndResetList(distinctKeys), GroupByClause.GroupingType.GROUP_BY));
+                groupByExprs = distinctKeys;
+            }
+        }
+
         // Gate on GROUP BY, not aggregates: the refresh path (IvmDeltaAggregateRule) keys on
         // GROUP BY, so a GROUP BY-only query must also get QUERY_COMPUTED row ids here — else the
         // AUTO_INCREMENT MV it would otherwise build crashes refresh on a row-id type mismatch.
@@ -365,12 +411,13 @@ public class IVMAnalyzer {
                 .toList();
         selectRelation.setAggregate(newAggFuncs);
 
-        // Build the row ID function expression
-        int encodeRowIdVersion = IvmOpUtils.deduceEncodeRowIdVersion(groupByExprs);
+        // Build the row ID from the group keys, normalized like the refresh aggregate (see normalizeGroupKeys).
+        List<Expr> rowIdKeys = normalizeGroupKeys(groupByExprs);
+        int encodeRowIdVersion = IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
         if (statement != null) {
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
         }
-        FunctionCallExpr rowIdFuncExpr = IvmOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, groupByExprs);
+        FunctionCallExpr rowIdFuncExpr = IvmOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, rowIdKeys);
         SelectList selectList = selectRelation.getSelectList();
         List<SelectListItem> newItems = Lists.newArrayList();
         // add row_id func expr
@@ -400,6 +447,20 @@ public class IVMAnalyzer {
         newAggFuncInfos.stream()
                 .forEach(aggFunctionInfo -> newOutputExpressions.add(aggFunctionInfo.newAggFunc));
         selectRelation.setOutputExpr(newOutputExpressions);
+
+        // __ROW_ID__ is now output column 1, so a positional GROUP BY ordinal would re-resolve to it
+        // on re-analysis -- the aggregate would group by the encoded row id and the merge join would
+        // re-encode it, splitting one group across rows. Shift ordinals past the prepended column.
+        GroupByClause groupByClause = selectRelation.getGroupByClause();
+        if (groupByClause != null && groupByClause.getGroupingType() == GroupByClause.GroupingType.GROUP_BY) {
+            ArrayList<Expr> shiftedKeys = Lists.newArrayList();
+            for (Expr key : groupByClause.getGroupingExprs()) {
+                shiftedKeys.add(key instanceof IntLiteral
+                        ? new IntLiteral(((IntLiteral) key).getLongValue() + 1)
+                        : key);
+            }
+            selectRelation.setGroupByClause(new GroupByClause(shiftedKeys, GroupByClause.GroupingType.GROUP_BY));
+        }
         return true;
     }
 

@@ -35,20 +35,41 @@ TEST(RuntimeStateCoreTest, FragmentDictStateSetGet) {
     EXPECT_EQ(ptr, const_state.fragment_dict_state());
 }
 
-TEST(RuntimeStateCoreTest, SetFragmentCtxKeepsFragmentDictStateExplicit) {
+TEST(RuntimeStateCoreTest, SetFragmentCtxAlsoSetsFragmentRuntimeStateAndKeepsFragmentDictStateExplicit) {
     EXPECT_EXIT(
             [] {
                 RuntimeState state;
                 auto* fragment_ctx = reinterpret_cast<pipeline::FragmentContext*>(static_cast<uintptr_t>(0x1234));
+                auto* fragment_runtime_state =
+                        reinterpret_cast<pipeline::FragmentRuntimeState*>(static_cast<uintptr_t>(0x3456));
                 auto* fragment_dict_state = reinterpret_cast<FragmentDictState*>(static_cast<uintptr_t>(0x5678));
                 state.set_fragment_dict_state(fragment_dict_state);
-                state.set_fragment_ctx(fragment_ctx);
-                if (state.fragment_ctx() != fragment_ctx || state.fragment_dict_state() != fragment_dict_state) {
+                state.set_fragment_ctx(fragment_ctx, fragment_runtime_state);
+                if (state.fragment_ctx() != fragment_ctx || state.fragment_runtime_state() != fragment_runtime_state ||
+                    state.fragment_dict_state() != fragment_dict_state) {
                     std::_Exit(1);
                 }
                 std::_Exit(0);
             }(),
             ::testing::ExitedWithCode(0), "");
+}
+
+TEST(RuntimeStateCoreTest, QueryCtxAndQueryRuntimeStateDefaultNull) {
+    RuntimeState state;
+    EXPECT_EQ(nullptr, state.query_ctx());
+    EXPECT_EQ(nullptr, state.query_runtime_state());
+    EXPECT_EQ(state.obj_pool(), state.global_obj_pool());
+}
+
+TEST(RuntimeStateCoreTest, SetQueryCtxAlsoSetsQueryRuntimeStateAndGlobalObjectPool) {
+    RuntimeState state;
+    auto* query_ctx = reinterpret_cast<pipeline::QueryContext*>(static_cast<uintptr_t>(0x1234));
+    auto* query_runtime_state = reinterpret_cast<pipeline::QueryRuntimeState*>(static_cast<uintptr_t>(0x3456));
+    auto* query_obj_pool = reinterpret_cast<ObjectPool*>(static_cast<uintptr_t>(0x5678));
+    state.set_query_ctx(query_ctx, query_runtime_state, query_obj_pool);
+    EXPECT_EQ(query_ctx, state.query_ctx());
+    EXPECT_EQ(query_runtime_state, state.query_runtime_state());
+    EXPECT_EQ(query_obj_pool, state.global_obj_pool());
 }
 
 TEST(RuntimeStateCoreTest, FragmentRuntimeStateDefaultNull) {

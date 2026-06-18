@@ -874,6 +874,30 @@ TEST(TabletSplitterTest, colocate_aware_split_keeps_stats_consistent_across_pref
     EXPECT_GT(left_it->second.second, 0);
 }
 
+// Regression for the DATA-DRIVEN colocate split rejecting tables whose sort key is implicit.
+// A PRIMARY KEY (or DUPLICATE KEY without an explicit ORDER BY) table leaves sort_key_idxes empty
+// in the raw TabletSchemaPB. get_tablet_split_ranges_impl must resolve the arity from the
+// materialized schema (empty sort_key_idxes => key columns) before validating colocate_column_count;
+// reading the raw PB saw arity 0 and rejected every colocate split, silently falling back to an
+// identical tablet so an oversized colocate tablet never split.
+TEST(TabletSplitterTest, data_driven_colocate_split_resolves_empty_sort_key_idxes) {
+    auto m = make_empty_metadata_bigint_key_no_sort_key_idxes(0, 100);
+    ASSERT_TRUE(m->schema().sort_key_idxes().empty());
+
+    // colocate_column_count == 1 (the single key column) must pass the arity gate now that it is
+    // resolved against the materialized schema. The empty tablet then fails later at segment
+    // loading -- proving the gate was passed (pre-fix it failed with "Invalid colocate_column_count").
+    std::vector<TabletRangeInfo> split_ranges;
+    auto s = get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &split_ranges,
+                                     /*colocate_column_count=*/1);
+    ASSERT_FALSE(s.ok());
+    const std::string msg = s.to_string();
+    EXPECT_EQ(std::string::npos, msg.find("Invalid colocate_column_count"))
+            << "arity gate must resolve empty sort_key_idxes to key columns; actual: " << msg;
+    EXPECT_NE(std::string::npos, msg.find("No segments"))
+            << "empty tablet must fail at segment loading, not the arity gate; actual: " << msg;
+}
+
 // -----------------------------------------------------------------------------
 // Happy path: empty tablet, K=2 well-formed ranges covering parent.
 // -----------------------------------------------------------------------------

@@ -387,13 +387,13 @@ macOS 版本编译的实现遵循以下原则：
 
 **Q: 编译时报错 "protobuf version mismatch"**
 
-A: 确保 BE 的 CMake 构建使用 `thirdparty/installed/bin/protoc` (版本 3.14.0)，而不是系统或 Homebrew 的 protobuf：
+A: 确保 BE 的 CMake 构建使用 `thirdparty/installed/bin/protoc` (版本 3.16.1)，而不是系统或 Homebrew 的 protobuf：
 
 ```bash
 # 检查 protobuf 版本
 /Users/kks/git/starrocks/thirdparty/installed/bin/protoc --version
 
-# 应该输出：libprotoc 3.14.0
+# 应该输出：libprotoc 3.16.1
 ```
 
 **Q: 编译时内存不足**

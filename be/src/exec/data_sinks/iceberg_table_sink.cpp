@@ -20,12 +20,13 @@
 #include "common/runtime_profile.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "formats/reserved_columns.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -65,10 +66,10 @@ Status append_iceberg_sink_column(const SlotDescriptor* slot,
     }
 
     formats::FileColumnId field_id;
-    if (col_name == HdfsScanner::ICEBERG_ROW_ID) {
-        field_id.field_id = HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID;
-    } else if (col_name == HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
-        field_id.field_id = HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID;
+    if (col_name == formats::kIcebergRowIdColumnName) {
+        field_id.field_id = formats::kIcebergRowIdColumnId;
+    } else if (col_name == formats::kIcebergLastUpdatedSequenceNumberColumnName) {
+        field_id.field_id = formats::kIcebergLastUpdatedSequenceNumberColumnId;
     } else {
         return Status::InternalError(
                 fmt::format("Iceberg sink field ids do not match output expressions, col_name={}", col_name));
@@ -145,9 +146,9 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     size_t sink_dop = context->data_sink_dop();
 
     if (iceberg_table_desc->is_unpartitioned_table() || t_iceberg_sink.is_static_partition_sink) {
-        auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
-                pipeline::LocalExchanger::PassThroughType::SCALE);
+        auto ops = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+                sink_dop, pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
         context->add_pipeline(ops);
     } else {
@@ -166,8 +167,8 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
             }
         }
 
-        auto ops = context->interpolate_local_key_partition_exchange(
-                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+        auto ops = ::starrocks::pipeline::builder::interpolate_local_key_partition_exchange(
+                context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop, transform_exprs);
         ops.emplace_back(std::move(op));
         context->add_pipeline(ops);

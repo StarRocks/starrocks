@@ -22,8 +22,12 @@
 #include "common/logging.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/load_path/dummy_load_path_mgr.h"
+#include "compute_env/load_path/load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer.h"
+#include "compute_env/profile_report_worker.h"
+#include "compute_env/query_cache/cache_manager.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/result/result_queue_mgr.h"
 #include "compute_env/spill/dir_manager.h"
@@ -91,6 +95,21 @@ Status ComputeEnv::init_workgroup(const ComputeEnvWorkGroupOptions& options) {
     return Status::OK();
 }
 
+Status ComputeEnv::init_load_path(std::vector<std::string> store_paths, bool use_dummy_load_path_mgr) {
+    if (_load_path_mgr != nullptr) {
+        return Status::InternalError("LoadPathMgr has been initialized");
+    }
+    std::unique_ptr<BaseLoadPathMgr> load_path_mgr;
+    if (use_dummy_load_path_mgr) {
+        load_path_mgr = std::make_unique<DummyLoadPathMgr>();
+    } else {
+        load_path_mgr = std::make_unique<LoadPathMgr>(std::move(store_paths));
+    }
+    RETURN_IF_ERROR(load_path_mgr->init());
+    _load_path_mgr = std::move(load_path_mgr);
+    return Status::OK();
+}
+
 Status ComputeEnv::init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics) {
     auto spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(spill_dir_mgr->init(config::spill_local_storage_dir, store_paths));
@@ -117,9 +136,31 @@ Status ComputeEnv::init_spill(const std::vector<std::string>& store_paths, Metri
     return Status::OK();
 }
 
+Status ComputeEnv::init_query_cache(size_t capacity) {
+    _cache_mgr = std::make_unique<query_cache::CacheManager>(capacity);
+    return Status::OK();
+}
+
+Status ComputeEnv::init_profile_report_worker(ProfileReportWorkerOptions options) {
+    if (_profile_report_worker != nullptr) {
+        return Status::InternalError("ProfileReportWorker has been initialized");
+    }
+    if (options.report_non_pipeline_fragments == nullptr || options.report_pipeline_fragments == nullptr) {
+        return Status::InternalError("ProfileReportWorker report callbacks must be set");
+    }
+    _profile_report_worker = std::make_unique<ProfileReportWorker>(std::move(options));
+    return Status::OK();
+}
+
 void ComputeEnv::stop() {
     if (_stream_mgr != nullptr) {
         _stream_mgr->close();
+    }
+}
+
+void ComputeEnv::stop_profile_report_worker() {
+    if (_profile_report_worker != nullptr) {
+        _profile_report_worker->close();
     }
 }
 
@@ -139,7 +180,18 @@ void ComputeEnv::stop_result_mgr() {
     }
 }
 
+void ComputeEnv::destroy_profile_report_worker() {
+    stop_profile_report_worker();
+    _profile_report_worker.reset();
+}
+
+void ComputeEnv::destroy_load_path() {
+    _load_path_mgr.reset();
+}
+
 void ComputeEnv::destroy() {
+    destroy_profile_report_worker();
+    destroy_load_path();
     _global_spill_manager.reset();
     _spill_dir_mgr.reset();
     if (_workgroup_manager != nullptr) {
@@ -151,6 +203,7 @@ void ComputeEnv::destroy() {
     _result_queue_mgr.reset();
     _result_mgr.reset();
     _stream_mgr.reset();
+    _cache_mgr.reset();
     _driver_limiter.reset();
     _pipeline_timer.reset();
 }

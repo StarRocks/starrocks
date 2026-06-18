@@ -17,18 +17,19 @@
 #include <chrono>
 
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/query_context_manager.h"
+#include "exec/runtime/schedule/event_scheduler.h"
+#include "platform/query_timeout_hook.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/logconfig.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -95,6 +96,10 @@ void PipelineDriverPoller::run_internal() {
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
                 WARN_IF_POLLER_TIMEOUT(driver->to_readable_string());
+                auto* runtime_state = driver->runtime_state();
+                DCHECK(runtime_state != nullptr);
+                auto* fragment_ctx = runtime_state->fragment_ctx();
+                DCHECK(fragment_ctx != nullptr);
                 if (!driver->is_query_never_expired() && driver->query_runtime_state()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
@@ -102,22 +107,22 @@ void PipelineDriverPoller::run_internal() {
                     //
                     // If the fragment is expired when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
-                    size_t expired_log_count = driver->fragment_ctx()->expired_log_count();
+                    size_t expired_log_count = fragment_ctx->expired_log_count();
                     if (expired_log_count <= 10) {
                         LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
-                        driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
+                        fragment_ctx->set_expired_log_count(++expired_log_count);
                     }
                     auto query_id = driver->query_runtime_state()->query_id();
                     size_t timeout = driver->query_runtime_state()->get_query_expire_seconds();
                     hook_on_query_timeout(query_id, timeout);
-                    driver->fragment_ctx()->cancel(
-                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));
+                    cancel_fragment_context(fragment_ctx, Status::TimedOut(fmt::format(
+                                                                  "Query reached its timeout of {} seconds", timeout)));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
-                } else if (driver->fragment_ctx()->is_canceled()) {
+                } else if (runtime_state->is_cancelled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
-                } else if (driver->need_report_exec_state()) {
+                } else if (!driver->is_finished() && fragment_ctx->need_report_exec_state()) {
                     // If the runtime profile is enabled, the driver should be rescheduled after the timeout for triggering
                     // the profile report prcessing.
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
@@ -132,8 +137,8 @@ void PipelineDriverPoller::run_internal() {
                         // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
                         // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
                         // FragmentContext is unregistered prematurely.
-                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                                       : DriverState::FINISH);
+                        driver->set_driver_state(runtime_state->is_cancelled() ? DriverState::CANCELED
+                                                                               : DriverState::FINISH);
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
@@ -143,7 +148,7 @@ void PipelineDriverPoller::run_internal() {
                 } else {
                     auto status_or_is_not_blocked = driver->is_not_blocked();
                     if (!status_or_is_not_blocked.ok()) {
-                        driver->fragment_ctx()->cancel(status_or_is_not_blocked.status());
+                        cancel_fragment_context(fragment_ctx, status_or_is_not_blocked.status());
                         on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                     } else if (status_or_is_not_blocked.value()) {
                         driver->set_driver_state(DriverState::READY);
@@ -189,7 +194,11 @@ void PipelineDriverPoller::run_internal() {
 }
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
-    auto event_scheduler = driver->fragment_ctx()->event_scheduler();
+    auto* runtime_state = driver->runtime_state();
+    DCHECK(runtime_state != nullptr);
+    auto* fragment_ctx = runtime_state->fragment_ctx();
+    DCHECK(fragment_ctx != nullptr);
+    auto event_scheduler = fragment_ctx->event_scheduler();
     if (event_scheduler != nullptr) {
         event_scheduler->add_blocked_driver(driver);
         return;
@@ -212,7 +221,9 @@ void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drive
 
 void PipelineDriverPoller::on_cancel(DriverRawPtr driver, std::vector<DriverRawPtr>& ready_drivers,
                                      DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
-    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+    auto* runtime_state = driver->runtime_state();
+    DCHECK(runtime_state != nullptr);
+    driver->cancel_operators(runtime_state);
     if (driver->is_still_pending_finish()) {
         driver->set_driver_state(DriverState::PENDING_FINISH);
         ++driver_it;

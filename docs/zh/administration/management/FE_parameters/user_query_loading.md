@@ -531,6 +531,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: DELETE 语句中 IN 谓词允许的最大元素数量。
 - 引入版本: -
 
+### `enable_non_primary_key_delete_warning`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，对非主键 OLAP 表（明细表、聚合表、更新表）执行成功的 `DELETE` 后，StarRocks 会在 MySQL OK 包的 `info` 字段中返回一条提示，提醒用户 `DELETE` 会写入删除谓词、在 base compaction 完成前每次查询都需要 merge-on-read，并建议批量按分区删除时改用 `ALTER TABLE ... TRUNCATE PARTITION`。设置为 `false` 可关闭此提示。该提示不会改变 DELETE 的语义或执行流程，只是额外向客户端返回一段 info 字符串。详见 [DELETE](../../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)。
+- 引入版本: -
+
 ### `max_create_table_timeout_second`
 
 - 默认值: 600
@@ -804,6 +813,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 统计信息缓存的更新间隔。
 - 引入版本: -
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制 Follower（以及重启恢复）在回放统计信息日志时如何刷新 Connector（外部表）统计信息缓存。设为 `true` 时，按日志中持久化的表 UUID 失效缓存，并在下次查询时惰性重新加载，从而避免在回放期间解析外部表元数据（`MetadataMgr.getTable`）——该解析可能因 Hive Metastore 或对象存储变慢而阻塞日志回放线程。设为 `false`（默认）时使用原有的主动刷新方式，保持现有行为。在该 UUID 被持久化之前写入的统计信息日志，无论该配置如何都会回退到主动刷新。
 
 ### `statistics_large_string_column_merge_threshold`
 

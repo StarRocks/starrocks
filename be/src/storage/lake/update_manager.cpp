@@ -722,8 +722,19 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     for (size_t i = 0; i < tschema->num_key_columns(); i++) pk_cids.push_back((uint32_t)i);
     Schema pkey_schema = ChunkHelper::convert_schema(tschema, pk_cids);
 
-    std::vector<uint32_t> update_cids(op_write.txn_meta().partial_update_column_ids().begin(),
-                                      op_write.txn_meta().partial_update_column_ids().end());
+    // Resolve cid from uid against current schema; partial_update_column_ids is stale across schema drift.
+    const auto& txn_meta = op_write.txn_meta();
+    std::vector<uint32_t> update_cids;
+    update_cids.reserve(txn_meta.partial_update_column_unique_ids_size());
+    for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
+        const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
+        const auto cid = tschema->field_index(uid);
+        if (cid == -1) {
+            return Status::InternalError(strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
+                                                             tablet->tablet_id()));
+        }
+        update_cids.push_back(static_cast<uint32_t>(cid));
+    }
 
     int32_t ai_cid = -1;
     for (int i = 0; i < tschema->num_columns(); ++i) {
@@ -1314,11 +1325,22 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
+    // Only parallelize when the segment iterator will actually split into more than one
+    // compare chunk. SegmentPKIterator splits at pk_index_parallel_execution_min_rows, so a
+    // rowset smaller than that yields a single chunk per segment, and comparing it inline on
+    // the publish thread is cheaper than a thread-pool round-trip. The rowset-wide row count
+    // is a safe lower bound for the per-segment count: if the whole rowset is under the
+    // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+    if (config::enable_pk_index_parallel_execution &&
+        params.op_write.rowset().num_rows() >= config::pk_index_parallel_execution_min_rows) {
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
+    // TRACE_COUNTER_* reads a thread-local current trace that pool worker threads do not
+    // inherit, so counters incremented inside a submitted compare task would silently drop.
+    // Capture the publish thread's trace and re-adopt it inside each worker task.
+    Trace* parent_trace = Trace::CurrentTrace();
 
     std::mutex mutex;
     Status status = Status::OK();
@@ -1332,6 +1354,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         result->chunk_physical_rowid_offset = current.physical_rowid_offset;
 
         auto compare_func = [&, result, current]() {
+            ADOPT_TRACE(parent_trace);
             auto st = process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx,
                                                                         upsert.get(), current, tablet_column,
                                                                         read_column_ids, index, result);
@@ -1348,6 +1371,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
                 status.update(submit_st);
             }
         } else {
+            // Single-chunk (or parallel execution disabled): compare on the publish thread.
             compare_func();
             RETURN_IF_ERROR(status);
         }

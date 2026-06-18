@@ -17,13 +17,13 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "compute_env/global_dict/parser.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_parser.h"
+#include "storage/primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
@@ -258,7 +258,7 @@ void ParquetUTBase::create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opc
 
 void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, const RuntimeFilterProbeCollector* rf,
                                             TupleDescriptor* tuple_desc, RuntimeState* runtime_state,
-                                            HdfsScannerContext* params) {
+                                            HdfsScannerContext* ctx) {
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &conjuncts;
     opts.tuple_desc = tuple_desc;
@@ -268,12 +268,13 @@ void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = {true, true};
-    params->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
-    ASSERT_TRUE(params->conjuncts_manager->parse_conjuncts().ok());
+    ctx->predicates.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ASSERT_TRUE(ctx->predicates.conjuncts_manager->parse_conjuncts().ok());
     ConnectorPredicateParser predicate_parser{&tuple_desc->decoded_slots()};
-    auto st = params->conjuncts_manager->get_predicate_tree(&predicate_parser, params->predicate_free_pool);
+    auto st = ctx->predicates.conjuncts_manager->get_predicate_tree(&predicate_parser,
+                                                                    ctx->predicates.predicate_free_pool);
     ASSERT_TRUE(st.ok());
-    params->predicate_tree = st.value();
+    ctx->predicates.predicate_tree = st.value();
 }
 
 void ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::type opcode, starrocks::SlotId slot_id,

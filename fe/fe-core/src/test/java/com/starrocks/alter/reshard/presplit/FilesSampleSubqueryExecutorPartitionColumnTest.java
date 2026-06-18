@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import org.mockito.Mockito;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.brokerFileStatus;
@@ -47,10 +49,8 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
         Column sortKey = bigintColumn("user_id");
         Column partitionColumn = bigintColumn("ts");
 
-        String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                Map.of("path", "s3://bucket/foo", "format", "parquet"),
-                List.of(sortKey),
-                List.of(partitionColumn),
+        Map<String, String> properties = Map.of("path", "s3://bucket/foo", "format", "parquet");
+        String sql = buildSampleSqlFromColumns(properties, List.of(sortKey), List.of(partitionColumn),
                 /*samplingRate=*/ 0.1, /*rowLimit=*/ 100, /*seed=*/ 0L);
 
         Assertions.assertTrue(sql.contains("`user_id`"), "sort-key column must appear in projection: " + sql);
@@ -65,10 +65,8 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
     void unpartitionedRequestKeepsCurrentSql() {
         Column sortKey = bigintColumn("user_id");
 
-        String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                Map.of("path", "s3://bucket/foo", "format", "parquet"),
-                List.of(sortKey),
-                List.of(),
+        Map<String, String> properties = Map.of("path", "s3://bucket/foo", "format", "parquet");
+        String sql = buildSampleSqlFromColumns(properties, List.of(sortKey), List.of(),
                 /*samplingRate=*/ 0.1, /*rowLimit=*/ 100, /*seed=*/ 0L);
 
         Assertions.assertTrue(sql.contains("`user_id`"));
@@ -83,10 +81,8 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
         Column yearColumn = bigintColumn("year");
         Column monthColumn = bigintColumn("month");
 
-        String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                Map.of("path", "s3://bucket/foo", "format", "parquet"),
-                List.of(sortKey),
-                List.of(yearColumn, monthColumn),
+        Map<String, String> properties = Map.of("path", "s3://bucket/foo", "format", "parquet");
+        String sql = buildSampleSqlFromColumns(properties, List.of(sortKey), List.of(yearColumn, monthColumn),
                 /*samplingRate=*/ 0.1, /*rowLimit=*/ 100, /*seed=*/ 0L);
 
         Assertions.assertTrue(sql.contains("`year`"));
@@ -107,8 +103,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
         properties.put("path", "s3://bucket/has\"quote/file*.parquet");
         properties.put("aws.s3.secret_key", "back\\slash");
 
-        String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                properties,
+        String sql = buildSampleSqlFromColumns(properties,
                 List.of(bigintColumn("user_id")),
                 List.of(bigintColumn("ts")),
                 /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
@@ -260,6 +255,27 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
         Assertions.assertFalse(thrown.getMessage().contains("sort-key"),
                 "null-on-non-nullable error must not misattribute the role to sort-key: "
                         + thrown.getMessage());
+    }
+
+    /**
+     * Convenience bridge used by SQL-synthesis tests: converts a FILES property map
+     * and column lists into the seams exposed by the refactored base class.
+     */
+    private static String buildSampleSqlFromColumns(
+            Map<String, String> filesProperties,
+            List<Column> sortKeyColumns, List<Column> partitionSourceColumns,
+            double samplingRate, int rowLimit, long seed) {
+        String propertiesClause = FilesSampleSubqueryExecutor.buildPropertiesClause(filesProperties);
+        String fromClauseSql = "FILES(" + propertiesClause + ")";
+        List<String> sortKeyIdents = sortKeyColumns.stream()
+                .map(c -> SqlUtils.getIdentSql(c.getName()))
+                .collect(Collectors.toList());
+        List<String> partitionIdents = partitionSourceColumns.stream()
+                .map(c -> SqlUtils.getIdentSql(c.getName()))
+                .collect(Collectors.toList());
+        return AbstractSqlSampleSubqueryExecutor.buildSampleSql(
+                fromClauseSql, /*whereClauseSqlOrNull=*/ null,
+                sortKeyIdents, partitionIdents, samplingRate, rowLimit, seed);
     }
 
     private static TableFunctionTable mockSourceTable(

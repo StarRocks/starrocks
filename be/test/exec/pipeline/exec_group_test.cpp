@@ -20,12 +20,13 @@
 #include "common/thread/threadpool.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
-#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/driver_executor.h"
+#include "exec/pipeline/primitives/execution_group_lifecycle.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -60,6 +61,33 @@ private:
     ColocateExecutionGroup* _group;
 };
 
+class MockExecutionGroupLifecycle final : public ExecutionGroupLifecycle {
+public:
+    void on_execution_group_finished() override { ++num_finished_groups; }
+
+    size_t num_finished_groups = 0;
+};
+
+TEST(ExecutionGroupTest, NotifiesExecutionGroupLifecycleOnceWhenAllPipelinesFinish) {
+    NormalExecutionGroup group;
+    MockExecutionGroupLifecycle lifecycle;
+    group.attach_execution_group_lifecycle(&lifecycle);
+
+    Pipeline pipeline1(1, {}, &group);
+    Pipeline pipeline2(2, {}, &group);
+    group.add_pipeline(&pipeline1);
+    group.add_pipeline(&pipeline2);
+
+    group.count_down_pipeline();
+    EXPECT_EQ(0, lifecycle.num_finished_groups);
+
+    group.count_down_pipeline();
+    EXPECT_EQ(1, lifecycle.num_finished_groups);
+
+    group.count_down_pipeline();
+    EXPECT_EQ(1, lifecycle.num_finished_groups);
+}
+
 TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
     std::unique_ptr<ThreadPool> tp;
     ASSERT_OK(ThreadPoolBuilder("mock").set_max_threads(4).build(&tp));
@@ -80,8 +108,8 @@ TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
         Operators ops_with_sink;
         ops_with_sink.emplace_back(factories[0]->create(100, i));
         ops_with_sink.emplace_back(factories[1]->create(100, i));
-        pipeline.drivers().emplace_back(
-                std::make_shared<PipelineDriver>(ops_with_sink, nullptr, nullptr, &pipeline, &pipeline, -1));
+        pipeline.mutable_drivers().emplace_back(std::make_shared<PipelineDriver>(
+                ops_with_sink, nullptr, nullptr, pipeline.pipeline_event(), &pipeline, nullptr, -1));
     }
 
     group.add_pipeline(&pipeline);

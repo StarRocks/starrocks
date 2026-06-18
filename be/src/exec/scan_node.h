@@ -44,6 +44,7 @@
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -51,8 +52,6 @@ namespace starrocks {
 namespace pipeline {
 class MorselQueueBuilder;
 using MorselQueueBuilderPtr = std::unique_ptr<MorselQueueBuilder>;
-class MorselQueueFactory;
-using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
 } // namespace pipeline
 
 class TScanRange;

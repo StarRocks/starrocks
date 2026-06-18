@@ -17,26 +17,27 @@
 #include <random>
 
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "column/nullable_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/query_context_manager.h"
 #include "exprs/function_context.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
-#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -82,6 +83,8 @@ void PipelineTestBase::_prepare() {
     _exec_env = ExecEnv::GetInstance();
 
     _prepare_request();
+    _request.params.query_id = generate_uuid();
+    _request.params.fragment_instance_id = generate_uuid();
 
     const auto& params = _request.params;
     const auto& query_id = params.query_id;
@@ -95,24 +98,25 @@ void PipelineTestBase::_prepare() {
     _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                  GlobalEnv::GetInstance()->query_pool_mem_tracker());
-    _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
+    auto fragment_ctx = std::make_shared<FragmentContext>();
+    _fragment_ctx = fragment_ctx.get();
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
+    _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
     _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
             _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
             _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
-    _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
     _fragment_future = _fragment_ctx->finish_future();
+    ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
     _runtime_state = _fragment_ctx->runtime_state();
 
     _runtime_state->set_chunk_size(_vector_chunk_size);
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
     _query_ctx->attach_to_runtime_state(_runtime_state);
-    _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     _obj_pool = _runtime_state->obj_pool();
@@ -126,7 +130,8 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
     _pipelines.clear();
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
-    _fragment_ctx->iterate_pipeline([this](Pipeline* pipeline) { pipeline->instantiate_drivers(_runtime_state); });
+    _fragment_ctx->iterate_pipeline(
+            [this](Pipeline* pipeline) { instantiate_pipeline_drivers(_fragment_ctx, pipeline); });
 }
 
 void PipelineTestBase::_execute() {

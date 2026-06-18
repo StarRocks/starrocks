@@ -71,11 +71,22 @@ CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 
+// Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
+// When writing a txn log takes longer than this threshold, the stack trace of the slow thread
+// is dumped to the log to help diagnose slow object-storage writes.
+// Disabled by default (<= 0); set to a positive value such as 4000 (4 seconds) to enable.
+CONF_mInt64(lake_put_txn_log_timeout_guard_ms, "-1");
+
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
+
+// Whether vacuum tasks honor the timeout carried in the request (VacuumRequest.timeout_ms)
+// and abort themselves once it elapses. Set to false to let vacuum tasks always run to
+// completion no matter how long the FE caller waits.
+CONF_mBool(lake_vacuum_enable_task_timeout, "true");
 
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 
@@ -104,7 +115,7 @@ CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 
 // If the local pk index file is older than this threshold
 // it may be evicted if the disk is full

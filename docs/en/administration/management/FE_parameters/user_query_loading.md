@@ -531,6 +531,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
 - Introduced in: -
 
+### `enable_non_primary_key_delete_warning`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When set to `true`, a successful `DELETE` against a non-Primary-Key OLAP table (Duplicate Key, Aggregate, Unique Key) returns an informational notice in the MySQL OK packet's `info` field, reminding the user that `DELETE` writes delete predicates and incurs merge-on-read cost until base compaction runs, and recommending `ALTER TABLE ... TRUNCATE PARTITION` for bulk partition removal. Set to `false` to suppress the notice. The notice does not change DELETE semantics or affect execution; it only adds an info string visible to the client. See [DELETE](../../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md) for context.
+- Introduced in: -
+
 ### `max_create_table_timeout_second`
 
 - Default: 600
@@ -804,6 +813,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The interval at which the cache of statistical information is updated.
 - Introduced in: -
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls how followers (and restart recovery) refresh the connector (external table) statistics cache when replaying statistics journals. When set to `true`, the cache is invalidated by the table UUID persisted in the journal and reloaded lazily on the next query, which avoids resolving external table metadata (`MetadataMgr.getTable`) during replay — such resolution may block the journal replayer on the Hive Metastore or object storage. When set to `false` (default), the legacy eager refresh is used, preserving existing behavior. Statistics journals written before this UUID was persisted always fall back to eager refresh regardless of this setting.
 
 ### `statistics_large_string_column_merge_threshold`
 

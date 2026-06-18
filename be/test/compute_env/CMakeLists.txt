@@ -53,7 +53,16 @@ add_executable(compute_env_test
         compute_env_test.cpp
         compute_env_test_main.cpp
         data_stream_mgr_test.cpp
+        fragment_dict_state_test.cpp
+        load_path_state_helper_test.cpp
+        load_path_mgr_test.cpp
+        profile_report_worker_test.cpp
+        query/file_scan_split_context_test.cpp
+        query/query_scan_helpers_test.cpp
+        query_cache_test.cpp
+        rejected_record_writer_test.cpp
         result_queue_mgr_test.cpp
+        runtime_range_pruner_test.cpp
         ${COMPUTE_ENV_WORKGROUP_TEST_FILES}
         ${COMPUTE_ENV_SPILL_TEST_FILES})
 set_target_properties(compute_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

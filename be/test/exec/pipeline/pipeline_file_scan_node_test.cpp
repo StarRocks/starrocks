@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -37,15 +38,17 @@
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/query_context_manager.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "gutil/map_util.h"
@@ -71,6 +74,9 @@ public:
         _exec_env = ExecEnv::GetInstance();
         _exec_env->process_metrics_registry()->root_registry()->set_collect_hook_enabled(true);
 
+        _request.params.query_id = generate_uuid();
+        _request.params.fragment_instance_id = generate_uuid();
+
         const auto& params = _request.params;
         const auto& query_id = params.query_id;
         const auto& fragment_id = params.fragment_instance_id;
@@ -83,24 +89,25 @@ public:
         _query_ctx->query_runtime_state().extend_query_lifetime();
         _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                      GlobalEnv::GetInstance()->query_pool_mem_tracker());
-        _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
-        _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
+        auto fragment_ctx = std::make_shared<FragmentContext>();
+        _fragment_ctx = fragment_ctx.get();
         _fragment_ctx->set_query_id(query_id);
         _fragment_ctx->set_fragment_instance_id(fragment_id);
+        _fragment_ctx->set_workgroup(_exec_env->workgroup_manager()->get_default_workgroup());
         _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
                 _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
                 _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
-        _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
         _fragment_future = _fragment_ctx->finish_future();
+        ASSERT_OK(_query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
         _runtime_state = _fragment_ctx->runtime_state();
 
         _runtime_state->set_chunk_size(config::vector_chunk_size);
         _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
         _runtime_state->set_be_number(_request.backend_num);
         _query_ctx->attach_to_runtime_state(_runtime_state);
-        _runtime_state->set_fragment_ctx(_fragment_ctx);
+        _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
         _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
         _pool = _runtime_state->obj_pool();
         auto sink_dop = degree_of_parallelism;
@@ -251,8 +258,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
         }
     });
 
-    _fragment_ctx->iterate_pipeline(
-            [this](auto pipeline) { pipeline->instantiate_drivers(_fragment_ctx->runtime_state()); });
+    _fragment_ctx->iterate_pipeline([this](auto pipeline) { instantiate_pipeline_drivers(_fragment_ctx, pipeline); });
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {

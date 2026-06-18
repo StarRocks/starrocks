@@ -18,7 +18,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
-#include "storage/convert_helper.h"
 #include "storage/primitive/column_mapping.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"

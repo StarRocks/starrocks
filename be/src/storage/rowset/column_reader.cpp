@@ -55,11 +55,11 @@
 #include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "storage/column_predicate.h"
+#include "runtime/env/global_env.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_file_reader.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "types/type_descriptor.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
@@ -67,6 +67,7 @@
 #endif
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/bloom_filter.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
@@ -77,7 +78,6 @@
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/options.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -437,18 +437,18 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
     auto bitmap_reader = std::make_unique<BitmapIndexReader>();
     ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
     (void)first_load;
-    BitmapIndexIterator* inner = nullptr;
+    SegmentBitmapIndexIterator* inner = nullptr;
     RETURN_IF_ERROR(bitmap_reader->new_iterator(sub_opts, &inner));
 
     // Wrap the inner iterator so destruction tears down its backing reader
     // and file handle deterministically. BitmapIndexIterator has a virtual
     // destructor, so the caller's `delete iterator` correctly dispatches
     // into the wrapper's dtor.
-    class OwningBitmapIndexIterator final : public BitmapIndexIterator {
+    class OwningBitmapIndexIterator final : public SegmentBitmapIndexIterator {
     public:
-        OwningBitmapIndexIterator(BitmapIndexIterator&& base, std::unique_ptr<BitmapIndexReader> reader,
+        OwningBitmapIndexIterator(SegmentBitmapIndexIterator&& base, std::unique_ptr<BitmapIndexReader> reader,
                                   std::unique_ptr<RandomAccessFile> file)
-                : BitmapIndexIterator(std::move(base)), _reader(std::move(reader)), _file(std::move(file)) {}
+                : SegmentBitmapIndexIterator(std::move(base)), _reader(std::move(reader)), _file(std::move(file)) {}
         ~OwningBitmapIndexIterator() override = default;
 
     private:
@@ -459,7 +459,7 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
     // Transfer inner iterator state into the wrapper. `inner` was allocated
     // by BitmapIndexReader::new_iterator via `new`, so we take ownership
     // through a unique_ptr and move-construct into the wrapper.
-    std::unique_ptr<BitmapIndexIterator> inner_owned(inner);
+    std::unique_ptr<SegmentBitmapIndexIterator> inner_owned(inner);
     *iterator = new OwningBitmapIndexIterator(std::move(*inner_owned), std::move(bitmap_reader), std::move(idx_file));
     return Status::OK();
 }
