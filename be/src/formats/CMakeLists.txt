@@ -21,6 +21,7 @@ ADD_BE_LIB(FormatCore
         file_writer.cpp
         io/async_flush_output_stream.cpp
         io/formatted_output_stream_file.cpp
+        reserved_columns.h
         scan_context.h
         utils.h
         )
