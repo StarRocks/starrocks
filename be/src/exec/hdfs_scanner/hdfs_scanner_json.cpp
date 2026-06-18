@@ -14,17 +14,12 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 
-<<<<<<< HEAD
-=======
-#include "base/compression/compression_utils.h"
-#include "base/string/utf8.h"
-#include "common/simdjson_util.h"
->>>>>>> 725fdae84e ([BugFix] Fix UTF8_ERROR when reading gzip-compressed JSON Hive external tables (#74827))
 #include "formats/avro/nullable_column.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
 #include "util/compression/compression_utils.h"
 #include "util/simdjson_util.h"
+#include "util/utf8.h"
 
 namespace starrocks {
 

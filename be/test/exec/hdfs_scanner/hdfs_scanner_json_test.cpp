@@ -17,17 +17,13 @@
 #include <google/protobuf/descriptor.pb.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include <cstdio>
 #include <fstream>
 
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
->>>>>>> 725fdae84e ([BugFix] Fix UTF8_ERROR when reading gzip-compressed JSON Hive external tables (#74827))
 #include "formats/parquet/parquet_test_util/util.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 class HdfsScannerJsonReaderTest : public testing::Test {
@@ -210,9 +206,6 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_wrong_order_json) {
     ASSERT_EQ(chunk->get_column_by_slot_id(1)->debug_string(),
               "['str_1', 'str_2', 'str_3', 'str_4', NULL, 'str_6', 'str_7', NULL]");
 }
-<<<<<<< HEAD
-} // namespace starrocks
-=======
 
 namespace {
 void write_file(const std::string& path, const std::string& content) {
@@ -254,7 +247,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_3byte_utf8_split_one_byte_before_boundary
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
     ASSERT_EQ(chunk->num_rows(), 3);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3]");
@@ -275,7 +268,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_3byte_utf8_split_two_bytes_before_boundar
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
     ASSERT_EQ(chunk->num_rows(), 3);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3]");
@@ -296,7 +289,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_4byte_utf8_split_across_boundary) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
     ASSERT_EQ(chunk->num_rows(), 3);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3]");
@@ -304,4 +297,3 @@ TEST_F(HdfsScannerJsonReaderTest, test_4byte_utf8_split_across_boundary) {
     ASSERT_EQ(col_value(chunk.get(), 1, 2), "end");
 }
 } // namespace starrocks
->>>>>>> 725fdae84e ([BugFix] Fix UTF8_ERROR when reading gzip-compressed JSON Hive external tables (#74827))
