@@ -69,11 +69,30 @@ private:
     std::vector<ChunkIteratorPtr> _children;
     size_t _cur_idx = 0;
     size_t _merged_rows = 0;
+    // Scratch chunk used to coalesce sparse child output (see do_get_next).
+    ChunkUniquePtr _coalesce_tmp;
 };
 
 inline Status UnionIterator::do_get_next(Chunk* chunk) {
-    while (_cur_idx < _children.size()) {
-        Status res = _children[_cur_idx]->get_next(chunk);
+    // Coalesce rows across the non-overlapping child segments into a full chunk
+    // before returning. A child segment iterator asserts the output chunk is
+    // empty and builds into it, so we pull each child into a scratch chunk and
+    // swap (zero-copy) when the output is still empty, only paying an append
+    // copy when topping a partial chunk up from a later segment.
+    //
+    // Without this, a segment that yields only a handful of rows -- e.g. a
+    // scattered secondary-index readback where each base segment matches a few
+    // rowids -- emits a tiny partial chunk, forcing one downstream
+    // (aggregation/scheduling) invocation per segment. On sparse scans this
+    // collapses thousands of tiny chunks into a few full ones; on dense scans
+    // the first child already fills the chunk so it stays a single swap.
+    const auto target_rows = static_cast<size_t>(chunk_size());
+    while (chunk->num_rows() < target_rows && _cur_idx < _children.size()) {
+        if (_coalesce_tmp == nullptr) {
+            _coalesce_tmp = chunk->clone_empty();
+        }
+        _coalesce_tmp->reset();
+        Status res = _children[_cur_idx]->get_next(_coalesce_tmp.get());
         if (res.is_end_of_file()) {
             _merged_rows += _children[_cur_idx]->merged_rows();
             _children[_cur_idx]->close();
@@ -81,7 +100,17 @@ inline Status UnionIterator::do_get_next(Chunk* chunk) {
             _cur_idx++;
             continue;
         }
-        return res;
+        if (!res.ok()) {
+            return res;
+        }
+        if (chunk->num_rows() == 0) {
+            chunk->swap_chunk(*_coalesce_tmp);
+        } else {
+            chunk->append(*_coalesce_tmp);
+        }
+    }
+    if (chunk->num_rows() > 0) {
+        return Status::OK();
     }
     return Status::EndOfFile("End of union iterator");
 }
