@@ -62,6 +62,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Hybrid backend selector for hive table.
@@ -94,6 +95,10 @@ public class HDFSBackendSelector implements BackendSelector {
     private final boolean shuffleScanRange;
     private final boolean useIncrementalScanRanges;
     private final int kCandidateNumber = 3;
+    // Number of top hash-candidate nodes a split may be cached/served on. Each scan range is routed to a
+    // uniformly random one of its top-N hash nodes, spreading a hot data object across N nodes instead of
+    // pinning it to its single hash home. 1 (default) preserves the original single-home placement behavior.
+    private final int cacheReplicaNum;
     // After testing, this value can ensure that the scan range size assigned to each BE is as uniform as possible,
     // and the largest scan data is not more than 1.1 times of the average value
     private final double kMaxImbalanceRatio = 1.1;
@@ -174,6 +179,7 @@ public class HDFSBackendSelector implements BackendSelector {
         this.hdfsScanRangeHasher = new HdfsScanRangeHasher();
         this.shuffleScanRange = shuffleScanRange;
         this.useIncrementalScanRanges = useIncrementalScanRanges;
+        this.cacheReplicaNum = connectContext.getSessionVariable().getHdfsBackendSelectorCacheReplicaNum();
         this.candidateWorkerProvider = initCandidateWorkerProvider();
     }
 
@@ -359,19 +365,46 @@ public class HDFSBackendSelector implements BackendSelector {
             Collections.shuffle(remoteScanRangeLocations);
         }
         // assign scan ranges.
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        // Only spread a split across its top-N hash candidates when cache locality is actually in play: the
+        // data cache is enabled and the user has not explicitly requested byte re-balancing. Otherwise fall
+        // back to the existing re-balance path so enable_scan_datacache=false and
+        // hdfs_backend_selector_force_rebalance=true keep their intended byte-balanced placement.
+        boolean useCacheReplicaSpread = cacheReplicaNum > 1
+                && sessionVariable.isEnableScanDataCache()
+                && !sessionVariable.getHdfsBackendSelectorForceRebalance();
+        int candidateCount = useCacheReplicaSpread ? Math.max(kCandidateNumber, cacheReplicaNum) : kCandidateNumber;
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
-            List<ComputeNode> backends = hashRing.get(scanRangeLocations, kCandidateNumber);
-            ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
+            List<ComputeNode> backends = hashRing.get(scanRangeLocations, candidateCount);
+            ComputeNode node;
+            if (useCacheReplicaSpread && !backends.isEmpty()) {
+                // Route each split to a uniformly random one of its top-N hash candidates so a hot data
+                // object is served by N nodes instead of pinning to its single hash home. Stateless: the
+                // only per-call state is the random draw.
+                int replicaCount = Math.min(cacheReplicaNum, backends.size());
+                node = backends.get(ThreadLocalRandom.current().nextInt(replicaCount));
+            } else {
+                // An empty backends list also falls through here: reBalanceScanRangeForComputeNode returns
+                // null and the node == null check below raises the clear "Failed to find backend" error.
+                node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
+            }
             if (node == null) {
                 throw new StarRocksException("Failed to find backend to execute");
             }
 
             ComputeNode candidateNode = null;
             if (candidateHashRing != null) {
-                List<ComputeNode> candidateBackends = candidateHashRing.get(scanRangeLocations, kCandidateNumber);
-                // if data cache is enabled, skip re-balancing because it makes the cache position undefined.
-                candidateNode = candidateBackends.get(0);
+                List<ComputeNode> candidateBackends = candidateHashRing.get(scanRangeLocations, candidateCount);
+                if (!candidateBackends.isEmpty()) {
+                    // Spread the peer datacache hint across the historical top-N as well when the execution
+                    // node is spread; otherwise all N execution replicas of a hot split would peer-read from
+                    // the single historical top-1 node, recreating the worker skew on the cache-read path.
+                    int candidateIndex = useCacheReplicaSpread
+                            ? ThreadLocalRandom.current().nextInt(Math.min(cacheReplicaNum, candidateBackends.size()))
+                            : 0;
+                    candidateNode = candidateBackends.get(candidateIndex);
+                }
             }
             recordScanRangeAssignment(node, candidateNode, backends, scanRangeLocations);
         }
