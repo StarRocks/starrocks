@@ -18,3 +18,22 @@ where table_name = 'test_column_default';
 
 -- query information_schema.columns without db
 select if(count(*) > 1, "OK", "FAILED") from INFORMATION_SCHEMA.COLUMNS;
+
+-- name: test_column_datetime_precision
+CREATE TABLE `test_column_datetime_precision` (
+  `id` int NOT NULL COMMENT "",
+  `dt` datetime NOT NULL COMMENT "",
+  `d` date NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- DATETIME_PRECISION must be non-NULL for DATETIME columns so MySQL-protocol
+-- clients (e.g. Trino's mysql connector) can derive COLUMN_SIZE; DATE and
+-- non-temporal columns stay NULL.
+select COLUMN_NAME, DATA_TYPE, DATETIME_PRECISION
+from INFORMATION_SCHEMA.COLUMNS
+where table_name = 'test_column_datetime_precision' order by ORDINAL_POSITION;
+drop table test_column_datetime_precision;
