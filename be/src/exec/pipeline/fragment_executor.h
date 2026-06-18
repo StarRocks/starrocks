@@ -155,6 +155,13 @@ private:
     int64_t _fragment_start_time = 0;
     QueryContextManager* _query_ctx_mgr = nullptr;
     QueryContext* _query_ctx = nullptr;
+    // Pin the QueryContext alive for at least as long as `_fragment_ctx`.
+    // Fragment operators cache raw pointers into query-scoped state (e.g.
+    // QueryContext::spill_manager()); if the QueryContext is reclaimed (its active
+    // fragment count reaches 0) while this executor still holds the last reference
+    // to `_fragment_ctx`, tearing the fragment down would deref freed memory.
+    // Declared before `_fragment_ctx` so it is destroyed AFTER it.
+    QueryContextPtr _query_ctx_hold = nullptr;
     FragmentContextPtr _fragment_ctx = nullptr;
     workgroup::WorkGroupPtr _wg = nullptr;
 };
