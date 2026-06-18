@@ -15,34 +15,13 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "gen_cpp/Types_types.h" // for TStorageMedium::type
+#include "storage/primitive/tablet_basic_info.h"
 
 namespace starrocks {
-
-struct TabletBasicInfo {
-    int64_t table_id{0};
-    int64_t partition_id{0};
-    int64_t tablet_id{0};
-    int64_t num_version{0};
-    int64_t max_version{0};
-    int64_t min_version{0};
-    int64_t num_rowset{0};
-    int64_t num_segment{0};
-    int64_t num_row{0};
-    int64_t data_size{0};
-    int64_t index_mem{0};
-    int64_t create_time{0};
-    int32_t state{0};
-    int32_t type{0};
-    std::string data_dir;
-    int64_t shard_id{0};
-    int64_t schema_hash{0};
-    int64_t index_disk_usage{0};
-    TStorageMedium::type medium_type;
-};
 
 class SchemaBeTabletsScanner : public SchemaScanner {
 public:
