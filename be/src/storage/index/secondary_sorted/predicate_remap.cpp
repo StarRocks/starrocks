@@ -16,9 +16,11 @@
 
 #include "common/logging.h"
 #include "common/object_pool.h"
-// PredicateType + new_column_*_predicate_from_datum factories live in
-// column_predicate.h (pulled in by predicate_remap.h); there is no
-// standalone storage/predicate_type.h header.
+#include "storage/primitive/column_predicate_factory.h"
+// new_column_*_predicate_from_datum factories now live in
+// storage/primitive/column_predicate_factory.h (split out of column_predicate.h
+// upstream); PredicateType comes via column_predicate.h (pulled in by
+// predicate_remap.h).
 
 namespace starrocks::secondary_sorted {
 
