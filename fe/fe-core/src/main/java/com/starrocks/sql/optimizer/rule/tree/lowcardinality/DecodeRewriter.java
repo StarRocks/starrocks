@@ -288,10 +288,13 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (info == null) {
             info = DecodeInfo.empty();
         }
+        ColumnRefSet encodedUnionColumns = new ColumnRefSet();
         final DecodeInfo finalInfo = info;
+        encodedUnionColumns.union(unionOp.getOutputColumnRefOp().stream().filter(
+                c -> finalInfo.outputStringColumns.contains(c) || finalInfo.usedStringColumns.contains(c)).toList());
         List<Map<ColumnRefOperator, ConstantOperator>> constantMappings =
                 context.unionDictionaryManager.generateConstantEncodingMap(
-                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), context.allStringColumns);
+                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), encodedUnionColumns);
         List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
         for (int i = 0; i < optExpression.arity(); ++i) {
             Map<ColumnRefOperator, ConstantOperator> constantMapping = constantMappings.get(i);
@@ -319,15 +322,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             optExpression.setChild(i, newChild);
         }
         List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
-                c -> context.allStringColumns.contains(c.getId())
-                        ? context.stringRefToDictRefMap.get(c) : c).toList();
+                c -> encodedUnionColumns.contains(c) ? context.stringRefToDictRefMap.get(c) : c).toList();
 
         ColumnRefSet inputColumns = new ColumnRefSet();
         inputColumns.union(finalInfo.inputStringColumns);
-        unionOp.getOutputColumnRefOp().stream().map(ColumnRefOperator::getId).filter(context.allStringColumns::contains)
-                .forEach(inputColumns::union);
-        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), inputColumns);
-        Projection newProjection = rewriteProjection(unionOp.getProjection(), inputColumns);
+        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), encodedUnionColumns);
+        Projection newProjection = rewriteProjection(unionOp.getProjection(), encodedUnionColumns);
 
         PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
                 unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,

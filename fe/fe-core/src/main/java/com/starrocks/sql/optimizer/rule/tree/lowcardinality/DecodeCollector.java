@@ -417,6 +417,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             info.outputStringColumns.intersect(alls);
             info.decodeStringColumns.intersect(alls);
             info.inputStringColumns.intersect(alls);
+            info.usedStringColumns.intersect(alls);
             if (!info.isEmpty()) {
                 context.operatorDecodeInfo.put(operator, info);
                 if (operator instanceof PhysicalHashAggregateOperator hashAgg) {
@@ -835,17 +836,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 List<Integer> childColumnIds = childColumns.stream().map(ColumnRefOperator::getId).toList();
                 boolean isCandidate = childColumns.stream().allMatch(
                         c -> context.outputStringColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
-                int outputColumnId = setOp.getOutputColumnRefOp().get(i).getId();
+                ColumnRefOperator outputColumn = setOp.getOutputColumnRefOp().get(i);
                 Integer useChildId;
                 if (isCandidate && (useChildId = unionDictionaryManager.mergeDictionaries(childColumnIds)) != null) {
                     childColumnIds.stream().filter(context.outputStringColumns::contains).forEach(c -> {
                         result.usedStringColumns.union(c);
                         expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
                     });
-                    stringRefToDefineExprMap.put(outputColumnId, childColumns.stream()
-                            .filter(c -> c.getId() == useChildId).findAny().orElseThrow());
-                    expressionStringRefCounter.put(outputColumnId, 1);
-                    result.outputStringColumns.union(outputColumnId);
+                    setDefineExpr(outputColumn, childColumns.stream()
+                            .filter(c -> c.getId() == useChildId).findAny().orElseThrow(), 1);
+                    result.outputStringColumns.union(outputColumn);
                 } else {
                     childColumns.stream().filter(c -> context.outputStringColumns.contains(c))
                             .forEach(result.decodeStringColumns::union);
