@@ -28,13 +28,17 @@
 
 namespace starrocks::lake {
 
-// Distribution of output segment file sizes (bytes) produced by lake compaction. Exposed via
+// Distribution of output segment file sizes (in KiB) produced by lake compaction. Exposed via
 // the BE metrics endpoint as gauge series (count, percentiles, max) under this name.
-static bvar::LatencyRecorder g_lake_compaction_output_segment_size_bytes("lake_compaction_output_segment_size_bytes");
+// Sizes are recorded in KiB (not bytes) on purpose: bvar::LatencyRecorder stores percentile
+// samples as uint32_t, so a byte-valued sample >= 4 GiB would wrap around and corrupt the
+// percentiles. Recording KiB raises that ceiling to 4 TiB, well beyond any single segment,
+// while still resolving small-file detection (a 64 KiB segment records as 64).
+static bvar::LatencyRecorder g_lake_compaction_output_segment_size_kb("lake_compaction_output_segment_size_kb");
 
 #ifdef BE_TEST
 int64_t lake_compaction_output_segment_size_recorded_count() {
-    return g_lake_compaction_output_segment_size_bytes.count();
+    return g_lake_compaction_output_segment_size_kb.count();
 }
 #endif
 
@@ -147,7 +151,9 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     int64_t put_count = 0;
     for (const auto& file : writer->segments()) {
         if (file.size.has_value()) {
-            g_lake_compaction_output_segment_size_bytes << file.size.value();
+            // Record in KiB; see g_lake_compaction_output_segment_size_kb for why bytes would
+            // overflow the uint32_t percentile samples.
+            g_lake_compaction_output_segment_size_kb << (file.size.value() >> 10);
         }
         ++put_count;
     }

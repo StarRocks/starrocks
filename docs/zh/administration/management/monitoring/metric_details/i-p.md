@@ -235,11 +235,11 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
-## `lake_compaction_output_segment_size_bytes`
+## `lake_compaction_output_segment_size_kb`
 
-- 单位：字节
+- 单位：KiB
 - 类型：分布（以 gauge 序列暴露：`_count`、`_latency_80/90/99`、`_max_latency`；分位数后缀由 BE 的 `bvar_latency_p1/p2/p3` 标志决定，默认 p1=80）
-- 描述：存算分离（lake）压缩任务生成的输出 Segment 文件大小分布。可通过百分位数发现产生大量小文件、增加远端存储 API 成本的低效压缩。注意：该指标基于 bvar `LatencyRecorder` 实现，因此其百分位序列名称带有 `_latency` 后缀，尽管单位为字节。
+- 描述：存算分离（lake）压缩任务生成的输出 Segment 文件大小分布。可通过百分位数发现产生大量小文件、增加远端存储 API 成本的低效压缩。记录单位为 KiB 而非字节：底层 bvar `LatencyRecorder` 以 32 位存储百分位采样，因此以字节为单位、达到或超过 4 GiB 的采样会发生回绕；使用 KiB 可将该上限提升至 4 TiB。注意：该指标基于 bvar `LatencyRecorder` 实现，因此尽管它度量的是文件大小，其百分位序列名称仍带有 `_latency` 后缀。
 
 ## `lake_compaction_remote_write_count`
 

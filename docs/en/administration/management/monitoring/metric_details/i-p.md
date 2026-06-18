@@ -235,11 +235,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
-## `lake_compaction_output_segment_size_bytes`
+## `lake_compaction_output_segment_size_kb`
 
-- Unit: Bytes
+- Unit: KiB
 - Type: Distribution (exposed as gauge series: `_count`, `_latency_80/90/99`, `_max_latency`; suffixes follow the `bvar_latency_p1/p2/p3` BE flags — default p1=80)
-- Description: Distribution of output segment file sizes produced by shared-data (lake) compaction tasks. Use the percentiles to spot wasteful small-file compactions that drive remote-storage API cost. Note: this metric is backed by a bvar `LatencyRecorder`, so its percentile series carry a `_latency` suffix even though the unit is bytes.
+- Description: Distribution of output segment file sizes produced by shared-data (lake) compaction tasks. Use the percentiles to spot wasteful small-file compactions that drive remote-storage API cost. Sizes are recorded in KiB rather than bytes: the backing bvar `LatencyRecorder` stores percentile samples as 32-bit values, so a byte-valued sample at or above 4 GiB would wrap around; KiB raises that ceiling to 4 TiB. Note: this metric is backed by a bvar `LatencyRecorder`, so its percentile series carry a `_latency` suffix even though it measures file size.
 
 ## `lake_compaction_remote_write_count`
 

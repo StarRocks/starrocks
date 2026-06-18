@@ -37,7 +37,7 @@ class TabletWriter;
 
 #ifdef BE_TEST
 // Cumulative number of output segment sizes recorded into the
-// lake_compaction_output_segment_size_bytes distribution metric. Test-only accessor.
+// lake_compaction_output_segment_size_kb distribution metric. Test-only accessor.
 int64_t lake_compaction_output_segment_size_recorded_count();
 #endif
 
