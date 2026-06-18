@@ -385,9 +385,8 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
     // Partition and not-existed columns must be appended before predicate evaluation
     // because ctxs_by_slot may reference non-file or partition slots.
-    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
-    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
+    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, chunk_size));
+    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
     return Status::OK();
 }
 
@@ -480,18 +479,7 @@ class HiveJniScanner : public JniScanner {
 public:
     HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
             : JniScanner(std::move(factory_class), std::move(params)) {}
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
-
-Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    // fill chunk with all wanted column exclude partition columns
-    ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
-    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
-    // only Hive needs partition columns appended explicitly; Paimon and Hudi append them on the Java side.
-    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
-    return Status::OK();
-}
 
 std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);

@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
+#include <optional>
 
 #include "cache/cache_options.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
@@ -93,6 +94,12 @@ struct HdfsScannerStats {
     // io coalesce
     int64_t active_lazy_coalesce_together = 0;
     int64_t active_lazy_coalesce_seperately = 0;
+    int64_t parquet_lazy_col_skip_rows = 0;
+    int64_t parquet_lazy_slot_triggered = 0;
+    int64_t parquet_lazy_read_count = 0;
+    int64_t parquet_lazy_read_ns = 0;
+    int64_t parquet_lazy_full_trigger_count = 0;
+    int64_t parquet_dict_code_predicate_eval_count = 0;
     // page statistics
     bool has_page_statistics = false;
     // page skip
@@ -134,6 +141,11 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* late_materialize_skip_rows_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_col_skip_rows_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_slot_triggered_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_read_count_counter = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_read_timer = nullptr;
+    RuntimeProfile::Counter* parquet_lazy_full_trigger_count_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_size = nullptr;
 
@@ -361,6 +373,8 @@ struct HdfsScannerContext {
 
     std::vector<SlotDescriptor*> not_existed_slots;
 
+    std::optional<SlotDescriptor*> _count_slot;
+
     // for iceberg reserved fields
     std::vector<SlotDescriptor*> reserved_field_slots;
 
@@ -406,6 +420,7 @@ struct HdfsScannerContext {
     }
 
     bool can_use_count_optimization() const;
+    bool has_count_column() const { return _count_slot.has_value(); }
 
     bool can_use_min_max_optimization() const;
 
@@ -427,13 +442,15 @@ struct HdfsScannerContext {
     // If there is no partition column in the chunk，append partition column to chunk，
     // otherwise update partition column in chunk
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t output_rows, int64_t value);
     MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
                                           const Columns& values);
+
+    Status append_side_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+    Status evaluate_all_predicates(ChunkPtr* chunk);
 
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
@@ -486,20 +503,6 @@ public:
     virtual void do_update_counter(HdfsScannerProfile* profile);
     virtual Status reinterpret_status(const Status& st);
 
-    // ORC and Parquet push conjunct_ctxs_by_slot into their own column-level
-    // readers (lazy materialisation, dict filter, etc.) and do NOT want the base
-    // class to apply them a second time.  All other formats return false so the
-    // base class handles by-slot evaluation uniformly in get_next().
-    virtual bool scanner_handles_predicate_by_slot_internally() const { return false; }
-
-    // True if the scanner evaluates multi-slot predicates (conjuncts->scanner_ctxs)
-    // internally inside do_get_next(), so the base class must not apply them again.
-    // Scanners that return true MUST guarantee row-level correctness — the ORC
-    // search-argument / Parquet statistics pass is only an approximate skip; the
-    // actual predicate must still be evaluated on every returned row.
-    // Future expression-driven Parquet lazy materialisation will also set this true
-    // once it can interleave predicate evaluation with column loading.
-    virtual bool scanner_handles_multi_slot_conjuncts_internally() const { return false; }
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx != nullptr && _scanner_ctx->split.has_split_tasks; }
 

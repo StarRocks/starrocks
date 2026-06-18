@@ -28,6 +28,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "exec/exec_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
@@ -361,9 +362,8 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         }
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));
-                _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
-                _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, row_count);
+                // partition / not-existed / extended columns are now appended
+                // inside GroupReader::get_next() before emit_physical_columns.
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -413,16 +413,19 @@ Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
         size_t read_size = 0;
         if (_scanner_ctx->options.use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
-            _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
-            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
-            _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
+            // append_side_columns_to_chunk fills per-row count (value=1),
+            // partition, and extended columns first.  The next call overwrites
+            // the count column with the aggregated file row count.
+            RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, 1));
+            _scanner_ctx->append_or_update_count_column_to_chunk(chunk, 1, read_size);
         } else {
             read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-            RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size));
-            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
-            _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, read_size);
+            RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, read_size));
         }
         _scan_row_count += read_size;
+        if (!_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
+        }
         return Status::OK();
     }
 
