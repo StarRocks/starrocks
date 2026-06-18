@@ -47,7 +47,6 @@
 namespace starrocks {
 
 class DataDir;
-class ExecEnv;
 class SegmentPB;
 class MemTable;
 

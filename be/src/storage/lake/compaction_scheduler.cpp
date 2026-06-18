@@ -38,7 +38,6 @@
 #include "gen_cpp/lake_service.pb.h"
 #include "gutil/stl_util.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
