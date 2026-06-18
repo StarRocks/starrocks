@@ -260,7 +260,7 @@ public class FoldConstantsRuleTest {
         // Non-constant text: not folded, returned as-is
         LikePredicateOperator nonConst = new LikePredicateOperator(
                 LikePredicateOperator.LikeType.LIKE,
-                new ColumnRefOperator(1, VarcharType.VARCHAR, "col", true),
+                new ColumnRefOperator(1, Type.VARCHAR, "col", true),
                 ConstantOperator.createVarchar("a\\\\b"));
         assertEquals(nonConst, rule.apply(nonConst, null));
 
@@ -385,7 +385,7 @@ public class FoldConstantsRuleTest {
         // NULL operand → NULL
         assertEquals(OB_NULL, rule.apply(new LikePredicateOperator(
                 LikePredicateOperator.LikeType.LIKE,
-                ConstantOperator.createNull(VarcharType.VARCHAR),
+                ConstantOperator.createNull(Type.VARCHAR),
                 ConstantOperator.createVarchar("abc")), null));
 
         // LIKE folding is case-sensitive (binary collation): 'ABC' LIKE 'abc' → 0

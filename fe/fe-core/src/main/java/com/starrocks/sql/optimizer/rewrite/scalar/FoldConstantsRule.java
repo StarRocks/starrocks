@@ -43,13 +43,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.NullType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -538,7 +531,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
                                                      ScalarOperatorRewriteContext context) {
         if (hasNull(predicate.getChildren())) {
-            return ConstantOperator.createNull(BooleanType.BOOLEAN);
+            return ConstantOperator.createNull(Type.BOOLEAN);
         }
         if (notAllConstant(predicate.getChildren()) || predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
             return predicate;
