@@ -308,6 +308,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+    public void invalidateConnectorTableColumnStatistics(String tableUUID, List<String> columns) {
+        if (tableUUID == null || tableUUID.isEmpty() || columns == null) {
+            return;
+        }
+        List<ConnectorTableColumnKey> allKeys = columns.stream()
+                .map(column -> new ConnectorTableColumnKey(tableUUID, column))
+                .collect(Collectors.toList());
+        connectorTableCachedStatistics.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
     public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
         Preconditions.checkState(table != null);
         if (!StatisticUtils.checkStatisticTableStateNormal()) {
@@ -633,6 +644,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), column);
             allKeys.add(key);
         }
+        connectorHistogramCache.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
+    public void invalidateConnectorHistogramStatistics(String tableUUID, List<String> columns) {
+        if (tableUUID == null || tableUUID.isEmpty() || columns == null) {
+            return;
+        }
+        List<ConnectorTableColumnKey> allKeys = columns.stream()
+                .map(column -> new ConnectorTableColumnKey(tableUUID, column))
+                .collect(Collectors.toList());
         connectorHistogramCache.synchronous().invalidateAll(allKeys);
     }
 
