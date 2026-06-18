@@ -74,8 +74,8 @@ static StatusOr<int64_t> choose_any_version(int64_t tablet_id) {
 }
 
 EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTabletInfo>* tablet_infos, int64_t signature,
-                                         AgentStatus* res_status, MemTracker* mem_tracker)
-        : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature), _res_status(res_status) {
+                                         MemTracker* mem_tracker)
+        : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "BatchLoad", mem_tracker);
 }
 
@@ -84,24 +84,25 @@ EngineBatchLoadTask::~EngineBatchLoadTask() = default;
 Status EngineBatchLoadTask::execute() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    AgentStatus status = STARROCKS_SUCCESS;
+    Status status;
     if (_push_req.push_type == TPushType::LOAD_V2) {
         status = _init();
 
-        if (status == STARROCKS_SUCCESS) {
+        if (status.ok()) {
             uint32_t retry_time = 0;
             while (retry_time < PUSH_MAX_RETRY) {
                 status = _process();
 
-                if (status == STARROCKS_PUSH_HAD_LOADED) {
+                if (status.is_already_exist()) {
                     LOG(WARNING) << "transaction exists when realtime push, "
                                     "but unfinished, do not report to fe, signature: "
                                  << _signature;
                     break; // not retry anymore
                 }
                 // Internal error, need retry
-                if (status == STARROCKS_ERROR) {
-                    LOG(WARNING) << "push internal error, need retry.signature: " << _signature;
+                if (!status.ok()) {
+                    LOG(WARNING) << "push internal error, need retry. status: " << status
+                                 << ", signature: " << _signature;
                     retry_time += 1;
                 } else {
                     break;
@@ -109,24 +110,20 @@ Status EngineBatchLoadTask::execute() {
             }
         }
     } else if (_push_req.push_type == TPushType::DELETE) {
-        Status delete_data_status = _delete_data(_push_req, _tablet_infos);
-        if (!delete_data_status.ok()) {
-            LOG(WARNING) << "delete data failed. status: " << delete_data_status << ", signature: " << _signature;
-            status = STARROCKS_ERROR;
+        status = _delete_data(_push_req, _tablet_infos);
+        if (!status.ok()) {
+            LOG(WARNING) << "delete data failed. status: " << status << ", signature: " << _signature;
         }
     } else {
-        status = STARROCKS_TASK_REQUEST_ERROR;
+        status = Status::InvalidArgument(fmt::format("invalid push type: {}", static_cast<int>(_push_req.push_type)));
     }
-    *_res_status = status;
-    return Status::OK();
+    return status;
 }
 
-AgentStatus EngineBatchLoadTask::_init() {
-    AgentStatus status = STARROCKS_SUCCESS;
-
+Status EngineBatchLoadTask::_init() {
     if (_is_init) {
         VLOG(3) << "has been inited";
-        return status;
+        return Status::OK();
     }
 
     // not need to check these conditions for lake tablet
@@ -137,41 +134,33 @@ AgentStatus EngineBatchLoadTask::_init() {
         if (tablet == nullptr) {
             LOG(WARNING) << "get tables failed. "
                          << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
-            return STARROCKS_PUSH_INVALID_TABLE;
+            return Status::NotFound(fmt::format("not found tablet: {}", _push_req.tablet_id));
         }
 
         // check disk capacity
         if (tablet->data_dir()->capacity_limit_reached(_push_req.__isset.http_file_size)) {
-            return STARROCKS_DISK_REACH_CAPACITY_LIMIT;
+            return Status::CapacityLimitExceed(
+                    fmt::format("disk capacity limit reached, tablet_id: {}", _push_req.tablet_id));
         }
     }
 
     DCHECK(!_push_req.__isset.http_file_path);
     _is_init = true;
-    return status;
+    return Status::OK();
 }
 
-AgentStatus EngineBatchLoadTask::_process() {
-    AgentStatus status = STARROCKS_SUCCESS;
+Status EngineBatchLoadTask::_process() {
     if (!_is_init) {
         LOG(WARNING) << "has not init yet. tablet_id: " << _push_req.tablet_id;
-        return STARROCKS_ERROR;
+        return Status::InternalError("has not init yet");
     }
 
-    if (status == STARROCKS_SUCCESS) {
-        // Load delta file
-        time_t push_begin = time(nullptr);
-        Status push_status = _push(_push_req, _tablet_infos);
-        time_t push_finish = time(nullptr);
-        LOG(INFO) << "Push finish, cost time: " << (push_finish - push_begin);
-        if (push_status.is_already_exist()) {
-            status = STARROCKS_PUSH_HAD_LOADED;
-        } else if (!push_status.ok()) {
-            status = STARROCKS_ERROR;
-        }
-    }
-
-    return status;
+    // Load delta file
+    time_t push_begin = time(nullptr);
+    Status push_status = _push(_push_req, _tablet_infos);
+    time_t push_finish = time(nullptr);
+    LOG(INFO) << "Push finish, cost time: " << (push_finish - push_begin);
+    return push_status;
 }
 
 Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {

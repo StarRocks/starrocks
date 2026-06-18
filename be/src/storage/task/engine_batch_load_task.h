@@ -34,10 +34,10 @@
 
 #pragma once
 
-#include <utility>
+#include <memory>
 #include <vector>
 
-#include "agent/status.h"
+#include "base/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "storage/olap_common.h"
@@ -56,20 +56,20 @@ class StorageEngine;
 class EngineBatchLoadTask : public EngineTask {
 public:
     EngineBatchLoadTask(TPushReq& push_req, std::vector<TTabletInfo>* tablet_infos, int64_t signature,
-                        AgentStatus* res_status, MemTracker* mem_tracker);
+                        MemTracker* mem_tracker);
     ~EngineBatchLoadTask() override;
 
     Status execute() override;
 
 private:
     // The initial function of pusher
-    virtual AgentStatus _init();
+    virtual Status _init();
 
     // The process of push data to olap engine
     //
     // Output parameters:
     // * tablet_infos: The info of pushed tablet after push data
-    virtual AgentStatus _process();
+    virtual Status _process();
 
     // Delete data of specified tablet according to delete conditions,
     // once delete_data command submit success, deleted data is not visible,
@@ -88,6 +88,5 @@ private:
     TPushReq& _push_req;
     std::vector<TTabletInfo>* _tablet_infos;
     int64_t _signature;
-    AgentStatus* _res_status;
 }; // class Pusher
 } // namespace starrocks

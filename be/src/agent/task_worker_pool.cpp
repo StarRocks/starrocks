@@ -307,7 +307,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     }
 
     while (true) {
-        AgentStatus status = STARROCKS_SUCCESS;
+        Status status;
         AgentTaskRequestPtr agent_task_req;
         do {
             agent_task_req = worker_pool_this->_pop_task(priority);
@@ -332,16 +332,15 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> tablet_infos;
 
 #ifndef __APPLE__
-        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
+        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        // EngineBatchLoadTask execute always return OK
-        (void)(StorageEngine::instance()->execute_task(&engine_task));
+        status = StorageEngine::instance()->execute_task(&engine_task);
 #else
         LOG(WARNING) << "push is not supported on MacOS, signature: " << agent_task_req->signature;
-        status = STARROCKS_ERROR;
+        status = Status::InternalError("push is not supported on MacOS");
 #endif
 
-        if (status == STARROCKS_PUSH_HAD_LOADED) {
+        if (status.is_already_exist()) {
             // remove the task and not return to fe
             remove_task_info(agent_task_req->task_type, agent_task_req->signature);
             continue;
@@ -355,7 +354,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
 
-        if (status == STARROCKS_SUCCESS) {
+        if (status.ok()) {
             VLOG(3) << "push ok. signature: " << agent_task_req->signature << ", push_type: " << push_req.push_type;
             error_msgs.emplace_back("push success");
 
@@ -363,13 +362,13 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
             task_status.__set_status_code(TStatusCode::OK);
             finish_task_request.__set_finish_tablet_infos(tablet_infos);
-        } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
-            LOG(WARNING) << "push request push_type invalid. type: " << push_req.push_type
+        } else if (status.is_invalid_argument()) {
+            LOG(WARNING) << "push request push_type invalid. type: " << push_req.push_type << ", status: " << status
                          << ", signature: " << agent_task_req->signature;
             error_msgs.emplace_back("push request push_type invalid.");
             task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
         } else {
-            LOG(WARNING) << "push failed, error_code: " << status << ", signature: " << agent_task_req->signature;
+            LOG(WARNING) << "push failed, status: " << status << ", signature: " << agent_task_req->signature;
             error_msgs.emplace_back("push failed");
             task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
         }
@@ -402,7 +401,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     }
 
     while (true) {
-        AgentStatus status = STARROCKS_SUCCESS;
+        Status status;
         AgentTaskRequestPtr agent_task_req;
         do {
             agent_task_req = worker_pool_this->_pop_task(priority);
@@ -453,16 +452,15 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
 #ifndef __APPLE__
-        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
+        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        // EngineBatchLoadTask execute always return OK
-        (void)(StorageEngine::instance()->execute_task(&engine_task));
+        status = StorageEngine::instance()->execute_task(&engine_task);
 #else
         LOG(WARNING) << "delete is not supported on MacOS, signature: " << agent_task_req->signature;
-        status = STARROCKS_ERROR;
+        status = Status::InternalError("delete is not supported on MacOS");
 #endif
 
-        if (status == STARROCKS_PUSH_HAD_LOADED) {
+        if (status.is_already_exist()) {
             // remove the task and not return to fe
             remove_task_info(agent_task_req->task_type, agent_task_req->signature);
             continue;
@@ -479,7 +477,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             finish_task_request.__set_request_version(push_req.version);
         }
 
-        if (status == STARROCKS_SUCCESS) {
+        if (status.ok()) {
             VLOG(3) << "delete push ok. signature: " << agent_task_req->signature
                     << ", push_type: " << push_req.push_type;
             error_msgs.emplace_back("push success");
@@ -488,14 +486,13 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
             task_status.__set_status_code(TStatusCode::OK);
             finish_task_request.__set_finish_tablet_infos(tablet_infos);
-        } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
+        } else if (status.is_invalid_argument()) {
             LOG(WARNING) << "delete push request push_type invalid. type: " << push_req.push_type
-                         << ", signature: " << agent_task_req->signature;
+                         << ", status: " << status << ", signature: " << agent_task_req->signature;
             error_msgs.emplace_back("push request push_type invalid.");
             task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
         } else {
-            LOG(WARNING) << "delete push failed, error_code: " << status
-                         << ", signature: " << agent_task_req->signature;
+            LOG(WARNING) << "delete push failed, status: " << status << ", signature: " << agent_task_req->signature;
             error_msgs.emplace_back("delete push failed");
             task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
         }
