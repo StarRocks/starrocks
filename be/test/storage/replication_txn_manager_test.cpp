@@ -32,6 +32,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
+#include "testutil/local_snapshot_client.h"
 
 namespace starrocks {
 
@@ -40,6 +41,9 @@ public:
     ReplicationTxnManagerTest() = default;
     ~ReplicationTxnManagerTest() override = default;
     void SetUp() override {
+        _previous_snapshot_client =
+                StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                        local_snapshot_client_for_test());
         if (GetParam() != TKeysType::type::PRIMARY_KEYS) {
             create_tablet(_tablet_id, _version, _schema_hash);
             create_tablet(_src_tablet_id, _src_version, _schema_hash);
@@ -68,6 +72,8 @@ public:
         EXPECT_TRUE(status.ok()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                _previous_snapshot_client);
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int64_t version, int32_t schema_hash,
@@ -185,6 +191,7 @@ protected:
     int32_t _schema_hash = 368169781;
     int64_t _version = 2;
     int64_t _src_version = 10;
+    RemoteSnapshotClient* _previous_snapshot_client = nullptr;
 };
 
 TEST_P(ReplicationTxnManagerTest, test_remote_snapshot_no_missing_versions) {
@@ -201,7 +208,7 @@ TEST_P(ReplicationTxnManagerTest, test_remote_snapshot_no_missing_versions) {
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
@@ -227,7 +234,7 @@ TEST_P(ReplicationTxnManagerTest, test_remote_snapshot_no_versions) {
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version + 1);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
@@ -253,7 +260,7 @@ TEST_P(ReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
@@ -301,7 +308,7 @@ TEST_P(ReplicationTxnManagerTest, test_publish_failed) {
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
@@ -334,7 +341,7 @@ TEST_P(ReplicationTxnManagerTest, test_run_normal) {
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,

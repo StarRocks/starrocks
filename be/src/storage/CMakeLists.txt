@@ -98,6 +98,7 @@ set(STORAGE_FILES
     primary_key_encoder.cpp
     protobuf_file.cpp
     replication_txn_manager.cpp
+    remote_snapshot_client.cpp
     replication_utils.cpp
     segment_stream_converter.cpp
     del_file_stream_converter.cpp
