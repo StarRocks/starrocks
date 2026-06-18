@@ -373,7 +373,8 @@ protected:
         TQueryGlobals query_globals;
         TUniqueId fragment_id;
         auto* exec_env = ExecEnv::GetInstance();
-        auto* state = _object_pool->add(new RuntimeState(query_id, fragment_id, query_options, query_globals, exec_env));
+        auto* state =
+                _object_pool->add(new RuntimeState(query_id, fragment_id, query_options, query_globals, exec_env));
         state->init_mem_trackers(query_id);
         return state;
     }
