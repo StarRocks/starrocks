@@ -384,7 +384,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             }
 
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.PENDING) {
-                // enableDoubleWritePartition assigns watershedTxnId atomically under the table write lock.
+                // enableDoubleWritePartition assigns watershedTxnId atomically under the database WRITE lock
+                // (the lock that conflicts with the load's mapping read in OlapTableSink.complete()).
                 enableDoubleWritePartition(db, tbl, rewriteTask.getPartitionName(), rewriteTask.getTempPartitionName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
             }
@@ -666,7 +667,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             locker.unLockTableWithIntensiveDbLock(db.getId(), tbl.getId(), LockType.READ);
         }
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .existCommittedTxns(dbId, tableId, sourcePartitionId);
+                    .existCommittedTxns(db.getId(), tbl.getId(), sourcePartitionId);
     }
 
     /**
