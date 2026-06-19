@@ -965,6 +965,13 @@ under the License.
                         <groupId>ch.qos.reload4j</groupId>
                         <artifactId>reload4j</artifactId>
                     </exclusion>
+                    <!-- jline (via hadoop-yarn-client) is only used by YARN's interactive
+                         shell, which FE never invokes. Exclude it to drop the vulnerable
+                         jline-remote-telnet bundle (GHSA-2r2c-cx56-8933, GHSA-47qp-hqvx-6r3f). -->
+                    <exclusion>
+                        <groupId>org.jline</groupId>
+                        <artifactId>jline</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
