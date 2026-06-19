@@ -725,7 +725,7 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     auto* op_add_index = txn_log->mutable_op_add_index();
 
     AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
-                            alter_version);
+                            alter_version, _lake_schema_change_pool);
     auto run_st = sc.run(op_add_index);
     if (!run_st.ok()) {
         // Do NOT fall back to do_process_alter_tablet here. The fast-path

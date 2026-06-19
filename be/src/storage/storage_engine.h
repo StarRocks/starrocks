@@ -42,6 +42,7 @@
 #include <ctime>
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <set>
@@ -86,6 +87,7 @@ class DictionaryCacheManager;
 class LoadSpillBlockMergeExecutor;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
+class ThreadPool;
 
 struct DeltaColumnGroupKey {
     int64_t tablet_id;
@@ -242,6 +244,18 @@ public:
     SegmentReplicateExecutor* segment_replicate_executor() { return _segment_replicate_executor.get(); }
 
     SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
+
+    // Dedicated pool used by lake schema-change inner sub-tasks (currently only
+    // the ADD INDEX fast path's per-segment index building). Physically isolated
+    // from the alter_tablet outer pool to avoid pool-exhaustion deadlock.
+    // Capacity = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism.
+    ThreadPool* lake_schema_change_thread_pool() const { return _lake_schema_change_thread_pool.get(); }
+
+    // Recompute and apply the lake_schema_change pool max size from the current
+    // values of `alter_tablet_worker_count` and
+    // `lake_schema_change_per_tablet_parallelism`. Invoked from the dynamic
+    // config update callback when either knob changes.
+    Status update_lake_schema_change_thread_pool_max();
 
     UpdateManager* update_manager() { return _update_manager.get(); }
 
@@ -491,6 +505,11 @@ private:
     std::unique_ptr<SegmentReplicateExecutor> _segment_replicate_executor;
 
     std::unique_ptr<SegmentFlushExecutor> _segment_flush_executor;
+
+    // Sub-task pool for lake schema-change inner parallelism (e.g. per-segment
+    // index building). Sized as alter_tablet_worker_count *
+    // lake_schema_change_per_tablet_parallelism. See storage_engine.cpp pool init.
+    std::unique_ptr<ThreadPool> _lake_schema_change_thread_pool;
 
     std::unique_ptr<UpdateManager> _update_manager;
 

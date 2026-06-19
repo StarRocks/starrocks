@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <new>
 #include <queue>
@@ -51,6 +52,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_agent_fwd.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -58,6 +60,7 @@
 #include "common/status.h"
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
 #include "common/util/thrift_client_cache.h"
 #include "cumulative_compaction.h"
@@ -92,6 +95,10 @@ namespace starrocks {
 
 StorageEngine* StorageEngine::_s_instance = nullptr;
 StorageEngine* StorageEngine::_p_instance = nullptr;
+
+static int calc_lake_schema_change_thread_pool_max_threads() {
+    return std::max(1, config::alter_tablet_worker_count * config::lake_schema_change_per_tablet_parallelism);
+}
 
 static Status _validate_options(const EngineOptions& options) {
     if (options.store_paths.empty()) {
@@ -250,6 +257,24 @@ Status StorageEngine::_open(const EngineOptions& options) {
                               "init lake MemTableFlushExecutor failed");
     StorageMetrics::instance()->register_thread_pool_metrics("lake_memtable_flush",
                                                              _lake_memtable_flush_executor->get_thread_pool());
+
+    // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
+    // index building inside a single ADD INDEX job). Physically isolated
+    // from the alter_tablet outer pool to avoid the classic deadlock where
+    // outer tasks block holding their pool slot waiting for inner sub-tasks
+    // to drain. Capacity is auto-derived as
+    //     alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+    // because the worst case is every outer alter task fanning out
+    // lake_schema_change_per_tablet_parallelism inner tasks at once. The
+    // pool is DYNAMIC, so it does not hold idle threads when no schema
+    // change is running.
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_schema_change")
+                            .set_min_threads(0)
+                            .set_max_threads(calc_lake_schema_change_thread_pool_max_threads())
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_schema_change_thread_pool));
+    StorageMetrics::instance()->register_thread_pool_metrics("lake_schema_change",
+                                                             _lake_schema_change_thread_pool.get());
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
@@ -672,6 +697,14 @@ void StorageEngine::stop() {
         _compaction_checker_thread.join();
     }
 
+    // Drain lake ADD INDEX sub-tasks before shutting down storage managers they
+    // may read through. In normal BE/CN step-down, ExecEnv stops AgentServer's
+    // outer ALTER pool before StorageEngine::stop(), so this is usually already
+    // quiescent; keep the order defensive for direct StorageEngine shutdowns.
+    if (_lake_schema_change_thread_pool) {
+        _lake_schema_change_thread_pool->shutdown();
+    }
+
     if (_update_manager) {
         _update_manager->stop();
     }
@@ -685,6 +718,14 @@ void StorageEngine::stop() {
         _local_pk_index_manager->stop();
     }
 #endif
+}
+
+Status StorageEngine::update_lake_schema_change_thread_pool_max() {
+    if (_lake_schema_change_thread_pool == nullptr) {
+        return Status::OK();
+    }
+    int new_max = calc_lake_schema_change_thread_pool_max_threads();
+    return _lake_schema_change_thread_pool->update_max_threads(new_max);
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

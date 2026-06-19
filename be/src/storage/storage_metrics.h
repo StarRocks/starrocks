@@ -186,6 +186,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
     METRICS_DEFINE_THREAD_POOL(memtable_flush);
     METRICS_DEFINE_THREAD_POOL(lake_memtable_flush);
+    METRICS_DEFINE_THREAD_POOL(lake_schema_change);
     METRICS_DEFINE_THREAD_POOL(segment_replicate);
     METRICS_DEFINE_THREAD_POOL(segment_flush);
     METRICS_DEFINE_THREAD_POOL(update_apply);

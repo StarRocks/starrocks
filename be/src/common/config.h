@@ -159,7 +159,7 @@ CONF_mInt32(alter_tablet_worker_count, "3");
 // thread pool; LinkedSchemaChange / DirectSchemaChange / SortedSchemaChange and
 // the DROP INDEX fast path remain single-threaded and are unaffected.
 //
-// The dedicated _thread_pool_lake_schema_change capacity is auto-derived as:
+// The dedicated storage-owned lake_schema_change thread-pool capacity is auto-derived as:
 //     pool_max = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
 // so the outer alter pool and inner segment pool stay physically isolated and
 // never deadlock against each other.
