@@ -2062,4 +2062,28 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 2> : TRUE");
     }
+
+    @Test
+    public void testReduceCastBoundaryDateDoesNotAbortPlanning() throws Exception {
+        starRocksAssert.withTable("create table rc_t (id int, dt datetime) duplicate key(id) " +
+                "distributed by hash(id) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withTable("create table rc_t2 (id int, d date) duplicate key(id) " +
+                "distributed by hash(id) buckets 1 properties('replication_num'='1')");
+        try {
+            // Boundary date literals used to make ReduceCastRule shift past [0000-01-01, 9999-12-31]
+            // via plusDays(+/-1) and throw "Invalid date value", aborting planning of valid queries.
+            for (String sql : new String[] {
+                    "select * from rc_t where cast(dt as date) <= '9999-12-31'",
+                    "select * from rc_t where cast(dt as date) > '9999-12-31'",
+                    "select * from rc_t where cast(dt as date) = '9999-12-31'",
+                    "select * from rc_t2 where cast(d as datetime) < '0000-01-01 00:00:00'",
+                    "select * from rc_t2 where cast(d as datetime) > '9999-12-31 12:00:00'"}) {
+                String plan = getFragmentPlan(sql);
+                Assertions.assertTrue(plan.contains("rc_t"), sql + " => " + plan);
+            }
+        } finally {
+            starRocksAssert.dropTable("rc_t");
+            starRocksAssert.dropTable("rc_t2");
+        }
+    }
 }
