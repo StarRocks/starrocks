@@ -428,6 +428,8 @@ public class QueryAnalyzer {
     private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
         // for recursive cte analyze
         private String currentRecursiveCTE = null;
+        // for cyclic view detection: ids of views currently being expanded on the resolution path
+        private final Set<Long> viewExpansionStack = new HashSet<>();
 
         public Visitor() {
         }
@@ -1569,6 +1571,12 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            // Views have no CREATE-time cycle check (ALTER VIEW can close a cycle), so guard
+            // here to avoid unbounded recursion -> StackOverflowError during analysis.
+            if (!viewExpansionStack.add(node.getView().getId())) {
+                throw new SemanticException(
+                        "View " + node.getName() + " contains a cycle in its definition");
+            }
             boolean isRelationAliasCaseInSensitive = false;
             if (ConnectContext.get() != null) {
                 isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
@@ -1584,6 +1592,7 @@ public class QueryAnalyzer {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             } finally {
+                viewExpansionStack.remove(node.getView().getId());
                 if (ConnectContext.get() != null && node.getView().isHiveView()) {
                     ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
                 }

@@ -1795,4 +1795,33 @@ public class ViewPlanTest extends PlanTestBase {
         starRocksAssert.dropView("v_r");
         starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
+
+    @Test
+    public void testCyclicViewRaisesSemanticErrorNotStackOverflow() throws Exception {
+        starRocksAssert.withTable("create table cyc_base (a int) duplicate key(a) " +
+                "distributed by hash(a) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withView("create view cyc_v1 as select a from cyc_base");
+        starRocksAssert.withView("create view cyc_v2 as select a from cyc_v1");
+
+        // ALTER VIEW is analyzed against the *current* catalog (cyc_v1 still reads cyc_base), so it
+        // passes analysis and commits the cycle cyc_v1 -> cyc_v2 -> cyc_v1.
+        String alterView = "alter view cyc_v1 as select a from cyc_v2";
+        AlterViewStmt alterViewStmt = (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(connectContext, alterViewStmt);
+
+        try {
+            // Selecting through the cycle must raise a graceful SemanticException, never a
+            // StackOverflowError escaping to the top-level handler.
+            Throwable t = Assertions.assertThrows(Throwable.class,
+                    () -> getFragmentPlan("select * from cyc_v1"));
+            Assertions.assertFalse(t instanceof StackOverflowError,
+                    "cyclic view must not overflow the stack");
+            Assertions.assertTrue(t.getMessage() != null && t.getMessage().contains("cycle"),
+                    "expected a graceful cycle semantic error, but got: " + t);
+        } finally {
+            starRocksAssert.dropView("cyc_v1");
+            starRocksAssert.dropView("cyc_v2");
+            starRocksAssert.dropTable("cyc_base");
+        }
+    }
 }
