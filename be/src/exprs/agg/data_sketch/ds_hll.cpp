@@ -113,6 +113,26 @@ int64_t DataSketchesHll::estimate_cardinality() const {
     if (_sketch_union == nullptr) {
         return 0;
     }
+    // Use the composite (non-HIP) estimator instead of get_estimate().
+    //
+    // get_estimate() returns the HIP (Historic Inverse Probability) estimate while the union's
+    // internal gadget still has its out-of-order flag unset. The HIP accumulator is updated
+    // incrementally using the running kxq value at the moment each register changes, so its final
+    // value depends on the order in which coupons/sketches were merged. In distributed/parallel
+    // aggregation the merge order is non-deterministic, which makes the HIP estimate fluctuate
+    // across runs over the same data. This happens whenever each partial sketch stays in coupon
+    // (LIST/SET) mode while the unioned cardinality crosses the SET->HLL promotion threshold: the
+    // gadget is promoted to HLL via coupon replay but never sets the out-of-order flag, so it keeps
+    // using the order-dependent HIP estimate.
+    //
+    // get_composite_estimate() is computed purely from the final register state, so it is
+    // independent of merge order and reproducible. The trade-off is a slightly higher relative
+    // standard error (non-HIP RSE factor 1.039 vs HIP 0.833, ~1.25x), which is acceptable here
+    // since this object is fundamentally a merge accumulator where the HIP estimate is not valid.
+    //
+    // There is no meaningful performance concern: estimate_cardinality() is only called from the
+    // finalize/output stage (once per group), never on the hot update/merge path. The extra cost
+    // of the composite estimator over reading the cached HIP accumulator is O(1) and negligible.
     return _sketch_union->get_composite_estimate();
 }
 
