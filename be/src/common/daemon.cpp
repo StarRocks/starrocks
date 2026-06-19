@@ -323,6 +323,7 @@ void init_signals() {
     if (ret < 0) {
         exit(-1);
     }
+    signal(SIGPIPE, SIG_IGN);
 }
 
 void init_minidump() {
