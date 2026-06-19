@@ -311,6 +311,7 @@ void StorageMetrics::_register_thread_pool_metrics(const std::string& name, Thre
     REGISTER_STORAGE_THREAD_POOL_METRICS(load_spill_block_merge);
     REGISTER_STORAGE_THREAD_POOL_METRICS(memtable_flush);
     REGISTER_STORAGE_THREAD_POOL_METRICS(lake_memtable_flush);
+    REGISTER_STORAGE_THREAD_POOL_METRICS(lake_schema_change);
     REGISTER_STORAGE_THREAD_POOL_METRICS(segment_replicate);
     REGISTER_STORAGE_THREAD_POOL_METRICS(segment_flush);
     REGISTER_STORAGE_THREAD_POOL_METRICS(update_apply);

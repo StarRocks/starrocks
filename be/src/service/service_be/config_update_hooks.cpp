@@ -284,16 +284,15 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return Status::OK();
     });
     registry->register_callback("alter_tablet_worker_count", [=]() -> Status {
-        // update_max_thread_by_type(TTaskType::ALTER, ...) cascades into
-        // AgentServer::update_lake_schema_change_thread_pool_max() because the
-        // lake_schema_change inner pool capacity is derived from
+        // alter_tablet_worker_count is one of the inputs into the lake_schema_change
+        // inner pool capacity:
         //   alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+        // Keep the outer ALTER pool and storage-owned inner pool sized in sync.
         exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
-        return Status::OK();
+        return StorageEngine::instance()->update_lake_schema_change_thread_pool_max();
     });
     registry->register_callback("lake_schema_change_per_tablet_parallelism", [=]() -> Status {
-        exec_env->agent_server()->update_lake_schema_change_thread_pool_max();
-        return Status::OK();
+        return StorageEngine::instance()->update_lake_schema_change_thread_pool_max();
     });
     registry->register_callback("update_tablet_meta_info_worker_count", [=]() -> Status {
         exec_env->agent_server()->update_max_thread_by_type(TTaskType::UPDATE_TABLET_META_INFO,

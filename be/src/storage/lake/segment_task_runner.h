@@ -36,10 +36,11 @@ namespace starrocks::lake {
 // INDEX fast path remain single-threaded and do not use this runner.
 //
 // The runner wraps a CONCURRENT ThreadPoolToken bound to the dedicated
-// _thread_pool_lake_schema_change pool, with a per-job concurrency cap from
-// `config::lake_schema_change_per_tablet_parallelism`. It collects the first
-// failure across all sub-tasks (fail-fast: subsequent tasks short-circuit
-// once a failure is observed) and exposes that error from `wait()`.
+// storage-owned lake_schema_change pool. The pool is globally sized from
+// `config::lake_schema_change_per_tablet_parallelism`; this runner does not add
+// another per-job throttle. It collects the first failure across all sub-tasks
+// (fail-fast: subsequent tasks short-circuit once a failure is observed) and
+// exposes that error from `wait()`.
 //
 // Lifetime: construct one per job; submit() returns immediately on enqueue
 // failure (e.g. token shutdown). Always call wait() before destruction so
@@ -47,7 +48,7 @@ namespace starrocks::lake {
 class SegmentTaskRunner {
 public:
     // `pool` must outlive this runner. `max_concurrency` is informational —
-    // the outer pool is already sized to
+    // the storage-owned lake_schema_change pool is already sized to
     // `alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism`,
     // so concurrency is enforced by the pool itself rather than per-runner
     // throttling. Kept on the signature so callers can pass the config knob

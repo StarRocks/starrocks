@@ -186,7 +186,6 @@ void AgentMetrics::_register_thread_pool_metrics(const std::string& name, Thread
     REGISTER_AGENT_THREAD_POOL_METRICS(drop);
     REGISTER_AGENT_THREAD_POOL_METRICS(create_tablet);
     REGISTER_AGENT_THREAD_POOL_METRICS(alter_tablet);
-    REGISTER_AGENT_THREAD_POOL_METRICS(lake_schema_change);
     REGISTER_AGENT_THREAD_POOL_METRICS(clear_transaction);
     REGISTER_AGENT_THREAD_POOL_METRICS(storage_medium_migrate);
     REGISTER_AGENT_THREAD_POOL_METRICS(check_consistency);
