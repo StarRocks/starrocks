@@ -42,6 +42,7 @@
 
 #include "agent/agent_metrics.h"
 #include "agent/agent_task.h"
+#include "agent/publish_version_manager.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "base/phmap/phmap.h"
@@ -125,6 +126,8 @@ public:
 
     ThreadPool* get_thread_pool(int type) const;
 
+    PublishVersionManager* publish_version_manager() const { return _publish_version_manager.get(); }
+
     ThreadPool* get_lake_replicate_file_thread_pool() const { return _thread_pool_replicate_file.get(); }
 
     ThreadPool* get_lake_schema_change_thread_pool() const { return _thread_pool_lake_schema_change.get(); }
@@ -190,6 +193,8 @@ private:
     // `lake_replication_file_copy_threads`. Kept distinct from `_thread_pool_replicate_snapshot`
     // so that the outer agent task can wait on per-file sub-tasks without self-deadlock.
     std::unique_ptr<ThreadPool> _thread_pool_replicate_file;
+
+    std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -350,6 +355,12 @@ Status AgentServer::Impl::init() {
                 calc_real_num_threads(config::lake_replication_file_copy_threads, REPLICATION_CPU_CORES_MULTIPLIER),
                 std::numeric_limits<int>::max(), _thread_pool_replicate_file);
 
+        _publish_version_manager = std::make_unique<PublishVersionManager>();
+        RETURN_IF_ERROR_WITH_WARN(_publish_version_manager->init(), "init publish_version_manager failed");
+#ifndef BE_TEST
+        _publish_version_manager->start();
+#endif
+
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
 #ifndef BE_TEST
@@ -382,6 +393,15 @@ Status AgentServer::Impl::init() {
 
 void AgentServer::Impl::stop() {
     if (!_is_compute_node) {
+#ifndef BE_TEST
+        if (_publish_version_workers) {
+            _publish_version_workers->stop();
+            _publish_version_workers.reset();
+        }
+#endif
+        if (_publish_version_manager) {
+            _publish_version_manager->stop();
+        }
         _thread_pool_publish_version->shutdown();
         _thread_pool_drop->shutdown();
         _thread_pool_create_tablet->shutdown();
@@ -411,8 +431,7 @@ void AgentServer::Impl::stop() {
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
-#endif // BE_TEST
-        STOP_POOL(PUBLISH_VERSION, _publish_version_workers);
+#endif // BE_TEST \
         // Both PUSH and REALTIME_PUSH type use _push_workers
         STOP_POOL(PUSH, _push_workers);
         STOP_POOL(DELETE, _delete_workers);
@@ -889,6 +908,10 @@ void AgentServer::update_max_thread_by_type(int type, int new_val) {
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {
     return _impl->get_thread_pool(type);
+}
+
+PublishVersionManager* AgentServer::publish_version_manager() const {
+    return _impl->publish_version_manager();
 }
 
 ThreadPool* AgentServer::get_lake_replicate_file_thread_pool() const {

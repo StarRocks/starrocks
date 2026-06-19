@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/publish_version_manager.h"
+#include "agent/publish_version_manager.h"
 
 #include <gtest/gtest.h>
 
@@ -29,6 +29,7 @@
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/options.h"
@@ -49,7 +50,8 @@ namespace starrocks {
 class PublishVersionManagerTest : public testing::Test {
 public:
     void SetUp() override {
-        _publish_version_manager = starrocks::StorageEngine::instance()->publish_version_manager();
+        _publish_version_manager = ExecEnv::GetInstance()->agent_server()->publish_version_manager();
+        ASSERT_NE(nullptr, _publish_version_manager);
         _publish_version_manager->start();
     }
 

@@ -499,7 +499,7 @@ SET(DW_TEST_FILES
     ./storage/primary_index_test.cpp
     ./storage/primary_key_encoder_test.cpp
     ./storage/protobuf_file_test.cpp
-    ./storage/publish_version_manager_test.cpp
+    ./agent/publish_version_manager_test.cpp
     ./storage/publish_version_task_test.cpp
     ./storage/push_handler_test.cpp
     ./storage/replication_txn_manager_test.cpp
