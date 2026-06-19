@@ -15,9 +15,7 @@
 #include "service/core_dump_resource_releaser.h"
 
 #include <algorithm>
-#include <array>
 #include <cctype>
-#include <string_view>
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
@@ -52,30 +50,6 @@ bool parse_resource_str(const std::string& str, std::string* value) {
     *value = tmp_str;
     std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
     return true;
-}
-
-constexpr std::array<std::string_view, 10> kSupportedResourceNames = {
-        "data_cache",
-        "connector_scan_executor",
-        "olap_scan_executor",
-        "non_pipeline_scan_thread_pool",
-        "pipeline_prepare_thread_pool",
-        "pipeline_sink_io_thread_pool",
-        "query_rpc_thread_pool",
-        "datacache_rpc_thread_pool",
-        "publish_version_worker_pool",
-        "wg_driver_executor",
-};
-
-bool is_supported_resource_name(std::string_view resource_name) {
-    return std::find(kSupportedResourceNames.begin(), kSupportedResourceNames.end(), resource_name) !=
-           kSupportedResourceNames.end();
-}
-
-bool contains_resource_name(const std::set<std::string>& modules, std::string_view resource_name) {
-    return std::any_of(modules.begin(), modules.end(), [resource_name](const auto& module) {
-        return module.size() == resource_name.size() && std::equal(module.begin(), module.end(), resource_name.begin());
-    });
 }
 
 void try_release_exec_env_resources_before_core_dump(ExecEnv* exec_env, const CoreDumpResourceSelector& selector) {
@@ -126,21 +100,12 @@ CoreDumpResourceSelector::CoreDumpResourceSelector(const std::string& config_val
     if (config_value == "*") {
         _release_all = true;
     } else {
-        std::set<std::string> parsed_modules;
-        SplitStringAndParseToContainer(StringPiece(config_value), ",", &parse_resource_str, &parsed_modules);
-        for (const auto& module : parsed_modules) {
-            if (is_supported_resource_name(module)) {
-                _modules.insert(module);
-            }
-        }
+        SplitStringAndParseToContainer(StringPiece(config_value), ",", &parse_resource_str, &_modules);
     }
 }
 
-bool CoreDumpResourceSelector::should_release(std::string_view resource_name) const {
-    if (!is_supported_resource_name(resource_name)) {
-        return false;
-    }
-    return _release_all || contains_resource_name(_modules, resource_name);
+bool CoreDumpResourceSelector::should_release(const std::string& resource_name) const {
+    return _release_all || _modules.contains(resource_name);
 }
 
 void try_release_resources_before_core_dump(ExecEnv* exec_env, DataCache* data_cache) {

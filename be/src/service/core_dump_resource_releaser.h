@@ -16,7 +16,6 @@
 
 #include <set>
 #include <string>
-#include <string_view>
 
 namespace starrocks {
 
@@ -27,7 +26,7 @@ class CoreDumpResourceSelector {
 public:
     explicit CoreDumpResourceSelector(const std::string& config_value);
 
-    bool should_release(std::string_view resource_name) const;
+    bool should_release(const std::string& resource_name) const;
     bool release_all() const { return _release_all; }
     const std::set<std::string>& modules() const { return _modules; }
 

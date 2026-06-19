@@ -33,7 +33,7 @@ TEST(CoreDumpResourceSelectorTest, StarReleasesAllResources) {
     EXPECT_TRUE(selector.release_all());
     EXPECT_TRUE(selector.should_release("data_cache"));
     EXPECT_TRUE(selector.should_release("connector_scan_executor"));
-    EXPECT_FALSE(selector.should_release("unknown_resource"));
+    EXPECT_TRUE(selector.should_release("unknown_resource"));
 }
 
 TEST(CoreDumpResourceSelectorTest, ParsesTrimmedCommaSeparatedResources) {
@@ -54,13 +54,13 @@ TEST(CoreDumpResourceSelectorTest, LowercasesResourceNames) {
     EXPECT_FALSE(selector.should_release("DATA_CACHE"));
 }
 
-TEST(CoreDumpResourceSelectorTest, IgnoresEmptyAndUnknownEntries) {
+TEST(CoreDumpResourceSelectorTest, KeepsConfiguredResourceNames) {
     CoreDumpResourceSelector selector("unknown,, , data_cache");
 
     EXPECT_TRUE(selector.should_release("data_cache"));
-    EXPECT_FALSE(selector.should_release("unknown"));
+    EXPECT_TRUE(selector.should_release("unknown"));
     EXPECT_FALSE(selector.should_release("connector_scan_executor"));
-    EXPECT_EQ(1, selector.modules().size());
+    EXPECT_EQ(2, selector.modules().size());
 }
 
 } // namespace starrocks
