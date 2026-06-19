@@ -154,11 +154,14 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getCatalogDBName();
         String tableName = deltaLakeTable.getCatalogTableName();
-        Engine engine = deltaLakeTable.getDeltaEngine();
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
 
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+<<<<<<< HEAD
                 .setSnapshotId(snapshot.getVersion(engine))
+=======
+                .setTableVersionRange(TvrTableSnapshot.of(snapshot.getVersion()))
+>>>>>>> 9476d447e6 ([Enhancement] Bump delta kernel version to 4.2 (#74384))
                 .setPredicate(predicate)
                 .setLimit(limit)
                 .build();
@@ -221,8 +224,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, partitionColumns);
         Predicate deltaLakePredicate = new ScalarOperationToDeltaLakeExpr().convert(scalarOperators, deltaLakeContext);
 
-        ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
-        ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
+        ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
+        ScanImpl scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
         return new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;

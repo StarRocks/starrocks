@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromDeltaLakeType;
-import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NONE;
+import static io.delta.kernel.internal.util.ColumnMapping.ColumnMappingMode.NONE;
 
 public class DeltaLakeApiConverterTest {
     @Test
@@ -42,8 +42,13 @@ public class DeltaLakeApiConverterTest {
                 true
         );
 
+<<<<<<< HEAD
         Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
         Assertions.assertEquals(srType, new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+=======
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
+        Assertions.assertEquals(srType, new ArrayType(com.starrocks.type.IntegerType.INT));
+>>>>>>> 9476d447e6 ([Enhancement] Bump delta kernel version to 4.2 (#74384))
     }
 
     @Test
@@ -60,7 +65,7 @@ public class DeltaLakeApiConverterTest {
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
         Assertions.assertTrue(srType.isUnknown());
     }
 
@@ -72,7 +77,7 @@ public class DeltaLakeApiConverterTest {
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
         Assertions.assertEquals(srType,
                 new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARBINARY)));
     }
@@ -85,7 +90,7 @@ public class DeltaLakeApiConverterTest {
         );
         DataType deltaType = new io.delta.kernel.types.StructType(fields);
 
-        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
+        Type srType = fromDeltaLakeType(deltaType, NONE.value);
         Assertions.assertEquals(srType, new StructType(ImmutableList.of(
                 ScalarType.createType(PrimitiveType.INT),
                 ScalarType.createDefaultCatalogString())));

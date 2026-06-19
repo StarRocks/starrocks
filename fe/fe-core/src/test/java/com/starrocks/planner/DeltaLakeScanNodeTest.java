@@ -127,7 +127,7 @@ public class DeltaLakeScanNodeTest {
                 result = engine;
                 minTimes = 0;
 
-                snapshot.getVersion(engine);
+                snapshot.getVersion();
                 result = 123L;
                 minTimes = 0;
             }};
