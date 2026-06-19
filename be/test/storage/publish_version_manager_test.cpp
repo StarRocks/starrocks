@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <thread>
+
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
@@ -23,8 +26,6 @@
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
-#include "common/config_storage_fwd.h"
-#include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
@@ -49,19 +50,14 @@ class PublishVersionManagerTest : public testing::Test {
 public:
     void SetUp() override {
         _publish_version_manager = starrocks::StorageEngine::instance()->publish_version_manager();
-        _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
-        Thread::set_thread_name(_finish_publish_version_thread, "finish_pub_ver");
+        _publish_version_manager->start();
     }
 
     void TearDown() override {
+        _publish_version_manager->stop();
         if (_tablet) {
             StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
-        }
-        _stopped.store(true, std::memory_order_release);
-        _finish_publish_version_cv.notify_all();
-        if (_finish_publish_version_thread.joinable()) {
-            _finish_publish_version_thread.join();
         }
     }
 
@@ -150,36 +146,22 @@ public:
         return *writer->build();
     }
 
-    void* _finish_publish_version_thread_callback(void* arg) {
-        while (!_stopped.load(std::memory_order_consume)) {
-            int32_t interval = config::finish_publish_version_internal;
-            {
-                std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
-                CHECK(_publish_version_manager != nullptr);
-                while (!_publish_version_manager->has_pending_task() && !_stopped.load(std::memory_order_consume)) {
-                    _finish_publish_version_cv.wait(wl);
-                }
-                _publish_version_manager->finish_publish_version_task();
-                if (interval <= 0) {
-                    LOG(WARNING) << "finish_publish_version_internal config is illegal: " << interval
-                                 << ", force set to 1";
-                    interval = 1000;
-                }
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(interval));
-        }
-
-        return nullptr;
-    }
-
 public:
     TabletSharedPtr _tablet;
-    std::thread _finish_publish_version_thread;
-    std::mutex _finish_publish_version_mutex;
-    std::condition_variable _finish_publish_version_cv;
-    std::atomic<bool> _stopped{false};
     PublishVersionManager* _publish_version_manager;
 };
+
+template <typename Predicate>
+static void wait_until(Predicate&& predicate) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (predicate()) {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_TRUE(predicate());
+}
 
 static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
     TabletReaderParams params;
@@ -247,7 +229,6 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     pair.__set_tablet_id(_tablet->tablet_id());
     pair.__set_version(3);
     _publish_version_manager->wait_publish_task_apply_finish(std::move(finish_task_requests));
-    _finish_publish_version_cv.notify_one();
 
     ASSERT_EQ(0, _publish_version_manager->finish_task_requests_size());
     ASSERT_EQ(1, _publish_version_manager->waitting_finish_task_requests_size());
@@ -255,7 +236,10 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     _tablet->updates()->check_for_apply();
     ASSERT_EQ(N, read_tablet(_tablet, 3));
 
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    wait_until([&] {
+        return _publish_version_manager->finish_task_requests_size() == 0 &&
+               _publish_version_manager->waitting_finish_task_requests_size() == 0;
+    });
     ASSERT_EQ(0, _publish_version_manager->finish_task_requests_size());
     ASSERT_EQ(0, _publish_version_manager->waitting_finish_task_requests_size());
 }
