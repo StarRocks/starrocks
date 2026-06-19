@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef __APPLE__
 #include <aws/core/Aws.h>
-#include <aws/core/client/ClientConfiguration.h>
+#endif
+
 #include <glog/logging.h>
 #include <unistd.h>
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 
 #include "base/time/timezone_utils.h"
 #include "common/config_lake_fwd.h"
@@ -27,6 +30,9 @@
 #include "common/system/mem_info.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_s3.h"
+#ifndef __APPLE__
+#include "platform/aws/aws_sdk_guard.h"
+#endif
 #include "runtime/exec_env.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -36,7 +42,11 @@
 namespace starrocks::lake {
 
 static bool _starrocks_format_inited = false;
-Aws::SDKOptions aws_sdk_options;
+#ifdef __APPLE__
+static Aws::SDKOptions aws_sdk_options;
+#else
+static std::unique_ptr<starrocks::AwsSdkGuard> _aws_sdk_guard;
+#endif
 static starrocks::ProcessMetricsRegistry* process_metrics_registry() {
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
@@ -64,7 +74,11 @@ void starrocks_format_initialize(void) {
             return;
         }
 
+#ifdef __APPLE__
         Aws::InitAPI(aws_sdk_options);
+#else
+        _aws_sdk_guard = std::make_unique<starrocks::AwsSdkGuard>();
+#endif
 
         auto lzo_status = starrocks::register_orc_lzo_decompressor();
         CHECK(lzo_status.ok()) << "register ORC LZO decompressor error: " << lzo_status;
@@ -89,8 +103,13 @@ void starrocks_format_initialize(void) {
 void starrocks_format_shutdown(void) {
     if (_starrocks_format_inited) {
         LOG(INFO) << "starrocks format module start to deinitialize";
-        Aws::ShutdownAPI(aws_sdk_options);
         SAFE_DELETE(_lake_tablet_manager);
+        starrocks::close_s3_clients();
+#ifdef __APPLE__
+        Aws::ShutdownAPI(aws_sdk_options);
+#else
+        _aws_sdk_guard.reset();
+#endif
         // SAFE_DELETE(_lake_update_manager);
         LOG(INFO) << "starrocks format module has been deinitialized successfully";
     } else {

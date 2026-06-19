@@ -44,7 +44,8 @@
 #include <thrift/TOutput.h>
 
 #ifndef __APPLE__
-#include "fs/s3/aws_sdk_guard.h"
+#include "fs/fs_s3.h"
+#include "platform/aws/aws_sdk_guard.h"
 #endif
 
 #include "agent/agent_server.h"
@@ -244,6 +245,11 @@ int main(int argc, char** argv) {
 
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
+
+    // TODO: Move S3 client cleanup into a unified storage/platform lifecycle owner once the shutdown order is clearer.
+#ifndef __APPLE__
+    starrocks::close_s3_clients();
+#endif
 
     if (starrocks::process_quick_exit_in_progress()) {
         LOG(INFO) << "BE is shutting down, will exit quickly";

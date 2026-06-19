@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifndef __APPLE__
-#include "fs/s3/aws_sdk_guard.h"
+#include "platform/aws/aws_sdk_guard.h"
 
 #include <aws/core/utils/logging/LogLevel.h>
 
@@ -23,7 +23,8 @@
 
 #include "common/config_object_storage_fwd.h"
 #include "common/configbase.h"
-#include "fs/s3/poco_http_client_factory.h"
+#include "platform/aws/poco_common.h"
+#include "platform/aws/poco_http_client_factory.h"
 
 namespace starrocks {
 
@@ -69,6 +70,9 @@ AwsSdkGuard::AwsSdkGuard() {
 }
 
 AwsSdkGuard::~AwsSdkGuard() {
+    if (config::enable_poco_client_for_aws_sdk) {
+        poco::HTTPSessionPools::instance().shutdown();
+    }
     Aws::ShutdownAPI(_options);
 }
 

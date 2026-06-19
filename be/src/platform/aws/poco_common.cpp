@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/s3/poco_common.h"
+#include "platform/aws/poco_common.h"
 
 #include <Poco/Exception.h>
 #include <fmt/format.h>
@@ -22,8 +22,6 @@
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
-
-#include "runtime/current_thread.h"
 
 namespace starrocks::poco {
 
