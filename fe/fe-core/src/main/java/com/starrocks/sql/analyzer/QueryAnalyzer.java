@@ -1575,7 +1575,7 @@ public class QueryAnalyzer {
             // here to avoid unbounded recursion -> StackOverflowError during analysis.
             String viewKey = viewExpansionKey(node);
             if (!viewExpansionStack.add(viewKey)) {
-                throw new SemanticException(
+                throw new CyclicViewException(
                         "View " + node.getName() + " contains a cycle in its definition");
             }
             boolean isRelationAliasCaseInSensitive = false;
@@ -1589,6 +1589,10 @@ public class QueryAnalyzer {
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
+            } catch (CyclicViewException e) {
+                // Let the cycle error surface as-is; re-wrapping it at every enclosing view would
+                // bury the real reason behind a misleading "references invalid table(s)" prefix.
+                throw e;
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);

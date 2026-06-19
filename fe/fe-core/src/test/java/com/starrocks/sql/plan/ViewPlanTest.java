@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.CyclicViewException;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -1816,8 +1817,13 @@ public class ViewPlanTest extends PlanTestBase {
                     () -> getFragmentPlan("select * from cyc_v1"));
             Assertions.assertFalse(t instanceof StackOverflowError,
                     "cyclic view must not overflow the stack");
-            Assertions.assertTrue(t.getMessage() != null && t.getMessage().contains("cycle"),
+            Assertions.assertInstanceOf(CyclicViewException.class, t,
                     "expected a graceful cycle semantic error, but got: " + t);
+            Assertions.assertTrue(t.getMessage() != null && t.getMessage().contains("cycle"),
+                    "expected the cycle to be reported, but got: " + t);
+            // The cycle reason must surface directly, not be masked behind the generic outer wrapper.
+            Assertions.assertFalse(t.getMessage().contains("references invalid table"),
+                    "cycle error must not be re-wrapped as a generic 'invalid table' error: " + t);
         } finally {
             starRocksAssert.dropView("cyc_v1");
             starRocksAssert.dropView("cyc_v2");
