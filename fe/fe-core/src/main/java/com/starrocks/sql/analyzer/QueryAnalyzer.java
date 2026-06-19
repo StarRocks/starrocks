@@ -428,10 +428,19 @@ public class QueryAnalyzer {
     private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
         // for recursive cte analyze
         private String currentRecursiveCTE = null;
-        // for cyclic view detection: stable keys of views currently being expanded on the resolution path
-        private final Set<String> viewExpansionStack = new HashSet<>();
+        // Fallback for cyclic view detection when there is no session; the shared path lives on the
+        // session (see viewExpansionStack()) so it survives the fresh QueryAnalyzer that each
+        // scalar/IN/EXISTS subquery spawns.
+        private final Set<String> localViewExpansionStack = new HashSet<>();
 
         public Visitor() {
+        }
+
+        // Stable keys of the views currently being expanded on the resolution path. Shared via the
+        // session so a cycle routed through a subquery (which gets its own QueryAnalyzer/Visitor) is
+        // still observed; only when session is null do we fall back to the per-Visitor set.
+        private Set<String> viewExpansionStack() {
+            return session != null ? session.getViewExpansionPath() : localViewExpansionStack;
         }
 
         public Scope process(ParseNode node, Scope scope) {
@@ -1574,6 +1583,7 @@ public class QueryAnalyzer {
             // Views have no CREATE-time cycle check (ALTER VIEW can close a cycle), so guard
             // here to avoid unbounded recursion -> StackOverflowError during analysis.
             String viewKey = viewExpansionKey(node);
+            Set<String> viewExpansionStack = viewExpansionStack();
             if (!viewExpansionStack.add(viewKey)) {
                 throw new CyclicViewException(
                         "View " + node.getName() + " contains a cycle in its definition");

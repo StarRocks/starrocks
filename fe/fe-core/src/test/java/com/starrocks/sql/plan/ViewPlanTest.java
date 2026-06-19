@@ -1830,4 +1830,35 @@ public class ViewPlanTest extends PlanTestBase {
             starRocksAssert.dropTable("cyc_base");
         }
     }
+
+    @Test
+    public void testCyclicViewThroughSubqueryRaisesSemanticErrorNotStackOverflow() throws Exception {
+        starRocksAssert.withTable("create table cyc_sub_base (a int) duplicate key(a) " +
+                "distributed by hash(a) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withView("create view cyc_sub_v1 as select a from cyc_sub_base");
+        starRocksAssert.withView("create view cyc_sub_v2 as " +
+                "select a from cyc_sub_base where a in (select a from cyc_sub_v1)");
+
+        // Close the cycle through an IN subquery: cyc_sub_v1 -> (subquery) cyc_sub_v2 -> (subquery)
+        // cyc_sub_v1. Each subquery is analyzed by a *fresh* QueryAnalyzer, so the guard only fires
+        // if the expansion path is shared across those analyzers (via the session).
+        String alterView = "alter view cyc_sub_v1 as select a from cyc_sub_base where a in (select a from cyc_sub_v2)";
+        AlterViewStmt alterViewStmt = (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(connectContext, alterViewStmt);
+
+        try {
+            Throwable t = Assertions.assertThrows(Throwable.class,
+                    () -> getFragmentPlan("select * from cyc_sub_v1"));
+            Assertions.assertFalse(t instanceof StackOverflowError,
+                    "cyclic view through a subquery must not overflow the stack");
+            Assertions.assertInstanceOf(CyclicViewException.class, t,
+                    "expected a graceful cycle semantic error, but got: " + t);
+            Assertions.assertTrue(t.getMessage() != null && t.getMessage().contains("cycle"),
+                    "expected the cycle to be reported, but got: " + t);
+        } finally {
+            starRocksAssert.dropView("cyc_sub_v1");
+            starRocksAssert.dropView("cyc_sub_v2");
+            starRocksAssert.dropTable("cyc_sub_base");
+        }
+    }
 }
