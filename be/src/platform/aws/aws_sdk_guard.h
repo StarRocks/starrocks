@@ -14,7 +14,6 @@
 
 #pragma once
 
-#ifndef __APPLE__
 #include <aws/core/Aws.h>
 
 namespace starrocks {
@@ -39,4 +38,3 @@ private:
 };
 
 } // namespace starrocks
-#endif

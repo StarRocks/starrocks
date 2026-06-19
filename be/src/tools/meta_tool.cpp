@@ -32,10 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifdef __APPLE__
-#include <aws/core/Aws.h>
-#endif
-
 #include <fmt/format.h>
 #include <gflags/gflags.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -75,9 +71,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
-#ifndef __APPLE__
 #include "platform/aws/aws_sdk_guard.h"
-#endif
 #include "platform/store_path.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/chunk_helper.h"
@@ -2029,21 +2023,13 @@ int meta_tool_main(int argc, char** argv) {
             std::cerr << "expired_sec is less than 10min" << std::endl;
             return -1;
         }
-#ifdef __APPLE__
-        Aws::SDKOptions options;
-        Aws::InitAPI(options);
-#else
         starrocks::AwsSdkGuard aws_sdk_guard(starrocks::AwsSdkGuard::CurlLifecycle::SDK_MANAGED);
-#endif
         auto status =
                 starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
         if (!status.ok()) {
             std::cout << status << std::endl;
         }
         starrocks::close_s3_clients();
-#ifdef __APPLE__
-        Aws::ShutdownAPI(options);
-#endif
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",

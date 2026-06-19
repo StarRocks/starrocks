@@ -43,11 +43,6 @@
 #include <gflags/gflags.h>
 #include <thrift/TOutput.h>
 
-#ifndef __APPLE__
-#include "fs/fs_s3.h"
-#include "platform/aws/aws_sdk_guard.h"
-#endif
-
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
@@ -67,6 +62,8 @@
 #include "exec/pipeline/query_context.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_provider_bootstrap.h"
+#include "fs/fs_s3.h"
+#include "platform/aws/aws_sdk_guard.h"
 #include "platform/path_rw.h"
 #include "platform/store_path.h"
 #include "runtime/current_thread.h"
@@ -200,9 +197,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-#ifndef __APPLE__
     starrocks::AwsSdkGuard aws_sdk_guard;
-#endif
 
     EXIT_IF_ERROR(starrocks::fs::install_builtin_file_system_providers());
     LOG(INFO) << "file system provider registry init successfully";
@@ -247,9 +242,7 @@ int main(int argc, char** argv) {
     starrocks::start_be(paths, as_cn);
 
     // TODO: Move S3 client cleanup into a unified storage/platform lifecycle owner once the shutdown order is clearer.
-#ifndef __APPLE__
     starrocks::close_s3_clients();
-#endif
 
     if (starrocks::process_quick_exit_in_progress()) {
         LOG(INFO) << "BE is shutting down, will exit quickly";

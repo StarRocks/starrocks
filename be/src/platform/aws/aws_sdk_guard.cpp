@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __APPLE__
 #include "platform/aws/aws_sdk_guard.h"
 
 #include <aws/core/utils/logging/LogLevel.h>
@@ -78,4 +77,3 @@ AwsSdkGuard::~AwsSdkGuard() {
 }
 
 } // namespace starrocks
-#endif
