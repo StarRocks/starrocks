@@ -34,7 +34,6 @@
 #include "gutil/stl_util.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/util.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_proto_normalizer.h"
@@ -46,6 +45,8 @@
 #include "storage/lake/tablet_retain_info.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
+#include "storage/storage_cleanup_executor.h"
+#include "storage/storage_engine.h"
 
 namespace starrocks::lake {
 
@@ -73,10 +74,13 @@ struct VacuumTabletMetaVerionRange {
     }
 };
 
+static StorageCleanupExecutor* storage_cleanup_executor() {
+    return StorageEngine::instance()->storage_cleanup_executor();
+}
+
 static int get_num_delete_file_queued_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    return tp ? tp->num_queued_tasks() : 0;
+    return storage_cleanup_executor()->thread_pool()->num_queued_tasks();
 #else
     return 0;
 #endif
@@ -84,8 +88,7 @@ static int get_num_delete_file_queued_tasks(void*) {
 
 static int get_num_active_file_queued_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    return tp ? tp->active_threads() : 0;
+    return storage_cleanup_executor()->thread_pool()->active_threads();
 #else
     return 0;
 #endif
@@ -271,8 +274,7 @@ void delete_files_async(std::vector<std::string> files_to_delete) {
         return;
     }
     auto task = [files_to_delete = std::move(files_to_delete)]() { (void)delete_files(files_to_delete); };
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    auto st = tp->submit_func(std::move(task));
+    auto st = storage_cleanup_executor()->submit(std::move(task));
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
@@ -280,19 +282,12 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
     if (UNLIKELY(files_to_delete.empty())) {
         return completed_future(Status::OK());
     }
-    auto task = std::make_shared<std::packaged_task<Status()>>(
+    return storage_cleanup_executor()->submit_callable(
             [files_to_delete = std::move(files_to_delete)]() { return delete_files(files_to_delete); });
-    auto packaged_func = [task]() { (*task)(); };
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    if (auto st = tp->submit_func(std::move(packaged_func)); !st.ok()) {
-        return completed_future(std::move(st));
-    }
-    return task->get_future();
 }
 
 void run_clear_task_async(std::function<void()> task) {
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    auto st = tp->submit_func(std::move(task));
+    auto st = storage_cleanup_executor()->submit(std::move(task));
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
