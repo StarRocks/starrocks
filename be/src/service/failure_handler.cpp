@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "service/failure_handler.h"
+
 #include <glog/logging.h>
 #include <jemalloc/jemalloc.h>
 #include <pthread.h>
@@ -47,7 +49,6 @@
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_logging.h"
 
 namespace starrocks {
 
