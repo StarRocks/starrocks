@@ -41,6 +41,9 @@ CONF_mInt32(replication_min_speed_time_seconds, "300");
 // Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
+// The count of threads to run asynchronous storage cleanup tasks. 0 means half of CPU cores.
+CONF_mInt32(storage_cleanup_worker_count, "0");
+
 // The memory_limitation_per_thread_for_schema_change unit GB.
 CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
 

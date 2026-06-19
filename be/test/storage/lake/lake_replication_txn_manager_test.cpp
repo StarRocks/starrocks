@@ -68,6 +68,7 @@
 #include "storage/protobuf_file.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
 
@@ -132,7 +133,7 @@ protected:
         config::enable_transparent_data_encryption = false;
 
         // check primary index cache's ref
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // check trash files already removed
         for (const auto& file : _trash_files) {
             EXPECT_FALSE(fs::path_exist(file));
@@ -655,7 +656,7 @@ protected:
     }
 
     void TearDown() override {
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         ASSERT_OK(fs::remove_all(_test_dir));
     }
 
@@ -850,7 +851,7 @@ protected:
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         ASSERT_OK(fs::remove_all(_test_dir));
     }
 

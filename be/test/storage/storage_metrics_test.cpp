@@ -233,6 +233,7 @@ TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
 
     StorageMetrics metrics;
     metrics.register_thread_pool_metrics("pindex_load", threadpool.get());
+    metrics.register_thread_pool_metrics("storage_cleanup", threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);
@@ -240,6 +241,8 @@ TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
 
     assert_metric_value(&registry, "pindex_load_threadpool_size", "3");
     assert_metric_value(&registry, "pindex_load_queue_count", "0");
+    assert_metric_value(&registry, "storage_cleanup_threadpool_size", "3");
+    assert_metric_value(&registry, "storage_cleanup_queue_count", "0");
 }
 
 } // namespace starrocks

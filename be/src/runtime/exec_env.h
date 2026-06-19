@@ -209,8 +209,6 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
 
-    ThreadPool* delete_file_thread_pool();
-
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
 
     void try_release_resource_before_core_dump();

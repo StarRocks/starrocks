@@ -779,10 +779,6 @@ uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
     return std::min<uint32_t>(dop, 64);
 }
 
-ThreadPool* ExecEnv::delete_file_thread_pool() {
-    return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
-}
-
 void ExecEnv::try_release_resource_before_core_dump() {
     std::set<std::string> modules;
     bool release_all = false;

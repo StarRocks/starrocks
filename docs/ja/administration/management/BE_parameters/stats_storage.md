@@ -316,6 +316,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: タブレットを削除するために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
 - 導入バージョン: -
 
+### storage_cleanup_worker_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Lake ファイルクリーンアップなどの非同期ストレージクリーンアップタスクを実行するために使用されるスレッド数。`0` はノード内の CPU コアの半数を示します。
+- 導入バージョン: -
+
 ### enable_check_string_lengths
 
 - デフォルト: true

@@ -421,6 +421,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：删除 Tablet 的线程数。`0` 表示当前节点的 CPU 核数的一半。
 - 引入版本：-
 
+### storage_cleanup_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：执行异步存储清理任务（例如 Lake 文件清理）的线程数。`0` 表示当前节点的 CPU 核数的一半。
+- 引入版本：-
+
 ### enable_check_string_lengths
 
 - 默认值：true
