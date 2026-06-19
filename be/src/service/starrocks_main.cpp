@@ -51,13 +51,13 @@
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "base/failpoint/fail_point.h"
+#include "base/logging.h"
 #include "base/path/path_util.h"
 #include "base/uid_util.h"
 #include "common/config_object_storage_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
-#include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
@@ -76,7 +76,6 @@
 #include "service/daemon.h"
 #include "service/service.h"
 #include "storage/storage_engine.h"
-#include "util/logging.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
