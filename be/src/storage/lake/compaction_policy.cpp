@@ -19,9 +19,11 @@
 
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_secondary_index_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
+#include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/tablet.h"
@@ -587,6 +589,19 @@ StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(cons
     // If there are no rowsets, it could be cloud native index compaction, default to CLOUD_NATIVE_INDEX_COMPACTION
     if (rowsets.empty()) {
         return CLOUD_NATIVE_INDEX_COMPACTION;
+    }
+
+    // PoC secondary index: vertical compaction writes value columns in column
+    // groups and replays RowSourceMasks to align the non-key groups. On the
+    // single-task PK path this miswires the non-key value columns' sequential
+    // streams (observed: full-scans of `user_id` returned `order_id` data), which
+    // also poisons the .idx built from those output segments. Horizontal
+    // compaction writes all columns together row-by-row with no group/mask replay,
+    // so the merged base segments stay correct. Force horizontal for any tablet
+    // that has a registered secondary index.
+    if (config::enable_secondary_index_write && _tablet_metadata != nullptr &&
+        !secondary_sorted::SecondaryIndexRegistry::get_for_tablet(_tablet_metadata->id()).empty()) {
+        return HORIZONTAL_COMPACTION;
     }
 
     // TODO: support row source mask buffer based on starlet fs
