@@ -22,11 +22,13 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
@@ -149,6 +151,28 @@ TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path_with_miss
 
     auto st = ConfigUpdateRegistry::instance()->update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_schema_change_pool_size) {
+    auto* thread_pool = StorageEngine::instance()->lake_schema_change_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_alter_tablet_worker_count = config::alter_tablet_worker_count;
+    const int original_lake_schema_change_parallelism = config::lake_schema_change_per_tablet_parallelism;
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count",
+                                                                 std::to_string(original_alter_tablet_worker_count)));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config(
+                "lake_schema_change_per_tablet_parallelism", std::to_string(original_lake_schema_change_parallelism)));
+    });
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("lake_schema_change_per_tablet_parallelism", "3");
+    CHECK_OK(st);
+    ASSERT_EQ(std::max(1, config::alter_tablet_worker_count * 3), thread_pool->max_threads());
+
+    st = ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count", "2");
+    CHECK_OK(st);
+    ASSERT_EQ(6, thread_pool->max_threads());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {

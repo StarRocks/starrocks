@@ -20,8 +20,9 @@
 #include "storage/schema_change_utils.h"
 
 namespace starrocks {
+class ThreadPool;
 class TxnLogPB_OpSchemaChange;
-}
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -31,7 +32,8 @@ struct SchemaChangeParams;
 
 class SchemaChangeHandler {
 public:
-    explicit SchemaChangeHandler(TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
+    explicit SchemaChangeHandler(TabletManager* tablet_manager, ThreadPool* lake_schema_change_pool = nullptr)
+            : _tablet_manager(tablet_manager), _lake_schema_change_pool(lake_schema_change_pool) {}
     ~SchemaChangeHandler() = default;
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
@@ -47,7 +49,7 @@ private:
     // ADD INDEX fast path (lake-only). Skips data rewrite: builds standalone
     // .idx files (Index Delta Group) per segment and emits an OpAddIndex
     // TxnLog. Per-segment work runs in parallel on
-    // _thread_pool_lake_schema_change. Caller is expected to have already
+    // StorageEngine's lake_schema_change thread pool. Caller is expected to have already
     // validated `request.only_add_index` and the index list.
     Status do_process_add_index_only(const TAlterTabletReqV2& request);
 
@@ -59,6 +61,7 @@ private:
     Status do_process_update_tablet_meta(const TTabletMetaInfo& request, int64_t txn_id);
 
     TabletManager* _tablet_manager;
+    ThreadPool* _lake_schema_change_pool;
 };
 
 } // namespace starrocks::lake

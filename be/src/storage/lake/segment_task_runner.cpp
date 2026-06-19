@@ -22,7 +22,7 @@ namespace starrocks::lake {
 
 SegmentTaskRunner::SegmentTaskRunner(ThreadPool* pool, int /*max_concurrency*/) {
     // The `max_concurrency` parameter is informational — at runtime the
-    // outer pool is already sized to
+    // storage-owned lake_schema_change pool is already sized to
     //   alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
     // so a single job naturally observes at most that many concurrent
     // slots without any per-token cap inside the runner.

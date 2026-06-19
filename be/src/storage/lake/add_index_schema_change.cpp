@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "agent/agent_server.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
@@ -34,7 +33,6 @@
 #include "fs/key_cache.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/index_file_writer.h"
@@ -135,8 +133,9 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
 
 AddIndexSchemaChange::AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
                                            VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build,
-                                           int64_t alter_version)
+                                           int64_t alter_version, ThreadPool* lake_schema_change_pool)
         : _tablet_mgr(tablet_mgr),
+          _lake_schema_change_pool(lake_schema_change_pool),
           _txn_id(txn_id),
           _base_tablet(std::move(base_tablet)),
           _new_tablet(std::move(new_tablet)),
@@ -152,12 +151,7 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         op_add_index->add_new_indexes()->CopyFrom(ix);
     }
 
-    auto* exec_env = ExecEnv::GetInstance();
-    if (exec_env == nullptr || exec_env->agent_server() == nullptr) {
-        return Status::InternalError("AddIndexSchemaChange: ExecEnv or agent_server not available");
-    }
-    auto* pool = exec_env->agent_server()->get_lake_schema_change_thread_pool();
-    SegmentTaskRunner runner(pool, config::lake_schema_change_per_tablet_parallelism);
+    SegmentTaskRunner runner(_lake_schema_change_pool, config::lake_schema_change_per_tablet_parallelism);
 
     auto base_metadata = _base_tablet.metadata();
     if (base_metadata == nullptr) {
