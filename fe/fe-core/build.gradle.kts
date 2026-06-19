@@ -135,6 +135,9 @@ dependencies {
     implementation("io.delta:delta-kernel-defaults") {
         exclude(group = "org.apache.hadoop", module = "hadoop-client-api")
         exclude(group = "org.apache.hadoop", module = "hadoop-client-runtime")
+        // FE uses slf4j 1.7.x with log4j-slf4j-impl; exclude delta's slf4j 2.x binding to avoid
+        // NoClassDefFoundError: org/slf4j/spi/LoggingEventBuilder at startup
+        exclude(group = "org.apache.logging.log4j", module = "log4j-slf4j2-impl")
     }
     implementation("io.grpc:grpc-api")
     implementation("io.grpc:grpc-core")
