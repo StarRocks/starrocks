@@ -76,6 +76,7 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(TasksSystemTable.create());
             super.registerTableUnlocked(TaskRunsSystemTable.getInstance());
             super.registerTableUnlocked(MaterializedViewsSystemTable.create());
+            super.registerTableUnlocked(MaterializedViewRefreshJobsSystemTable.create());
             super.registerTableUnlocked(LoadsSystemTable.create());
             super.registerTableUnlocked(LoadTrackingLogsSystemTable.create());
             super.registerTableUnlocked(RoutineLoadJobsSystemTable.create());

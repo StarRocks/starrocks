@@ -1,0 +1,69 @@
+-- name: test_ivm_refresh_jobs_imv_columns
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+
+insert into t1 values
+  ('a', 1, '2023-12-01'),
+  ('b', 2, '2023-12-02');
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+set enable_materialized_view_rewrite = false;
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT col_str, col_int, dt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+-- Baseline refresh: hybrid processor falls back to PCT, so no IMV source range is
+-- recorded for this job (IMV_SOURCE_VERSION_RANGE / IMV_SOURCE_TIMESTAMP_RANGE stay NULL).
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('c', 3, '2023-12-03');
+
+-- Pure incremental refresh: consumes the new snapshot, so this job records a per-base-table
+-- {start,end} version range and the matching commit-time range.
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+-- REFRESH_MODE reflects the MV's configured mode for every job (INCREMENTAL here).
+function: assert_query_contains("SELECT DISTINCT REFRESH_MODE FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1'", "INCREMENTAL")
+
+-- The incremental job populates IMV_SOURCE_VERSION_RANGE, keyed by the base table's readable
+-- name (<catalog>.<db>.t1) with a JSON {start,end}. Snapshot ids are random 64-bit values, so
+-- match on the table name and the JSON shape, never on the id.
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_VERSION_RANGE IS NOT NULL AND IMV_SOURCE_VERSION_RANGE LIKE '%t1%' AND IMV_SOURCE_VERSION_RANGE LIKE '%start%' AND IMV_SOURCE_VERSION_RANGE LIKE '%end%'", "1")
+
+-- The incremental job also populates IMV_SOURCE_TIMESTAMP_RANGE, keyed the same way, with
+-- epoch-millis start/end.
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_TIMESTAMP_RANGE IS NOT NULL AND IMV_SOURCE_TIMESTAMP_RANGE LIKE '%t1%' AND IMV_SOURCE_TIMESTAMP_RANGE LIKE '%start%' AND IMV_SOURCE_TIMESTAMP_RANGE LIKE '%end%'", "1")
+
+-- The baseline (PCT) job records no source range: at least one job has both range columns NULL.
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_VERSION_RANGE IS NULL AND IMV_SOURCE_TIMESTAMP_RANGE IS NULL", "1")
+
+-- A pinning job records IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP, keyed by the iceberg table identifier
+-- (t1:<uuid>) -- a different key scheme from the range columns. Assert on at least one job and
+-- match the table name only, not the uuid/snapshot value.
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP IS NOT NULL AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP LIKE '%t1%'", "1")
+
+drop materialized view test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

@@ -424,10 +424,12 @@ public class TaskRunStatus implements Writable {
             if (!state.equals(Constants.TaskRunState.SUCCESS)) {
                 return true;
             }
-            // if state is success, we should check if the mvTaskRunExtraMessage is empty
-            return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+            // if state is success, we should check if the mvTaskRunExtraMessage is empty (a run rehydrated from
+            // archived history can have a null extra message, which means no pending partitions, i.e. finished)
+            return mvTaskRunExtraMessage == null
+                    || (Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
                     Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
-                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
+                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues()));
         }
     }
 
