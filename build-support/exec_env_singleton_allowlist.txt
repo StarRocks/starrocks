@@ -15,7 +15,7 @@ src/service/service_be/config_update_hooks.cpp
 src/runtime/exec_env.cpp
 src/runtime/fragment_mgr.cpp
 src/runtime/load_channel_mgr.cpp
-src/runtime/logconfig.cpp
+src/service/failure_handler.cpp
 src/script/script.cpp
 src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp
