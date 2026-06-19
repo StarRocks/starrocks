@@ -338,7 +338,12 @@ public class OptOlapPartitionPruner {
             } else {
                 return prune;
             }
-        } catch (AnalysisException e) {
+        } catch (Exception e) {
+            // Pruning is best-effort. A non-numeric LIST partition value that fails to cast (or any
+            // other pruning failure) must not abort the query: fall back to the unpruned candidate set
+            // (all partitions when no explicit PARTITION hint was given), and let the scan apply the
+            // predicate. StarRocksConnectorException (a RuntimeException) used to escape the old
+            // AnalysisException-only catch and fail valid queries.
             LOG.warn("PartitionPrune Failed. ", e);
         }
         return specifyPartitionIds;
