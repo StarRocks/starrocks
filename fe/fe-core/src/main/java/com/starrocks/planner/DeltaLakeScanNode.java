@@ -39,7 +39,11 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+<<<<<<< HEAD
 import io.delta.kernel.engine.Engine;
+=======
+import com.starrocks.type.Type;
+>>>>>>> 9476d447e6 ([Enhancement] Bump delta kernel version to 4.2 (#74384))
 import io.delta.kernel.internal.SnapshotImpl;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -128,8 +132,7 @@ public class DeltaLakeScanNode extends ScanNode {
         this.enableIncrementalScanRanges = enableIncrementalScanRanges;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
-        Engine engine = deltaLakeTable.getDeltaEngine();
-        long snapshotId = snapshot.getVersion(engine);
+        long snapshotId = snapshot.getVersion();
 
         GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
@@ -170,7 +173,7 @@ public class DeltaLakeScanNode extends ScanNode {
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
         output.append(prefix).append(String.format("TABLE VERSION: %s",
-                deltaLakeTable.getDeltaSnapshot().getVersion(deltaLakeTable.getDeltaEngine())));
+                deltaLakeTable.getDeltaSnapshot().getVersion()));
         output.append("\n");
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));

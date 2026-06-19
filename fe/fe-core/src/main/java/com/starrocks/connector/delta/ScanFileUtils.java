@@ -25,8 +25,10 @@ import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.util.ColumnMapping;
 import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
+import org.apache.hadoop.fs.Path;
 
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,10 @@ import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_ORDINAL;
 import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_STATS_ORDINAL;
 
 public class ScanFileUtils {
+    private static final int TABLE_ROOT_ORDINAL = InternalScanFileUtils.SCAN_FILE_SCHEMA.indexOf("tableRoot");
+    private static final int ADD_FILE_PATH_ORDINAL =
+            ((StructType) InternalScanFileUtils.SCAN_FILE_SCHEMA.get("add").getDataType()).indexOf("path");
+
     public static class Records {
         @SerializedName(value = "numRecords")
         public long numRecords;
@@ -68,6 +74,21 @@ public class ScanFileUtils {
         return new DeltaLakeAddFileStatsSerDe(estimateRowCount, null, null, null);
     }
 
+    // delta-kernel 4.2 URI-decodes the path inside getAddFileStatus(), but BE opens the object key
+    // verbatim and the physical key keeps the URI-encoded add.path. Rebuild the absolute path from the
+    // raw add.path so the encoding is preserved (matching pre-4.2 behavior).
+    private static FileStatus getEncodedAddFileStatus(Row scanFileInfo) {
+        Row addFile = getAddFileEntry(scanFileInfo);
+        if (addFile.isNullAt(ADD_FILE_PATH_ORDINAL) || scanFileInfo.isNullAt(TABLE_ROOT_ORDINAL)) {
+            throw new IllegalArgumentException("There is no `add.path` or `tableRoot` entry in the scan file row");
+        }
+        FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(scanFileInfo);
+        String encodedPath = addFile.getString(ADD_FILE_PATH_ORDINAL);
+        String tableRoot = scanFileInfo.getString(TABLE_ROOT_ORDINAL);
+        String encodedAbsolutePath = new Path(tableRoot, encodedPath).toString();
+        return FileStatus.of(encodedAbsolutePath, fileStatus.getSize(), fileStatus.getModificationTime());
+    }
+
     private static Row getAddFileEntry(Row scanFileInfo) {
         if (scanFileInfo.isNullAt(ADD_FILE_ORDINAL)) {
             throw new IllegalArgumentException("There is no `add` entry in the scan file row");
@@ -88,7 +109,7 @@ public class ScanFileUtils {
         Set<String> partitionColumns = metadata.getPartitionColNames();
         Map<String, StructField> schema = buildCaseInsensitiveSchema(metadata.getSchema().fields());
 
-        FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
+        FileStatus fileStatus = getEncodedAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Map<String, String> physicalNameToPartitionNameMap = Maps.newHashMap();
         // partition Values use column physical name(using in column mapping) as key, we need to convert it to logical name

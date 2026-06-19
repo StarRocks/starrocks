@@ -201,6 +201,10 @@ public class CachingDeltaLakeMetastoreTest {
                 public void checkpoint(Engine engine, long version)
                         throws TableNotFoundException, CheckpointAlreadyExistsException, IOException {
                 }
+
+                @Override
+                public void checksum(Engine engine, long version) throws TableNotFoundException, IOException {
+                }
             };
 
             new MockUp<TableImpl>() {

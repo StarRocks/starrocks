@@ -91,7 +91,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                     @NotNull
                     @Override
                     public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.first.getSize(),
+                                pair.first.getModificationTime(), pair.second, hdfsConfiguration);
                     }
                 });
 
@@ -183,7 +184,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         Engine deltaEngine = deltaLakeTable.getDeltaEngine();
         List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
 
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
+        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder();
         Scan scan = scanBuilder.build();
         try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
             while (scanFilesAsBatches.hasNext()) {

@@ -126,10 +126,17 @@ public class DeltaLakeScanNodeTest {
             result = engine;
             minTimes = 0;
 
+<<<<<<< HEAD
             snapshot.getVersion(engine);
             result = 123L;
             minTimes = 0;
         }};
+=======
+                snapshot.getVersion();
+                result = 123L;
+                minTimes = 0;
+            }};
+>>>>>>> 9476d447e6 ([Enhancement] Bump delta kernel version to 4.2 (#74384))
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);

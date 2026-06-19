@@ -20,7 +20,6 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import io.delta.kernel.data.ArrayValue;
 import io.delta.kernel.data.ColumnVector;
-import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
@@ -33,15 +32,15 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_KEY;
-import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NAME;
-import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NONE;
+import static io.delta.kernel.internal.util.ColumnMapping.ColumnMappingMode.NAME;
+import static io.delta.kernel.internal.util.ColumnMapping.ColumnMappingMode.NONE;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -59,20 +58,19 @@ public class DeltaUtilsTest {
         new Expectations(metadata) {
             {
                 metadata.getConfiguration();
-                result = ImmutableMap.of(COLUMN_MAPPING_MODE_KEY, COLUMN_MAPPING_MODE_NAME);
+                result = ImmutableMap.of(COLUMN_MAPPING_MODE_KEY, NAME.value);
                 minTimes = 0;
             }
         };
 
-        DeltaUtils.checkProtocolAndMetadata(new Protocol(3, 7, Lists.newArrayList(),
-                Lists.newArrayList()), metadata);
+        DeltaUtils.checkProtocolAndMetadata(new Protocol(3, 7), metadata);
     }
 
     @Test
     public void testConvertDeltaSnapshotToSRTable(@Mocked SnapshotImpl snapshot) {
         new Expectations() {
             {
-                snapshot.getSchema((Engine) any);
+                snapshot.getSchema();
                 result = new StructType(Lists.newArrayList(new StructField("col1", IntegerType.INTEGER, true),
                         new StructField("col2", DateType.DATE, true)));
                 minTimes = 0;
@@ -81,8 +79,8 @@ public class DeltaUtilsTest {
 
         new MockUp<ColumnMapping>() {
             @Mock
-            public String getColumnMappingMode(Configuration configuration) {
-                return COLUMN_MAPPING_MODE_NONE;
+            public ColumnMapping.ColumnMappingMode getColumnMappingMode(Map<String, String> configuration) {
+                return NONE;
             }
         };
 
