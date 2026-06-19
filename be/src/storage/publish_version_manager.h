@@ -14,10 +14,14 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
+#include <thread>
+#include <vector>
 
 #include "common/status.h"
 #include "common/thread/threadpool.h"
@@ -31,20 +35,26 @@ class PublishVersionManager {
 public:
     Status init();
     ~PublishVersionManager();
+    void start();
+    void stop();
     void wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests);
-    bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
-    void finish_publish_version_task();
-    void update_tablet_version(TFinishTaskRequest& finish_task_request);
 
-    size_t finish_task_requests_size() { return _finish_task_requests.size(); }
-    size_t waitting_finish_task_requests_size() { return _waitting_finish_task_requests.size(); }
+    size_t finish_task_requests_size();
+    size_t waitting_finish_task_requests_size();
 
 private:
     bool _all_task_applied(const TFinishTaskRequest& finish_task_request);
     bool _left_task_applied(const TFinishTaskRequest& finish_task_request);
+    bool _has_pending_task_unlocked() const;
+    void _finish_publish_version_task_unlocked();
+    void _finish_publish_version_thread_callback();
+    void _update_tablet_version(TFinishTaskRequest& finish_task_request);
 
 private:
     mutable std::mutex _lock;
+    std::condition_variable _finish_publish_version_cv;
+    std::atomic<bool> _stopped{true};
+    std::thread _finish_publish_version_thread;
 
     std::map<int64_t, TFinishTaskRequest> _finish_task_requests;
     std::map<int64_t, TFinishTaskRequest> _waitting_finish_task_requests;

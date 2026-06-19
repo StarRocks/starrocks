@@ -14,10 +14,15 @@
 
 #include "publish_version_manager.h"
 
+#include <chrono>
+
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/thread.h"
+#include "runtime/current_thread.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
@@ -39,12 +44,31 @@ Status PublishVersionManager::init() {
 }
 
 PublishVersionManager::~PublishVersionManager() {
+    stop();
     if (_finish_publish_version_thread_pool) {
         _finish_publish_version_thread_pool->shutdown();
     }
+    std::lock_guard wl(_lock);
     _finish_task_requests.clear();
     _waitting_finish_task_requests.clear();
     _unapplied_tablet_by_txn.clear();
+}
+
+void PublishVersionManager::start() {
+    if (_finish_publish_version_thread.joinable()) {
+        return;
+    }
+    _stopped.store(false, std::memory_order_release);
+    _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(); });
+    Thread::set_thread_name(_finish_publish_version_thread, "finish_pub_ver");
+}
+
+void PublishVersionManager::stop() {
+    _stopped.store(true, std::memory_order_release);
+    _finish_publish_version_cv.notify_all();
+    if (_finish_publish_version_thread.joinable()) {
+        _finish_publish_version_thread.join();
+    }
 }
 
 // should under lock
@@ -116,18 +140,31 @@ bool PublishVersionManager::_left_task_applied(const TFinishTaskRequest& finish_
 }
 
 void PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests) {
-    std::lock_guard wl(_lock);
-    for (size_t i = 0; i < finish_task_requests.size(); i++) {
-        if (_all_task_applied(finish_task_requests[i])) {
-            _finish_task_requests[finish_task_requests[i].signature] = finish_task_requests[i];
-        } else {
-            _waitting_finish_task_requests[finish_task_requests[i].signature] = finish_task_requests[i];
+    {
+        std::lock_guard wl(_lock);
+        for (size_t i = 0; i < finish_task_requests.size(); i++) {
+            if (_all_task_applied(finish_task_requests[i])) {
+                _finish_task_requests[finish_task_requests[i].signature] = finish_task_requests[i];
+            } else {
+                _waitting_finish_task_requests[finish_task_requests[i].signature] = finish_task_requests[i];
+            }
         }
+        DCHECK(_has_pending_task_unlocked());
     }
-    DCHECK(has_pending_task());
+    _finish_publish_version_cv.notify_one();
 }
 
-void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_task_request) {
+size_t PublishVersionManager::finish_task_requests_size() {
+    std::lock_guard wl(_lock);
+    return _finish_task_requests.size();
+}
+
+size_t PublishVersionManager::waitting_finish_task_requests_size() {
+    std::lock_guard wl(_lock);
+    return _waitting_finish_task_requests.size();
+}
+
+void PublishVersionManager::_update_tablet_version(TFinishTaskRequest& finish_task_request) {
     auto& tablet_versions = finish_task_request.tablet_versions;
     for (int32_t i = 0; i < tablet_versions.size(); i++) {
         int64_t tablet_id = tablet_versions[i].tablet_id;
@@ -138,50 +175,73 @@ void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_tas
     }
 }
 
-void PublishVersionManager::finish_publish_version_task() {
+bool PublishVersionManager::_has_pending_task_unlocked() const {
+    return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty();
+}
+
+void PublishVersionManager::_finish_publish_version_task_unlocked() {
     std::vector<int64_t> erase_finish_task_signature;
     std::vector<int64_t> erase_waitting_finish_task_signature;
-    {
-        std::lock_guard wl(_lock);
-        Status st;
-        for (auto& [signature, finish_task_request] : _finish_task_requests) {
-            // submit finish task
+    Status st;
+    for (auto& [signature, finish_task_request] : _finish_task_requests) {
+        // submit finish task
+        st = _finish_publish_version_thread_pool->submit_func([this, finish_request = finish_task_request]() mutable {
+            _update_tablet_version(finish_request);
+#ifndef BE_TEST
+            finish_task(finish_request);
+#endif
+            remove_task_info(finish_request.task_type, finish_request.signature);
+        });
+        if (st.ok()) {
+            erase_finish_task_signature.emplace_back(signature);
+        }
+    }
+
+    for (auto& [signature, finish_task_request] : _waitting_finish_task_requests) {
+        if (_left_task_applied(finish_task_request)) {
             st = _finish_publish_version_thread_pool->submit_func(
                     [this, finish_request = finish_task_request]() mutable {
-                        update_tablet_version(finish_request);
+                        _update_tablet_version(finish_request);
 #ifndef BE_TEST
                         finish_task(finish_request);
 #endif
                         remove_task_info(finish_request.task_type, finish_request.signature);
                     });
             if (st.ok()) {
-                erase_finish_task_signature.emplace_back(signature);
+                erase_waitting_finish_task_signature.emplace_back(signature);
             }
         }
+    }
+    for (auto& signature : erase_finish_task_signature) {
+        _finish_task_requests.erase(signature);
+    }
+    for (auto& signature : erase_waitting_finish_task_signature) {
+        _waitting_finish_task_requests.erase(signature);
+        _unapplied_tablet_by_txn.erase(signature);
+    }
+}
 
-        std::vector<int64_t> clear_txn;
-        for (auto& [signature, finish_task_request] : _waitting_finish_task_requests) {
-            if (_left_task_applied(finish_task_request)) {
-                st = _finish_publish_version_thread_pool->submit_func(
-                        [this, finish_request = finish_task_request]() mutable {
-                            update_tablet_version(finish_request);
-#ifndef BE_TEST
-                            finish_task(finish_request);
-#endif
-                            remove_task_info(finish_request.task_type, finish_request.signature);
-                        });
-                if (st.ok()) {
-                    erase_waitting_finish_task_signature.emplace_back(signature);
-                }
+void PublishVersionManager::_finish_publish_version_thread_callback() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
+    while (!_stopped.load(std::memory_order_consume)) {
+        int32_t interval = config::finish_publish_version_internal;
+        {
+            // wait cv for at most one second and then wake up to check if has pending tasks or stopping in progress
+            auto wait_timeout = std::chrono::seconds(1);
+            std::unique_lock<std::mutex> wl(_lock);
+            while (!_has_pending_task_unlocked() && !_stopped.load(std::memory_order_consume)) {
+                _finish_publish_version_cv.wait_for(wl, wait_timeout);
+            }
+            if (!_has_pending_task_unlocked()) {
+                continue;
+            }
+            _finish_publish_version_task_unlocked();
+            if (interval <= 0) {
+                LOG(WARNING) << "finish_publish_version_internal config is illegal: " << interval << ", force set to 1";
+                interval = 1000;
             }
         }
-        for (auto& signature : erase_finish_task_signature) {
-            _finish_task_requests.erase(signature);
-        }
-        for (auto& signature : erase_waitting_finish_task_signature) {
-            _waitting_finish_task_requests.erase(signature);
-            _unapplied_tablet_by_txn.erase(signature);
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
     }
 }
 

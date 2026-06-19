@@ -117,8 +117,7 @@ Status StorageEngine::start_bg_threads() {
 #endif
 
     // start thread for check finish publish version
-    _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
-    Thread::set_thread_name(_finish_publish_version_thread, "finish_pub_ver");
+    _publish_version_manager->start();
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -620,30 +619,6 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
             interval = 1;
         }
         SLEEP_IN_BG_WORKER(interval);
-    }
-
-    return nullptr;
-}
-
-void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
-    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
-    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        int32_t interval = config::finish_publish_version_internal;
-        {
-            // wait cv for at most one second and then wake up to check if has pending tasks or stopping in progress
-            auto wait_timeout = std::chrono::seconds(1);
-            std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
-            while (!_publish_version_manager->has_pending_task() &&
-                   !_bg_worker_stopped.load(std::memory_order_consume)) {
-                _finish_publish_version_cv.wait_for(wl, wait_timeout);
-            }
-            _publish_version_manager->finish_publish_version_task();
-            if (interval <= 0) {
-                LOG(WARNING) << "finish_publish_version_internal config is illegal: " << interval << ", force set to 1";
-                interval = 1000;
-            }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
     }
 
     return nullptr;

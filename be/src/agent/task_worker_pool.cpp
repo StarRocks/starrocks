@@ -582,7 +582,6 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 int64_t t1 = MonotonicMillis();
                 StorageEngine::instance()->publish_version_manager()->wait_publish_task_apply_finish(
                         std::move(finish_task_requests));
-                StorageEngine::instance()->wake_finish_publish_vesion_thread();
                 affected_dirs.clear();
                 batch_publish_latency = 0;
                 VLOG(1) << "batch submit " << finish_task_size << " finish publish version task "
