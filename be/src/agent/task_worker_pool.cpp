@@ -45,6 +45,7 @@
 #include "agent/agent_server.h"
 #include "agent/finish_task.h"
 #include "agent/publish_version.h"
+#include "agent/publish_version_manager.h"
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
@@ -72,7 +73,6 @@
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/primitive/storage_ids.h"
-#include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
@@ -580,8 +580,9 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 int64_t t0 = MonotonicMillis();
                 StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
                 int64_t t1 = MonotonicMillis();
-                StorageEngine::instance()->publish_version_manager()->wait_publish_task_apply_finish(
-                        std::move(finish_task_requests));
+                auto* publish_version_manager = agent_server->publish_version_manager();
+                DCHECK(publish_version_manager != nullptr);
+                publish_version_manager->wait_publish_task_apply_finish(std::move(finish_task_requests));
                 affected_dirs.clear();
                 batch_publish_latency = 0;
                 VLOG(1) << "batch submit " << finish_task_size << " finish publish version task "

@@ -90,7 +90,6 @@ set(STORAGE_FILES
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
-    publish_version_manager.cpp
     olap_define.cpp
     olap_server.cpp
     persistent_index.cpp
