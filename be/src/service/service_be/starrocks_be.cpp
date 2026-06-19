@@ -24,6 +24,7 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
@@ -349,6 +350,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (exec_env->lake_tablet_manager() != nullptr) {
         exec_env->lake_tablet_manager()->stop();
     }
+#endif
+
+    const int64_t storage_cleanup_drain_timeout_ms =
+            config::loop_count_wait_fragments_finish > 0 ? config::loop_count_wait_fragments_finish * 10 * 1000 : 0;
+    storage_engine->shutdown_storage_cleanup_executor(storage_cleanup_drain_timeout_ms);
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage cleanup executor exit successfully";
+
+#ifdef USE_STAROS
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif

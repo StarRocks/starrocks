@@ -223,6 +223,8 @@ CONF_mInt32(replication_min_speed_limit_kbps, "50");
 CONF_mInt32(replication_min_speed_time_seconds, "300");
 // Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
+// The count of threads to run asynchronous storage cleanup tasks. 0 means half of CPU cores.
+CONF_mInt32(storage_cleanup_worker_count, "0");
 // The lake replication slow log threshold
 CONF_mInt64(lake_replication_slow_log_ms, "30000");
 // The buffer size used for reading remote data during lake replication

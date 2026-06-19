@@ -388,6 +388,15 @@ This topic introduces the following types of BE configurations:
 - Description: The number of threads used to drop a tablet. `0` indicates half of the CPU cores in the node.
 - Introduced in: -
 
+### storage_cleanup_worker_count
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads used to run asynchronous storage cleanup tasks, such as Lake file cleanup. `0` indicates half of the CPU cores in the node.
+- Introduced in: -
+
 ### enable_check_string_lengths
 
 - Default: true

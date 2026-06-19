@@ -85,6 +85,7 @@
 #include "storage/rowset/unique_rowset_id_generator.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
+#include "storage/storage_cleanup_executor.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -126,6 +127,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _replication_txn_manager(new ReplicationTxnManager()),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
+          _storage_cleanup_executor(new StorageCleanupExecutor()),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
           _dictionary_cache_manager(new DictionaryCacheManager()) {
@@ -154,6 +156,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 }
 
 StorageEngine::~StorageEngine() {
+    shutdown_storage_cleanup_executor();
+
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
     _tablet_manager.reset();
@@ -257,6 +261,10 @@ Status StorageEngine::_open(const EngineOptions& options) {
                               "init lake MemTableFlushExecutor failed");
     StorageMetrics::instance()->register_thread_pool_metrics("lake_memtable_flush",
                                                              _lake_memtable_flush_executor->get_thread_pool());
+
+    RETURN_IF_ERROR_WITH_WARN(_storage_cleanup_executor->init(), "init StorageCleanupExecutor failed");
+    StorageMetrics::instance()->register_thread_pool_metrics("storage_cleanup",
+                                                             _storage_cleanup_executor->thread_pool());
 
     // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
     // index building inside a single ADD INDEX job). Physically isolated
@@ -726,6 +734,18 @@ Status StorageEngine::update_lake_schema_change_thread_pool_max() {
     }
     int new_max = calc_lake_schema_change_thread_pool_max_threads();
     return _lake_schema_change_thread_pool->update_max_threads(new_max);
+}
+
+void StorageEngine::shutdown_storage_cleanup_executor(int64_t drain_timeout_ms) {
+    if (_storage_cleanup_executor != nullptr) {
+        _storage_cleanup_executor->shutdown(drain_timeout_ms);
+    }
+}
+
+void StorageEngine::wait_storage_cleanup_tasks() {
+    if (_storage_cleanup_executor != nullptr) {
+        _storage_cleanup_executor->wait();
+    }
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

@@ -38,6 +38,7 @@
         "replication_min_speed_limit_kbps",
         "replication_min_speed_time_seconds",
         "clear_expired_replication_snapshots_interval_seconds",
+        "storage_cleanup_worker_count",
         "memory_limitation_per_thread_for_schema_change",
         "memory_ratio_for_sorting_schema_change",
         "update_cache_expire_sec",

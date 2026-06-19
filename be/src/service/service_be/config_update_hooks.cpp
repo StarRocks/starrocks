@@ -63,6 +63,7 @@
 #include "storage/persistent_index_load_executor.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
+#include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 
@@ -376,6 +377,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         }
         auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
         return thread_pool->update_max_threads(max_thread_cnt);
+    });
+    registry->register_callback("storage_cleanup_worker_count", [=]() -> Status {
+        return StorageEngine::instance()->storage_cleanup_executor()->update_max_threads();
     });
     registry->register_callback("make_snapshot_worker_count", [=]() -> Status {
         auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);

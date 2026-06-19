@@ -1,7 +1,6 @@
 # Production files that still call ExecEnv::GetInstance() directly.
 src/agent/agent_task.cpp
 src/agent/heartbeat_server.cpp
-src/agent/publish_version.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
 src/exec/pipeline/fragment_executor.cpp
@@ -27,7 +26,6 @@ src/storage/lake/metacache.cpp
 src/storage/lake/tablet_reshard.cpp
 src/storage/lake/transactions.cpp
 src/storage/lake/update_manager.cpp
-src/storage/lake/vacuum.cpp
 src/storage/lake/vertical_compaction_task.cpp
 src/storage/load_chunk_spiller.cpp
 src/storage/load_spill_block_manager.cpp
