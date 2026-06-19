@@ -21,7 +21,7 @@ BLAKE3(str);
 
 ## Return value
 
-Returns a value of the VARCHAR type. If the input is NULL, NULL is returned. If the input is empty, an empty string is returned.
+Returns a value of the VARCHAR type. If the input is NULL, NULL is returned. An empty input string returns the BLAKE3 digest of the zero-length message (`af1349b9 f5f9a1a6 a0404dea 36dcc949 9bcb25c9 adc112b7 cc9a93ca e41f3262`).
 
 This function accepts only one string. More than one input string causes an error.
 

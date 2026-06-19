@@ -2863,9 +2863,6 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(blake3Impl, str) {
     const Slice& input_str = str;
     const auto* message = reinterpret_cast<const unsigned char*>(input_str.data);
     size_t message_len = input_str.size;
-    if (message_len == 0) {
-        return std::string();
-    }
 
     uint8_t output[Blake3Hash::BLAKE3_HASH_BYTES];
     Blake3Hash::blake3_compute(message, message_len, output);

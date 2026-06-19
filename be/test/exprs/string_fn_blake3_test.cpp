@@ -107,7 +107,9 @@ TEST_F(StringFunctionBlake3Test, abcNullLiteralTest) {
 
     for (int j = 0; j < 20; ++j) {
         if (j % 2 != 0) {
-            std::string s = "";
+            // BLAKE3 digest of the empty (zero-length) message.
+            // https://raw.githubusercontent.com/BLAKE3-team/BLAKE3/master/test_vectors/test_vectors.json
+            std::string s = "af1349b9 f5f9a1a6 a0404dea 36dcc949 9bcb25c9 adc112b7 cc9a93ca e41f3262";
             ASSERT_EQ(s, data_column->get_slice(j).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));
