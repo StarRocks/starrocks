@@ -213,8 +213,6 @@ public:
 
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
 
-    void try_release_resource_before_core_dump();
-
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
     VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }

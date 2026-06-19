@@ -49,6 +49,7 @@
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "service/core_dump_resource_releaser.h"
 
 namespace starrocks {
 
@@ -176,10 +177,7 @@ static void failure_handler_after_output_log() {
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
         set_process_is_crashing();
 
-        ExecEnv::GetInstance()->try_release_resource_before_core_dump();
-#ifndef __APPLE__
-        DataCache::GetInstance()->try_release_resource_before_core_dump();
-#endif
+        try_release_resources_before_core_dump(ExecEnv::GetInstance(), DataCache::GetInstance());
 #ifndef __APPLE__
         dontdump_unused_pages();
 #endif

@@ -34,7 +34,6 @@
 
 #include "runtime/exec_env.h"
 
-#include <cctype>
 #include <memory>
 #include <thread>
 
@@ -65,8 +64,6 @@
 #include "exec/runtime/query_context_manager.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
-#include "gutil/strings/split.h"
-#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -113,23 +110,6 @@
 #endif
 
 namespace starrocks {
-
-bool parse_resource_str(const string& str, string* value) {
-    if (!str.empty()) {
-        std::string tmp_str = str;
-        StripLeadingWhiteSpace(&tmp_str);
-        StripTrailingWhitespace(&tmp_str);
-        if (tmp_str.empty()) {
-            return false;
-        } else {
-            *value = tmp_str;
-            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
-            return true;
-        }
-    } else {
-        return false;
-    }
-}
 
 ExecEnv* ExecEnv::GetInstance() {
     static ExecEnv s_exec_env;
@@ -781,52 +761,6 @@ uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
-}
-
-void ExecEnv::try_release_resource_before_core_dump() {
-    std::set<std::string> modules;
-    bool release_all = false;
-    auto* global_env = _global_env;
-    DCHECK(global_env != nullptr);
-    if (config::try_release_resource_before_core_dump.value() == "*") {
-        release_all = true;
-    } else {
-        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
-                                       &parse_resource_str, &modules);
-    }
-
-    auto need_release = [&release_all, &modules](const std::string& name) {
-        return release_all || modules.contains(name);
-    };
-
-    if (workgroup_manager() != nullptr && need_release("connector_scan_executor")) {
-        workgroup_manager()->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
-    }
-    if (workgroup_manager() != nullptr && need_release("olap_scan_executor")) {
-        workgroup_manager()->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
-    }
-    if (global_env->thread_pool() != nullptr && need_release("non_pipeline_scan_thread_pool")) {
-        global_env->thread_pool()->shutdown();
-    }
-    if (global_env->pipeline_prepare_pool() != nullptr && need_release("pipeline_prepare_thread_pool")) {
-        global_env->pipeline_prepare_pool()->shutdown();
-    }
-    if (global_env->pipeline_sink_io_pool() != nullptr && need_release("pipeline_sink_io_thread_pool")) {
-        global_env->pipeline_sink_io_pool()->shutdown();
-    }
-    if (global_env->query_rpc_pool() != nullptr && need_release("query_rpc_thread_pool")) {
-        global_env->query_rpc_pool()->shutdown();
-    }
-    if (global_env->datacache_rpc_pool() != nullptr && need_release("datacache_rpc_thread_pool")) {
-        global_env->datacache_rpc_pool()->shutdown();
-        LOG(INFO) << "shutdown datacache rpc thread pool";
-    }
-    if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
-        _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
-    }
-    if (workgroup_manager() != nullptr && need_release("wg_driver_executor")) {
-        workgroup_manager()->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
-    }
 }
 
 workgroup::WorkGroupManager* ExecEnv::workgroup_manager() {
