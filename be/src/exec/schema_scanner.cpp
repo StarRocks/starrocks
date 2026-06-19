@@ -46,6 +46,7 @@
 #include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
+#include "exec/schema_scanner/schema_materialized_view_refresh_jobs_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
 #include "exec/schema_scanner/schema_partitions_meta_scanner.h"
 #include "exec/schema_scanner/schema_pipe_files.h"
@@ -172,6 +173,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTaskRunsScanner>();
     case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
         return std::make_unique<SchemaMaterializedViewsScanner>();
+    case TSchemaTableType::SCH_MATERIALIZED_VIEW_REFRESH_JOBS:
+        return std::make_unique<SchemaMaterializedViewRefreshJobsScanner>();
     case TSchemaTableType::SCH_LOADS:
         return std::make_unique<SchemaLoadsScanner>();
     case TSchemaTableType::SCH_LOAD_TRACKING_LOGS:
