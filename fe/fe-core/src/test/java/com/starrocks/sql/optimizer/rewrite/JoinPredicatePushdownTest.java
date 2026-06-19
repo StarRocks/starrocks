@@ -264,4 +264,22 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
             connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(false);
         }
     }
+
+    @Test
+    public void testSplitJoinORToUnionRuleRejectsNullSafeEqual() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
+        try {
+            // Null-safe '<=>' disjuncts must NOT be rewritten into a UNION ALL of joins: the dedup
+            // predicate added to the second branch is the negation of plain '=', which is wrong for
+            // '<=>' and would emit duplicate rows for NULL-matching tuples. The rule must keep the
+            // original OR condition on a single join instead of splitting it.
+            String sql = "select * from t0 join t1 on t0.v1 <=> t1.v4 or t0.v2 <=> t1.v5";
+            String plan = getFragmentPlan(sql);
+            PlanTestBase.assertContains(plan, "<=>");
+            // the '!=' dedup predicate only appears when the rule splits the OR; it must be absent.
+            PlanTestBase.assertNotContains(plan, "!=");
+        } finally {
+            connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(false);
+        }
+    }
 }
