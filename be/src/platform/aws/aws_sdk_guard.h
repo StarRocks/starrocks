@@ -14,14 +14,18 @@
 
 #pragma once
 
-#ifndef __APPLE__
 #include <aws/core/Aws.h>
 
 namespace starrocks {
 
 class AwsSdkGuard {
 public:
-    AwsSdkGuard();
+    enum class CurlLifecycle {
+        EXTERNALLY_MANAGED,
+        SDK_MANAGED,
+    };
+
+    explicit AwsSdkGuard(CurlLifecycle curl_lifecycle = CurlLifecycle::EXTERNALLY_MANAGED);
     ~AwsSdkGuard();
 
     AwsSdkGuard(const AwsSdkGuard&) = delete;
@@ -34,4 +38,3 @@ private:
 };
 
 } // namespace starrocks
-#endif

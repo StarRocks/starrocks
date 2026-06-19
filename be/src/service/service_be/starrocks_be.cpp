@@ -27,14 +27,12 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
-#include "common/config_object_storage_fwd.h"
 #include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "connector/connector_bootstrap.h"
-#include "fs/s3/poco_common.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -351,13 +349,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
-#endif
-
-#ifndef __APPLE__
-    if (config::enable_poco_client_for_aws_sdk) {
-        starrocks::poco::HTTPSessionPools::instance().shutdown();
-        LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
-    }
 #endif
 
     http_server->join();

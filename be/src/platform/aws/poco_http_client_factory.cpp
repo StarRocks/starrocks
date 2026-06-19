@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/s3/poco_http_client_factory.h"
+#include "platform/aws/poco_http_client_factory.h"
 
 #include <aws/core/client/ClientConfiguration.h>
 #include <aws/core/http/HttpRequest.h>
 #include <aws/core/http/HttpResponse.h>
 #include <aws/core/http/standard/StandardHttpRequest.h>
 
-#include "fs/s3/poco_http_client.h"
+#include "platform/aws/poco_http_client.h"
 
 namespace starrocks::poco {
 

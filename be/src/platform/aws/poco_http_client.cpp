@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/s3/poco_http_client.h"
+#include "platform/aws/poco_http_client.h"
 
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
@@ -29,8 +29,8 @@
 
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
-#include "fs/s3/poco_common.h"
 #include "io/s3_zero_copy_iostream.h"
+#include "platform/aws/poco_common.h"
 
 namespace starrocks::poco {
 
