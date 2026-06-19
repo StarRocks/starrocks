@@ -907,7 +907,17 @@ StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionConte
     // Process each column using template dispatch
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
         const ColumnPtr& col = columns[col_idx];
-        const Column* data_col = col->only_null() ? nullptr : ColumnHelper::get_data_column(col.get());
+        if (col->only_null()) {
+            // An all-NULL column contributes a Null marker for every row. Its const null
+            // column holds a single element, so the per-row encode path would read it out of
+            // bounds (and the data column is absent, risking a null deref). Handle it here.
+            const uint8_t null_marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
+            for (size_t row = 0; row < chunk_size; row++) {
+                digests[row].update(&null_marker, 1);
+            }
+            continue;
+        }
+        const Column* data_col = ColumnHelper::get_data_column(col.get());
         const NullColumn* null_col = ColumnHelper::get_null_column(col.get());
 
         // Get logical type from FunctionContext
