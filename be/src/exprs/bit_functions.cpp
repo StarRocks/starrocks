@@ -25,12 +25,30 @@ namespace starrocks {
 VECTORIZED_BIT_BINARY_IMPL(bitAnd, &);
 VECTORIZED_BIT_BINARY_IMPL(bitOr, |);
 VECTORIZED_BIT_BINARY_IMPL(bitXor, ^);
-VECTORIZED_BIT_BINARY_IMPL(bitShiftLeft, <<);
-VECTORIZED_BIT_BINARY_IMPL(bitShiftRight, >>);
 
 #undef VECTORIZED_BIT_BINARY_IMPL
 
+// The shift count must be in [0, bitwidth(operand)). A negative count or one >= the
+// operand's bit width is undefined behavior in C++; on x86 the hardware shift masks
+// the count to the operand width and silently returns a wrong result instead of 0.
+// Define such out-of-range shifts to return 0. The shift count is a BIGINT (int64_t).
+#define VECTORIZED_BIT_SHIFT_IMPL(NAME, OP)                          \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(NAME##Impl, l, r) {             \
+        if (r < 0 || r >= static_cast<int64_t>(sizeof(LType) * 8)) { \
+            return 0;                                                \
+        }                                                            \
+        return l OP r;                                               \
+    }
+
+VECTORIZED_BIT_SHIFT_IMPL(bitShiftLeft, <<);
+VECTORIZED_BIT_SHIFT_IMPL(bitShiftRight, >>);
+
+#undef VECTORIZED_BIT_SHIFT_IMPL
+
 DEFINE_BINARY_FUNCTION_WITH_IMPL(bitShiftRightLogicalImpl, v, shift) {
+    if (shift < 0 || shift >= static_cast<int64_t>(sizeof(LType) * 8)) {
+        return 0;
+    }
     if constexpr (std::is_same_v<LType, int8_t>) {
         return uint8_t(v) >> shift;
     } else if constexpr (std::is_same_v<LType, int16_t>) {
