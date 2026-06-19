@@ -23,6 +23,7 @@ set(EXEC_FILES
     backend_metrics_initializer.cpp
     backend_base.cpp
     daemon.cpp
+    failure_handler.cpp
     internal_service.cpp
     service_metrics.cpp
     mem_hook.cpp

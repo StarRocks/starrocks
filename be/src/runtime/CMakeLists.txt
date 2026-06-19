@@ -118,7 +118,6 @@ set(RUNTIME_FILES
     lake_snapshot_loader.cpp
     command_executor.cpp
     diagnose_daemon.cpp
-    logconfig.cpp
 )
 
 ADD_BE_LIB(Runtime
