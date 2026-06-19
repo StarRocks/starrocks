@@ -15,7 +15,9 @@
 #include "service/core_dump_resource_releaser.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <string_view>
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
@@ -30,8 +32,8 @@
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -52,24 +54,28 @@ bool parse_resource_str(const std::string& str, std::string* value) {
     return true;
 }
 
-const std::set<std::string>& supported_resource_names() {
-    static const std::set<std::string> kSupportedResourceNames = {
-            "data_cache",
-            "connector_scan_executor",
-            "olap_scan_executor",
-            "non_pipeline_scan_thread_pool",
-            "pipeline_prepare_thread_pool",
-            "pipeline_sink_io_thread_pool",
-            "query_rpc_thread_pool",
-            "datacache_rpc_thread_pool",
-            "publish_version_worker_pool",
-            "wg_driver_executor",
-    };
-    return kSupportedResourceNames;
+constexpr std::array<std::string_view, 10> kSupportedResourceNames = {
+        "data_cache",
+        "connector_scan_executor",
+        "olap_scan_executor",
+        "non_pipeline_scan_thread_pool",
+        "pipeline_prepare_thread_pool",
+        "pipeline_sink_io_thread_pool",
+        "query_rpc_thread_pool",
+        "datacache_rpc_thread_pool",
+        "publish_version_worker_pool",
+        "wg_driver_executor",
+};
+
+bool is_supported_resource_name(std::string_view resource_name) {
+    return std::find(kSupportedResourceNames.begin(), kSupportedResourceNames.end(), resource_name) !=
+           kSupportedResourceNames.end();
 }
 
-bool is_supported_resource_name(const std::string& resource_name) {
-    return supported_resource_names().contains(resource_name);
+bool contains_resource_name(const std::set<std::string>& modules, std::string_view resource_name) {
+    return std::any_of(modules.begin(), modules.end(), [resource_name](const auto& module) {
+        return module.size() == resource_name.size() && std::equal(module.begin(), module.end(), resource_name.begin());
+    });
 }
 
 void try_release_exec_env_resources_before_core_dump(ExecEnv* exec_env, const CoreDumpResourceSelector& selector) {
@@ -77,8 +83,12 @@ void try_release_exec_env_resources_before_core_dump(ExecEnv* exec_env, const Co
         return;
     }
 
-    const auto& execution = exec_env->execution_services();
-    auto* workgroup_manager = execution.workgroup_manager;
+    auto* global_env = exec_env->global_env();
+    if (global_env == nullptr) {
+        return;
+    }
+
+    auto* workgroup_manager = exec_env->workgroup_manager();
 
     if (workgroup_manager != nullptr && selector.should_release("connector_scan_executor")) {
         workgroup_manager->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
@@ -86,20 +96,20 @@ void try_release_exec_env_resources_before_core_dump(ExecEnv* exec_env, const Co
     if (workgroup_manager != nullptr && selector.should_release("olap_scan_executor")) {
         workgroup_manager->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
     }
-    if (execution.thread_pool != nullptr && selector.should_release("non_pipeline_scan_thread_pool")) {
-        execution.thread_pool->shutdown();
+    if (global_env->thread_pool() != nullptr && selector.should_release("non_pipeline_scan_thread_pool")) {
+        global_env->thread_pool()->shutdown();
     }
-    if (execution.pipeline_prepare_pool != nullptr && selector.should_release("pipeline_prepare_thread_pool")) {
-        execution.pipeline_prepare_pool->shutdown();
+    if (global_env->pipeline_prepare_pool() != nullptr && selector.should_release("pipeline_prepare_thread_pool")) {
+        global_env->pipeline_prepare_pool()->shutdown();
     }
-    if (execution.pipeline_sink_io_pool != nullptr && selector.should_release("pipeline_sink_io_thread_pool")) {
-        execution.pipeline_sink_io_pool->shutdown();
+    if (global_env->pipeline_sink_io_pool() != nullptr && selector.should_release("pipeline_sink_io_thread_pool")) {
+        global_env->pipeline_sink_io_pool()->shutdown();
     }
-    if (execution.query_rpc_pool != nullptr && selector.should_release("query_rpc_thread_pool")) {
-        execution.query_rpc_pool->shutdown();
+    if (global_env->query_rpc_pool() != nullptr && selector.should_release("query_rpc_thread_pool")) {
+        global_env->query_rpc_pool()->shutdown();
     }
-    if (execution.datacache_rpc_pool != nullptr && selector.should_release("datacache_rpc_thread_pool")) {
-        execution.datacache_rpc_pool->shutdown();
+    if (global_env->datacache_rpc_pool() != nullptr && selector.should_release("datacache_rpc_thread_pool")) {
+        global_env->datacache_rpc_pool()->shutdown();
         LOG(INFO) << "shutdown datacache rpc thread pool";
     }
     if (exec_env->agent_server() != nullptr && selector.should_release("publish_version_worker_pool")) {
@@ -126,8 +136,11 @@ CoreDumpResourceSelector::CoreDumpResourceSelector(const std::string& config_val
     }
 }
 
-bool CoreDumpResourceSelector::should_release(const std::string& resource_name) const {
-    return is_supported_resource_name(resource_name) && (_release_all || _modules.contains(resource_name));
+bool CoreDumpResourceSelector::should_release(std::string_view resource_name) const {
+    if (!is_supported_resource_name(resource_name)) {
+        return false;
+    }
+    return _release_all || contains_resource_name(_modules, resource_name);
 }
 
 void try_release_resources_before_core_dump(ExecEnv* exec_env, DataCache* data_cache) {

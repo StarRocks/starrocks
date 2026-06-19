@@ -181,6 +181,7 @@ public:
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
+    GlobalEnv* global_env() const { return _global_env; }
     MemTracker* query_pool_mem_tracker() { return _global_env->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
