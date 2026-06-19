@@ -75,7 +75,6 @@
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_meta.h"
@@ -122,7 +121,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
-          _publish_version_manager(new PublishVersionManager()),
           _dictionary_cache_manager(new DictionaryCacheManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
@@ -217,8 +215,6 @@ Status StorageEngine::_open(const EngineOptions& options) {
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
-
-    RETURN_IF_ERROR_WITH_WARN(_publish_version_manager->init(), "init publish_version_manager failed");
 
     auto dirs = get_stores<false>();
 
@@ -640,7 +636,6 @@ void StorageEngine::stop() {
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
-    _publish_version_manager->stop();
     wake_schedule_apply_thread();
     JOIN_THREAD(_schedule_apply_thread)
 

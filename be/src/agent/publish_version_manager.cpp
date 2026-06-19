@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "publish_version_manager.h"
+#include "agent/publish_version_manager.h"
 
 #include <chrono>
 

@@ -61,7 +61,6 @@
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/persistent_index_compaction_manager.h"
-#include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -115,9 +114,6 @@ Status StorageEngine::start_bg_threads() {
             std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
     Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pindex_gc_evict");
 #endif
-
-    // start thread for check finish publish version
-    _publish_version_manager->start();
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;

@@ -82,7 +82,6 @@ class TAllocateAutoIncrementIdParam;
 class TAllocateAutoIncrementIdResult;
 class UpdateManager;
 class CompactionManager;
-class PublishVersionManager;
 class DictionaryCacheManager;
 class LoadSpillBlockMergeExecutor;
 class SegmentFlushExecutor;
@@ -229,8 +228,6 @@ public:
     ReplicationTxnManager* replication_txn_manager() { return _replication_txn_manager.get(); }
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
-
-    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
 
     DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
 
@@ -498,8 +495,6 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
-
-    std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
     std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
 
