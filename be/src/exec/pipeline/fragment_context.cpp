@@ -229,7 +229,12 @@ void FragmentContext::set_final_status(const Status& status) {
                                             ? _workgroup->executors()
                                             : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
             auto* executor = executors->driver_executor();
-            iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
+            if (executor == nullptr) {
+                LOG(WARNING) << "[Driver] driver_executor is null, skip cancel drivers, query_id="
+                             << print_id(_query_id);
+            } else {
+                iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
+            }
         }
 
         // cancel drivers in event scheduler
