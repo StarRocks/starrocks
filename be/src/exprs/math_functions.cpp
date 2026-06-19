@@ -360,6 +360,18 @@ DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(truncate, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBL
 DEFINE_MATH_BINARY_FN(round_up_to, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
 DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::atan2);
 
+// Iceberg truncate/bucket transforms use the second argument (truncate width /
+// number of buckets) directly as a modulo divisor. Iceberg requires it to be a
+// positive number; reject width <= 0 here so a width of 0 returns a normal error
+// instead of raising SIGFPE on the integer idiv.
+static Status check_iceberg_transform_width(int64_t width) {
+    if (width <= 0) {
+        return Status::InvalidArgument(
+                fmt::format("The width/num_buckets of iceberg transform must be greater than 0, but got: {}", width));
+    }
+    return Status::OK();
+}
+
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
@@ -369,6 +381,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
     const int32_t original_scale = decimalv3_col->scale();
     const int32_t original_precision = decimalv3_col->precision();
@@ -421,6 +434,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
     const auto& raw_null_flags = null_flags->immutable_data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
     const auto& raw_c0 = int_col->immutable_data();
@@ -460,6 +474,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
     auto col = ColumnHelper::cast_to_raw<Type>(c0);
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
@@ -490,6 +505,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
@@ -516,6 +532,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
     auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
@@ -541,6 +558,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     const int size = columns[0]->size();
     ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
     int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
 
     ColumnBuilder<TYPE_INT> builder(size);
     for (int i = 0; i < size; i++) {
@@ -563,6 +581,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionC
     const int size = columns[0]->size();
     ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
     int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
 
     ColumnBuilder<TYPE_INT> builder(size);
     for (int i = 0; i < size; i++) {
@@ -615,6 +634,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
 
+    RETURN_IF_ERROR(check_iceberg_transform_width(width));
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
     const auto& raw_c0 = decimalv3_col->immutable_data();
