@@ -21,10 +21,14 @@
 #include <Poco/URI.h>
 #include <aws/core/http/HttpRequest.h>
 
+#include <cstdint>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <tuple>
+#include <unordered_map>
 
-#include "fs/s3/pool_base.h"
-#include "runtime/mem_tracker.h"
+#include "platform/aws/pool_base.h"
 
 namespace starrocks::poco {
 

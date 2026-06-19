@@ -17,6 +17,8 @@
 #include <Poco/Net/NetSSL.h>
 #include <aws/core/http/HttpClientFactory.h>
 
+#include <memory>
+
 namespace Aws::Http {
 class HttpClient;
 class HttpRequest;

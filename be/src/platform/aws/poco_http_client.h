@@ -22,7 +22,7 @@
 
 #include <string>
 
-#include "fs/s3/poco_common.h"
+#include "platform/aws/poco_common.h"
 
 namespace Aws::Http::Standard {
 class StandardHttpResponse;

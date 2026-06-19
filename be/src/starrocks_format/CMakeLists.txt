@@ -36,6 +36,7 @@ set(STARROCKS_LIBS
     Gutil
     HttpCore
     IO
+    Platform
     Serde
     Storage
     Rowset

@@ -64,7 +64,6 @@
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
-#include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
@@ -656,12 +655,6 @@ void ExecEnv::stop() {
         _diagnose_daemon->stop();
         component_times.emplace_back("diagnose_daemon", MonotonicMillis() - start);
     }
-
-#if !defined(__APPLE__) && !defined(BE_TEST)
-    start = MonotonicMillis();
-    close_s3_clients();
-    component_times.emplace_back("close_s3_clients", MonotonicMillis() - start);
-#endif
 
     start = MonotonicMillis();
     PythonEnvManager::getInstance().close();
