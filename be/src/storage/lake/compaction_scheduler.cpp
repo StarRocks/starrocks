@@ -37,7 +37,9 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "gutil/stl_util.h"
+#include "common/config_secondary_index_fwd.h"
 #include "platform/thrift_rpc_helper.h"
+#include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
@@ -272,6 +274,27 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     // Check if parallel compaction is enabled
     bool has_parallel_config = request->has_parallel_config();
     bool enable_parallel = has_parallel_config && request->parallel_config().enable_parallel();
+
+    // PoC secondary index: the parallel/segment-range compaction path builds a
+    // separate partial .idx in each subtask, but the manager-side merge
+    // (tablet_parallel_compaction_manager.cpp) neither propagates the per-subtask
+    // SecondaryIndexFilePB into the merged output rowset nor reconciles the
+    // subtask-local segment ids against the rebased merged segment ids -- so the
+    // merged rowset ends up with secondary_indexes_size()==0 and the reader falls
+    // back to a full scan (IndexRowsScanned=0). Force the single-task path for any
+    // tablet that has a registered secondary index: that produces one output
+    // rowset, and the compaction hook builds exactly one .idx over its segments
+    // with matching 0-based segment ids and attaches it.
+    if (enable_parallel && config::enable_secondary_index_write) {
+        for (auto tablet_id : request->tablet_ids()) {
+            if (!secondary_sorted::SecondaryIndexRegistry::get_for_tablet(tablet_id).empty()) {
+                LOG(INFO) << "secondary_index: forcing non-parallel compaction for txn=" << request->txn_id()
+                          << " because tablet=" << tablet_id << " has a registered secondary index";
+                enable_parallel = false;
+                break;
+            }
+        }
+    }
 
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
