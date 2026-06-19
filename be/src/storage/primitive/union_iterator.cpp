@@ -71,6 +71,10 @@ private:
     size_t _merged_rows = 0;
     // Scratch chunk used to coalesce sparse child output (see do_get_next).
     ChunkUniquePtr _coalesce_tmp;
+    // Rows of _coalesce_tmp already drained into a returned chunk; remaining rows
+    // carry over to the next do_get_next call so a full child chunk never forces
+    // the output past chunk_size.
+    size_t _tmp_consumed = 0;
 };
 
 inline Status UnionIterator::do_get_next(Chunk* chunk) {
@@ -87,26 +91,44 @@ inline Status UnionIterator::do_get_next(Chunk* chunk) {
     // collapses thousands of tiny chunks into a few full ones; on dense scans
     // the first child already fills the chunk so it stays a single swap.
     const auto target_rows = static_cast<size_t>(chunk_size());
-    while (chunk->num_rows() < target_rows && _cur_idx < _children.size()) {
-        if (_coalesce_tmp == nullptr) {
-            _coalesce_tmp = chunk->clone_empty();
+    while (chunk->num_rows() < target_rows) {
+        // Refill the scratch buffer from the next child once it is fully drained.
+        // A child segment iterator can emit up to chunk_size rows, so we keep any
+        // rows that do not fit the current output and resume from them next call.
+        if (_coalesce_tmp == nullptr || _tmp_consumed >= _coalesce_tmp->num_rows()) {
+            if (_cur_idx >= _children.size()) {
+                break;
+            }
+            if (_coalesce_tmp == nullptr) {
+                _coalesce_tmp = chunk->clone_empty();
+            }
+            _coalesce_tmp->reset();
+            _tmp_consumed = 0;
+            Status res = _children[_cur_idx]->get_next(_coalesce_tmp.get());
+            if (res.is_end_of_file()) {
+                _merged_rows += _children[_cur_idx]->merged_rows();
+                _children[_cur_idx]->close();
+                _children[_cur_idx].reset();
+                _cur_idx++;
+                continue;
+            }
+            if (!res.ok()) {
+                return res;
+            }
+            if (_coalesce_tmp->num_rows() == 0) {
+                continue;
+            }
         }
-        _coalesce_tmp->reset();
-        Status res = _children[_cur_idx]->get_next(_coalesce_tmp.get());
-        if (res.is_end_of_file()) {
-            _merged_rows += _children[_cur_idx]->merged_rows();
-            _children[_cur_idx]->close();
-            _children[_cur_idx].reset();
-            _cur_idx++;
-            continue;
-        }
-        if (!res.ok()) {
-            return res;
-        }
-        if (chunk->num_rows() == 0) {
+        const size_t avail = _coalesce_tmp->num_rows() - _tmp_consumed;
+        const size_t room = target_rows - chunk->num_rows();
+        const size_t take = avail < room ? avail : room;
+        if (chunk->num_rows() == 0 && _tmp_consumed == 0 && take == _coalesce_tmp->num_rows()) {
+            // Zero-copy fast path: the whole scratch chunk fits and the output is
+            // still empty (the common dense case -- first child fills the chunk).
             chunk->swap_chunk(*_coalesce_tmp);
         } else {
-            chunk->append(*_coalesce_tmp);
+            chunk->append(*_coalesce_tmp, _tmp_consumed, take);
+            _tmp_consumed += take;
         }
     }
     if (chunk->num_rows() > 0) {
