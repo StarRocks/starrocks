@@ -21,14 +21,16 @@ CREATE TABLE t_hll_16 (
   cnt  ds_hll_count_distinct(varchar, int, varchar) NULL
 ) ENGINE=OLAP
 AGGREGATE KEY(k)
-DISTRIBUTED BY HASH(k) BUCKETS 16;
+DISTRIBUTED BY HASH(k) BUCKETS 16
+PROPERTIES ("replication_num" = "1");
 
 CREATE TABLE t_hll_1 (
   k    int NULL,
   cnt  ds_hll_count_distinct(varchar, int, varchar) NULL
 ) ENGINE=OLAP
 AGGREGATE KEY(k)
-DISTRIBUTED BY HASH(k) BUCKETS 16;
+DISTRIBUTED BY HASH(k) BUCKETS 16
+PROPERTIES ("replication_num" = "1");
 
 -- 16 keys * 1000 distinct values each = 16000 distinct in total.
 insert into t_hll_16
