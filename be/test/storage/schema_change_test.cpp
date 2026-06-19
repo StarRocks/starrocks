@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "base/logging.h"
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/datum_convert.h"
@@ -39,7 +40,6 @@
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

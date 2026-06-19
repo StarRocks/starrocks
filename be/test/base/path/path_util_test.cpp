@@ -39,7 +39,7 @@
 #include <string>
 #include <vector>
 
-#include "util/logging.h"
+#include "base/logging.h"
 
 using std::string;
 using std::vector;

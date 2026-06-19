@@ -28,6 +28,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_object_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/status.h"
@@ -53,7 +54,6 @@
 #include "platform/platform_env.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
-#include "util/logging.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"

@@ -37,6 +37,7 @@
 #include <set>
 #include <vector>
 
+#include "base/logging.h"
 #include "base/testutil/assert.h"
 #include "common/configbase.h"
 #include "fs/fs.h"
@@ -44,7 +45,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "storage/olap_define.h"
-#include "util/logging.h"
 
 #ifndef BE_TEST
 #define BE_TEST

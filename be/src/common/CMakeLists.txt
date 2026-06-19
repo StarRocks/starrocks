@@ -25,6 +25,7 @@ set(COMMON_FILES
   configbase.cpp
   config_update_registry.cpp
   config.cpp
+  glog_init.cpp
   greplog.cpp
   memory/column_allocator.cpp
   metrics/process_metrics_registry.cpp

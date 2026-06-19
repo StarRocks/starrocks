@@ -50,12 +50,12 @@
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
+#include "base/logging.h"
 #include "compute_env/spill/spill_metrics.h"
 #include "connector/file_scan_metrics.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/query_scan_metrics.h"
 #include "storage/flat_json_metrics.h"
-#include "util/logging.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {

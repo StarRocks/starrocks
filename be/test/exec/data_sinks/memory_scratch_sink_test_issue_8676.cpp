@@ -49,6 +49,7 @@
 #include <iostream>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/logging.h"
 #include "column/chunk.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
@@ -67,7 +68,6 @@
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
 #include "types/logical_type.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

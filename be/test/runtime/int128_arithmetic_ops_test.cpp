@@ -38,8 +38,8 @@
 #include <random>
 #include <string>
 
+#include "base/logging.h"
 #include "types/int128_arithmetics_x86_64.h"
-#include "util/logging.h"
 
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;

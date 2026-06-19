@@ -38,6 +38,7 @@
 
 #include <memory>
 
+#include "base/logging.h"
 #include "base/types/int128.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -48,7 +49,6 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
 using starrocks::operator<<;

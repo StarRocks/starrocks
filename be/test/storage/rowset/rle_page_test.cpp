@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <memory>
 
+#include "base/logging.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -49,7 +50,6 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "types/storage_type_traits.h"
-#include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
 
