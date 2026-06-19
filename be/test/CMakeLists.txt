@@ -430,8 +430,10 @@ SET(DW_TEST_FILES
     ./storage/lake/index_file_writer_reader_test.cpp
     ./storage/lake/auto_increment_partial_update_test.cpp
     ./storage/lake/compaction_policy_test.cpp
+    ./storage/lake/compaction_result_manager_test.cpp
     ./storage/lake/compaction_scheduler_test.cpp
     ./storage/lake/compaction_task_context_test.cpp
+    ./storage/lake/lake_compaction_manager_test.cpp
     ./storage/lake/condition_update_test.cpp
     ./storage/lake/segment_pk_iterator_test.cpp
     ./storage/lake/delta_writer_test.cpp

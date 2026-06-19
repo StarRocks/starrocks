@@ -90,7 +90,9 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/lake_compaction_manager.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
@@ -356,6 +358,23 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
+    {
+        std::vector<std::string> result_root_dirs;
+        result_root_dirs.reserve(store_paths.size());
+        for (const auto& sp : store_paths) {
+            result_root_dirs.emplace_back(sp.path);
+        }
+        _lake_compaction_result_manager = std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
+        auto scan_st = _lake_compaction_result_manager->scan_on_startup();
+        if (!scan_st.ok()) {
+            LOG(WARNING) << "CompactionResultManager scan_on_startup failed: " << scan_st;
+        }
+        // LakeCompactionManager dispatch thread is gated by the runtime config
+        // and only needed when autonomous compaction is enabled. We launch it
+        // unconditionally here — the dispatch_loop is a no-op (cv.wait_for) when
+        // the feature is off, so the cost is negligible.
+        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager, _lake_compaction_result_manager.get());
+    }
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
         std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
@@ -375,6 +394,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
+    {
+        std::vector<std::string> result_root_dirs;
+        for (const auto& sp : _store_paths) result_root_dirs.emplace_back(sp.path);
+        _lake_compaction_result_manager = std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
+        (void)_lake_compaction_result_manager->scan_on_startup();
+        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager, _lake_compaction_result_manager.get());
+    }
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
 #endif
@@ -632,6 +658,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _diagnose_daemon->stop();
         component_times.emplace_back("diagnose_daemon", MonotonicMillis() - start);
+    }
+
+    {
+        start = MonotonicMillis();
+        lake::LakeCompactionManager::instance()->stop();
+        component_times.emplace_back("lake_compaction_manager", MonotonicMillis() - start);
     }
 
 #if !defined(__APPLE__) && !defined(BE_TEST)

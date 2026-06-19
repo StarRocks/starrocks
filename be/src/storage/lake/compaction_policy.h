@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <unordered_set>
 #include <vector>
 
 #include "common/statusor.h"
@@ -37,6 +38,18 @@ public:
     virtual ~CompactionPolicy();
 
     virtual StatusOr<std::vector<RowsetPtr>> pick_rowsets() = 0;
+
+    // Autonomous compaction extension. Pick rowsets honoring two constraints:
+    //   1. excluded_rowset_ids: rowsets currently held by either an in-flight task
+    //      (running_inputs) or a pending CompactionResultPB (pending_inputs); must
+    //      not be selected so that overlapping subtasks don't collide.
+    //   2. max_input_bytes: total input size of returned rowsets must not exceed
+    //      this cap (<= 0 means unlimited). Lets a large tablet split into multiple
+    //      compaction tasks driven by LakeCompactionManager.
+    // Default implementation calls pick_rowsets() and post-filters; subclasses may
+    // override for an integrated, score-aware selection.
+    virtual StatusOr<std::vector<RowsetPtr>> pick_rowsets_with_limit(
+            const std::unordered_set<uint32_t>& excluded_rowset_ids, int64_t max_input_bytes);
 
     virtual StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets);
 
