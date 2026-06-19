@@ -77,7 +77,7 @@ void starrocks_format_initialize(void) {
 #ifdef __APPLE__
         Aws::InitAPI(aws_sdk_options);
 #else
-        _aws_sdk_guard = std::make_unique<starrocks::AwsSdkGuard>();
+        _aws_sdk_guard = std::make_unique<starrocks::AwsSdkGuard>(starrocks::AwsSdkGuard::CurlLifecycle::SDK_MANAGED);
 #endif
 
         auto lzo_status = starrocks::register_orc_lzo_decompressor();

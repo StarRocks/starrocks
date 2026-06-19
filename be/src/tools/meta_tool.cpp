@@ -2033,7 +2033,7 @@ int meta_tool_main(int argc, char** argv) {
         Aws::SDKOptions options;
         Aws::InitAPI(options);
 #else
-        starrocks::AwsSdkGuard aws_sdk_guard;
+        starrocks::AwsSdkGuard aws_sdk_guard(starrocks::AwsSdkGuard::CurlLifecycle::SDK_MANAGED);
 #endif
         auto status =
                 starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);

@@ -51,9 +51,10 @@ Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
 
 } // namespace
 
-AwsSdkGuard::AwsSdkGuard() {
-    // libcurl is already initialized beforehand.
-    _options.httpOptions.initAndCleanupCurl = false;
+AwsSdkGuard::AwsSdkGuard(CurlLifecycle curl_lifecycle) {
+    // starrocks_main initializes libcurl before constructing this guard.
+    // Standalone tools should use SDK_MANAGED.
+    _options.httpOptions.initAndCleanupCurl = curl_lifecycle == CurlLifecycle::SDK_MANAGED;
     if (config::aws_sdk_logging_trace_enabled) {
         auto level = parse_aws_sdk_log_level(config::aws_sdk_logging_trace_level);
         std::cerr << "enable aws sdk logging trace. log level = " << Aws::Utils::Logging::GetLogLevelName(level)
