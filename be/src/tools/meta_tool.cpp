@@ -54,6 +54,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
 #include "common/util/debug_util.h"
@@ -97,7 +98,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "types/olap_type_infra.h"
-#include "util/logging.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;

@@ -22,6 +22,7 @@
 #include "agent/publish_version.h"
 #include "base/concurrency/await.h"
 #include "base/failpoint/fail_point.h"
+#include "base/logging.h"
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
 #include "base/time/time.h"
@@ -59,7 +60,6 @@
 #include "storage/update_manager.h"
 #include "testutil/local_snapshot_client.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

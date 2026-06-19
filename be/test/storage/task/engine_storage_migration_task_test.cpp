@@ -28,6 +28,7 @@
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
@@ -56,7 +57,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

@@ -59,6 +59,7 @@
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
+#include "common/glog_init.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
@@ -73,13 +74,13 @@
 #include "platform/platform_metrics.h"
 #include "platform/user_function_cache.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_logging.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/mem_hook.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 #include "util/memory_lock.h"
 
 namespace starrocks {
@@ -348,6 +349,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
     } else {
         init_glog("be", true);
     }
+    init_runtime_logging_hooks();
 
     LOG(INFO) << get_version_string(false);
 
