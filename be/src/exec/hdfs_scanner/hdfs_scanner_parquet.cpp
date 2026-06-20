@@ -20,7 +20,6 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/file_reader.h"
 
 namespace starrocks {
@@ -99,6 +98,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile::Counter* group_chunk_read_timer = nullptr;
     RuntimeProfile::Counter* group_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
+    RuntimeProfile::Counter* dict_code_predicate_eval_count = nullptr;
 
     // io coalesce
     RuntimeProfile::Counter* active_lazy_coalesce_together = nullptr;
@@ -158,6 +158,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
+    dict_code_predicate_eval_count =
+            ADD_CHILD_COUNTER(root, "DictCodePredicateEvalCount", TUnit::UNIT, kParquetProfileSectionPrefix);
 
     active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
                                                       kParquetProfileSectionPrefix);
@@ -207,6 +209,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
     COUNTER_UPDATE(active_lazy_coalesce_together, _app_stats.active_lazy_coalesce_together);
     COUNTER_UPDATE(active_lazy_coalesce_seperately, _app_stats.active_lazy_coalesce_seperately);
+    COUNTER_UPDATE(dict_code_predicate_eval_count, _app_stats.parquet_dict_code_predicate_eval_count);
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
@@ -265,17 +268,7 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
 }
 
 Status HdfsParquetScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    RETURN_IF_ERROR(_reader->get_next(chunk));
-    // Evaluate multi-slot predicates after FileReader has materialised all columns
-    // (including lazily-loaded ones from its internal predicate pipeline).
-    // This pass is the correctness guarantee; statistics-based skipping inside
-    // FileReader is approximate.  In the future, expression-driven lazy
-    // materialisation will replace this with interleaved column-load/evaluate.
-    if ((*chunk)->num_rows() > 0 && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
-        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, chunk->get()));
-    }
-    return Status::OK();
+    return _reader->get_next(chunk);
 }
 
 void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {

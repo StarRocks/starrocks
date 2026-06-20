@@ -212,9 +212,11 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         if (_scanner_ctx->is_first_split) {
             file_record_count = _scanner_ctx->scan_range->record_count;
         }
-        _scanner_ctx->append_or_update_count_column_to_chunk(chunk, file_record_count);
-        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
-        _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
+        // append_side_columns_to_chunk fills per-row count (value=1),
+        // partition, and extended columns first.  The next call overwrites the
+        // count column with the aggregated file record count.
+        RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, 1));
+        _scanner_ctx->append_or_update_count_column_to_chunk(chunk, 1, file_record_count);
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += 1;
         return Status::OK();
@@ -225,9 +227,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         // 3 means we output 3 values: min, max, and null
         const size_t row_count = 3;
         (*chunk)->set_num_rows(row_count);
-        _scanner_ctx->append_or_update_min_max_column_to_chunk(chunk, row_count);
-        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
-        _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, row_count);
+        RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, row_count));
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += row_count;
         return Status::OK();
@@ -236,24 +236,6 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
-        // Simple scanners (Text, Avro, JSON, JNI) cannot push single-slot predicates
-        // into their column readers, so the base class applies them here uniformly.
-        // ORC and Parquet return true because they handle by-slot evaluation
-        // internally via lazy materialisation and dict-filter pipelines.
-        if (!scanner_handles_predicate_by_slot_internally()) {
-            SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-            Filter chunk_filter;
-            RETURN_IF_ERROR(_scanner_ctx->evaluate_on_conjunct_ctxs_by_slot(chunk, &chunk_filter));
-        }
-        // Multi-slot predicates (e.g. "a + b > 5") evaluated here for formats that
-        // cannot handle them internally (Text, Avro, JSON, JNI).  ORC and Parquet
-        // evaluate them inside do_get_next() after all columns are materialised and
-        // return true from scanner_handles_multi_slot_conjuncts_internally().
-        if (!scanner_handles_multi_slot_conjuncts_internally() && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
-            SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-            RETURN_IF_ERROR(
-                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
-        }
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
@@ -493,6 +475,11 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->raw_rows_read_counter, _app_stats.raw_rows_read);
     COUNTER_UPDATE(profile->rows_read_counter, _app_stats.rows_read);
     COUNTER_UPDATE(profile->late_materialize_skip_rows_counter, _app_stats.late_materialize_skip_rows);
+    COUNTER_UPDATE(profile->parquet_lazy_col_skip_rows_counter, _app_stats.parquet_lazy_col_skip_rows);
+    COUNTER_UPDATE(profile->parquet_lazy_slot_triggered_counter, _app_stats.parquet_lazy_slot_triggered);
+    COUNTER_UPDATE(profile->parquet_lazy_read_count_counter, _app_stats.parquet_lazy_read_count);
+    COUNTER_UPDATE(profile->parquet_lazy_read_timer, _app_stats.parquet_lazy_read_ns);
+    COUNTER_UPDATE(profile->parquet_lazy_full_trigger_count_counter, _app_stats.parquet_lazy_full_trigger_count);
     COUNTER_UPDATE(profile->expr_filter_timer, _app_stats.expr_filter_ns);
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);

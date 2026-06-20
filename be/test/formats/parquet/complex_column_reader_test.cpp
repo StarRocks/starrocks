@@ -1059,9 +1059,9 @@ TEST(ParquetComplexColumnReaderTest, VariantVirtualZoneMapReaderSkipsWhenSourceI
 
 // White-box coverage for the fail-fast invariants introduced by the dict-code-leak fix.
 //
-// In normal flow fill_dst_column()/_restore_tmp_column() are only reached right after read_range()
-// has swapped in the reader's internal temporary column, so the "source is not a temporary column"
-// and "lost original destination column" guards are unreachable end to end. The test target is built
+// In normal flow fill_dst_column()/_restore_physical_column() are only reached right after read_range()
+// has swapped in the reader's PHYSICAL column, so the "source is not a physical column"
+// and "lost logical destination" guards are unreachable end to end. The test target is built
 // with -fno-access-control, so construct the readers directly and reach into their internals.
 TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource) {
     ColumnReaderOptions opts;
@@ -1071,35 +1071,35 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     GlobalDictMap dict;
     auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
 
-    // LowCardColumnReader::fill_dst_column rejects a src that is not its dict-code column
-    // (_dict_code is null without a preceding read_range()).
+    // LowCardColumnReader::fill_dst_column: when src is not _code_column
+    // (PHYSICAL dict codes), it is treated as already LOGICAL → swap directly.
     {
         ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
-        EXPECT_FALSE(reader.fill_dst_column(dst, src).ok());
+        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
     }
 
-    // LowRowsColumnReader::fill_dst_column rejects a src that is not its temporary string column.
+    // LowRowsColumnReader::fill_dst_column: same LOGICAL fallback.
     {
         ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
         LowRowsColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
-        EXPECT_FALSE(reader.fill_dst_column(dst, src).ok());
+        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
     }
 
-    // RawColumnReader::_restore_tmp_column errors when a temporary column is still referenced as the
-    // caller-visible column but the original destination column was lost.
+    // RawColumnReader::_restore_physical_column errors when a PHYSICAL column
+    // is still the caller-visible column but _logical_dst was lost.
     {
         ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr code = make_int_col();
-        reader._dict_code = code;
-        reader._ori_column = nullptr;
+        reader._code_column = code;
+        reader._logical_dst = nullptr;
         ColumnPtr col = code;
-        EXPECT_FALSE(reader._restore_tmp_column(col).ok());
+        EXPECT_FALSE(reader._restore_physical_column(col).ok());
     }
 }
 

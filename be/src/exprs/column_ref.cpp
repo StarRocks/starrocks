@@ -52,6 +52,13 @@ std::string ColumnRef::debug_string() const {
 }
 
 StatusOr<ColumnPtr> ColumnRef::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    if (ptr != nullptr && !ptr->is_slot_exist(slot_id())) {
+        if (auto* provider = ptr->missing_column_provider()) {
+            if (provider->can_provide(slot_id())) {
+                return provider->provide(slot_id());
+            }
+        }
+    }
     return get_column(this, ptr);
 }
 

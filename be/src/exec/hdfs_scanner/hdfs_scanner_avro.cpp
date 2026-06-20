@@ -119,15 +119,8 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
             }
         }
     }
-    // Fill not-existed slots: fills the ___count___ column (count queries) and any
-    // schema-evolution columns absent from this file. Also calls ck->set_num_rows().
-    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(&ck, row_count));
-
-    // Fill partition and extended constant columns.
-    _scanner_ctx->append_or_update_partition_column_to_chunk(&ck, row_count);
-    _scanner_ctx->append_or_update_extended_column_to_chunk(&ck, row_count);
-
-    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
+    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(&ck, row_count));
+    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(&ck));
 
     // Note: _app_stats.rows_read is updated by the base class HdfsScanner::get_next
     // after do_get_next returns. Do NOT update it here to avoid double-counting.

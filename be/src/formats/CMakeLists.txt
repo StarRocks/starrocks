@@ -115,6 +115,8 @@ ADD_BE_LIB(Formats
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_materializer.cpp
+        parquet/lazy_materialization_context.cpp
+        parquet/read_range_planner.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
         parquet/column_reader_factory.cpp

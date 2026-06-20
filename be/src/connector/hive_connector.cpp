@@ -586,6 +586,27 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _scanner_ctx.profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _scanner_ctx.profile.late_materialize_skip_rows_counter =
             ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
+    // Row count: rows filtered out before lazy columns were read.
+    _scanner_ctx.profile.parquet_lazy_col_skip_rows_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyColSkipRows", TUnit::UNIT);
+
+    // Event count: how many lazy slots were materialized on-demand during
+    // predicate evaluation via MissingColumnProvider.
+    _scanner_ctx.profile.parquet_lazy_slot_triggered_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazySlotTriggered", TUnit::UNIT);
+
+    // Operation count: lazy column read_range() calls (includes both
+    // on-demand triggers and backfill reads).
+    _scanner_ctx.profile.parquet_lazy_read_count_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyReadCount", TUnit::UNIT);
+
+    // Time spent reading lazy columns (on-demand + backfill).
+    _scanner_ctx.profile.parquet_lazy_read_timer = ADD_TIMER(_runtime_profile, "ParquetLazyReadTime");
+
+    // Row group count: row groups where every classified-lazy column was
+    // triggered on-demand (suggests active/lazy classification misprediction).
+    _scanner_ctx.profile.parquet_lazy_full_trigger_count_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyFullTriggerCount", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
 
