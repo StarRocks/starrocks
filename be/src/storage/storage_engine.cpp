@@ -713,9 +713,10 @@ void StorageEngine::stop() {
     }
 
     // Drain lake ADD INDEX sub-tasks before shutting down storage managers they
-    // may read through. In normal BE/CN step-down, ExecEnv stops AgentServer's
-    // outer ALTER pool before StorageEngine::stop(), so this is usually already
-    // quiescent; keep the order defensive for direct StorageEngine shutdowns.
+    // may read through. In normal BE/CN step-down, starrocks_be.cpp stops
+    // AgentServer's outer ALTER pool before StorageEngine::stop(), so this is
+    // usually already quiescent; keep the order defensive for direct StorageEngine
+    // shutdowns.
     if (_lake_schema_change_thread_pool) {
         _lake_schema_change_thread_pool->shutdown();
     }

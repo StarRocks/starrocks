@@ -206,6 +206,7 @@ public:
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
 
     AgentServer* agent_server() const { return _agent_server; }
+    void set_agent_server(AgentServer* agent_server);
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
 

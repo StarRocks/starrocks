@@ -202,6 +202,11 @@ void ExecEnv::_refresh_service_contexts() {
     _admin_services.agent = &_agent_services;
 }
 
+void ExecEnv::set_agent_server(AgentServer* agent_server) {
+    _agent_server = agent_server;
+    _refresh_service_contexts();
+}
+
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
                      GlobalEnv* global_env, bool as_cn) {
     DCHECK(process_metrics_registry != nullptr);
@@ -362,9 +367,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager, process_metrics, _table_metrics_mgr);
 
-    _agent_server = new AgentServer(this, false);
-    RETURN_IF_ERROR(_agent_server->init());
-
     _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
 
@@ -521,12 +523,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("lake_partial_update_thread_pool", MonotonicMillis() - start);
     }
 
-    if (_agent_server) {
-        start = MonotonicMillis();
-        _agent_server->stop();
-        component_times.emplace_back("agent_server", MonotonicMillis() - start);
-    }
-
     if (_runtime_filter_worker) {
         start = MonotonicMillis();
         _runtime_filter_worker->close();
@@ -634,7 +630,6 @@ void ExecEnv::stop() {
 }
 
 void ExecEnv::destroy() {
-    SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     if (_compute_env != nullptr) {
         _compute_env->destroy_profile_report_worker();

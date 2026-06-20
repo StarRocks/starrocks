@@ -69,10 +69,10 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     env._lake_tablet_manager = reinterpret_cast<lake::TabletManager*>(0x7);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
-    env._agent_server = reinterpret_cast<AgentServer*>(0xa);
     env._heartbeat_flags = reinterpret_cast<HeartbeatFlags*>(0xb);
+    auto* agent_server = reinterpret_cast<AgentServer*>(0xa);
 
-    env._refresh_service_contexts();
+    env.set_agent_server(agent_server);
 
     EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
     EXPECT_EQ(env.execution_services().workgroup_manager, env.compute_env()->workgroup_manager());
@@ -105,7 +105,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
 
-    EXPECT_EQ(env.agent_services().agent_server, env._agent_server);
+    EXPECT_EQ(env.agent_services().agent_server, agent_server);
     EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);
 
     EXPECT_EQ(env.query_execution_services().execution, &env.execution_services());
