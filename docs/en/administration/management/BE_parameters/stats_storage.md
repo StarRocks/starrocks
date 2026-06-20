@@ -331,7 +331,7 @@ This topic introduces the following types of BE configurations:
 - Type: double
 - Unit: -
 - Is mutable: No
-- Description: Ratio threshold used to decide whether to use dictionary encoding for non-string columns (numeric, date/time, decimal types). When enabled (value &gt; 0.0001) the writer computes max_card = row_count * dictionary_encoding_ratio_for_non_string_column and, for samples with row_count &gt; `dictionary_min_rowcount`, chooses DICT_ENCODING only if distinct_count ≤ max_card; otherwise it falls back to BIT_SHUFFLE. A value of `0` (default) disables non-string dictionary encoding. This parameter is analogous to `dictionary_encoding_ratio` but applies to non-string columns. Use values in (0,1] — smaller values restrict dictionary encoding to lower-cardinality columns and reduce dictionary memory/IO overhead.
+- Description: Ratio threshold used to decide whether to use dictionary encoding for non-string columns (numeric, date/time, decimal types). When enabled (value > 0.0001) the writer computes max_card = row_count * dictionary_encoding_ratio_for_non_string_column and, for samples with row_count > `dictionary_min_rowcount`, chooses DICT_ENCODING only if distinct_count ≤ max_card; otherwise it falls back to BIT_SHUFFLE. A value of `0` (default) disables non-string dictionary encoding. This parameter is analogous to `dictionary_encoding_ratio` but applies to non-string columns. Use values in (0,1] — smaller values restrict dictionary encoding to lower-cardinality columns and reduce dictionary memory/IO overhead.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ### dictionary_page_size
@@ -1114,7 +1114,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Threshold (in bytes) used by BinaryPlainPageDecoder to decide whether to eagerly parse a dictionary (binary/plain) page. If a page's encoded size is &lt; `small_dictionary_page_size`, the decoder pre-parses all string entries into an in-memory vector (`_parsed_datas`) to accelerate random access and batch reads. Raising this value causes more pages to be pre-parsed (which can reduce per-access decoding overhead and may increase effective compression for larger dictionaries) but increases memory usage and CPU spent parsing; excessively large values can degrade overall performance. Tune only after measuring memory and access-latency trade-offs.
+- Description: Threshold (in bytes) used by BinaryPlainPageDecoder to decide whether to eagerly parse a dictionary (binary/plain) page. If a page's encoded size is < `small_dictionary_page_size`, the decoder pre-parses all string entries into an in-memory vector (`_parsed_datas`) to accelerate random access and batch reads. Raising this value causes more pages to be pre-parsed (which can reduce per-access decoding overhead and may increase effective compression for larger dictionaries) but increases memory usage and CPU spent parsing; excessively large values can degrade overall performance. Tune only after measuring memory and access-latency trade-offs.
 - Introduced in: v3.4.1, v3.5.0
 
 ### snapshot_expire_time_sec
@@ -1134,6 +1134,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: When a sender job's memory usage is high, memtables that have not been updated for longer than `stale_memtable_flush_time_sec` seconds will be flushed to reduce memory pressure. This behavior is only considered when memory limits are approaching (`limit_exceeded_by_ratio(70)` or higher). In `LocalTabletsChannel`, an additional path at very high memory usage (`limit_exceeded_by_ratio(95)`) may flush memtables whose size exceeds `write_buffer_size / 4`. A value of `0` disables this age-based stale-memtable flushing (immutable-partition memtables still flush immediately when idle or on high memory).
 - Introduced in: v3.2.0
+
+### storage_cleanup_worker_count
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads used to clean up storage files. `0` indicates half of the CPU cores in the node.
+- Introduced in: -
 
 ### storage_flood_stage_left_capacity_bytes
 

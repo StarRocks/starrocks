@@ -270,6 +270,8 @@ Status StorageEngine::_open(const EngineOptions& options) {
                                                              _lake_memtable_flush_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_storage_cleanup_executor->init(), "init StorageCleanupExecutor failed");
+    StorageMetrics::instance()->register_thread_pool_metrics("storage_cleanup",
+                                                             _storage_cleanup_executor->thread_pool());
 
     // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
     // index building inside a single ADD INDEX job). Physically isolated

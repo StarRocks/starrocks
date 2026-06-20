@@ -242,4 +242,24 @@ TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
     assert_metric_value(&registry, "pindex_load_queue_count", "0");
 }
 
+TEST(StorageMetricsTest, RegisterStorageCleanupThreadPoolMetricsBeforeInstall) {
+    std::unique_ptr<ThreadPool> threadpool;
+    auto status = ThreadPoolBuilder("stor_cleanup_metric_tst")
+                          .set_min_threads(0)
+                          .set_max_threads(3)
+                          .set_max_queue_size(5)
+                          .build(&threadpool);
+    ASSERT_TRUE(status.ok()) << status;
+
+    StorageMetrics metrics;
+    metrics.register_thread_pool_metrics("storage_cleanup", threadpool.get());
+
+    MetricRegistry registry("test_registry");
+    metrics.install(&registry);
+    registry.trigger_hook();
+
+    assert_metric_value(&registry, "storage_cleanup_threadpool_size", "3");
+    assert_metric_value(&registry, "storage_cleanup_queue_count", "0");
+}
+
 } // namespace starrocks

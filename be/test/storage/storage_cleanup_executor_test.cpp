@@ -21,7 +21,7 @@
 #include <thread>
 
 #include "base/testutil/assert.h"
-#include "common/config_agent_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
 
@@ -30,14 +30,14 @@ namespace starrocks {
 class StorageCleanupExecutorTest : public testing::Test {
 protected:
     void SetUp() override {
-        _old_drop_tablet_worker_count = config::drop_tablet_worker_count;
-        config::drop_tablet_worker_count = 1;
+        _old_storage_cleanup_worker_count = config::storage_cleanup_worker_count;
+        config::storage_cleanup_worker_count = 1;
     }
 
-    void TearDown() override { config::drop_tablet_worker_count = _old_drop_tablet_worker_count; }
+    void TearDown() override { config::storage_cleanup_worker_count = _old_storage_cleanup_worker_count; }
 
 private:
-    int32_t _old_drop_tablet_worker_count = 0;
+    int32_t _old_storage_cleanup_worker_count = 0;
 };
 
 TEST_F(StorageCleanupExecutorTest, SubmitAndCallable) {
@@ -99,12 +99,12 @@ TEST_F(StorageCleanupExecutorTest, ShutdownDrainsAcceptedTasks) {
     EXPECT_EQ(2, ran.load());
 }
 
-TEST_F(StorageCleanupExecutorTest, UpdateMaxThreadsUsesDropTabletWorkerCount) {
+TEST_F(StorageCleanupExecutorTest, UpdateMaxThreadsUsesStorageCleanupWorkerCount) {
     StorageCleanupExecutor executor;
     ASSERT_OK(executor.init());
     ASSERT_EQ(1, executor.thread_pool()->max_threads());
 
-    config::drop_tablet_worker_count = 3;
+    config::storage_cleanup_worker_count = 3;
     ASSERT_OK(executor.update_max_threads());
     ASSERT_EQ(3, executor.thread_pool()->max_threads());
 }

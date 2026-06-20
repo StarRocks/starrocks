@@ -375,7 +375,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
             max_thread_cnt = config::drop_tablet_worker_count;
         }
         auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
-        RETURN_IF_ERROR(thread_pool->update_max_threads(max_thread_cnt));
+        return thread_pool->update_max_threads(max_thread_cnt);
+    });
+    registry->register_callback("storage_cleanup_worker_count", [=]() -> Status {
         return StorageEngine::instance()->update_storage_cleanup_thread_pool_max();
     });
     registry->register_callback("make_snapshot_worker_count", [=]() -> Status {

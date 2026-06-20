@@ -15,11 +15,10 @@
 #include "storage/storage_cleanup_executor.h"
 
 #include <algorithm>
-#include <limits>
 #include <utility>
 
 #include "base/time/monotime.h"
-#include "common/config_agent_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
@@ -29,9 +28,11 @@ namespace starrocks {
 
 namespace {
 
+constexpr int kStorageCleanupMaxQueueSize = 40960;
+
 int calc_storage_cleanup_worker_count() {
-    return config::drop_tablet_worker_count > 0 ? config::drop_tablet_worker_count
-                                                : std::max(static_cast<int>(CpuInfo::num_cores() / 2), 1);
+    return config::storage_cleanup_worker_count > 0 ? config::storage_cleanup_worker_count
+                                                    : std::max(static_cast<int>(CpuInfo::num_cores() / 2), 1);
 }
 
 std::future<Status> completed_future(Status value) {
@@ -50,7 +51,7 @@ Status StorageCleanupExecutor::init() {
     return ThreadPoolBuilder("storage_cleanup")
             .set_min_threads(1)
             .set_max_threads(calc_storage_cleanup_worker_count())
-            .set_max_queue_size(std::numeric_limits<int>::max())
+            .set_max_queue_size(kStorageCleanupMaxQueueSize)
             .build(&_thread_pool);
 }
 

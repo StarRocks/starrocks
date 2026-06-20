@@ -32,6 +32,7 @@
       "path": "be/src/common/config_storage_fwd.h",
       "configs": [
         "cluster_id",
+        "storage_cleanup_worker_count",
         "check_consistency_worker_count",
         "compact_threads",
         "replication_max_speed_limit_kbps",
