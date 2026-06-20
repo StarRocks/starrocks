@@ -54,6 +54,13 @@ TEST_F(StorageCleanupExecutorTest, SubmitAndCallable) {
     ASSERT_OK(future.get());
 }
 
+TEST_F(StorageCleanupExecutorTest, MetricsBeforeInitReturnZero) {
+    StorageCleanupExecutor executor;
+
+    EXPECT_EQ(0, executor.num_queued_tasks());
+    EXPECT_EQ(0, executor.active_threads());
+}
+
 TEST_F(StorageCleanupExecutorTest, RejectsSubmitAfterShutdown) {
     StorageCleanupExecutor executor;
     ASSERT_OK(executor.init());

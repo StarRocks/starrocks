@@ -126,6 +126,14 @@ Status StorageCleanupExecutor::update_max_threads() {
     return status;
 }
 
+int StorageCleanupExecutor::num_queued_tasks() const {
+    return _thread_pool == nullptr ? 0 : _thread_pool->num_queued_tasks();
+}
+
+int StorageCleanupExecutor::active_threads() const {
+    return _thread_pool == nullptr ? 0 : _thread_pool->active_threads();
+}
+
 bool StorageCleanupExecutor::_begin_pool_op() {
     std::lock_guard l(_mutex);
     if (_shutting_down) {

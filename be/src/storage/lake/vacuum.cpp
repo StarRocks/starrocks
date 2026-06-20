@@ -78,9 +78,17 @@ static StorageCleanupExecutor* storage_cleanup_executor() {
     return StorageEngine::instance()->storage_cleanup_executor();
 }
 
+#ifndef BE_TEST
+static StorageCleanupExecutor* storage_cleanup_executor_for_metrics() {
+    auto* engine = StorageEngine::instance();
+    return engine == nullptr ? nullptr : engine->storage_cleanup_executor();
+}
+#endif
+
 static int get_num_delete_file_queued_tasks(void*) {
 #ifndef BE_TEST
-    return storage_cleanup_executor()->thread_pool()->num_queued_tasks();
+    auto* executor = storage_cleanup_executor_for_metrics();
+    return executor == nullptr ? 0 : executor->num_queued_tasks();
 #else
     return 0;
 #endif
@@ -88,7 +96,8 @@ static int get_num_delete_file_queued_tasks(void*) {
 
 static int get_num_active_file_queued_tasks(void*) {
 #ifndef BE_TEST
-    return storage_cleanup_executor()->thread_pool()->active_threads();
+    auto* executor = storage_cleanup_executor_for_metrics();
+    return executor == nullptr ? 0 : executor->active_threads();
 #else
     return 0;
 #endif

@@ -39,6 +39,8 @@ public:
     void shutdown(int64_t drain_timeout_ms);
     Status update_max_threads();
 
+    int num_queued_tasks() const;
+    int active_threads() const;
     ThreadPool* thread_pool() const { return _thread_pool.get(); }
 
 private:
