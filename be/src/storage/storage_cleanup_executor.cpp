@@ -15,6 +15,7 @@
 #include "storage/storage_cleanup_executor.h"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "base/time/monotime.h"
@@ -28,7 +29,9 @@ namespace starrocks {
 
 namespace {
 
-constexpr int kStorageCleanupMaxQueueSize = 40960;
+// Preserve the old DROP pool behavior. Current async cleanup callers only log
+// submit failures and do not retry, so a hard queue cap can drop deletion tasks.
+constexpr int kStorageCleanupMaxQueueSize = std::numeric_limits<int>::max();
 
 int calc_storage_cleanup_worker_count() {
     return config::storage_cleanup_worker_count > 0 ? config::storage_cleanup_worker_count
