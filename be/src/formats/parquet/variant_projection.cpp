@@ -977,13 +977,13 @@ Status VariantProjectionHandler::emit_projections(ChunkPtr& active_chunk, ChunkP
                         fmt::format("variant deferred projected column row count mismatch for slot {}: {} vs {}",
                                     slot_id, projected_col->size(), active_chunk->num_rows()));
             }
-            (*dst)->get_column_by_slot_id(slot_id) = projected_col;
+            (*dst)->append_or_update_column(ColumnPtr(projected_col), slot_id);
             continue;
         }
         // Early-projected virtual slot (Phase 2b compound-conjunct prep) —
         // already filtered and ready to move to dst.
         if (active_chunk->is_slot_exist(slot_id)) {
-            (*dst)->get_column_by_slot_id(slot_id) = active_chunk->get_column_by_slot_id(slot_id);
+            (*dst)->append_or_update_column(ColumnPtr(active_chunk->get_column_by_slot_id(slot_id)), slot_id);
             continue;
         }
         if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
@@ -993,7 +993,7 @@ Status VariantProjectionHandler::emit_projections(ChunkPtr& active_chunk, ChunkP
         const ColumnPtr& source_column = active_chunk->get_column_by_slot_id(projection.source_slot_id);
         ASSIGN_OR_RETURN(auto result_column, project_variant_leaf_column(source_column, projection.parsed_path,
                                                                          projection.target_type, zone));
-        (*dst)->get_column_by_slot_id(slot_id) = std::move(result_column);
+        (*dst)->append_or_update_column(std::move(result_column), slot_id);
     }
     return Status::OK();
 }
