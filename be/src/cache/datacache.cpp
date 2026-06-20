@@ -22,13 +22,10 @@
 #include "cache/mem_cache/page_cache.h"
 #include "cache/mem_space_monitor.h"
 #include "common/config_cache_fwd.h"
-#include "common/config_diagnostic_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "gutil/strings/split.h"
-#include "gutil/strings/strip.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -258,38 +255,8 @@ StatusOr<DiskCacheOptions> DataCache::_init_disk_cache_options() {
 }
 #endif
 
-static bool parse_resource_str(const string& str, string* value) {
-    if (!str.empty()) {
-        std::string tmp_str = str;
-        StripLeadingWhiteSpace(&tmp_str);
-        StripTrailingWhitespace(&tmp_str);
-        if (tmp_str.empty()) {
-            return false;
-        } else {
-            *value = tmp_str;
-            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
-            return true;
-        }
-    } else {
-        return false;
-    }
-}
-
-void DataCache::try_release_resource_before_core_dump() {
-    std::set<std::string> modules;
-    bool release_all = false;
-    if (config::try_release_resource_before_core_dump.value() == "*") {
-        release_all = true;
-    } else {
-        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
-                                       &parse_resource_str, &modules);
-    }
-
-    auto need_release = [&release_all, &modules](const std::string& name) {
-        return release_all || modules.contains(name);
-    };
-
-    if (_local_mem_cache != nullptr && need_release("data_cache")) {
+void DataCache::release_memory_before_core_dump() {
+    if (_local_mem_cache != nullptr) {
         (void)_local_mem_cache->update_mem_quota(0);
     }
 }
