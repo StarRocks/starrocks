@@ -45,8 +45,8 @@ static inline std::vector<std::string> split_utf8_characters(const Slice& str) {
     for (int i = 0; i < str.size;) {
         // A truncated/invalid UTF-8 lead byte at the tail can claim more bytes than remain;
         // clamp to the rest of the string to avoid an out-of-bounds read of adjacent memory.
-        size_t char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])],
-                                            str.size - i);
+        size_t char_size =
+                std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])], str.size - i);
         chars.emplace_back(str.data + i, char_size);
         i += char_size;
     }
@@ -218,8 +218,8 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             if (delimiter.size == 0) { // split each character
                 for (auto h = 0; h < str.size;) {
                     // Clamp to the remaining bytes: a tail lead byte may claim more than is left.
-                    size_t char_size = std::min<size_t>(
-                            UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[h])], str.size - h);
+                    size_t char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[h])],
+                                                        str.size - h);
                     array_binary_column->append(Slice(str.data + h, char_size));
                     h += char_size;
                     ++offset;
