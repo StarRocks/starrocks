@@ -37,11 +37,13 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
@@ -93,6 +95,11 @@ protected:
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
               _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {
+        if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+            parallel_compact_mgr != nullptr) {
+            _update_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
+            parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_mgr.get());
+        }
         PFailPointTriggerMode trigger_mode;
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(

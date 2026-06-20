@@ -25,7 +25,6 @@ src/storage/lake/local_pk_index_manager.cpp
 src/storage/lake/metacache.cpp
 src/storage/lake/tablet_reshard.cpp
 src/storage/lake/transactions.cpp
-src/storage/lake/update_manager.cpp
 src/storage/lake/vertical_compaction_task.cpp
 src/storage/load_chunk_spiller.cpp
 src/storage/load_spill_block_manager.cpp

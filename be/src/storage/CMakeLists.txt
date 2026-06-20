@@ -104,6 +104,7 @@ set(STORAGE_FILES
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     storage_cleanup_executor.cpp
+    storage_env.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp

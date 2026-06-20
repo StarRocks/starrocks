@@ -65,6 +65,7 @@
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/update_manager.h"
 
 #ifdef USE_STAROS
@@ -336,7 +337,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return Status::OK();
     });
     registry->register_callback("pk_index_parallel_compaction_threadpool_max_threads", [=]() -> Status {
-        auto mgr = exec_env->parallel_compact_mgr();
+        auto mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
         if (mgr != nullptr) {
             return mgr->update_max_threads(config::pk_index_parallel_compaction_threadpool_max_threads);
         }
