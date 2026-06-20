@@ -18,6 +18,7 @@
 #include <sanitizer/lsan_interface.h>
 #endif
 
+#include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "base/brpc/brpc.h"
@@ -147,6 +148,18 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
+
+    auto agent_server = std::make_unique<AgentServer>(exec_env, false);
+    // AgentServer::start() starts workers that can read ExecEnv::agent_server()
+    // immediately, so publish the pointer before starting those workers.
+    exec_env->set_agent_server(agent_server.get());
+    auto agent_status = agent_server->start();
+    if (!agent_status.ok()) {
+        exec_env->set_agent_server(nullptr);
+        LOG(ERROR) << agent_status.message();
+        exit(1);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": agent server start successfully";
 
 #if !defined(__APPLE__) && defined(WITH_STARCACHE)
     cache_env->attach_peer_cache_stub_cache(platform_env->brpc_stub_cache());
@@ -337,8 +350,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     daemon.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": daemon threads exit successfully";
 
-    // Keep ExecEnv stop before StorageEngine stop: AgentServer pools may submit
+    // Keep AgentServer stop before StorageEngine stop: AgentServer pools may submit
     // storage cleanup work, and StorageEngine::stop() drains the cleanup executor.
+    agent_server->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server stop successfully";
+
     exec_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec engine destroy successfully";
 
@@ -364,6 +380,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     thrift_server->join();
     thrift_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
+
+    exec_env->set_agent_server(nullptr);
+    agent_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server destroy successfully";
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
