@@ -22,6 +22,7 @@ add_subdirectory(service_be)
 set(EXEC_FILES
     backend_metrics_initializer.cpp
     backend_base.cpp
+    core_dump_resource_releaser.cpp
     daemon.cpp
     failure_handler.cpp
     internal_service.cpp
@@ -33,7 +34,7 @@ ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 
-target_link_libraries(Service PRIVATE ExecRuntime Platform)
+target_link_libraries(Service PRIVATE Runtime Cache Agent ComputeEnv ExecRuntime Platform)
 target_link_libraries(ServiceBE PUBLIC Service)
 target_link_libraries(ServiceBE PRIVATE ConnectorBootstrap)
 
