@@ -1,0 +1,22 @@
+-- name: test_alter_modify_after_nonexistent
+CREATE DATABASE IF NOT EXISTS test_alter_modify_after_nonexistent_db;
+-- result:
+-- !result
+USE test_alter_modify_after_nonexistent_db;
+-- result:
+-- !result
+CREATE TABLE t_alt1 (
+  k INT,
+  v INT
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+ALTER TABLE t_alt1 MODIFY COLUMN v BIGINT AFTER nope;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column[nope] does not exist.')
+-- !result
+ALTER TABLE t_alt1 MODIFY COLUMN v BIGINT AFTER k;
+-- result:
+-- !result
