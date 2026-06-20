@@ -190,7 +190,7 @@ StatusOr<DiskCacheOptions> DataCache::_init_disk_cache_options() {
     DiskCacheOptions cache_options;
 
 #ifdef USE_STAROS
-    std::vector<string> corresponding_starlet_dirs;
+    std::vector<std::string> corresponding_starlet_dirs;
     if (config::datacache_unified_instance_enable && !config::starlet_cache_dir.empty()) {
         // in older versions, users might set `starlet_cache_dir` instead of `storage_root_path` for starlet cache,
         // we need to move starlet cache into storage_root_path/datacache
