@@ -36,6 +36,8 @@
 
 #include <bthread/sys_futex.h>
 
+#include <cmath>
+
 #include "base/hash/unaligned_access.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -49,6 +51,7 @@
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "types/logical_type.h"
 #include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
 #include "types/type_info.h"
@@ -155,6 +158,11 @@ struct ZoneMap {
     bool has_null = false;
     // has_not_null means whether zone has none-null value
     bool has_not_null = false;
+    // has_value means min_value/max_value hold a real ORDERABLE value (finite, non-NaN).
+    // Separate from has_not_null: a pure-NaN FLOAT/DOUBLE zone has non-null rows
+    // (has_not_null=true) but no orderable min/max (has_value=false). Writer-internal
+    // only; never serialized to ZoneMapPB.
+    bool has_value = false;
 
     void to_proto(ZoneMapPB* dst, TypeInfo* type_info) const {
         dst->set_min(min_value.to_zone_map_string(type_info));
@@ -210,6 +218,7 @@ private:
         zone_map->max_value.reset(_type_info);
         zone_map->has_null = false;
         zone_map->has_not_null = false;
+        zone_map->has_value = false;
     }
 
     TypeInfo* _type_info;
@@ -255,11 +264,37 @@ void ZoneMapIndexWriterImpl<LT>::_truncate_string_minmax_if_needed(ZoneMap<LT>* 
 
 template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
-    if (count > 0) {
-        const auto* vals = reinterpret_cast<const CppType*>(values);
-        auto [pmin, pmax] = std::minmax_element(vals, vals + count);
+    if (count == 0) {
+        return;
+    }
+    const auto* vals = reinterpret_cast<const CppType*>(values);
 
-        if (_page_zone_map.has_not_null) {
+    const CppType* pmin = nullptr;
+    const CppType* pmax = nullptr;
+    if constexpr (lt_is_float<type>) {
+        // NaN breaks the total order assumed by '<' / '>'. Exclude it from the
+        // orderable min/max so it cannot lock or widen the zone map range.
+        for (size_t i = 0; i < count; ++i) {
+            const CppType v = unaligned_load<CppType>(vals + i);
+            if (std::isnan(v)) {
+                continue;
+            }
+            if (pmin == nullptr || v < unaligned_load<CppType>(pmin)) {
+                pmin = vals + i;
+            }
+            if (pmax == nullptr || v > unaligned_load<CppType>(pmax)) {
+                pmax = vals + i;
+            }
+        }
+    } else {
+        auto mm = std::minmax_element(vals, vals + count);
+        pmin = mm.first;
+        pmax = mm.second;
+    }
+
+    if (pmin != nullptr) {
+        // This batch has at least one orderable (non-NaN) value.
+        if (_page_zone_map.has_value) {
             if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
                 _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
                 _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
@@ -277,16 +312,31 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
             _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
             _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
             _truncate_string_minmax_if_needed(&_page_zone_map);
+
+            _page_zone_map.has_value = true;
         }
-        _page_zone_map.has_not_null = true;
+    } else if (!_page_zone_map.has_value) {
+        // Whole batch is NaN and no orderable value recorded yet: stash a NaN as a
+        // placeholder so this page (which DOES contain non-null rows) can serialize a
+        // min/max. has_value stays false, so this NaN is never merged into the segment
+        // zone map nor compared against later finite batches. (Placeholder strategy a.)
+        _page_zone_map.min_value.resize_container_for_fit(_type_info, vals);
+        _type_info->direct_copy(&_page_zone_map.min_value.value, vals);
+        _page_zone_map.max_value.resize_container_for_fit(_type_info, vals);
+        _type_info->direct_copy(&_page_zone_map.max_value.value, vals);
     }
+
+    // NaN is a value, not NULL: the page has non-null rows.
+    _page_zone_map.has_not_null = true;
 }
 
 template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
-    // Update segment zone map.
-    if (_page_zone_map.has_not_null) {
-        if (_segment_zone_map.has_not_null) {
+    // Update segment zone map. Only pages carrying an orderable (non-NaN) value
+    // contribute to the segment min/max; a pure-NaN page must not lock or widen the
+    // segment range via NaN's broken '<' ordering.
+    if (_page_zone_map.has_value) {
+        if (_segment_zone_map.has_value) {
             if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
                 _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
                 _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
@@ -304,7 +354,21 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
             _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
             _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
             _truncate_string_minmax_if_needed(&_segment_zone_map);
+
+            _segment_zone_map.has_value = true;
         }
+    } else if (_page_zone_map.has_not_null && !_segment_zone_map.has_value && !_segment_zone_map.has_not_null) {
+        // Pure-NaN page and the segment has no value/rows yet: carry the NaN placeholder
+        // forward so a segment made entirely of NaN pages still serializes min/max with
+        // has_not_null=true. segment has_value stays false; the first finite page (if any)
+        // overwrites via the else branch above (which copies without comparison).
+        _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
+        _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
+        _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
+        _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+    }
+
+    if (_page_zone_map.has_not_null) {
         _segment_zone_map.has_not_null = true;
     }
 

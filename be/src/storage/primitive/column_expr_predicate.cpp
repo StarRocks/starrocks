@@ -18,6 +18,7 @@
 #include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/inverted_index_common.h"
 #include "storage/primitive/inverted_index_iterator.h"
+#include "storage/primitive/zone_map_detail.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -176,6 +177,15 @@ bool ColumnExprPredicate::is_negated_expr() const {
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     // if expr does not satisfy monotonicity, we can not apply zone map.
     if (!_monotonic) return true;
+    // A NaN FLOAT/DOUBLE min/max endpoint is unorderable: evaluating the (IEEE) expression
+    // on it yields all-false, which would wrongly prune a page/segment that may still hold
+    // matching finite rows (e.g. legacy NaN-polluted zonemaps, or a pure-NaN page that must
+    // remain reachable by != / IS NOT NULL). Keep conservatively. Mirrors the guard in the
+    // typed comparison predicates (column_predicate_cmp.cpp).
+    const LogicalType ltype = _type_info->type();
+    if (zonemap_endpoint_is_nan(ltype, detail.min_value()) || zonemap_endpoint_is_nan(ltype, detail.max_value())) {
+        return true;
+    }
     // construct column and chunk by zone map
     TypeDescriptor type_desc = TypeDescriptor::from_storage_type_info(_type_info.get());
     MutableColumnPtr col = ColumnHelper::create_column(type_desc, detail.has_null());

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cmath>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -19,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "runtime/runtime_filter.h"
 #include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/zone_map_detail.h"
 
 namespace starrocks {
 
@@ -42,6 +44,55 @@ static inline std::string to_string(const std::vector<uint16_t>& values) {
     std::string s = ss.str();
     s.pop_back();
     return s;
+}
+
+// Fix B: a NaN ZoneMap endpoint is unorderable; every comparison predicate must
+// keep the page (conservative), because TypeInfo::cmp(finite, NaN) == 0 otherwise
+// makes GT/LT/EQ/NE prune pages that may hold matching rows (report §10/§11).
+TEST(ColumnPredicateNaNZoneMapTest, DoubleNaNEndpointKeepsPage) {
+    TypeInfoPtr ti = get_type_info(TYPE_DOUBLE);
+    double nan_v = std::nan("");
+    ZoneMapDetail nan_detail(Datum(nan_v), Datum(nan_v), false); // min=max=NaN, has_null=false
+
+    std::unique_ptr<ColumnPredicate> gt(new_column_gt_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> le(new_column_le_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> ne(new_column_ne_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+
+    ASSERT_TRUE(gt->zone_map_filter(nan_detail));
+    ASSERT_TRUE(lt->zone_map_filter(nan_detail));
+    ASSERT_TRUE(ge->zone_map_filter(nan_detail));
+    ASSERT_TRUE(le->zone_map_filter(nan_detail));
+    ASSERT_TRUE(eq->zone_map_filter(nan_detail));
+    ASSERT_TRUE(ne->zone_map_filter(nan_detail));
+}
+
+// Guard: finite endpoints must still prune normally (the NaN guard must not
+// over-keep). GT 3000 against [0,100] -> no row can match -> prune (false).
+TEST(ColumnPredicateNaNZoneMapTest, DoubleFiniteEndpointStillPrunes) {
+    TypeInfoPtr ti = get_type_info(TYPE_DOUBLE);
+    ZoneMapDetail finite_detail(Datum((double)0.0), Datum((double)100.0), false);
+
+    std::unique_ptr<ColumnPredicate> gt(new_column_gt_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate_from_datum(ti, 0, Datum((double)-1.0)));
+
+    ASSERT_FALSE(gt->zone_map_filter(finite_detail)); // 3000 > max(100) -> prune
+    ASSERT_FALSE(lt->zone_map_filter(finite_detail)); // -1 < min(0)   -> prune
+}
+
+// FLOAT mirror.
+TEST(ColumnPredicateNaNZoneMapTest, FloatNaNEndpointKeepsPage) {
+    TypeInfoPtr ti = get_type_info(TYPE_FLOAT);
+    float nan_v = std::nanf("");
+    ZoneMapDetail nan_detail(Datum(nan_v), Datum(nan_v), false);
+
+    std::unique_ptr<ColumnPredicate> gt(new_column_gt_predicate_from_datum(ti, 0, Datum((float)3000.0f)));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate_from_datum(ti, 0, Datum((float)3000.0f)));
+
+    ASSERT_TRUE(gt->zone_map_filter(nan_detail));
+    ASSERT_TRUE(eq->zone_map_filter(nan_detail));
 }
 
 // NOLINTNEXTLINE

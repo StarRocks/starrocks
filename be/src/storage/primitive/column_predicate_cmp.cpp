@@ -30,6 +30,7 @@
 #include "storage/primitive/rowid_types.h"
 #include "storage/primitive/zone_map_detail.h"
 #include "types/datum.h"
+#include "types/logical_type.h"
 #include "types/olap_type_infra.h"
 #include "types/type_info.h"
 
@@ -276,6 +277,19 @@ public:
     }
 
 protected:
+    // For FLOAT/DOUBLE, a NaN min/max ZoneMap endpoint is unorderable: TypeInfo::cmp
+    // returns 0 for any (finite, NaN) pair, which makes range/equality pruning drop
+    // pages that may contain matching rows. Treat any NaN endpoint conservatively
+    // (keep the page). Compile-time no-op for non-float field types.
+    bool zonemap_has_nan_endpoint(const ZoneMapDetail& detail) const {
+        if constexpr (lt_is_float<field_type>) {
+            return zonemap_endpoint_is_nan(field_type, detail.min_value()) ||
+                   zonemap_endpoint_is_nan(field_type, detail.max_value());
+        } else {
+            return false;
+        }
+    }
+
     PredicateType _predicate;
     ValueType _value;
 };
@@ -290,6 +304,9 @@ public:
             : Base(PredicateType::kGE, type_info, id, value) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (this->zonemap_has_nan_endpoint(detail)) {
+            return true;
+        }
         const auto& max = detail.max_value();
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
@@ -340,6 +357,9 @@ public:
             : Base(PredicateType::kGT, type_info, id, value) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (this->zonemap_has_nan_endpoint(detail)) {
+            return true;
+        }
         const auto& max = detail.max_value();
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
@@ -390,6 +410,9 @@ public:
             : Base(PredicateType::kLE, type_info, id, value) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (this->zonemap_has_nan_endpoint(detail)) {
+            return true;
+        }
         const auto& min = detail.min_or_null_value();
         const auto& max = detail.max_value();
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
@@ -441,6 +464,9 @@ public:
             : Base(PredicateType::kLT, type_info, id, value) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (this->zonemap_has_nan_endpoint(detail)) {
+            return true;
+        }
         const auto& min = detail.min_or_null_value();
         const auto& max = detail.max_value();
         return (this->type_info()->cmp(Datum(this->_value), min) > 0) & !max.is_null();
@@ -492,6 +518,9 @@ public:
             : Base(PredicateType::kEQ, type_info, id, value) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (this->zonemap_has_nan_endpoint(detail)) {
+            return true;
+        }
         const auto& min = detail.min_or_null_value();
         const auto& max = detail.max_value();
         const auto type_info = this->type_info();
@@ -555,6 +584,9 @@ public:
             : Base(PredicateType::kNE, type_info, id, value) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (this->zonemap_has_nan_endpoint(detail)) {
+            return true;
+        }
         const auto& min = detail.min_or_null_value();
         const auto& max = detail.max_value();
         const auto type_info = this->type_info();

@@ -14,11 +14,32 @@
 
 #pragma once
 
+#include <cmath>
 #include <utility>
 
 #include "types/datum.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
+
+// A FLOAT/DOUBLE ZoneMap endpoint holding NaN is unorderable: TypeInfo::cmp returns 0 for
+// any (finite, NaN) pair, and evaluating an IEEE expression on it yields all-false, so
+// range/equality pruning would wrongly drop a page/segment that may still hold matching
+// rows (legacy NaN-polluted zonemaps, or a pure-NaN page reachable by != / IS NOT NULL).
+// Callers must treat such an endpoint conservatively (keep the page). Returns false for
+// non-float types and for NULL.
+inline bool zonemap_endpoint_is_nan(LogicalType ltype, const Datum& d) {
+    if (d.is_null()) {
+        return false;
+    }
+    if (ltype == TYPE_FLOAT) {
+        return std::isnan(d.get_float());
+    }
+    if (ltype == TYPE_DOUBLE) {
+        return std::isnan(d.get_double());
+    }
+    return false;
+}
 
 class ZoneMapDetail {
 public:

@@ -36,6 +36,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <cstdlib>
 #include <memory>
 #include <string>
 
@@ -49,6 +51,11 @@
 #include "storage/tablet_schema_helper.h"
 
 namespace starrocks {
+
+// Parse a ZoneMapPB min/max string (produced by TypeInfo::to_string) back to double.
+static inline double zm_to_double(const std::string& s) {
+    return std::strtod(s.c_str(), nullptr);
+}
 
 class ColumnZoneMapTest : public testing::Test {
 protected:
@@ -327,6 +334,138 @@ TEST_F(ColumnZoneMapTest, AllNullPage) {
     // segment zonemap
     const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
     check_result(segment_zonemap, false, false, "", "", true, false);
+}
+
+// A page containing a mix of NaN and finite values must report the FINITE range,
+// not NaN. NaN is placed first so std::minmax_element on unfixed code deterministically
+// locks min/max to NaN (NaN incumbent is never dislodged by '<').
+TEST_F(ColumnZoneMapTest, DoubleMixedNaNKeepsFiniteRange) {
+    std::string filename = kTestDir + "/DoubleMixedNaNKeepsFiniteRange";
+    TypeInfoPtr type_info = get_type_info(TYPE_DOUBLE);
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    double nan_v = std::nan("");
+    std::vector<double> vals = {nan_v, 2.0, 5.0};
+    writer->add_values(vals.data(), vals.size());
+    ASSERT_OK(writer->flush());
+
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    ASSERT_EQ(1, reader.num_pages());
+    const auto& zm = reader.page_zone_maps()[0];
+    ASSERT_TRUE(zm.has_not_null());
+    ASSERT_FALSE(zm.has_null());
+    ASSERT_EQ(2.0, zm_to_double(zm.min()));
+    ASSERT_EQ(5.0, zm_to_double(zm.max()));
+}
+
+// Multi-batch within one page: an all-NaN batch must not lock min/max so a later
+// finite batch in the same page is recorded correctly.
+TEST_F(ColumnZoneMapTest, DoubleNaNBatchThenFiniteBatch) {
+    std::string filename = kTestDir + "/DoubleNaNBatchThenFiniteBatch";
+    TypeInfoPtr type_info = get_type_info(TYPE_DOUBLE);
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    double nan_v = std::nan("");
+    std::vector<double> b1 = {nan_v, nan_v};
+    std::vector<double> b2 = {2.0, 5.0};
+    writer->add_values(b1.data(), b1.size());
+    writer->add_values(b2.data(), b2.size()); // same page, no flush between
+    ASSERT_OK(writer->flush());
+
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    const auto& zm = reader.page_zone_maps()[0];
+    ASSERT_TRUE(zm.has_not_null());
+    ASSERT_EQ(2.0, zm_to_double(zm.min()));
+    ASSERT_EQ(5.0, zm_to_double(zm.max()));
+}
+
+// Invariant lock (passes before AND after the fix): a pure-NaN page has non-null
+// rows, so has_not_null must stay true (otherwise IS NOT NULL would wrongly prune).
+// Placeholder strategy (a): min/max are NaN.
+TEST_F(ColumnZoneMapTest, DoubleAllNaNPageKeepsHasNotNull) {
+    std::string filename = kTestDir + "/DoubleAllNaNPageKeepsHasNotNull";
+    TypeInfoPtr type_info = get_type_info(TYPE_DOUBLE);
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    std::vector<double> vals(5, std::nan(""));
+    writer->add_values(vals.data(), vals.size());
+    ASSERT_OK(writer->flush());
+
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    const auto& zm = reader.page_zone_maps()[0];
+    ASSERT_TRUE(zm.has_not_null());
+    ASSERT_FALSE(zm.has_null());
+    ASSERT_TRUE(std::isnan(zm_to_double(zm.min())));
+    ASSERT_TRUE(std::isnan(zm_to_double(zm.max())));
+
+    // The pure-NaN SEGMENT must also keep has_not_null=true with NaN min/max (the flush
+    // placeholder path), not [TYPE_MIN, TYPE_MIN] which the read-side guard could not detect.
+    const auto& seg = index_meta.zone_map_index().segment_zone_map();
+    ASSERT_TRUE(seg.has_not_null());
+    ASSERT_FALSE(seg.has_null());
+    ASSERT_TRUE(std::isnan(zm_to_double(seg.min())));
+    ASSERT_TRUE(std::isnan(zm_to_double(seg.max())));
+}
+
+// Compaction-style segment merge (report §12): an all-NaN page flushed before a
+// finite page must not poison the SEGMENT range. Segment must report the finite range.
+TEST_F(ColumnZoneMapTest, DoubleSegmentNaNPageThenFinitePage) {
+    std::string filename = kTestDir + "/DoubleSegmentNaNPageThenFinitePage";
+    TypeInfoPtr type_info = get_type_info(TYPE_DOUBLE);
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    double nan_v = std::nan("");
+    std::vector<double> p0(3, nan_v);
+    writer->add_values(p0.data(), p0.size());
+    ASSERT_OK(writer->flush()); // page 0: all NaN
+
+    std::vector<double> p1 = {2500.0, 2999.0};
+    writer->add_values(p1.data(), p1.size());
+    ASSERT_OK(writer->flush()); // page 1: finite
+
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    const auto& seg = index_meta.zone_map_index().segment_zone_map();
+    ASSERT_TRUE(seg.has_not_null());
+    ASSERT_EQ(2500.0, zm_to_double(seg.min()));
+    ASSERT_EQ(2999.0, zm_to_double(seg.max()));
+}
+
+// FLOAT mirror of the mixed-page case to confirm both float types are covered.
+TEST_F(ColumnZoneMapTest, FloatMixedNaNKeepsFiniteRange) {
+    std::string filename = kTestDir + "/FloatMixedNaNKeepsFiniteRange";
+    TypeInfoPtr type_info = get_type_info(TYPE_FLOAT);
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    float nan_v = std::nanf("");
+    std::vector<float> vals = {nan_v, 2.0f, 5.0f};
+    writer->add_values(vals.data(), vals.size());
+    ASSERT_OK(writer->flush());
+
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    const auto& zm = reader.page_zone_maps()[0];
+    ASSERT_TRUE(zm.has_not_null());
+    ASSERT_EQ(2.0, zm_to_double(zm.min()));
+    ASSERT_EQ(5.0, zm_to_double(zm.max()));
 }
 
 // Test for int

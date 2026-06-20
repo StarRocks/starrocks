@@ -1,0 +1,57 @@
+-- name: test_zonemap_nan_pruning
+-- Regression for the FLOAT/DOUBLE ZoneMap NaN-pollution mis-prune.
+-- A typed NaN (Inf - Inf) poisons the segment zonemap min/max to [-nan,-nan];
+-- before the fix, ordered predicates pruned the whole segment -> wrong (empty) results.
+-- NOTE: CAST('NaN' AS DOUBLE) becomes NULL in StarRocks, so typed NaN must come from
+-- arithmetic. The "val IS NULL = 0" / "val != val = 3" asserts fail loudly if the NaN
+-- generation ever silently degrades to NULL.
+CREATE TABLE t_zm_nan (
+    id BIGINT,
+    val DOUBLE
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_zm_nan VALUES
+  (1, (1e308*10)-(1e308*10)),
+  (2, (1e308*10)-(1e308*10)),
+  (3, (1e308*10)-(1e308*10)),
+  (4, 100.0),
+  (5, 200.0),
+  (6, 300.0),
+  (7, 400.0),
+  (8, 500.0);
+SELECT COUNT(*) FROM t_zm_nan;
+SELECT COUNT(*) FROM t_zm_nan WHERE val IS NULL;
+SELECT COUNT(*) FROM t_zm_nan WHERE val != val;
+SELECT COUNT(*) FROM t_zm_nan WHERE val > 250;
+SELECT COUNT(*) FROM t_zm_nan WHERE val < 250;
+SELECT COUNT(*) FROM t_zm_nan WHERE val = 300;
+SELECT COUNT(*) FROM t_zm_nan WHERE val >= 300;
+SELECT COUNT(*) FROM t_zm_nan WHERE val != 300;
+SELECT COUNT(*) FROM t_zm_nan WHERE val IS NOT NULL;
+DROP TABLE t_zm_nan;
+
+-- name: test_zonemap_all_nan
+-- A column that is ENTIRELY typed NaN -> a pure-NaN segment. Its zonemap must keep
+-- has_not_null=true (NaN is non-null), so IS NOT NULL / != still reach the rows; ordered
+-- predicates correctly match nothing. End-to-end counterpart to the C++ test
+-- DoubleAllNaNPageKeepsHasNotNull. The discriminating assert is "val IS NOT NULL = 4":
+-- if the pure-NaN segment were mismarked all-null, it would wrongly return 0.
+CREATE TABLE t_zm_allnan (
+    id BIGINT,
+    val DOUBLE
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_zm_allnan VALUES
+  (1, (1e308*10)-(1e308*10)),
+  (2, (1e308*10)-(1e308*10)),
+  (3, (1e308*10)-(1e308*10)),
+  (4, (1e308*10)-(1e308*10));
+SELECT COUNT(*) FROM t_zm_allnan;
+SELECT COUNT(*) FROM t_zm_allnan WHERE val IS NULL;
+SELECT COUNT(*) FROM t_zm_allnan WHERE val != val;
+SELECT COUNT(*) FROM t_zm_allnan WHERE val = val;
+SELECT COUNT(*) FROM t_zm_allnan WHERE val IS NOT NULL;
+SELECT COUNT(*) FROM t_zm_allnan WHERE val > 100;
+SELECT COUNT(*) FROM t_zm_allnan WHERE val < 100;
+SELECT COUNT(*) FROM t_zm_allnan WHERE val != 100;
+DROP TABLE t_zm_allnan;
