@@ -54,6 +54,7 @@
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_agent_fwd.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -85,6 +86,7 @@
 #include "storage/rowset/unique_rowset_id_generator.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
+#include "storage/storage_cleanup_executor.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -98,6 +100,10 @@ StorageEngine* StorageEngine::_p_instance = nullptr;
 
 static int calc_lake_schema_change_thread_pool_max_threads() {
     return std::max(1, config::alter_tablet_worker_count * config::lake_schema_change_per_tablet_parallelism);
+}
+
+static int64_t calc_storage_cleanup_drain_timeout_ms() {
+    return config::loop_count_wait_fragments_finish > 0 ? config::loop_count_wait_fragments_finish * 10 * 1000 : 0;
 }
 
 static Status _validate_options(const EngineOptions& options) {
@@ -126,6 +132,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _replication_txn_manager(new ReplicationTxnManager()),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
+          _storage_cleanup_executor(new StorageCleanupExecutor()),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
           _dictionary_cache_manager(new DictionaryCacheManager()) {
@@ -154,6 +161,10 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 }
 
 StorageEngine::~StorageEngine() {
+    if (_storage_cleanup_executor) {
+        _storage_cleanup_executor->shutdown(0);
+    }
+
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
     _tablet_manager.reset();
@@ -257,6 +268,10 @@ Status StorageEngine::_open(const EngineOptions& options) {
                               "init lake MemTableFlushExecutor failed");
     StorageMetrics::instance()->register_thread_pool_metrics("lake_memtable_flush",
                                                              _lake_memtable_flush_executor->get_thread_pool());
+
+    RETURN_IF_ERROR_WITH_WARN(_storage_cleanup_executor->init(), "init StorageCleanupExecutor failed");
+    StorageMetrics::instance()->register_thread_pool_metrics("storage_cleanup",
+                                                             _storage_cleanup_executor->thread_pool());
 
     // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
     // index building inside a single ADD INDEX job). Physically isolated
@@ -718,6 +733,11 @@ void StorageEngine::stop() {
         _local_pk_index_manager->stop();
     }
 #endif
+
+    // Drain cleanup after all storage-side producers are quiesced.
+    if (_storage_cleanup_executor) {
+        _storage_cleanup_executor->shutdown(calc_storage_cleanup_drain_timeout_ms());
+    }
 }
 
 Status StorageEngine::update_lake_schema_change_thread_pool_max() {
@@ -726,6 +746,19 @@ Status StorageEngine::update_lake_schema_change_thread_pool_max() {
     }
     int new_max = calc_lake_schema_change_thread_pool_max_threads();
     return _lake_schema_change_thread_pool->update_max_threads(new_max);
+}
+
+Status StorageEngine::update_storage_cleanup_thread_pool_max() {
+    if (_storage_cleanup_executor == nullptr) {
+        return Status::OK();
+    }
+    return _storage_cleanup_executor->update_max_threads();
+}
+
+void StorageEngine::wait_storage_cleanup_tasks() {
+    if (_storage_cleanup_executor != nullptr) {
+        _storage_cleanup_executor->wait();
+    }
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

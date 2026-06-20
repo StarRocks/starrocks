@@ -1116,6 +1116,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：当内存接近限制时，超过该时间未被更新的 MemTable 会被提前 Flush 以缓解内存压力；0 表示禁用按“陈旧时间”触发的刷盘（仍可能因高内存或不可变分区触发）。
 - 引入版本：v3.2.0
 
+### storage_cleanup_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：清理存储文件的线程数。`0` 表示当前节点的 CPU 核数的一半。
+- 引入版本：-
+
 ### storage_flood_stage_left_capacity_bytes
 
 - 默认值：107374182400
