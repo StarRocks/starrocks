@@ -97,12 +97,19 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
     auto index_schema = build_index_schema(*input.source_schema, index_col_ids);
     TabletSchemaCSPtr index_schema_csptr = index_schema;
 
-    // Read schema used to pull idx_cols out of source segments. We pass the
-    // source schema shared_ptr directly because TabletSchema::create() takes
-    // it by const ref to the smart pointer.
-    std::vector<int32_t> read_cids(index_col_ids.begin(), index_col_ids.end());
-    auto read_tablet_schema = TabletSchema::create(input.source_schema, read_cids);
-    Schema read_schema = ChunkHelper::convert_schema(read_tablet_schema);
+    // Read the FULL source schema from each segment and project the index
+    // columns in-memory by position (index_col_ids) below. A projected partial
+    // schema (TabletSchema::create with referenced_column_ids) copies the
+    // source's keys_type=PRIMARY_KEYS + num_short_key_columns into a schema that
+    // no longer contains the PK columns; on a compacted PK segment the segment
+    // iterator then misaligns and serves a key column (e.g. order_id) in place
+    // of the requested index column (e.g. user_id). Reading the full schema is
+    // the exact shape the segment was written with, so the iterator resolves
+    // every column correctly -- this mirrors the load-path collector, which
+    // projects the index columns out of the full write chunk by position.
+    // Costs extra column read I/O per build (one-time, and dominated by the
+    // single-threaded sort), but is provably correct.
+    Schema read_schema = ChunkHelper::convert_schema(input.source_schema);
 
     // Lazily-initialised accumulator columns. Stored as MutableColumns so we
     // can append into them; the COW pattern of regular Columns/ColumnPtr does
@@ -143,16 +150,19 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexWriter::build(const BuildInput& inp
             if (n == 0) continue;
 
             // First time we see real data: clone empty columns from the
-            // chunk so the accumulator has matching types.
+            // chunk so the accumulator has matching types. The chunk carries
+            // the FULL source schema, so project the index columns by their
+            // source-schema position (index_col_ids), exactly as the load-path
+            // collector does (collector.cpp via source_col_ids).
             if (acc_index_cols.empty()) {
                 acc_index_cols.reserve(index_col_ids.size());
                 for (size_t c = 0; c < index_col_ids.size(); ++c) {
-                    acc_index_cols.push_back(chunk->get_column_by_index(c)->clone_empty());
+                    acc_index_cols.push_back(chunk->get_column_by_index(index_col_ids[c])->clone_empty());
                 }
             }
 
             for (size_t c = 0; c < index_col_ids.size(); ++c) {
-                acc_index_cols[c]->append(*chunk->get_column_by_index(c), 0, n);
+                acc_index_cols[c]->append(*chunk->get_column_by_index(index_col_ids[c]), 0, n);
             }
             // emit encoded_pos for each row, using a per-segment local rowid.
             auto& pos_data = encoded_pos_col->get_data();
