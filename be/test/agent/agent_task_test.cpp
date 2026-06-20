@@ -295,7 +295,7 @@ TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
     EXPECT_EQ(remote_snapshot_pool, agent_server->get_thread_pool(TTaskType::TABLET_RESTORE));
 }
 
-// The dedicated `replicate_file` pool is built by AgentServer::Impl::init() alongside
+// The dedicated `replicate_file` pool is built by AgentServer::Impl::start() alongside
 // `replicate_snapshot`. Verify it's exposed via the public accessor and is a distinct
 // pool from `replicate_snapshot` — the distinct-pool invariant is what makes the
 // outer-task -> ThreadPoolToken::wait() pattern in lake replication safe.

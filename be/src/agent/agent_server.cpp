@@ -111,7 +111,7 @@ public:
 
     ~Impl();
 
-    Status init();
+    Status start();
 
     void stop();
 
@@ -207,7 +207,7 @@ private:
     const bool _is_compute_node;
 };
 
-Status AgentServer::Impl::init() {
+Status AgentServer::Impl::start() {
     if (!_is_compute_node) {
         for (auto& path : _exec_env->store_paths()) {
             try {
@@ -905,8 +905,8 @@ void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
     return _impl->stop_task_worker_pool(type);
 }
 
-Status AgentServer::init() {
-    return _impl->init();
+Status AgentServer::start() {
+    return _impl->start();
 }
 
 void AgentServer::stop() {

@@ -59,7 +59,7 @@ public:
 
     ~AgentServer();
 
-    Status init();
+    Status start();
 
     void stop();
 

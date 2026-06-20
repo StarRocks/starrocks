@@ -17,6 +17,9 @@
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
 
+#include <memory>
+
+#include "agent/agent_server.h"
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
@@ -139,6 +142,13 @@ int init_test_env(int argc, char** argv) {
     CHECK(st.ok()) << st;
     st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
+    auto agent_server = std::make_unique<AgentServer>(exec_env, false);
+    exec_env->set_agent_server(agent_server.get());
+    st = agent_server->start();
+    if (!st.ok()) {
+        exec_env->set_agent_server(nullptr);
+    }
+    CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();
 
@@ -147,7 +157,9 @@ int init_test_env(int argc, char** argv) {
     (void)butil::DeleteFile(storage_root, true);
     exec_env->wait_for_finish();
     tls_thread_status.set_mem_tracker(nullptr);
-    // Stop ExecEnv first so AgentServer pools cannot submit new storage cleanup tasks while StorageEngine drains them.
+    // Stop AgentServer before StorageEngine drains storage cleanup work its pools may submit.
+    agent_server->stop();
+    exec_env->set_agent_server(nullptr);
     exec_env->stop();
     engine->stop();
 #ifdef USE_STAROS
@@ -157,6 +169,7 @@ int init_test_env(int argc, char** argv) {
 #endif
     delete engine;
     exec_env->destroy();
+    agent_server.reset();
     platform_env->destroy();
     cache_env->destroy();
     global_env->stop();
