@@ -219,7 +219,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_EQ(new_tablet_metadata1->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata1->rowsets(2).num_dels(), 0);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // make sure delvecs have been generated
     for (int i = 0; i < 2; i++) {
         auto itr = new_tablet_metadata1->delvec_meta().version_to_file().find(version - i);
@@ -929,7 +929,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // make sure delvecs have been generated
     for (int i = 0; i < 2; i++) {
         auto itr = new_tablet_metadata1->delvec_meta().version_to_file().find(version - i);
@@ -1013,7 +1013,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // make sure delvecs have been generated
     for (int i = 0; i < 2; i++) {
         auto itr = new_tablet_metadata1->delvec_meta().version_to_file().find(version - i);
@@ -1873,7 +1873,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     auto txn_id = next_id();
     auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
@@ -1949,7 +1949,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
     }
     ASSERT_EQ(kChunkSize * 2, read(version));
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // upsert chunk 0 again without publish
     auto load_txn_id = next_id();
@@ -2224,7 +2224,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_concurrent_compaction_and_publish) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // two concurrent compaction tasks
     // task-1

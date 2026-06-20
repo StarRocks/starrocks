@@ -41,6 +41,7 @@
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
@@ -80,7 +81,7 @@ public:
         }
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         (void)fs::remove_all(_test_dir);
     }
 

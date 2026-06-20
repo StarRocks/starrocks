@@ -146,11 +146,10 @@ int init_test_env(int argc, char** argv) {
     CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
     exec_env->wait_for_finish();
-    // delete engine
-    engine->stop();
-    // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
+    // Stop ExecEnv first so AgentServer pools cannot submit new storage cleanup tasks while StorageEngine drains them.
     exec_env->stop();
+    engine->stop();
 #ifdef USE_STAROS
     if (exec_env->lake_tablet_manager() != nullptr) {
         exec_env->lake_tablet_manager()->stop();

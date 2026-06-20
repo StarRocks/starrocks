@@ -103,6 +103,7 @@ set(STORAGE_FILES
     del_file_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
+    storage_cleanup_executor.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp

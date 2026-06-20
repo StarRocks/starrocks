@@ -77,6 +77,7 @@ namespace starrocks {
 class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
+class StorageCleanupExecutor;
 class Tablet;
 class ReplicationTxnManager;
 class TAllocateAutoIncrementIdParam;
@@ -256,6 +257,10 @@ public:
     // `lake_schema_change_per_tablet_parallelism`. Invoked from the dynamic
     // config update callback when either knob changes.
     Status update_lake_schema_change_thread_pool_max();
+
+    StorageCleanupExecutor* storage_cleanup_executor() { return _storage_cleanup_executor.get(); }
+    Status update_storage_cleanup_thread_pool_max();
+    void wait_storage_cleanup_tasks();
 
     UpdateManager* update_manager() { return _update_manager.get(); }
 
@@ -510,6 +515,8 @@ private:
     // index building). Sized as alter_tablet_worker_count *
     // lake_schema_change_per_tablet_parallelism. See storage_engine.cpp pool init.
     std::unique_ptr<ThreadPool> _lake_schema_change_thread_pool;
+
+    std::unique_ptr<StorageCleanupExecutor> _storage_cleanup_executor;
 
     std::unique_ptr<UpdateManager> _update_manager;
 

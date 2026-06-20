@@ -25,6 +25,7 @@
 #include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/system/cpu_info.h"
@@ -37,6 +38,7 @@
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/persistent_index_load_executor.h"
+#include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 
@@ -173,6 +175,35 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_schema_change_pool_size) {
     st = ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count", "2");
     CHECK_OK(st);
     ASSERT_EQ(6, thread_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_storage_cleanup_worker_count) {
+    auto* storage_cleanup_executor = StorageEngine::instance()->storage_cleanup_executor();
+    ASSERT_NE(nullptr, storage_cleanup_executor);
+    auto* storage_cleanup_pool = storage_cleanup_executor->thread_pool();
+    ASSERT_NE(nullptr, storage_cleanup_pool);
+
+    auto* drop_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+    ASSERT_NE(nullptr, drop_pool);
+    const auto original_drop_pool_max_threads = drop_pool->max_threads();
+    const auto original_drop_tablet_worker_count = config::drop_tablet_worker_count;
+    const auto original_storage_cleanup_worker_count = config::storage_cleanup_worker_count;
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("drop_tablet_worker_count",
+                                                                 std::to_string(original_drop_tablet_worker_count)));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config(
+                "storage_cleanup_worker_count", std::to_string(original_storage_cleanup_worker_count)));
+    });
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("storage_cleanup_worker_count", "4");
+    CHECK_OK(st);
+    ASSERT_EQ(4, storage_cleanup_pool->max_threads());
+    ASSERT_EQ(original_drop_pool_max_threads, drop_pool->max_threads());
+
+    st = ConfigUpdateRegistry::instance()->update_config("drop_tablet_worker_count", "2");
+    CHECK_OK(st);
+    ASSERT_EQ(2, drop_pool->max_threads());
+    ASSERT_EQ(4, storage_cleanup_pool->max_threads());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {

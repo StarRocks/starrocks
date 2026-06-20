@@ -3804,7 +3804,7 @@ TEST(LakeVacuumTest2, test_delete_files_async) {
     ASSERT_OK(f2->close());
 
     delete_files_async({"test_vacuum_delete_files1.txt", "test_vacuum_delete_files2.txt"});
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files1.txt"));
     ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files2.txt"));
 }
@@ -5751,7 +5751,7 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_flat_parses_valid_name) {
     int64_t deleted = 0;
     ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
                                 /*cleanup_legacy_load_spill=*/false, &deleted));
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_FALSE(path_exists(victim));
     EXPECT_EQ(1, deleted);
 }
@@ -5817,7 +5817,7 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_flat_threshold_strict_less_than) {
     int64_t deleted = 0;
     ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/100,
                                 /*cleanup_legacy_load_spill=*/false, &deleted));
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_TRUE(path_exists(kept));
     EXPECT_FALSE(path_exists(victim));
     EXPECT_EQ(1, deleted);

@@ -116,7 +116,7 @@ public:
     void TearDown() override {
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // check trash files already removed
         for (const auto& file : _trash_files) {
             EXPECT_FALSE(fs::path_exist(file));
@@ -1533,7 +1533,7 @@ public:
     void TearDown() override {
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
 
@@ -4247,7 +4247,7 @@ public:
     }
 
     void TearDown() override {
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
 

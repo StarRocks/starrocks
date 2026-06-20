@@ -973,6 +973,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: sender ジョブのメモリ使用量が高いとき、`stale_memtable_flush_time_sec` 秒より長く更新されていない memtable はメモリ圧力を下げるためにフラッシュされます。この動作はメモリ制限に近づいている場合（`limit_exceeded_by_ratio(70)` 以上）のみ考慮されます。`LocalTabletsChannel` ではさらに高いメモリ使用時（`limit_exceeded_by_ratio(95)`）に、`write_buffer_size / 4` より大きいサイズの memtable をフラッシュする追加パスが存在します。値が `0` の場合、年齢に基づく stale-memtable のフラッシュは無効になります（immutable-partition の memtable はアイドル時や高メモリ時に即座にフラッシュされます）。
 - 導入バージョン: v3.2.0
 
+### storage_cleanup_worker_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ストレージファイルをクリーンアップするために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
+- 導入バージョン: -
+
 ### storage_flood_stage_left_capacity_bytes
 
 - デフォルト: 107374182400
