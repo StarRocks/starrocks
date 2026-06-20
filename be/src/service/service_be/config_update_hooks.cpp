@@ -51,6 +51,7 @@
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel_mgr.h"
+#include "service/core_dump_resource_releaser.h"
 #include "storage/compaction_manager.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/compaction_scheduler.h"
@@ -78,6 +79,11 @@ namespace starrocks {
 void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env) {
     auto* registry = ConfigUpdateRegistry::instance();
     const auto* global_env_ptr = &global_env;
+
+    registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
+        refresh_core_dump_resource_releaser_config();
+        return Status::OK();
+    });
 
     registry->register_callback("scanner_thread_pool_thread_num", [=]() -> Status {
         LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;

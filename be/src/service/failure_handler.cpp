@@ -41,14 +41,18 @@
 #include <tuple>
 
 #include "base/uid_util.h"
+#ifndef __APPLE__
 #include "cache/datacache.h"
+#endif
 #include "common/config_diagnostic_fwd.h"
 #include "common/process_exit.h"
 #include "common/util/debug_util.h"
 #include "gutil/endian.h"
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
+#include "service/core_dump_resource_releaser.h"
 
 namespace starrocks {
 
@@ -176,10 +180,14 @@ static void failure_handler_after_output_log() {
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
         set_process_is_crashing();
 
-        ExecEnv::GetInstance()->try_release_resource_before_core_dump();
+        DataCache* data_cache = nullptr;
 #ifndef __APPLE__
-        DataCache::GetInstance()->try_release_resource_before_core_dump();
+        data_cache = DataCache::GetInstance();
 #endif
+        // Best-effort core-size optimization: release selected large pools/caches before
+        // marking unused jemalloc pages as dontdump. Keep this path allocation/log free
+        // because it may run after OOM or heap corruption.
+        try_release_resources_before_core_dump(ExecEnv::GetInstance(), GlobalEnv::GetInstance(), data_cache);
 #ifndef __APPLE__
         dontdump_unused_pages();
 #endif
@@ -209,6 +217,7 @@ void init_runtime_logging_hooks() {
     if (logging_hooks_initialized) {
         return;
     }
+    refresh_core_dump_resource_releaser_config();
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
