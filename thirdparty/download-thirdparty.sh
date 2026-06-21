@@ -763,6 +763,7 @@ if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
     if [ ! -f "$PATCHED_MARK" ] ; then
         patch -p1 < "$TP_PATCH_DIR/clucene-gcc14.patch"
         patch -p0 < "$TP_PATCH_DIR/clucene-no-hidden.patch"
+        patch -p1 < "$TP_PATCH_DIR/clucene-skiplist-reader.patch"
         touch "$PATCHED_MARK"
     fi
     cd -

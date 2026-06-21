@@ -1,0 +1,27 @@
+Fix MATCH_ALL crash: DefaultSkipListReader::readSkipData reads the wrong skip
+VInts and dereferences an unallocated proxPointer.
+
+The skip stream written by DefaultSkipListWriter emits two VInts after the doc
+delta (FreqSkip then ProxSkip). The reader regressed (StarRocks/clucene PR #3)
+to read a single VInt into proxPointer, which the constructor no longer
+allocates. On large posting lists (df >= skipInterval) the conjunction scorer
+used by MATCH_ALL calls skipTo(), reaching this code and crashing the backend.
+
+Read FreqSkip into the allocated freqPointer and consume-and-discard the
+ProxSkip VInt to keep the stream aligned. proxPointer is never dereferenced.
+
+--- a/src/core/CLucene/index/SkipListReader.cpp
++++ b/src/core/CLucene/index/SkipListReader.cpp
+@@ -308,7 +308,11 @@
+ 	} else {
+ 		delta = _skipStream->readVInt();
+ 	}
+-	proxPointer[level] += _skipStream->readVInt();
++	// Must match DefaultSkipListWriter::writeSkipData: DocSkip [, PayloadLength?], FreqSkip, ProxSkip.
++	// Accumulate FreqSkip in freqPointer for freqStream->seek() after skipTo(); consume ProxSkip to
++	// keep the skip stream aligned (proxPointer is not allocated on the term-docs path).
++	freqPointer[level] += _skipStream->readVInt();
++	_skipStream->readVInt();
+ 
+ 	return delta;
+ }
