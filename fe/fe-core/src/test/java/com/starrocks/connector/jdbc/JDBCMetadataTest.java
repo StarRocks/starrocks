@@ -1015,7 +1015,8 @@ public class JDBCMetadataTest {
 
     @Test
     public void testGetTableStatisticsCacheDisabledReturnsDefault() {
-        // When jdbc_meta_cache_enable=false, rowCountCache is null → return default immediately.
+        // Row-count cache is always built regardless of jdbc_meta_cache_enable.
+        // Cold start (nothing loaded yet) must return default_statistics_output_row_count immediately.
         Map<String, String> props = new HashMap<>(properties);
         props.put("jdbc_meta_cache_enable", "false");
 
@@ -1139,17 +1140,4 @@ public class JDBCMetadataTest {
                 "Row count should fall back to default when dialect returns -1 (unsupported)");
     }
 
-    @Test
-    public void testRowCountCacheNullWhenCacheDisabled() {
-        Map<String, String> props = new HashMap<>(properties);
-        props.put("jdbc_meta_cache_enable", "false");
-
-        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
-        // rowCountCache is private; verify indirectly — getTableStatistics must not throw
-        // and must return the default value even when table is valid.
-        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-        Statistics stats = jdbcMetadata.getTableStatistics(null, jdbcTable,
-                java.util.Collections.emptyMap(), java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
-        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount());
-    }
 }

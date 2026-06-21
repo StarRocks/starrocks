@@ -197,21 +197,27 @@ public class JDBCMetadata implements ConnectorMetadata {
         tableIdCache = new JDBCMetaCache<>(properties, true);
         tableInstanceCache = new JDBCMetaCache<>(properties, false);
         partitionInfoCache = new JDBCMetaCache<>(properties, false);
-        rowCountCache = buildRowCountCache();
+        rowCountCache = buildRowCountCache(properties);
     }
 
-    private AsyncLoadingCache<JDBCTableName, Long> buildRowCountCache() {
-        // Reuse the enable/expire settings already parsed by an existing JDBCMetaCache instance
-        // to avoid duplicating property-parsing logic.
-        if (!tableInstanceCache.isEnableCache()) {
-            return null;
-        }
-        long expireSec = tableInstanceCache.getCurrentExpireSec();
-        // refreshAfterWrite: return stale value while reloading asynchronously after expireSec.
-        // expireAfterWrite (2x): hard evict entries that are no longer actively queried.
+    private AsyncLoadingCache<JDBCTableName, Long> buildRowCountCache(Map<String, String> properties) {
+        // Row-count cache is always enabled regardless of jdbc_meta_cache_enable.
+        // jdbc_meta_cache_enable controls schema metadata freshness; statistics are a
+        // separate concern and must never block planning — async loading is mandatory.
+        // Each parameter can be overridden per-catalog via the JDBC catalog properties map.
+        long refreshSec = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_refresh_sec",
+                String.valueOf(Config.jdbc_row_count_cache_refresh_sec)));
+        long expireSec = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_expire_sec",
+                String.valueOf(Config.jdbc_row_count_cache_expire_sec)));
+        long maxSize = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_max_size",
+                String.valueOf(Config.jdbc_row_count_cache_max_size)));
         return Caffeine.newBuilder()
-                .refreshAfterWrite(expireSec, TimeUnit.SECONDS)
-                .expireAfterWrite(expireSec * 2, TimeUnit.SECONDS)
+                .maximumSize(maxSize)
+                .refreshAfterWrite(refreshSec, TimeUnit.SECONDS)
+                .expireAfterWrite(expireSec, TimeUnit.SECONDS)
                 .executor(ROW_COUNT_EXECUTOR)
                 .buildAsync(key -> loadRowCount(key));
     }
