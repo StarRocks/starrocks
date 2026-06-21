@@ -25,6 +25,7 @@
 #include "storage/del_vector.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_env.h"
 
 namespace starrocks::lake {
 
@@ -81,7 +82,7 @@ static bvar::Window<bvar::Adder<uint64_t>> g_aggregate_partition_cache_miss_minu
 
 #ifndef BE_TEST
 static Metacache* get_metacache() {
-    auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     return (mgr != nullptr) ? mgr->metacache() : nullptr;
 }
 

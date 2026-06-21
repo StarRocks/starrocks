@@ -25,6 +25,7 @@
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 LakeSnapshotLoader::LakeSnapshotLoader(ExecEnv* env) : _env(env) {}
@@ -133,7 +134,7 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
 
 Status LakeSnapshotLoader::_check_snapshot_paths(const ::starrocks::UploadSnapshotsRequest* request) {
     for (auto& [tablet_id, snapshot] : request->snapshots()) {
-        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        auto tablet = StorageEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id);
         if (!tablet.ok()) {
             std::stringstream ss;
             ss << "Fail to get tablet " << tablet_id;
@@ -190,7 +191,7 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
         }
 
         std::map<std::string, std::string> file_locations;
-        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        auto tablet = StorageEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id);
         auto tablet_metadata = tablet->get_metadata(snapshot.version());
         for (const auto& rowset : (*tablet_metadata)->rowsets()) {
             for (const auto& segment_meta : rowset.segment_metas()) {
@@ -310,7 +311,7 @@ Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* r
                 return Status::Corruption(fmt::format("failed to parse tablet meta {}", full_remote_file));
             }
             meta->set_id(restore_info.tablet_id());
-            RETURN_IF_ERROR(_env->lake_tablet_manager()->put_tablet_metadata(meta));
+            RETURN_IF_ERROR(StorageEnv::GetInstance()->lake_tablet_manager()->put_tablet_metadata(meta));
         }
 
         // 2.3. upload the segment files.
@@ -321,8 +322,8 @@ Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* r
             const std::string& remote_file = iter.first;
             const FileStat& file_stat = iter.second;
             std::string full_remote_file = restore_info.snapshot_path() + "/" + remote_file + "." + file_stat.md5;
-            std::string restored_file =
-                    _env->lake_tablet_manager()->segment_location(restore_info.tablet_id(), iter.first);
+            std::string restored_file = StorageEnv::GetInstance()->lake_tablet_manager()->segment_location(
+                    restore_info.tablet_id(), iter.first);
             std::unique_ptr<WritableFile> remote_writable_file;
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             BrokerFileSystem fs_broker(address, broker_prop);

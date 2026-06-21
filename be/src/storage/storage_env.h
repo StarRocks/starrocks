@@ -14,19 +14,36 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "common/status.h"
 
 namespace starrocks {
 
+class MemTracker;
+
 namespace lake {
 class LakePersistentIndexParallelCompactMgr;
+class LocationProvider;
+class ReplicationTxnManager;
 class TabletManager;
+class UpdateManager;
 } // namespace lake
 
+enum class LakeLocationProviderMode {
+    kDisabled,
+    kStarlet,
+    kFixed,
+};
+
 struct StorageEnvOptions {
-    lake::TabletManager* lake_tablet_manager = nullptr;
+    LakeLocationProviderMode lake_location_provider_mode = LakeLocationProviderMode::kDisabled;
+    std::vector<std::string> store_path_roots;
+    MemTracker* update_mem_tracker = nullptr;
+    int64_t lake_metadata_cache_limit = 0;
 };
 
 // Process-scoped storage resource owner. Keep business logic dependencies
@@ -43,11 +60,20 @@ public:
 
     Status init(const StorageEnvOptions& options);
     void stop();
+    void stop_lake_tablet_manager();
     void destroy();
 
+    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
+    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager.get(); }
+    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager.get(); }
+    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager.get(); }
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() const { return _parallel_compact_mgr.get(); }
 
 private:
+    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
+    std::unique_ptr<lake::UpdateManager> _lake_update_manager;
+    std::unique_ptr<lake::TabletManager> _lake_tablet_manager;
+    std::unique_ptr<lake::ReplicationTxnManager> _lake_replication_txn_manager;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
 };
 

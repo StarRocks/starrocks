@@ -51,6 +51,7 @@
 #include "storage/lake/update_compaction_state.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/rows_mapper.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {

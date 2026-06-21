@@ -27,6 +27,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
@@ -64,7 +65,7 @@ Status LocalPkIndexManager::clear_persistent_index(int64_t tablet_id, DataDir* d
 }
 
 void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids) {
-    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     int64_t t_start = MonotonicMillis();
 
     std::vector<int64_t> not_in_worker_tablet_ids;
@@ -266,8 +267,9 @@ void LocalPkIndexManager::schedule(const std::function<std::vector<TabletAndScor
         }
         mark_running(tablet_id, data_dir);
         auto st = _worker_thread_pool->submit_func([=] {
-            WARN_IF_ERROR(ExecEnv::GetInstance()->lake_update_manager()->pk_index_major_compaction(tablet_id, data_dir),
-                          "Failed to run PkIndexMajorCompactionTask");
+            WARN_IF_ERROR(
+                    StorageEnv::GetInstance()->lake_update_manager()->pk_index_major_compaction(tablet_id, data_dir),
+                    "Failed to run PkIndexMajorCompactionTask");
             unmark_running(tablet_id, data_dir);
         });
         if (!st.ok()) {

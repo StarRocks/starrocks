@@ -52,6 +52,7 @@
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "testutil/chunk_assert.h"
 

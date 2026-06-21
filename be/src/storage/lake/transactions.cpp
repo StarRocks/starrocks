@@ -33,6 +33,7 @@
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+#include "storage/storage_env.h"
 
 namespace {
 
@@ -76,7 +77,7 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
     }
 
     run_clear_task_async([txn_slog = std::move(txn_slog_or.value())]() {
-        (void)ExecEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
+        (void)StorageEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
     });
 
     tablet_mgr->metacache()->erase(slog_path);

@@ -50,6 +50,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -60,7 +61,7 @@ using namespace starrocks;
 class LakeDataSourceTest : public ::testing::Test {
 public:
     LakeDataSourceTest()
-            : _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
+            : _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
               _location_provider(std::make_shared<FixedLocationProvider>(kRootLocation)) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());

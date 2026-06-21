@@ -44,6 +44,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
@@ -163,9 +164,7 @@ int init_test_env(int argc, char** argv) {
     exec_env->stop();
     engine->stop();
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
     delete engine;
     exec_env->destroy();

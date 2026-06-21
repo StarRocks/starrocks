@@ -44,6 +44,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake_meta_reader.h"
 #include "storage/meta_reader.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -53,7 +54,7 @@ public:
     LakeMetaScannerTest() : _tablet_id(next_id()) {
         // setup TabletManager
         _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
-        _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        _tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         CHECK(FileSystem::Default()
                       ->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName))

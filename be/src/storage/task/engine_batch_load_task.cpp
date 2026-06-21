@@ -50,6 +50,7 @@
 #include "storage/olap_common.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 
 using apache::thrift::ThriftDebugString;
@@ -60,7 +61,7 @@ using std::vector;
 namespace starrocks {
 
 static StatusOr<int64_t> choose_any_version(int64_t tablet_id) {
-    auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (auto res = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id); res != nullptr) {
         return res->version();
     }
@@ -199,7 +200,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
                          << tablet_id;
             ASSIGN_OR_RETURN(tablet_version, choose_any_version(tablet_id));
         }
-        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         auto tablet_or = tablet_manager->get_tablet(tablet_id, tablet_version);
         if (!tablet_or.ok()) {
             LOG(WARNING) << "Fail to read tablet metadata. res=" << res << ", txn_id: " << request.transaction_id
