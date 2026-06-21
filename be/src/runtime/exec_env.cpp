@@ -352,6 +352,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_compute_env->init_query_cache(capacity));
 
     RETURN_IF_ERROR(_compute_env->init_spill(StorageEngine::instance()->get_store_paths(), process_metrics));
+    StorageEnv::GetInstance()->set_spill_dir_mgr(_compute_env->spill_dir_mgr());
 
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());
@@ -633,6 +634,7 @@ void ExecEnv::destroy() {
     // Query/workgroup teardown can release FragmentContext state that still uses
     // ComputeEnv-owned timers, pass-through stream buffers, and workgroup resources.
     if (_compute_env) {
+        StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
         _compute_env->destroy();
     }
 
