@@ -33,6 +33,10 @@ class TabletManager;
 class UpdateManager;
 } // namespace lake
 
+namespace spill {
+class DirManager;
+}
+
 enum class LakeLocationProviderMode {
     kDisabled,
     kStarlet,
@@ -68,6 +72,8 @@ public:
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager.get(); }
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager.get(); }
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() const { return _parallel_compact_mgr.get(); }
+    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr; }
+    void set_spill_dir_mgr(spill::DirManager* spill_dir_mgr) { _spill_dir_mgr = spill_dir_mgr; }
 
 private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
@@ -75,6 +81,7 @@ private:
     std::unique_ptr<lake::TabletManager> _lake_tablet_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _lake_replication_txn_manager;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
+    spill::DirManager* _spill_dir_mgr = nullptr;
 };
 
 } // namespace starrocks

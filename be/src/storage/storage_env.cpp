@@ -118,6 +118,7 @@ void StorageEnv::stop_lake_tablet_manager() {
 }
 
 void StorageEnv::destroy() {
+    _spill_dir_mgr = nullptr;
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
     }
