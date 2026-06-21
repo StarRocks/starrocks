@@ -44,6 +44,7 @@
 #include "storage/lake/test_util.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "testutil/deterministic_test_utils.h"
 

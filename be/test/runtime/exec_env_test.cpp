@@ -27,6 +27,7 @@
 #include "exec/pipeline/driver_queue_factory.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -66,7 +67,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     };
     ASSERT_OK(env.compute_env()->init_profile_report_worker(std::move(profile_report_worker_options)));
     env._broker_mgr = reinterpret_cast<BrokerMgr*>(0x5);
-    env._lake_tablet_manager = reinterpret_cast<lake::TabletManager*>(0x7);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
     env._heartbeat_flags = reinterpret_cast<HeartbeatFlags*>(0xb);
@@ -90,7 +90,10 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().broker_mgr, env._broker_mgr);
     EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
 
-    EXPECT_EQ(env.lake_services().lake_tablet_manager, env._lake_tablet_manager);
+    EXPECT_EQ(env.lake_services().lake_tablet_manager, StorageEnv::GetInstance()->lake_tablet_manager());
+    EXPECT_EQ(env.lake_services().lake_update_manager, StorageEnv::GetInstance()->lake_update_manager());
+    EXPECT_EQ(env.lake_services().lake_replication_txn_manager,
+              StorageEnv::GetInstance()->lake_replication_txn_manager());
     EXPECT_EQ(env.lake_services().lake_vector_index_build_thread_pool,
               global_env->lake_vector_index_build_thread_pool());
 

@@ -59,6 +59,7 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_env.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -80,8 +81,8 @@ public:
             : _tablet_id(next_id()),
               _partition_id(next_id()),
               _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
-              _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
-              _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
+              _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
+              _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
@@ -96,7 +97,7 @@ public:
     void create_tablet() {
         auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
         _tablet_id = metadata->id();
-        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         ASSERT_TRUE(tablet_mgr != nullptr);
         ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
     }

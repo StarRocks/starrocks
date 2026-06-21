@@ -226,7 +226,8 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                 config::update_memory_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-        st = exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
+        st = StorageEnv::GetInstance()->lake_update_manager()->update_primary_index_memory_limit(
+                config::update_memory_limit_percent);
 #endif
         return st;
     });
@@ -307,7 +308,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return Status::OK();
     });
     registry->register_callback("lake_metadata_cache_limit", [=]() -> Status {
-        auto tablet_mgr = exec_env->lake_tablet_manager();
+        auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
         return Status::OK();
     });
@@ -444,7 +445,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return executor->get_thread_pool()->update_max_threads(max_delta_writer_thread_num);
     });
     registry->register_callback("compact_threads", [=]() -> Status {
-        auto tablet_manager = exec_env->lake_tablet_manager();
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (tablet_manager != nullptr) {
             tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
         }
