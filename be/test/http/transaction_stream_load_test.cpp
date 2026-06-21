@@ -76,7 +76,7 @@ public:
 
         auto* platform_env = PlatformEnv::GetInstance();
         if (platform_env->brpc_stub_cache() == nullptr) {
-            ASSERT_OK(platform_env->init(&_metrics));
+            ASSERT_OK(platform_env->init(PlatformEnvOptions{.metrics = &_metrics}));
             _owns_platform_env = true;
         }
         _env._refresh_service_contexts();

@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <utility>
 
 #include "base/metrics.h"
@@ -38,7 +39,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     platform_env->destroy();
 
     static auto* metrics = new MetricRegistry("exec_env_test");
-    ASSERT_OK(platform_env->init(metrics));
+    ASSERT_OK(platform_env->init(PlatformEnvOptions{.metrics = metrics}));
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().load_path_mgr, nullptr);
@@ -55,6 +56,9 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
     workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
     ASSERT_OK(env.compute_env()->init_workgroup(workgroup_options));
+    std::error_code ec;
+    std::filesystem::create_directories(config::spill_local_storage_dir, ec);
+    ASSERT_FALSE(ec) << ec.message();
     ASSERT_OK(env.compute_env()->init_spill({config::storage_root_path}, metrics));
     ASSERT_OK(env.compute_env()->init_load_path({}, true));
     ProfileReportWorkerOptions profile_report_worker_options;
@@ -89,6 +93,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().broker_client_cache, platform_env->broker_client_cache());
     EXPECT_EQ(env.rpc_services().broker_mgr, env._broker_mgr);
     EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
+    EXPECT_EQ(env.platform_services().store_path_registry, platform_env->store_path_registry());
 
     EXPECT_EQ(env.lake_services().lake_tablet_manager, StorageEnv::GetInstance()->lake_tablet_manager());
     EXPECT_EQ(env.lake_services().lake_update_manager, StorageEnv::GetInstance()->lake_update_manager());

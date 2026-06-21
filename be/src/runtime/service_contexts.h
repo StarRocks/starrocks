@@ -41,6 +41,7 @@ class RuntimeFilterCache;
 class RuntimeFilterQueryLifecycle;
 class RuntimeFilterWorker;
 class SmallFileMgr;
+class StorePathRegistry;
 class StreamContextMgr;
 class StreamLoadExecutor;
 class TFileBrokerServiceClient;
@@ -79,6 +80,10 @@ class GlobalSpillManager;
 namespace workgroup {
 class WorkGroupManager;
 } // namespace workgroup
+
+struct PlatformServices {
+    const StorePathRegistry* store_path_registry = nullptr;
+};
 
 struct ExecutionEnv {
     PriorityThreadPool* thread_pool = nullptr;

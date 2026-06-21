@@ -458,12 +458,12 @@ TEST(RejectedRecordSyncDaemonCoreTest, SyncFailuresCounterAdvancesOnPostFailure)
 }
 
 // ===========================================================================
-// New: scan_once with null env / empty roots returns empty
+// New: scan_once with empty roots returns empty
 // ===========================================================================
 
-TEST(RejectedRecordSyncDaemonScanTest, ScanOnceWithNullEnvReturnsEmpty) {
+TEST(RejectedRecordSyncDaemonScanTest, ScanOnceWithEmptyRootsReturnsEmpty) {
     // The real scan_once (not the overridden one) returns immediately when
-    // store_path_roots() returns empty (null _env). We use a daemon that does
+    // store_path_roots() returns empty. We use a daemon that does
     // NOT override scan_once but does override store_path_roots via a
     // RealScanDaemon with an empty roots list.
     RealScanDaemon daemon(/*roots=*/{});

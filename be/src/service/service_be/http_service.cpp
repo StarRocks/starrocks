@@ -148,8 +148,10 @@ Status HttpServiceBE::start() {
 
     // register download action
     std::vector<std::string> allow_paths;
-    for (auto& path : _env->store_paths()) {
-        allow_paths.emplace_back(path.path);
+    const auto* store_path_registry = _env->platform_services().store_path_registry;
+    if (store_path_registry != nullptr) {
+        const auto& store_path_roots = store_path_registry->store_path_roots();
+        allow_paths.assign(store_path_roots.begin(), store_path_roots.end());
     }
     auto* download_action = new DownloadAction(_env, allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_download_load", download_action);

@@ -37,4 +37,20 @@ Status parse_root_path(const std::string& root_path, StorePath* path);
 Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path,
                               std::string_view configvar_name = "config::storage_root_path");
 
+class StorePathRegistry {
+public:
+    Status init(std::vector<StorePath> store_paths);
+
+    const std::vector<StorePath>& store_paths() const { return _store_paths; }
+    const std::vector<std::string>& store_path_roots() const { return _store_path_roots; }
+    size_t store_path_count() const { return _store_paths.size(); }
+    bool has_store_paths() const { return !_store_paths.empty(); }
+
+    void reset_for_test();
+
+private:
+    std::vector<StorePath> _store_paths;
+    std::vector<std::string> _store_path_roots;
+};
+
 } // namespace starrocks

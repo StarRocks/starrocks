@@ -23,7 +23,6 @@
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
@@ -55,7 +54,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         input_bytes += rowset->data_size_after_deletion();
     }
 
-    const auto& store_paths = ExecEnv::GetInstance()->store_paths();
+    const auto* store_path_registry = _tablet.tablet_manager()->store_path_registry();
+    DCHECK(store_path_registry != nullptr);
+    const auto& store_paths = store_path_registry->store_paths();
     DCHECK(!store_paths.empty());
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path);
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();

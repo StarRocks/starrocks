@@ -36,6 +36,7 @@
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
 #include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "platform/user_function_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -99,7 +100,10 @@ int init_test_env(int argc, char** argv) {
     auto st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
     auto* platform_env = PlatformEnv::GetInstance();
-    st = platform_env->init(process_metrics_registry->root_registry());
+    PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    st = platform_env->init(std::move(platform_env_options));
     CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();

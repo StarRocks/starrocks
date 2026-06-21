@@ -21,7 +21,6 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/tablet.h"
@@ -592,7 +591,8 @@ StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(cons
     // TODO: support row source mask buffer based on starlet fs
     // The current row source mask buffer is based on posix tmp file,
     // if there is no storage root path, use horizontal compaction.
-    if (ExecEnv::GetInstance()->store_paths().empty()) {
+    const auto* store_path_registry = _tablet_mgr->store_path_registry();
+    if (store_path_registry == nullptr || !store_path_registry->has_store_paths()) {
         return HORIZONTAL_COMPACTION;
     }
 

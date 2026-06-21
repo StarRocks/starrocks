@@ -116,8 +116,9 @@ static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet:
 #endif
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
-                             int64_t cache_capacity)
+                             int64_t cache_capacity, const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
+          _store_path_registry(store_path_registry),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr),
@@ -129,8 +130,10 @@ TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider
 #endif
 }
 
-TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity)
+TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
+                             const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
+          _store_path_registry(store_path_registry),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _table_schema_service(std::make_unique<TableSchemaService>(this)) {}
 
