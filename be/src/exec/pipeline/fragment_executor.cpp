@@ -110,6 +110,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
     ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
+    // Hold a strong reference so the QueryContext (and the query-scoped state that
+    // fragment operators point into, e.g. the spill manager) outlives `_fragment_ctx`.
+    _query_ctx_hold = _query_ctx->get_shared_ptr();
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
