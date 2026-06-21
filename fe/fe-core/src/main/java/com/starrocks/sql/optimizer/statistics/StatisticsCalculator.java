@@ -674,11 +674,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private long estimateFileScanRowCount(FileTable fileTable) {
-        if (optimizerContext != null
-                && optimizerContext.getSessionVariable().disableTableStatsFromMetadataForSingleTable()
-                && optimizerContext.getSourceTablesCount() == 1) {
-            return Config.default_statistics_output_row_count;
-        }
         try {
             // Use getFileDescsFromHdfs() — we only need file sizes, not text-format metadata.
             List<RemoteFileDesc> fileDescs = fileTable.getFileDescsFromHdfs();
@@ -703,11 +698,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private long estimateTableFunctionScanRowCount(TableFunctionTable table) {
-        if (optimizerContext != null
-                && optimizerContext.getSessionVariable().disableTableStatsFromMetadataForSingleTable()
-                && optimizerContext.getSourceTablesCount() == 1) {
-            return Config.default_statistics_output_row_count;
-        }
         try {
             List<TBrokerFileStatus> fileStatuses = table.loadFileList();
             if (fileStatuses == null || fileStatuses.isEmpty()) {
@@ -723,7 +713,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 return RowCountEstimator.estimate(totalBytes, Collections.emptyList(), null);
             }
 
-            HiveStorageFormat format = HiveStorageFormat.get(table.getFormat());
+            // CSV is stored as TEXTFILE in HiveStorageFormat; map it explicitly so the
+            // row-format compression factor (1.5) is applied rather than falling back to
+            // connector_row_size_estimate_bytes.
+            String fmt = table.getFormat();
+            HiveStorageFormat format = "csv".equalsIgnoreCase(fmt)
+                    ? HiveStorageFormat.TEXTFILE : HiveStorageFormat.get(fmt);
             return RowCountEstimator.estimate(totalBytes, table.getBaseSchema(), format);
         } catch (Exception e) {
             LOG.warn("Failed to estimate row count for TableFunctionTable [{}], fallback to default",
