@@ -64,6 +64,11 @@ public class FileTable extends Table {
     @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
 
+    // Cached file descriptors to avoid redundant remote listing within the same instance
+    // (e.g., statistics computation and scan-range setup both call getFileDescsFromHdfs).
+    // No TTL needed: FileTable is a per-query construct; cross-query stale reads are acceptable.
+    private volatile List<RemoteFileDesc> cachedFileDescs;
+
     public FileTable() {
         super(TableType.FILE);
     }
@@ -112,6 +117,9 @@ public class FileTable extends Table {
     }
 
     public List<RemoteFileDesc> getFileDescsFromHdfs() throws DdlException {
+        if (cachedFileDescs != null) {
+            return cachedFileDescs;
+        }
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties);
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
@@ -133,7 +141,8 @@ public class FileTable extends Table {
                     throw new DdlException("the path is a directory but didn't end with '/'");
                 }
             }
-            return remoteFileDescs;
+            cachedFileDescs = remoteFileDescs;
+            return cachedFileDescs;
         } catch (StarRocksConnectorException e) {
             throw new DdlException("doesn't get file with path: " + getTableLocation(), e);
         }

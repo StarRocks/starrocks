@@ -4523,6 +4523,15 @@ public class Config extends ConfigBase {
     public static long default_statistics_output_row_count = 1L;
 
     /**
+     * Default estimated bytes per row used by {@code RowCountEstimator} when the file format
+     * is unknown or does not support schema-based size estimation (e.g. SEQUENCE files).
+     * This value is divided into the total file size to produce an approximate row count for
+     * external file tables that have no statistics collected yet.
+     */
+    @ConfField(mutable = true)
+    public static long connector_row_size_estimate_bytes = 256L;
+
+    /**
      * Whether enable range distribution.
      */
     @ConfField(mutable = true, comment = "Whether enable range distribution.")
