@@ -352,7 +352,8 @@ public class ConnectProcessor {
         if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
             String digest = digestFromLeader;
             if (digest == null && (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest())) {
-                digest = computeStatementDigest(parsedStmt);
+                digest = computeStatementDigest(parsedStmt,
+                        ctx.getSessionVariable().isSqlDigestExcludeDb());
             }
             if (digest != null) {
                 ctx.getAuditEventBuilder().setDigest(digest);
@@ -405,12 +406,16 @@ public class ConnectProcessor {
     }
 
     public static String computeStatementDigest(StatementBase queryStmt) {
+        return computeStatementDigest(queryStmt, false);
+    }
+
+    public static String computeStatementDigest(StatementBase queryStmt, boolean excludeDb) {
         if (queryStmt == null) {
             return "";
         }
 
         try {
-            String digest = AstToSQLBuilder.toDigest(queryStmt);
+            String digest = AstToSQLBuilder.toDigest(queryStmt, excludeDb);
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
             md.update(digest.getBytes());
@@ -1354,7 +1359,8 @@ public class ConnectProcessor {
             StatementBase parsedStmt = executor.getParsedStmt();
             if ((Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) &&
                     (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt)) {
-                String digest = computeStatementDigest(parsedStmt);
+                String digest = computeStatementDigest(parsedStmt,
+                        ctx.getSessionVariable().isSqlDigestExcludeDb());
                 if (!digest.isEmpty()) {
                     result.setSql_digest(digest);
                 }

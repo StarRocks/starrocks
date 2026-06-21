@@ -1052,7 +1052,8 @@ public class StmtExecutor {
                     // If this sql is in blacklist, show message.
                     GlobalStateMgr.getCurrentState().getSqlBlackList().verifying(originSql);
                     if (Config.enable_sql_digest || context.getSessionVariable().isEnableSQLDigest()) {
-                        String digest = ConnectProcessor.computeStatementDigest(parsedStmt);
+                        String digest = ConnectProcessor.computeStatementDigest(parsedStmt,
+                                context.getSessionVariable().isSqlDigestExcludeDb());
                         if (!digest.isEmpty()) {
                             GlobalStateMgr.getCurrentState().getSqlDigestBlackList().verifying(digest);
                         }

@@ -754,6 +754,15 @@ public class UtFrameUtils {
         return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
+    public static String getStmtDigest(ConnectContext connectContext, String originStmt, boolean excludeDb)
+            throws Exception {
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
+                        .get(0);
+        Preconditions.checkState(statementBase instanceof QueryStatement);
+        return ConnectProcessor.computeStatementDigest(statementBase, excludeDb);
+    }
+
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
