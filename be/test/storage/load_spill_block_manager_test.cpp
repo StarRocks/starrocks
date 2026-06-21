@@ -16,22 +16,42 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "base/container/raw_container.h"
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
 class LoadSpillBlockManagerTest : public ::testing::Test {
 public:
-    void SetUp() { (void)FileSystem::Default()->create_dir_recursive(kTestDir); }
+    void SetUp() override {
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(kTestDir));
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(local_spill_dir()));
+        ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(local_spill_dir()));
+        _local_spill_dir_mgr = std::make_unique<spill::DirManager>(std::vector<std::shared_ptr<spill::Dir>>{
+                std::make_shared<spill::Dir>(local_spill_dir(), local_fs, std::numeric_limits<int64_t>::max())});
+        _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_local_spill_dir_mgr.get());
+    }
 
-    void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+    void TearDown() override {
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_previous_spill_dir_mgr);
+        _local_spill_dir_mgr.reset();
+        (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
+    }
 
 protected:
+    std::string local_spill_dir() const { return std::string(kTestDir) + "/local_spill"; }
+
     constexpr static const char* const kTestDir = "./lake_load_spill_block_manager_test";
+    spill::DirManager* _previous_spill_dir_mgr = nullptr;
+    std::unique_ptr<spill::DirManager> _local_spill_dir_mgr;
 };
 
 // Test that destroying LoadSpillBlockManager without calling init() does not crash.
@@ -48,7 +68,15 @@ TEST_F(LoadSpillBlockManagerTest, test_basic) {
             std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
+    ASSERT_FALSE(block->is_remote());
     ASSERT_OK(block_manager->release_block(block));
+}
+
+TEST_F(LoadSpillBlockManagerTest, test_init_without_storage_env_spill_dir_manager_fails) {
+    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+    auto status = block_manager->init();
+    ASSERT_TRUE(status.is_internal_error()) << status;
 }
 
 TEST_F(LoadSpillBlockManagerTest, test_write_read) {
@@ -227,11 +255,27 @@ TEST_F(LoadSpillBlockMergeExecutorTest, test_token_execution_mode) {
 
 class LoadSpillBlockContainerTest : public ::testing::Test {
 public:
-    void SetUp() override { (void)FileSystem::Default()->create_dir_recursive(kTestDir); }
-    void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+    void SetUp() override {
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(kTestDir));
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(local_spill_dir()));
+        ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(local_spill_dir()));
+        _local_spill_dir_mgr = std::make_unique<spill::DirManager>(std::vector<std::shared_ptr<spill::Dir>>{
+                std::make_shared<spill::Dir>(local_spill_dir(), local_fs, std::numeric_limits<int64_t>::max())});
+        _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_local_spill_dir_mgr.get());
+    }
+    void TearDown() override {
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_previous_spill_dir_mgr);
+        _local_spill_dir_mgr.reset();
+        (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
+    }
 
 protected:
+    std::string local_spill_dir() const { return std::string(kTestDir) + "/local_spill"; }
+
     constexpr static const char* const kTestDir = "./lake_load_spill_block_container_test";
+    spill::DirManager* _previous_spill_dir_mgr = nullptr;
+    std::unique_ptr<spill::DirManager> _local_spill_dir_mgr;
 };
 
 TEST_F(LoadSpillBlockContainerTest, test_block_group_with_slot_idx) {

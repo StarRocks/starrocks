@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "base/container/raw_container.h"
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
@@ -23,6 +25,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_writer.h"
@@ -31,6 +34,7 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -43,7 +47,13 @@ public:
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
     void SetUp() override {
-        (void)FileSystem::Default()->create_dir_recursive(kTestDir);
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(kTestDir));
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(local_spill_dir()));
+        ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(local_spill_dir()));
+        _local_spill_dir_mgr = std::make_unique<spill::DirManager>(std::vector<std::shared_ptr<spill::Dir>>{
+                std::make_shared<spill::Dir>(local_spill_dir(), local_fs, std::numeric_limits<int64_t>::max())});
+        _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_local_spill_dir_mgr.get());
         _block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
         ASSERT_OK(_block_manager->init());
         _profile = std::make_unique<RuntimeProfile>("test");
@@ -55,10 +65,14 @@ public:
     void TearDown() override {
         _spiller.reset();
         _block_manager.reset();
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_previous_spill_dir_mgr);
+        _local_spill_dir_mgr.reset();
         (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
     }
 
 protected:
+    std::string local_spill_dir() const { return std::string(kTestDir) + "/local_spill"; }
+
     ChunkPtr gen_data(int64_t chunk_size, int start_value) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
@@ -87,6 +101,8 @@ protected:
     }
 
     constexpr static const char* const kTestDir = "./load_spill_pipeline_merge_test";
+    spill::DirManager* _previous_spill_dir_mgr = nullptr;
+    std::unique_ptr<spill::DirManager> _local_spill_dir_mgr;
     std::unique_ptr<LoadSpillBlockManager> _block_manager;
     std::unique_ptr<RuntimeProfile> _profile;
     std::unique_ptr<LoadSpillPipelineMergeContext> _pipeline_merge_context;
