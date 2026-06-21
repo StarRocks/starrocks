@@ -19,6 +19,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 namespace lake {
@@ -104,7 +105,7 @@ std::shared_ptr<TxnLogPB> make_op_write_log_with_bundle(int64_t tablet_id, int64
 
 // Build a Tablet instance (minimal requirements for non-primary key path)
 bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
-    auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (mgr == nullptr) return false;
     auto meta = std::make_shared<TabletMetadata>();
     meta->set_id(tablet_id);
@@ -117,7 +118,7 @@ bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10001); // 修改参数顺序
     auto meta = build_non_pk_metadata(10001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -143,7 +144,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
 // op_write carrying segments) so split children converge on one identity. Gating on num_rows
 // instead would skip seg_zero, set num_rows-driven uid to log1's, and diverge across children.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchZeroNumRowsKeepsSegmentAndUid) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10020);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10020);
     auto meta = build_non_pk_metadata(10020);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -168,7 +169,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchZeroNumRowsKeepsSegmentAndUid) {
 // segments are present, the merged rowset must still be created (the early-exit keys on
 // segments, not total_num_rows) — otherwise the whole cross-published txn's data is dropped.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10021);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10021);
     auto meta = build_non_pk_metadata(10021);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -185,7 +186,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10004);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10004);
     auto meta = build_non_pk_metadata(10004);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -217,7 +218,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10005);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10005);
     auto meta = build_non_pk_metadata(10005);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -262,7 +263,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
     auto meta = build_non_pk_metadata(10002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -273,7 +274,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10003); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10003); // 修改参数顺序
     auto meta = build_non_pk_metadata(10003);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -299,7 +300,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 20001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20001); // 修改参数顺序
     auto meta = build_pk_metadata(20001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -317,7 +318,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsLogWithoutWrite) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 20002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20002); // 修改参数顺序
     auto meta = build_pk_metadata(20002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -374,7 +375,7 @@ std::shared_ptr<TxnLogPB> make_lake_replication_log_with_tablet_metadata(int64_t
 // "Already exist: FixedMutableIndex<20> insert found duplicate key, new(rssid=X rowid=0), old(rssid=Y rowid=Z)"
 // The fix: For lake pk table replication txns, finish() should just put or cache metadata, skipping pk index rebuild.
 TEST(TxnLogApplierBatchTest, PrimaryKeyLakeReplicationFinishSkipsPrepareIndex) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30001);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30001);
     // Use metadata with LOCAL persistent index enabled - this is the scenario that would
     // trigger prepare_primary_index() in finish() for normal transactions
     auto meta = build_pk_metadata_with_local_persistent_index(30001);
@@ -438,7 +439,7 @@ std::shared_ptr<TxnLogPB> make_replication_log_without_tablet_metadata(int64_t t
 
 // Test that non-PK table with lake replication log (has tablet_metadata) works correctly
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30002);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30002);
     auto meta = build_non_pk_metadata(30002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -459,7 +460,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
 // Test that bundle_file_offsets from multiple TxnLogs are correctly merged into the combined rowset.
 // This verifies multi-statement transaction support for file bundling.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10010);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10010);
     auto meta = build_non_pk_metadata(10010);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -490,7 +491,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
 
 // Test that when no TxnLogs have bundle_file_offsets, the merged rowset also has none.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10011);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10011);
     auto meta = build_non_pk_metadata(10011);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -511,7 +512,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
 // Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
 // data corruption — silently dropping offsets would leave bundled segment paths unresolvable.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10012);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10012);
     auto meta = build_non_pk_metadata(10012);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -529,7 +530,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsErr
 // Test reverse order: first TxnLog has no offsets, second has offsets.
 // This must also be detected as inconsistent and return error.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10013);
     auto meta = build_non_pk_metadata(10013);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -546,7 +547,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseRet
 
 // Test that a single TxnLog with mismatched offset/segment count returns error.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10014);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10014);
     auto meta = build_non_pk_metadata(10014);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -566,7 +567,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchRetu
 // the backfilled (non-deterministic) uid is safe. We clear the uid that make_op_write_log
 // auto-stamps to simulate the legacy log.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoUidBackfills) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10015);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10015);
     auto meta = build_non_pk_metadata(10015);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -582,7 +583,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoUidBackfills) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30003);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30003);
     auto meta = build_non_pk_metadata(30003);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -622,7 +623,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegm
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyFullReplicationWithoutTabletMetaClearsStaleDcgMeta) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30004);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30004);
     auto meta = build_non_pk_metadata(30004);
     meta->set_next_rowset_id(10);
     auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[123];
@@ -685,7 +686,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyFullReplicationWithoutTabletMetaClears
 TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
     // --- Sub-case 1: Non-lake path (offset-based DCG remap) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50001);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50001);
         auto meta = build_pk_metadata(50001);
         meta->set_next_rowset_id(10);
         // Pre-existing stale DCG
@@ -750,7 +751,7 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
 
     // --- Sub-case 2: Lake path (tablet_metadata copy) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50002);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50002);
         auto meta = build_pk_metadata(50002);
         meta->set_next_rowset_id(5);
         auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[88];
@@ -809,7 +810,7 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationWithDcg) {
     // from op_replication are correctly applied to metadata (pass-through without remapping).
     // The full DCG rssid remapping logic is tested by NonPKIncrementalReplicationWithDcg,
     // which uses the same shared apply_replication_dcg_meta function.
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50005);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50005);
     auto meta = build_pk_metadata(50005);
     meta->set_next_rowset_id(10);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
@@ -862,7 +863,7 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationWithDcg) {
 TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
     // --- Sub-case 1: Non-lake path (rssid_remap) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50003);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50003);
         auto meta = build_non_pk_metadata(50003);
         meta->set_next_rowset_id(10);
         auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
@@ -919,7 +920,7 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
 
     // --- Sub-case 2: Lake path (tablet_metadata copy + stale DCG cleanup) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50004);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50004);
         auto meta = build_non_pk_metadata(50004);
         meta->set_next_rowset_id(10);
         auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[88];
@@ -967,7 +968,7 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 40001);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40001);
     auto meta = build_non_pk_metadata(40001);
     meta->set_next_rowset_id(10);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);

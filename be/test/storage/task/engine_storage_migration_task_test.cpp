@@ -54,6 +54,7 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
@@ -819,9 +820,7 @@ int main(int argc, char** argv) {
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
     exec_env->destroy();
     platform_env->destroy();

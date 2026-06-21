@@ -55,6 +55,7 @@
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "storage/lake/vector_index_build_task.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_index.h"
 
 namespace starrocks {
@@ -698,7 +699,9 @@ struct AggregatePublishContext {
                 auto task = std::make_shared<CancellableRunnable>(
                         [&] {
                             DeferOp defer([&] { latch.count_down(); });
-                            publish_status = env->lake_tablet_manager()->put_bundle_tablet_metadata(tablet_metas);
+                            publish_status =
+                                    StorageEnv::GetInstance()->lake_tablet_manager()->put_bundle_tablet_metadata(
+                                            tablet_metas);
                         },
                         [&] {
                             publish_status = Status::Cancelled("put_bundle_tablet_metadata task has been cancelled");

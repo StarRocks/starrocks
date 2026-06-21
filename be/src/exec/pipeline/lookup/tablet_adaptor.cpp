@@ -37,6 +37,7 @@
 #include "storage/metadata_util.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
 
@@ -270,7 +271,7 @@ Status LakeScanTabletAdaptor::init(int64_t tablet_id) {
 
 Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
     _use_page_cache = state->use_page_cache();
-    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 
     auto version = _glm_ctx->get_rowsets_version(_tablet_id);
@@ -331,7 +332,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
                                   &target_segment_idx);
 
     if (target == nullptr) {
-        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         _rowsets = lake::Rowset::get_rowsets(tablet_mgr, _tablet.metadata());
         target = _glm_ctx->get_rowset(_rowsets, static_cast<int32_t>(lake_rssid), &target_segment_idx);
     }

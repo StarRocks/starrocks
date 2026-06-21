@@ -23,7 +23,7 @@ namespace starrocks {
 
 class MockRuntimeState : public RuntimeState {
 public:
-    MockRuntimeState(ExecEnv* execEnv) : RuntimeState(&execEnv->query_execution_services(), execEnv) {}
+    MockRuntimeState(ExecEnv* execEnv) : RuntimeState(static_cast<const QueryExecutionServices*>(nullptr), execEnv) {}
     MOCK_METHOD((ExecEnv*), exec_env, ());
 };
 
@@ -62,6 +62,10 @@ TEST_F(ListRowsetsTableFunctionTest, basic_test) {
 
     ListRowsets list_rowsets_func;
     auto result = list_rowsets_func.process(_runtimeState, _state);
+#ifndef __APPLE__
     ASSERT_EQ("Only works for tablets in the cloud-native table", _state->status().message());
+#else
+    ASSERT_EQ("Lake storage is disabled on macOS", _state->status().message());
+#endif
 }
 } // namespace starrocks
