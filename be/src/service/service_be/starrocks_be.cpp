@@ -52,6 +52,7 @@
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
 #include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
 
@@ -118,7 +119,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
     auto* platform_env = PlatformEnv::GetInstance();
-    EXIT_IF_ERROR(platform_env->init(process_metrics_registry->root_registry()));
+    PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    EXIT_IF_ERROR(platform_env->init(std::move(platform_env_options)));
     LOG(INFO) << process_name << " start step " << start_step++ << ": platform env init successfully";
 
     // cache env should be initialized before init_storage_engine,

@@ -56,6 +56,7 @@
 #include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
+#include "platform/store_path.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 
@@ -206,8 +207,10 @@ private:
 };
 
 Status AgentServer::Impl::start() {
+    const auto* store_path_registry = _exec_env->platform_services().store_path_registry;
+    DCHECK(store_path_registry != nullptr);
     if (!_is_compute_node) {
-        for (auto& path : _exec_env->store_paths()) {
+        for (const auto& path : store_path_registry->store_paths()) {
             try {
                 std::string dpp_download_path_str = path.path + DPP_PREFIX;
                 std::filesystem::path dpp_download_path(dpp_download_path_str);
@@ -312,9 +315,9 @@ Status AgentServer::Impl::start() {
         // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
         // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
         // callback, so that we can match the dop of FE clone task scheduling.
+        const auto store_path_count = store_path_registry->store_path_count();
         BUILD_DYNAMIC_TASK_THREAD_POOL(
-                clone, 0,
-                calc_clone_thread_pool_size(_exec_env->store_paths().size(), config::parallel_clone_task_per_path),
+                clone, 0, calc_clone_thread_pool_size(store_path_count, config::parallel_clone_task_per_path),
                 DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(
@@ -822,8 +825,11 @@ int32_t AgentServer::Impl::calc_max_threads_by_policy(const ThreadPoolSpec& spec
         return calc_real_num_threads(new_val);
     case ThreadPoolResizePolicy::REPLICATION_CPU_SCALED:
         return calc_real_num_threads(new_val, REPLICATION_CPU_CORES_MULTIPLIER);
-    case ThreadPoolResizePolicy::CLONE_PER_STORE_PATH:
-        return calc_clone_thread_pool_size(_exec_env->store_paths().size(), new_val);
+    case ThreadPoolResizePolicy::CLONE_PER_STORE_PATH: {
+        const auto* store_path_registry = _exec_env->platform_services().store_path_registry;
+        DCHECK(store_path_registry != nullptr);
+        return calc_clone_thread_pool_size(store_path_registry->store_path_count(), new_val);
+    }
     case ThreadPoolResizePolicy::RAW:
         return new_val;
     }

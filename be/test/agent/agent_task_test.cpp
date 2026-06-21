@@ -31,6 +31,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
+#include "platform/store_path.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
@@ -337,8 +338,10 @@ TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
     ASSERT_NE(nullptr, thread_pool);
 
     constexpr int new_parallelism = 4;
+    const auto* store_path_registry = ExecEnv::GetInstance()->platform_services().store_path_registry;
+    ASSERT_NE(nullptr, store_path_registry);
     const int expected_max_threads =
-            std::max(static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * new_parallelism, 2);
+            std::max(static_cast<int>(store_path_registry->store_path_count()) * new_parallelism, 2);
 
     agent_server->update_max_thread_by_type(TTaskType::CLONE, new_parallelism);
 

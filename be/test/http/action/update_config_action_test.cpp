@@ -33,6 +33,7 @@
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
+#include "platform/store_path.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
@@ -137,7 +138,9 @@ TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path) {
     auto st = ConfigUpdateRegistry::instance()->update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
 
-    int expected_max_threads = static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * 4;
+    const auto* store_path_registry = ExecEnv::GetInstance()->platform_services().store_path_registry;
+    ASSERT_NE(nullptr, store_path_registry);
+    int expected_max_threads = static_cast<int>(store_path_registry->store_path_count()) * 4;
     expected_max_threads = std::max(expected_max_threads, 2);
     ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
 }

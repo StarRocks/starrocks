@@ -14,8 +14,6 @@ src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp
 src/service/service_be/lake_service.cpp
 src/service/service_be/starrocks_be.cpp
-src/storage/lake/compaction_policy.cpp
-src/storage/lake/vertical_compaction_task.cpp
 src/storage/load_chunk_spiller.cpp
 src/storage/load_spill_block_manager.cpp
 src/storage/push_utils.cpp

@@ -789,7 +789,7 @@ int main(int argc, char** argv) {
     static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
     (void)global_env->init(process_metrics_registry->root_registry());
     auto* platform_env = starrocks::PlatformEnv::GetInstance();
-    (void)platform_env->init(process_metrics_registry->root_registry());
+    (void)platform_env->init(starrocks::PlatformEnvOptions{.metrics = process_metrics_registry->root_registry()});
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;

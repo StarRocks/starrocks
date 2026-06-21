@@ -158,12 +158,11 @@ public:
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
     BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
-    const std::vector<StorePath>& store_paths() const { return _store_paths; }
-
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
+    const PlatformServices& platform_services() const { return _platform_services; }
     const RpcServices& rpc_services() const { return _rpc_services; }
     const LakeServices& lake_services() const { return _lake_services; }
     const RuntimeServices& runtime_services() const { return _runtime_services; }
@@ -205,7 +204,6 @@ private:
     size_t _get_running_fragments_count() const;
 
     GlobalEnv* _global_env = nullptr;
-    std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
@@ -239,6 +237,7 @@ private:
     DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;
+    PlatformServices _platform_services;
     RpcServices _rpc_services;
     LakeServices _lake_services;
     RuntimeServices _runtime_services;

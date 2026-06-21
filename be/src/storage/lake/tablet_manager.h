@@ -26,6 +26,7 @@
 #include "compaction_task_context.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/macros.h"
+#include "platform/store_path.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -68,9 +69,10 @@ public:
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
     explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
-                           int64_t cache_capacity);
+                           int64_t cache_capacity, const StorePathRegistry* store_path_registry = nullptr);
 
-    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity);
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
+                           const StorePathRegistry* store_path_registry = nullptr);
 
     ~TabletManager();
 
@@ -230,6 +232,7 @@ public:
     std::string lcrm_location(int64_t tablet_id, std::string_view crm_name) const;
 
     const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+    const StorePathRegistry* store_path_registry() const { return _store_path_registry; }
 
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
@@ -321,6 +324,7 @@ private:
 
 private:
     std::shared_ptr<LocationProvider> _location_provider;
+    const StorePathRegistry* _store_path_registry = nullptr;
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr = nullptr;

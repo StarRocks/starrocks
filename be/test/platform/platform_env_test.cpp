@@ -16,9 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+#include <vector>
+
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "common/brpc/brpc_stub_cache.h"
+#include "platform/store_path.h"
 #include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -28,7 +32,7 @@ TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
     env->destroy();
 
     MetricRegistry metrics("platform_env_test");
-    ASSERT_OK(env->init(&metrics));
+    ASSERT_OK(env->init(PlatformEnvOptions{.metrics = &metrics}));
 
     ASSERT_NE(env->backend_client_cache(), nullptr);
     ASSERT_NE(env->frontend_client_cache(), nullptr);
@@ -62,6 +66,75 @@ TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
     ASSERT_FALSE(lake_stub.ok());
     EXPECT_TRUE(lake_stub.status().is_service_unavailable());
 #endif
+}
+
+TEST(PlatformEnvTest, OwnsStorePathsFromInitOptions) {
+    auto* env = PlatformEnv::GetInstance();
+    env->destroy();
+    env->reset_store_paths_for_test();
+
+    std::vector<StorePath> paths;
+    paths.emplace_back("/path1");
+    paths.emplace_back("/path2");
+    paths[1].storage_medium = TStorageMedium::SSD;
+
+    MetricRegistry metrics("platform_env_store_path_test");
+    PlatformEnvOptions options;
+    options.metrics = &metrics;
+    options.store_paths = paths;
+    ASSERT_OK(env->init(std::move(options)));
+
+    const auto* store_path_registry = env->store_path_registry();
+    ASSERT_NE(nullptr, store_path_registry);
+    ASSERT_EQ(2, store_path_registry->store_path_count());
+    EXPECT_TRUE(store_path_registry->has_store_paths());
+    ASSERT_EQ(2, store_path_registry->store_paths().size());
+    EXPECT_EQ("/path1", store_path_registry->store_paths()[0].path);
+    EXPECT_EQ(TStorageMedium::HDD, store_path_registry->store_paths()[0].storage_medium);
+    EXPECT_EQ("/path2", store_path_registry->store_paths()[1].path);
+    EXPECT_EQ(TStorageMedium::SSD, store_path_registry->store_paths()[1].storage_medium);
+    ASSERT_EQ(2, store_path_registry->store_path_roots().size());
+    EXPECT_EQ("/path1", store_path_registry->store_path_roots()[0]);
+    EXPECT_EQ("/path2", store_path_registry->store_path_roots()[1]);
+
+    env->destroy();
+    EXPECT_EQ(2, store_path_registry->store_path_count());
+    env->reset_store_paths_for_test();
+}
+
+TEST(PlatformEnvTest, RejectsConflictingStorePathReinitUntilTestReset) {
+    auto* env = PlatformEnv::GetInstance();
+    env->destroy();
+    env->reset_store_paths_for_test();
+
+    MetricRegistry metrics("platform_env_store_path_reinit_test");
+    PlatformEnvOptions options;
+    options.metrics = &metrics;
+    options.store_paths = {StorePath("/path1")};
+    ASSERT_OK(env->init(std::move(options)));
+
+    PlatformEnvOptions same_options;
+    same_options.metrics = &metrics;
+    same_options.store_paths = {StorePath("/path1")};
+    ASSERT_OK(env->init(std::move(same_options)));
+
+    PlatformEnvOptions different_options;
+    different_options.metrics = &metrics;
+    different_options.store_paths = {StorePath("/path2")};
+    EXPECT_FALSE(env->init(std::move(different_options)).ok());
+
+    env->reset_store_paths_for_test();
+    PlatformEnvOptions reset_options;
+    reset_options.metrics = &metrics;
+    reset_options.store_paths = {StorePath("/path2")};
+    ASSERT_OK(env->init(std::move(reset_options)));
+    const auto* store_path_registry = env->store_path_registry();
+    ASSERT_NE(nullptr, store_path_registry);
+    ASSERT_EQ(1, store_path_registry->store_path_count());
+    EXPECT_EQ("/path2", store_path_registry->store_paths()[0].path);
+
+    env->destroy();
+    env->reset_store_paths_for_test();
 }
 
 } // namespace starrocks

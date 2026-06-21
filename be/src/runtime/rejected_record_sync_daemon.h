@@ -110,7 +110,7 @@ public:
 
 protected:
     // Returns the list of store-path root directories that scan_once() should
-    // walk. Production returns one entry per element in _env->store_paths().
+    // walk. Production returns one entry per PlatformEnv store-path root.
     // Tests override this to inject a temporary directory without needing a
     // live ExecEnv, which allows the real scan_once() / collect_jsonl() /
     // is_claimable() logic to execute under test control.
