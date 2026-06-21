@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "platform/store_path.h"
 #include "runtime/mem_tracker.h"
+#include "storage/lake/tablet_manager.h"
 
 namespace starrocks {
 
@@ -43,7 +45,9 @@ TEST(StorageEnvTest, fixed_provider_init_owns_lake_resources) {
     MemTracker update_mem_tracker(-1, "storage_env_test");
     StorageEnvOptions options;
     options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
-    options.store_path_roots.emplace_back("storage_env_test_root");
+    StorePathRegistry store_path_registry;
+    ASSERT_OK(store_path_registry.init({StorePath("storage_env_test_root")}));
+    options.store_path_registry = &store_path_registry;
     options.update_mem_tracker = &update_mem_tracker;
     options.lake_metadata_cache_limit = 1024 * 1024;
 
@@ -52,6 +56,7 @@ TEST(StorageEnvTest, fixed_provider_init_owns_lake_resources) {
     EXPECT_NE(env.lake_location_provider().get(), nullptr);
     EXPECT_NE(env.lake_update_manager(), nullptr);
     EXPECT_NE(env.lake_tablet_manager(), nullptr);
+    EXPECT_EQ(env.lake_tablet_manager()->store_path_registry(), &store_path_registry);
     EXPECT_NE(env.lake_replication_txn_manager(), nullptr);
     EXPECT_NE(env.parallel_compact_mgr(), nullptr);
 
@@ -75,6 +80,8 @@ TEST(StorageEnvTest, fixed_provider_requires_store_path) {
     MemTracker update_mem_tracker(-1, "storage_env_test");
     StorageEnvOptions options;
     options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+    StorePathRegistry store_path_registry;
+    options.store_path_registry = &store_path_registry;
     options.update_mem_tracker = &update_mem_tracker;
     options.lake_metadata_cache_limit = 1024 * 1024;
 

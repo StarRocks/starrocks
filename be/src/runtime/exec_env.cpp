@@ -327,10 +327,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     }
 
     StorageEnvOptions storage_env_options;
-    storage_env_options.store_path_roots.reserve(_store_paths.size());
-    for (const auto& store_path : _store_paths) {
-        storage_env_options.store_path_roots.emplace_back(store_path.path);
-    }
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
     storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
     storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
