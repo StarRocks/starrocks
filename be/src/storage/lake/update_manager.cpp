@@ -31,7 +31,6 @@
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
@@ -503,10 +502,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             if (async_compact_cb == nullptr && !skip_early_sst_compact &&
                 index.current_fileset_index() - current_fileset_start_idx >=
                         config::pk_index_early_sst_compaction_threshold) {
+                if (_parallel_compact_mgr == nullptr) {
+                    return Status::InternalError("parallel compact manager is not initialized");
+                }
                 TRACE_COUNTER_INCREMENT("early_sst_compact_times", 1);
                 ASSIGN_OR_RETURN(async_compact_cb,
-                                 index.early_sst_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
-                                                         metadata, current_fileset_start_idx + 1 /* new fileset*/));
+                                 index.early_sst_compact(_parallel_compact_mgr, _tablet_mgr, metadata,
+                                                         current_fileset_start_idx + 1 /* new fileset*/));
             }
         } // end Phase 2 per-segment loop
     }     // end batch loop
@@ -1946,8 +1948,7 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     // 1. init some state
     auto& index = index_entry->value();
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, metadata.get()));
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
 
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
@@ -2003,8 +2004,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
-        ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                     input_rowsets_id, metadata.get()));
+        ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
         return builder->apply_opcompaction(
                 op_compaction,
                 *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
@@ -2021,8 +2021,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, metadata.get()));
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
@@ -2295,8 +2294,10 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
 
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
     if (config::enable_pk_index_parallel_compaction) {
-        return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
-                                                           metadata, txn_log);
+        if (_parallel_compact_mgr == nullptr) {
+            return Status::InternalError("parallel compact manager is not initialized");
+        }
+        return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
     }
     return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
 }
