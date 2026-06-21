@@ -219,7 +219,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     private long loadRowCount(JDBCTableName key) {
         try (Connection connection = getConnection()) {
             long count = schemaResolver.getTableRowCount(connection, key.getDatabaseName(), key.getTableName());
-            return count > 0 ? count : Config.default_statistics_output_row_count;
+            return count >= 0 ? count : Config.default_statistics_output_row_count;
         } catch (Exception e) {
             LOG.warn("Failed to load row count for {}.{}: {}", key.getDatabaseName(), key.getTableName(),
                     e.getMessage());

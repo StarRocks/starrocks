@@ -1134,9 +1134,9 @@ public class JDBCMetadataTest {
         Statistics stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
                 java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
 
-        // Must never return -1; must be default or greater.
-        Assertions.assertTrue((long) stats.getOutputRowCount() >= Config.default_statistics_output_row_count,
-                "Row count must not be negative; should fall back to default when dialect returns -1");
+        // Empty result set → getTableRowCount returns -1 → loadRowCount stores default.
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Row count should fall back to default when dialect returns -1 (unsupported)");
     }
 
     @Test
