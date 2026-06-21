@@ -219,7 +219,6 @@ FE-agent task orchestration, heartbeat handling, agent metrics, and agent worker
 - Targets: `AgentServer`
 - Allowed internal include prefixes: `agent/`, `cache/`, `compute_env/workgroup/`, `exec/pipeline/query_context.h`, `exec/runtime/query_context_manager.h`, `fs/`, `io/`, `runtime/`, `storage/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Runtime`, `Storage`, `Cache`, `ComputeEnv`, `ExecRuntime`, `StoragePrimitive`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `agent_server_test`
 - Remediation: Keep AgentServer as FE-agent task and heartbeat orchestration below Service; move service/bootstrap integration upward.
 
 ### ExprCore (`exprcore`)

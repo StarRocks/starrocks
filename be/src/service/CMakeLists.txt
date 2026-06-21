@@ -36,7 +36,7 @@ ADD_BE_LIB(Service
 
 target_link_libraries(Service PRIVATE Runtime Cache AgentServer ComputeEnv ExecRuntime Platform)
 target_link_libraries(ServiceBE PUBLIC Service)
-target_link_libraries(ServiceBE PRIVATE ConnectorBootstrap)
+target_link_libraries(ServiceBE PRIVATE AgentServer ConnectorBootstrap)
 
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))

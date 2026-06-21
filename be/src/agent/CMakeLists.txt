@@ -31,3 +31,22 @@ ADD_BE_LIB(AgentServer
         task_signatures_manager.cpp
         resource_group_usage_recorder.cpp
         )
+
+target_link_libraries(AgentServer
+        PUBLIC
+            Gutil
+            StarRocksGen
+        PRIVATE
+            Runtime
+            Storage
+            Cache
+            ComputeEnv
+            ExecRuntime
+            StoragePrimitive
+            RuntimeCore
+            Platform
+            FSCore
+            IO
+            Common
+            Base
+        )

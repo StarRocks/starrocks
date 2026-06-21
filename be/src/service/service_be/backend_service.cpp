@@ -38,6 +38,7 @@
 #include <memory>
 
 #include "agent/agent_server.h"
+#include "agent/task_worker_pool.h"
 #include "common/config_network_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_server.h"

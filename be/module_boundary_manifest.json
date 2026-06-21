@@ -530,24 +530,6 @@
         "Gutil",
         "StarRocksGen"
       ],
-      "allowed_test_targets": ["agent_server_test"],
-      "allowed_test_link_deps": [
-        "AgentServer",
-        "Runtime",
-        "Storage",
-        "Cache",
-        "ComputeEnv",
-        "ExecRuntime",
-        "StoragePrimitive",
-        "RuntimeCore",
-        "Platform",
-        "FSCore",
-        "IO",
-        "Common",
-        "Base",
-        "Gutil",
-        "StarRocksGen"
-      ],
       "remediation": "Keep AgentServer as FE-agent task and heartbeat orchestration below Service; move service/bootstrap integration upward."
     },
     {
