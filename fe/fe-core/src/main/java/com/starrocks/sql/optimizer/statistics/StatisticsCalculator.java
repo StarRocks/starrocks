@@ -912,14 +912,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                Config.default_statistics_output_row_count);
+        return computeJDBCScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                Config.default_statistics_output_row_count);
+        return computeJDBCScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeJDBCScanNode(Operator node, ExpressionContext context, Table table,
+                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        long rowCount = Config.default_statistics_output_row_count;
+        try {
+            String catalogName = table.getCatalogName();
+            Statistics connectorStats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null, null);
+            if (connectorStats != null) {
+                rowCount = (long) connectorStats.getOutputRowCount();
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get JDBC table statistics for {}: {}", table.getName(), e.getMessage());
+        }
+        return computeNormalExternalTableScanNode(node, context, table, colRefToColumnMetaMap, rowCount);
     }
 
     /**
