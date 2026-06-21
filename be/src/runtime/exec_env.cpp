@@ -87,12 +87,12 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #ifdef WITH_TENANN
@@ -154,7 +154,6 @@ void ExecEnv::_refresh_service_contexts() {
     _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
     _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
     _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
-    _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
     _lake_services.pk_index_execution_thread_pool = global_env->pk_index_execution_thread_pool();
     _lake_services.pk_index_memtable_flush_thread_pool = global_env->pk_index_memtable_flush_thread_pool();
     _lake_services.lake_partial_update_thread_pool = global_env->lake_partial_update_thread_pool();
@@ -350,18 +349,21 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     }
     setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
 
-    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
-    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
     _lake_update_manager = new lake::UpdateManager(_lake_location_provider, global_env->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
-    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
-    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
 #endif
+    if (_lake_tablet_manager != nullptr) {
+        StorageEnvOptions storage_env_options;
+        storage_env_options.lake_tablet_manager = _lake_tablet_manager;
+        RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(storage_env_options), "init StorageEnv failed");
+        if (_lake_update_manager != nullptr) {
+            _lake_update_manager->set_parallel_compact_mgr(StorageEnv::GetInstance()->parallel_compact_mgr());
+        }
+    }
 
     RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
 
@@ -499,9 +501,9 @@ void ExecEnv::stop() {
         component_times.emplace_back("lake_vector_index_build_thread_pool", MonotonicMillis() - start);
     }
 
-    if (_parallel_compact_mgr) {
+    if (StorageEnv::GetInstance()->parallel_compact_mgr() != nullptr) {
         start = MonotonicMillis();
-        _parallel_compact_mgr->shutdown();
+        StorageEnv::GetInstance()->stop();
         component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
     }
 
@@ -671,11 +673,11 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
+    StorageEnv::GetInstance()->destroy();
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_diagnose_daemon);
-    _parallel_compact_mgr.reset();
     DCHECK(_global_env != nullptr);
     _global_env->destroy_thread_pools();
     _query_execution_services.process_metrics = nullptr;

@@ -99,7 +99,6 @@ class LocationProvider;
 class TabletManager;
 class UpdateManager;
 class ReplicationTxnManager;
-class LakePersistentIndexParallelCompactMgr;
 } // namespace lake
 namespace spill {
 class DirManager;
@@ -210,8 +209,6 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
 
-    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
-
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
     VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }
@@ -256,7 +253,6 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
-    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
 
     AgentServer* _agent_server = nullptr;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
