@@ -197,17 +197,16 @@ public class JDBCMetadata implements ConnectorMetadata {
         tableIdCache = new JDBCMetaCache<>(properties, true);
         tableInstanceCache = new JDBCMetaCache<>(properties, false);
         partitionInfoCache = new JDBCMetaCache<>(properties, false);
-        rowCountCache = buildRowCountCache(properties);
+        rowCountCache = buildRowCountCache();
     }
 
-    private AsyncLoadingCache<JDBCTableName, Long> buildRowCountCache(Map<String, String> properties) {
-        boolean cacheEnabled = Boolean.parseBoolean(properties.getOrDefault(
-                "jdbc_meta_cache_enable", String.valueOf(Config.jdbc_meta_default_cache_enable)));
-        if (!cacheEnabled) {
+    private AsyncLoadingCache<JDBCTableName, Long> buildRowCountCache() {
+        // Reuse the enable/expire settings already parsed by an existing JDBCMetaCache instance
+        // to avoid duplicating property-parsing logic.
+        if (!tableInstanceCache.isEnableCache()) {
             return null;
         }
-        long expireSec = Long.parseLong(properties.getOrDefault(
-                "jdbc_meta_cache_expire_sec", String.valueOf(Config.jdbc_meta_default_cache_expire_sec)));
+        long expireSec = tableInstanceCache.getCurrentExpireSec();
         // refreshAfterWrite: return stale value while reloading asynchronously after expireSec.
         // expireAfterWrite (2x): hard evict entries that are no longer actively queried.
         return Caffeine.newBuilder()
