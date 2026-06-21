@@ -17,13 +17,13 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "common/status.h"
 
 namespace starrocks {
 
 class MemTracker;
+class StorePathRegistry;
 
 namespace lake {
 class LakePersistentIndexParallelCompactMgr;
@@ -41,7 +41,7 @@ enum class LakeLocationProviderMode {
 
 struct StorageEnvOptions {
     LakeLocationProviderMode lake_location_provider_mode = LakeLocationProviderMode::kDisabled;
-    std::vector<std::string> store_path_roots;
+    const StorePathRegistry* store_path_registry = nullptr;
     MemTracker* update_mem_tracker = nullptr;
     int64_t lake_metadata_cache_limit = 0;
 };

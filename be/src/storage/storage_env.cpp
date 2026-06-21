@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "gutil/strings/join.h"
+#include "platform/store_path.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -50,6 +51,11 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
     if (options.update_mem_tracker == nullptr) {
         return Status::InvalidArgument("StorageEnv lake update mem tracker is null");
     }
+    if (options.store_path_registry == nullptr) {
+        return Status::InvalidArgument("StorageEnv store path registry is null");
+    }
+
+    const auto& store_path_roots = options.store_path_registry->store_path_roots();
 
     std::shared_ptr<lake::LocationProvider> lake_location_provider;
     switch (options.lake_location_provider_mode) {
@@ -58,8 +64,8 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
         lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
         if (config::starlet_cache_dir.empty()) {
             std::vector<std::string> starlet_cache_paths;
-            starlet_cache_paths.reserve(options.store_path_roots.size());
-            for (const auto& store_path_root : options.store_path_roots) {
+            starlet_cache_paths.reserve(store_path_roots.size());
+            for (const auto& store_path_root : store_path_roots) {
                 starlet_cache_paths.emplace_back(store_path_root + "/starlet_cache");
             }
             config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
@@ -70,10 +76,10 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
         return Status::NotSupported("StorageEnv Starlet lake location requires USE_STAROS");
 #endif
     case LakeLocationProviderMode::kFixed:
-        if (options.store_path_roots.empty()) {
+        if (store_path_roots.empty()) {
             return Status::InvalidArgument("StorageEnv fixed lake location requires at least one store path");
         }
-        lake_location_provider = std::make_shared<lake::FixedLocationProvider>(options.store_path_roots.front());
+        lake_location_provider = std::make_shared<lake::FixedLocationProvider>(store_path_roots.front());
         break;
     case LakeLocationProviderMode::kDisabled:
         return Status::OK();
@@ -81,8 +87,9 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
 
     auto lake_update_manager =
             std::make_unique<lake::UpdateManager>(lake_location_provider, options.update_mem_tracker);
-    auto lake_tablet_manager = std::make_unique<lake::TabletManager>(lake_location_provider, lake_update_manager.get(),
-                                                                     options.lake_metadata_cache_limit);
+    auto lake_tablet_manager =
+            std::make_unique<lake::TabletManager>(lake_location_provider, lake_update_manager.get(),
+                                                  options.lake_metadata_cache_limit, options.store_path_registry);
     auto lake_replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(lake_tablet_manager.get());
 
     auto parallel_compact_mgr =

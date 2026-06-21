@@ -133,6 +133,8 @@ void ExecEnv::_refresh_service_contexts() {
     _execution_services.max_executor_threads = global_env->max_executor_threads();
 
     auto* platform_env = PlatformEnv::GetInstance();
+    _platform_services.store_path_registry = platform_env->store_path_registry();
+
     _rpc_services.backend_client_cache = platform_env->backend_client_cache();
     _rpc_services.frontend_client_cache = platform_env->frontend_client_cache();
     _rpc_services.broker_client_cache = platform_env->broker_client_cache();
@@ -212,7 +214,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _process_metrics_registry = process_metrics_registry;
     auto* process_metrics = process_metrics_registry->root_registry();
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
-    _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this, process_metrics);
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
@@ -326,10 +327,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     }
 
     StorageEnvOptions storage_env_options;
-    storage_env_options.store_path_roots.reserve(_store_paths.size());
-    for (const auto& store_path : _store_paths) {
-        storage_env_options.store_path_roots.emplace_back(store_path.path);
-    }
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
     storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
     storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
