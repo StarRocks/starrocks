@@ -541,8 +541,8 @@ endif()
 set(STARROCKS_LINK_LIBS
     Webserver
     Tools
+    AgentServer
     ${WL_START_GROUP}
-    Agent
     Connector
     # Legacy connector registration pulls concrete connector objects that
     # depend on Exec symbols, so keep it in the static library group.

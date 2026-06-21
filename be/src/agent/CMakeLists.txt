@@ -17,7 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/agent")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/agent")
 
-ADD_BE_LIB(Agent
+ADD_BE_LIB(AgentServer
         agent_metrics.cpp
         agent_server.cpp
         heartbeat_server.cpp
@@ -30,4 +30,23 @@ ADD_BE_LIB(Agent
         agent_task.cpp
         task_signatures_manager.cpp
         resource_group_usage_recorder.cpp
+        )
+
+target_link_libraries(AgentServer
+        PUBLIC
+            Gutil
+            StarRocksGen
+        PRIVATE
+            Runtime
+            Storage
+            Cache
+            ComputeEnv
+            ExecRuntime
+            StoragePrimitive
+            RuntimeCore
+            Platform
+            FSCore
+            IO
+            Common
+            Base
         )

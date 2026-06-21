@@ -214,6 +214,13 @@ Shared compute-side BE environment boundary for process-scoped compute resources
 - Core tests: `compute_env_test`, `compute_env_sorting_test`
 - Remediation: Keep ComputeEnv limited to process-scoped compute resources, load-path management without ExecEnv or concrete storage engine coupling, query-scoped scan coordination helpers without concrete scan/storage policy, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward.
 
+### AgentServer (`agentserver`)
+FE-agent task orchestration, heartbeat handling, agent metrics, and agent worker helpers below Service.
+- Targets: `AgentServer`
+- Allowed internal include prefixes: `agent/`, `cache/`, `compute_env/workgroup/`, `exec/pipeline/query_context.h`, `exec/runtime/query_context_manager.h`, `fs/`, `io/`, `runtime/`, `storage/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Runtime`, `Storage`, `Cache`, `ComputeEnv`, `ExecRuntime`, `StoragePrimitive`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep AgentServer as FE-agent task and heartbeat orchestration below Service; move service/bootstrap integration upward.
+
 ### ExprCore (`exprcore`)
 Core expression infrastructure that depends only on RuntimeCore and lower layers.
 - Targets: `ExprCore`
@@ -291,6 +298,13 @@ StarRocks-owned Starlet integration for worker runtime, shard metadata, status c
 - Allowed target deps: `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `staros_integration_test`
 - Remediation: Keep the Starlet adapter independent of service/bootstrap, storage, runtime, and filesystem modules; expose narrow accessors instead of pulling higher layers into lower layers.
+
+### Service (`service`)
+Shared service-layer target above runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.
+- Targets: `Service`
+- Allowed internal include prefixes: `service/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/`, `io/`, `platform/`, `runtime/`, `serde/`, `staros_integration/`, `storage/`, `types/`, `util/`
+- Allowed target deps: `Runtime`, `RuntimeEnv`, `RuntimeCore`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FSCore`, `FileSystem`, `IO`, `HttpCore`, `Webserver`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `StarOSIntegration`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `Util`, `Serde`, `ChunkCore`, `ColumnCore`, `Types`
+- Remediation: Keep shared Service below ServiceBE and depend on checked module targets such as AgentServer instead of ad hoc lower-layer reach-through.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 
 ## BE-Specific Sync Rules
