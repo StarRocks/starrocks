@@ -16,6 +16,7 @@
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
 #include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_skew_compactor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/fragment_runtime_state.h"
@@ -24,8 +25,20 @@
 
 namespace starrocks::pipeline {
 
+const std::shared_ptr<spill::Spiller>& SpillablePartitionWiseAggregateSinkOperator::_spiller() const {
+    return _agg_op->aggregator()->spiller();
+}
+
+SpillProcessChannelPtr SpillablePartitionWiseAggregateSinkOperator::_spill_channel() const {
+    return _agg_op->aggregator()->spill_channel();
+}
+
 bool SpillablePartitionWiseAggregateSinkOperator::need_input() const {
-    return !is_finished() && !_agg_op->aggregator()->is_full() && !_agg_op->aggregator()->spill_channel()->has_task();
+    return spill_sink_need_input();
+}
+
+BlockReason SpillablePartitionWiseAggregateSinkOperator::block_reason() const {
+    return spill_sink_block_reason();
 }
 
 bool SpillablePartitionWiseAggregateSinkOperator::is_finished() const {
@@ -91,6 +104,12 @@ void SpillablePartitionWiseAggregateSinkOperator::close(RuntimeState* state) {
 Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    // Propagate this wrapper's observer into the wrapped agg-op before its prepare(): the base
+    // AggregateBlockingSinkOperator::prepare attaches the operator's _observer to the aggregator-pip
+    // observable, and assign_observer only set _observer on the wrapper, not the sub-op. Without this the
+    // sub-op would attach nullptr and notify_source/sink would null-deref under the event scheduler (crash
+    // in release, not a silent no-op). Mirrors ConjugateOperator::prepare.
+    _agg_op->set_observer(observer());
     RETURN_IF_ERROR(_agg_op->prepare(state));
     RETURN_IF_ERROR(_agg_op->prepare_local_state(state));
 
@@ -107,6 +126,10 @@ Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state)
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
     _agg_op->set_agg_group_by_with_limit(false);
     _agg_op->aggregator()->params()->enable_pipeline_share_limit = false;
+
+    // Subscribe this sink driver to the wrapped agg-op spiller's sink list so flush/channel completions wake
+    // the OUTPUT_FULL sleeper. Unconditional: the poller-mode gate lives inside subscribe_sink.
+    _agg_op->aggregator()->spiller()->observable().subscribe_sink(state, observer());
 
     return Status::OK();
 }
@@ -376,9 +399,34 @@ OperatorPtr SpillablePartitionWiseAggregateSinkOperatorFactory::create(int32_t d
 
 Status SpillablePartitionWiseAggregateSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    // Propagate this wrapper's observer into the wrapped sub-ops before their prepare(): the base
+    // AggregateBlockingSourceOperator::prepare attaches the operator's _observer to the aggregator-pip
+    // observable, and assign_observer only set _observer on the wrapper. Without this the sub-op would
+    // attach nullptr and notify_source would null-deref under the event scheduler (crash in release).
+    // _pw_agg is a ConjugateOperator -- it re-propagates to its own sub-ops in its prepare(), but it still
+    // needs a real observer of its own. Mirrors ConjugateOperator::prepare.
+    _non_pw_agg->set_observer(observer());
+    _pw_agg->set_observer(observer());
     RETURN_IF_ERROR(_non_pw_agg->prepare(state));
     RETURN_IF_ERROR(_pw_agg->prepare(state));
+
+    // Subscribe this source driver to the parent spiller's source list. All transient per-partition restore
+    // readers complete_io on this same parent spiller, so one source-list subscription covers every restore
+    // wakeup. Unconditional: the poller-mode gate lives inside subscribe_source.
+    _non_pw_agg->aggregator()->spiller()->observable().subscribe_source(state, observer());
     return Status::OK();
+}
+
+const std::shared_ptr<spill::Spiller>& SpillablePartitionWiseAggregateSourceOperator::_spiller() const {
+    return _non_pw_agg->aggregator()->spiller();
+}
+
+bool SpillablePartitionWiseAggregateSourceOperator::_sink_complete() const {
+    return _non_pw_agg->aggregator()->is_sink_complete();
+}
+
+bool SpillablePartitionWiseAggregateSourceOperator::_conjugate_finished() const {
+    return _pw_agg->is_finished();
 }
 
 Status SpillablePartitionWiseAggregateSourceOperator::prepare_local_state(RuntimeState* state) {
@@ -394,54 +442,12 @@ void SpillablePartitionWiseAggregateSourceOperator::close(RuntimeState* state) {
     return SourceOperator::close(state);
 }
 
-bool SpillablePartitionWiseAggregateSourceOperator::has_output() const {
-    auto& spiller = _non_pw_agg->aggregator()->spiller();
-    bool has_spilled = spiller->spilled();
-
-    if (!has_spilled) {
-        return _non_pw_agg->has_output();
-    }
-
-    // is_sink_complete returning true indicates that sink operator has finished all spilling tasks
-    // and source operator can process spill partitions one by one safely.
-    if (!_non_pw_agg->aggregator()->is_sink_complete()) {
-        return false;
-    }
-
-    // at first time, we must call pull_chunk to acquire all partitions
-    if (_partitions.empty()) {
-        return true;
-    }
-    // if we processed all partitions, then no data to output
-    if (_curr_partition_idx >= _partitions.size()) {
-        return false;
-    }
-
-    // if current partition reader is not created, or no async store task trigger, or has output data.
-    // we must invoke pull_chunk to try to obtain chunk from current partition reader and push it to pw_agg
-    if (!_curr_partition_reader || !_curr_partition_reader->has_restore_task() ||
-        _curr_partition_reader->has_output_data()) {
-        return true;
-    }
-
-    // pw_agg receives all data of the current partition, then it should output result.
-    if (_curr_partition_eos && !_pw_agg->is_finished()) {
-        return true;
-    }
-
-    return false;
+bool SpillablePartitionWiseAggregateSourceOperator::_non_pw_has_output() const {
+    return _non_pw_agg->has_output();
 }
 
-bool SpillablePartitionWiseAggregateSourceOperator::is_finished() const {
-    if (_is_finished) {
-        return true;
-    }
-    auto& spiller = _non_pw_agg->aggregator()->spiller();
-    if (!spiller->spilled()) {
-        return _non_pw_agg->is_finished();
-    } else {
-        return !_partitions.empty() && _curr_partition_idx >= _partitions.size();
-    }
+bool SpillablePartitionWiseAggregateSourceOperator::_non_pw_finished() const {
+    return _non_pw_agg->is_finished();
 }
 
 Status SpillablePartitionWiseAggregateSourceOperator::set_finishing(RuntimeState* state) {

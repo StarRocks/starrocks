@@ -18,6 +18,7 @@
 
 #include "common/status.h"
 #include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 
 namespace starrocks::pipeline {
@@ -26,7 +27,39 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
     _accumulator.set_max_size(state->chunk_size());
+
+    // Subscribe this source driver to the spiller's source list so restore /
+    // flush-all completions wake the INPUT_EMPTY sleeper. Unconditional: the
+    // poller-mode gate lives inside subscribe_source. observer() is valid here.
+    _aggregator->spiller()->observable().subscribe_source(state, observer());
     return Status::OK();
+}
+
+std::optional<BlockReason> SpillableAggregateBlockingSourceOperator::_blocked_on() const {
+    // A finished or non-spilled source is not parked on a spill block (the non-spilled base output is
+    // routed by has_output() above this). A failed spiller is runnable -- the run carries the status out
+    // through the RETURN_TRUE_IF_SPILL_TASK_ERROR guard, not a reason -> nullopt. Buffered accumulator
+    // output, spiller output data, or the eos chunk are all runnable (has_output() returns true on the
+    // spilled branch). Otherwise the source is waiting on the restore IO the source-list subscription is
+    // woken by -> WAIT_RESTORE. block_reason() reads this only when parked (has_output() == false), where
+    // none of the runnable conditions hold, so the spilled-branch answer matches has_output()'s spilled branch.
+    if (_is_finished || !_aggregator->spiller()->spilled()) {
+        return std::nullopt;
+    }
+    if (!_aggregator->spiller()->task_status().ok()) {
+        return std::nullopt;
+    }
+    if (_accumulator.has_output() || _aggregator->spiller()->has_output_data() ||
+        (_aggregator->is_spilled_eos() && _has_last_chunk)) {
+        return std::nullopt;
+    }
+    // Passed through named<R, kCoveredWakeups>(): a restore park outside this source's source-list coverage
+    // mask does not compile, so the value spill_source_block_reason() returns is always a covered reason.
+    return named<BlockReason::WAIT_RESTORE, kCoveredWakeups>();
+}
+
+BlockReason SpillableAggregateBlockingSourceOperator::block_reason() const {
+    return spill_source_block_reason();
 }
 
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
@@ -40,28 +73,13 @@ bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (_is_finished) {
         return false;
     }
-    bool has_spilled = _aggregator->spiller()->spilled();
-
-    if (!has_spilled && AggregateBlockingSourceOperator::has_output()) {
-        return true;
+    if (!_aggregator->spiller()->spilled()) {
+        return AggregateBlockingSourceOperator::has_output();
     }
-
-    if (!has_spilled) {
-        return false;
-    }
-    if (_accumulator.has_output()) {
-        return true;
-    }
-    // has output data from spiller.
-    if (_aggregator->spiller()->has_output_data()) {
-        return true;
-    }
-    RETURN_TRUE_IF_SPILL_TASK_ERROR(_aggregator->spiller());
-    // has eos chunk
-    if (_aggregator->is_spilled_eos() && _has_last_chunk) {
-        return true;
-    }
-    return false;
+    // Spilled: runnable unless parked on restore IO. _blocked_on() puts the buffered-output / spiller-
+    // output-data / error / eos checks in its runnable (nullopt) branch, so the source has output here
+    // exactly when it is not blocked on WAIT_RESTORE.
+    return !_blocked_on().has_value();
 }
 
 bool SpillableAggregateBlockingSourceOperator::is_finished() const {
