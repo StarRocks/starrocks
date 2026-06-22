@@ -485,6 +485,26 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals("ERR:select from", auditRecords.get(0));
     }
 
+    // Verify a parse failure replaces the previous statement's diagnostics with its own error:
+    // the statement never reaches StmtExecutor.execute() (which normally clears the buffer and
+    // records the failure), so without the explicit handling in handleQuery, SHOW WARNINGS would
+    // return stale entries after a syntax error and SHOW ERRORS would not return the error.
+    @Test
+    public void testParseFailureReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select from");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
     // Verify LargeInPredicate retry is scoped to the failing stmt instead of replaying previous stmts.
     @Test
     public void testMultiStatementLargeInPredicateRetriesCurrentStmtOnly() throws Exception {

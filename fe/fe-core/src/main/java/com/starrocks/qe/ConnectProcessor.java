@@ -714,6 +714,7 @@ public class ConnectProcessor {
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             // if parse failed, audit stmts together once
             if (!parseSucceeded) {
+                recordParseFailureDiagnostics();
                 auditAfterExec(originStmt, null, null, null);
             }
         } catch (Throwable e) {
@@ -725,6 +726,7 @@ public class ConnectProcessor {
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             // for safety
             if (!parseSucceeded) {
+                recordParseFailureDiagnostics();
                 auditAfterExec(originStmt, null, null, null);
             }
         } finally {
@@ -734,6 +736,21 @@ public class ConnectProcessor {
                 ctx.getSessionVariable().setCustomQueryId("");
             }
         }
+    }
+
+    // A statement that fails to parse never reaches StmtExecutor.execute(), which normally clears
+    // the previous statement's diagnostics and records the failure into the session buffer. Do
+    // both here so SHOW WARNINGS does not return stale entries after a syntax error and SHOW
+    // ERRORS mirrors the ERR packet, following MySQL diagnostics-area semantics.
+    private void recordParseFailureDiagnostics() {
+        ctx.clearWarnings();
+        String errorMessage = ctx.getState().getErrorMessage();
+        if (errorMessage == null || errorMessage.isEmpty()) {
+            // Keep in sync with MysqlErrPacket, which substitutes "Unknown error" on the wire.
+            errorMessage = "Unknown error";
+        }
+        int errorCode = ctx.getState().getErrorCode() != null ? ctx.getState().getErrorCode().getCode() : 1064;
+        ctx.addWarning(new QueryWarning("Error", String.valueOf(errorCode), errorMessage));
     }
 
     private static class QueryAttemptResult {

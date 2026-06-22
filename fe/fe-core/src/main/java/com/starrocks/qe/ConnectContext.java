@@ -286,6 +286,12 @@ public class ConnectContext {
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
 
+    // Session-level SQL warning buffer (MySQL diagnostics area). Holds the diagnostics produced
+    // by the most recent warning-generating statement so they can be read back via
+    // SHOW WARNINGS / SHOW ERRORS. Reset semantics follow MySQL: cleared at the start of the next
+    // warning-generating statement, but not by SHOW WARNINGS itself (see StmtExecutor.execute).
+    private final List<QueryWarning> warnings = Lists.newArrayList();
+
     private boolean skipFinishSink = false;
     private FinishSinkHandler handler = null;
 
@@ -1944,6 +1950,18 @@ public class ConnectContext {
 
     public List<Listener> getListeners() {
         return listeners;
+    }
+
+    public void addWarning(QueryWarning warning) {
+        this.warnings.add(warning);
+    }
+
+    public List<QueryWarning> getWarnings() {
+        return warnings;
+    }
+
+    public void clearWarnings() {
+        this.warnings.clear();
     }
 
     public void onQueryFinished() {
