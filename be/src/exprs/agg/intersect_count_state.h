@@ -14,8 +14,14 @@
 
 #pragma once
 
+#include <cstdint>
+#include <cstring>
+#include <map>
+#include <string>
+
 #include "types/bitmap_value.h"
 #include "types/datetime_value.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
 
