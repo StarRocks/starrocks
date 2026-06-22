@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "storage/compaction_manager.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {

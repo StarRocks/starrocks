@@ -30,7 +30,7 @@
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/runtime_state.h"
 #include "storage/primitive/aggregate_type.h"
-#include "storage/tablet_column_type_utils.h"
+#include "storage/primitive/tablet_column_type_utils.h"
 #include "types/agg_state_desc.h"
 #include "types/collection.h"
 

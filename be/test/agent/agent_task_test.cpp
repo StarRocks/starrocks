@@ -36,7 +36,7 @@
 #include "platform/store_path.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
 #include "testutil/local_snapshot_client.h"

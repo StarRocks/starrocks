@@ -66,7 +66,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "types/logical_type.h"
 
 namespace starrocks::vectorized {

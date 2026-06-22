@@ -44,7 +44,7 @@
 #include "fs/fs_util.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 
 #ifndef BE_TEST
 #define BE_TEST

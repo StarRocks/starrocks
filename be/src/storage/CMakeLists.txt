@@ -43,7 +43,9 @@ ADD_BE_LIB(StoragePrimitive
     primitive/predicate_parser.cpp
     primitive/primary_key_encoder.cpp
     primitive/predicate_tree/predicate_tree.cpp
+    primitive/storage_define.cpp
     primitive/storage_ids.cpp
+    primitive/tablet_column_type_utils.cpp
     primitive/union_iterator.cpp
 )
 
@@ -92,7 +94,6 @@ set(STORAGE_FILES
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
-    olap_define.cpp
     olap_server.cpp
     persistent_index.cpp
     primary_index.cpp
@@ -116,7 +117,6 @@ set(STORAGE_FILES
     tablet.cpp
     tablet_manager.cpp
     tablet_column.cpp
-    tablet_column_type_utils.cpp
     tablet_column_util.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
