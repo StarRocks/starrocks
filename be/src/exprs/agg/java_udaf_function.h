@@ -19,7 +19,6 @@
 #include <memory>
 #include <numeric>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include "base/utility/defer_op.h"
@@ -313,26 +312,17 @@ public:
         auto& serialized_bytes = serialized_column->get_bytes();
         const auto& offsets = serialized_column->get_offset();
 
-        if (serialized_bytes.size() > std::numeric_limits<int>::max()) {
-            ctx->set_error("serialized column size is too large");
+        const size_t java_max_buffer_size = std::numeric_limits<int>::max();
+        if (offsets.is_large() || offsets.back() > java_max_buffer_size ||
+            serialized_bytes.size() > java_max_buffer_size ||
+            offsets.size() > java_max_buffer_size / sizeof(uint32_t)) {
+            ctx->set_error("Java UDAF does not support BinaryColumn with large offsets or bytes");
             return;
         }
 
-        auto buffer_array = offsets.visit_storage([&](const auto& offsets_buf) -> jobject {
-            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
-            if constexpr (std::is_same_v<OffsetValue, uint32_t>) {
-                return helper.batch_create_bytebuf(serialized_bytes.data(), offsets_buf.data(), start, start + size);
-            } else {
-                // Sticky-large storage whose values are already bounded by the INT_MAX check
-                // above: materialize uint32_t offsets for the JNI ABI.
-                Buffer<uint32_t> u32_offsets;
-                u32_offsets.resize(offsets_buf.size());
-                for (size_t i = 0; i < offsets_buf.size(); ++i) {
-                    u32_offsets[i] = static_cast<uint32_t>(offsets_buf[i]);
-                }
-                return helper.batch_create_bytebuf(serialized_bytes.data(), u32_offsets.data(), start, start + size);
-            }
-        });
+        const auto& offsets_buf = offsets.small_storage();
+        auto buffer_array =
+                helper.batch_create_bytebuf(serialized_bytes.data(), offsets_buf.data(), start, start + size);
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         // batch call merge
