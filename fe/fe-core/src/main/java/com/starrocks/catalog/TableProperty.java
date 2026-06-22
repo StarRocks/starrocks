@@ -317,25 +317,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
-<<<<<<< HEAD
-=======
     @SerializedName(value = "enableStatisticCollectOnFirstLoadSet")
     private boolean enableStatisticCollectOnFirstLoadSet = false;
 
-    // table level query timeout in seconds
-    // default value -1 means use cluster query_timeout
-    @SerializedName(value = "tableQueryTimeout")
-    private int tableQueryTimeout = -1;
-
-    /**
-     * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
-     * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
-     * It is disabled by default for existing tables to ensure backward compatibility after an upgrade.
-     * New tables will have this property explicitly set to true upon creation.
-     */
-    private boolean cloudNativeFastSchemaEvolutionV2 = false;
-
->>>>>>> 1675b2c421 ([Enhancement] Support table-level override for first load statistics collection (#74794))
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -344,72 +328,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.properties = properties;
     }
 
-<<<<<<< HEAD
-=======
-    public TableProperty(TableProperty other) {
-        this.properties = Maps.newLinkedHashMap();
-        if (other.properties != null) {
-            this.properties.putAll(other.properties);
-        }
-        this.flatJsonConfig = other.flatJsonConfig == null ? null : new FlatJsonConfig(other.flatJsonConfig);
-        this.dynamicPartitionProperty = copyDynamicPartitionProperty(other.dynamicPartitionProperty);
-        this.replicationNum = other.replicationNum;
-        this.partitionTTLNumber = other.partitionTTLNumber;
-        this.partitionTTL = other.partitionTTL;
-        this.partitionRetentionCondition = other.partitionRetentionCondition;
-        this.timeDriftConstraintSpec = other.timeDriftConstraintSpec;
-        this.partitionRefreshNumber = other.partitionRefreshNumber;
-        this.partitionRefreshStrategy = other.partitionRefreshStrategy;
-        this.mvRefreshMode = other.mvRefreshMode;
-        this.autoRefreshPartitionsLimit = other.autoRefreshPartitionsLimit;
-        this.excludedTriggerTables = other.excludedTriggerTables == null ? null : Lists.newArrayList(other.excludedTriggerTables);
-        this.excludedRefreshTables = other.excludedRefreshTables == null ? null : Lists.newArrayList(other.excludedRefreshTables);
-        this.mvSortKeys = other.mvSortKeys == null ? null : Lists.newArrayList(other.mvSortKeys);
-        this.forceExternalTableQueryRewrite = other.forceExternalTableQueryRewrite;
-        this.queryRewriteConsistencyMode = other.queryRewriteConsistencyMode;
-        this.mvQueryRewriteSwitch = other.mvQueryRewriteSwitch;
-        this.mvTransparentRewriteMode = other.mvTransparentRewriteMode;
-        this.enablePersistentIndex = other.enablePersistentIndex;
-        this.persistentIndexType = other.persistentIndexType;
-        this.lightWeightTabletCreation = other.lightWeightTabletCreation;
-        this.primaryIndexCacheExpireSec = other.primaryIndexCacheExpireSec;
-        this.storageVolume = other.storageVolume;
-        this.storageCoolDownTTL = other.storageCoolDownTTL;
-        this.resourceGroup = other.resourceGroup;
-        this.compressionType = other.compressionType;
-        this.compressionLevel = other.compressionLevel;
-        this.writeQuorum = other.writeQuorum;
-        this.enableReplicatedStorage = other.enableReplicatedStorage;
-        this.storageType = other.storageType;
-        this.bucketSize = other.bucketSize;
-        this.mutableBucketNum = other.mutableBucketNum;
-        this.enableLoadProfile = other.enableLoadProfile;
-        this.loadInitialOpenPartitionNumber = other.loadInitialOpenPartitionNumber;
-        this.baseCompactionForbiddenTimeRanges = other.baseCompactionForbiddenTimeRanges;
-        this.hasDelete = other.hasDelete;
-        this.hasForbiddenGlobalDict = other.hasForbiddenGlobalDict;
-        if (other.storageInfo != null) {
-            this.storageInfo = new StorageInfo(other.storageInfo.getFilePathInfo(), other.storageInfo.getCacheInfo());
-        }
-        this.binlogAvailableVersions = other.binlogAvailableVersions == null
-                ? new HashMap<>()
-                : new HashMap<>(other.binlogAvailableVersions);
-        this.binlogConfig = other.binlogConfig == null ? null : new BinlogConfig(other.binlogConfig);
-        this.uniqueConstraints = other.uniqueConstraints == null ? null : Lists.newArrayList(other.uniqueConstraints);
-        this.foreignKeyConstraints = other.foreignKeyConstraints == null ? null : Lists.newArrayList(other.foreignKeyConstraints);
-        this.useFastSchemaEvolution = other.useFastSchemaEvolution;
-        this.dataCachePartitionDuration = other.dataCachePartitionDuration;
-        this.location = copyLocation(other.location);
-        this.fileBundling = other.fileBundling;
-        this.compactionStrategy = other.compactionStrategy;
-        this.lakeCompactionMaxParallel = other.lakeCompactionMaxParallel;
-        this.enableStatisticCollectOnFirstLoad = other.enableStatisticCollectOnFirstLoad;
-        this.enableStatisticCollectOnFirstLoadSet = other.enableStatisticCollectOnFirstLoadSet;
-        this.tableQueryTimeout = other.tableQueryTimeout;
-        this.cloudNativeFastSchemaEvolutionV2 = other.cloudNativeFastSchemaEvolutionV2;
-    }
-
->>>>>>> 1675b2c421 ([Enhancement] Support table-level override for first load statistics collection (#74794))
     public TableProperty copy() {
         TableProperty newTableProperty = new TableProperty(Maps.newHashMap(this.properties));
         try {
@@ -419,6 +337,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
         newTableProperty.hasDelete = this.hasDelete;
         newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
+        newTableProperty.enableStatisticCollectOnFirstLoad = this.enableStatisticCollectOnFirstLoad;
+        newTableProperty.enableStatisticCollectOnFirstLoadSet = this.enableStatisticCollectOnFirstLoadSet;
         if (this.storageInfo != null) {
             newTableProperty.storageInfo =
                     new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());

@@ -4382,22 +4382,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 olapTable.setHasDelete();
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();
-<<<<<<< HEAD
                 if (tableProperty == null) {
                     tableProperty = new TableProperty(properties);
                     olapTable.setTableProperty(tableProperty.buildProperty(opCode));
                 } else {
                     tableProperty.modifyTableProperties(properties);
                     tableProperty.buildProperty(opCode);
-=======
-                tableProperty.modifyTableProperties(properties);
-                tableProperty.buildProperty(opCode);
+                }
                 if (opCode == OperationType.OP_ALTER_TABLE_PROPERTIES &&
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
                     tableProperty.setEnableStatisticCollectOnFirstLoad(
                             Boolean.parseBoolean(properties.get(
                                     PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)));
->>>>>>> 1675b2c421 ([Enhancement] Support table-level override for first load statistics collection (#74794))
                 }
 
                 if (StringUtils.isNotEmpty(comment)) {
