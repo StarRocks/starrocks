@@ -542,6 +542,7 @@ set(STARROCKS_LINK_LIBS
     Webserver
     Tools
     AgentServer
+    DataWorkflows
     ${WL_START_GROUP}
     Connector
     # Legacy connector registration pulls concrete connector objects that
@@ -981,6 +982,7 @@ add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/platform)
 add_subdirectory(${SRC_DIR}/storage)
+add_subdirectory(${SRC_DIR}/data_workflows)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/compute_env)
 add_subdirectory(${SRC_DIR}/serde)

@@ -177,7 +177,6 @@ set(STORAGE_FILES
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
-    task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_manual_compaction_task.cpp
@@ -192,7 +191,6 @@ set(STORAGE_FILES
     convert_helper.cpp
     delete_predicates.cpp
     predicate_parser.cpp
-    push_handler.cpp
     row_store_encoder.cpp
     row_store_encoder_simple.cpp
     row_store_encoder_factory.cpp

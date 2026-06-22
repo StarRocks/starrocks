@@ -28,6 +28,7 @@
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/cpu_info.h"
+#include "data_workflows/load/engine_batch_load_task.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -37,7 +38,6 @@
 #include "storage/olap_define.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
-#include "storage/task/engine_batch_load_task.h"
 #include "storage/task/engine_clone_task.h"
 #include "testutil/local_snapshot_client.h"
 
