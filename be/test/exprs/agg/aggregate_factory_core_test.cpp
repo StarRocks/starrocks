@@ -14,7 +14,10 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 #include "exprs/agg/aggregate_factory.h"
+#include "types/agg_state_desc.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -32,6 +35,23 @@ TEST(AggregateFactoryCoreTest, builtinWindowResolves) {
 TEST(AggregateFactoryCoreTest, dataSketchAggregatesResolve) {
     EXPECT_NE(nullptr, get_aggregate_function("ds_hll_count_distinct", TYPE_BIGINT, TYPE_BIGINT, false));
     EXPECT_NE(nullptr, get_aggregate_function("ds_theta_count_distinct", TYPE_DOUBLE, TYPE_BIGINT, false));
+}
+
+TEST(AggregateFactoryCoreTest, builtinAggregateResolvesFromAggStateDesc) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    AggStateDesc desc("array_agg2", return_type, arg_types, true, 1);
+
+    EXPECT_NE(nullptr, get_aggregate_function(desc));
+}
+
+TEST(AggregateFactoryCoreTest, invalidAggStateDescReturnsNull) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    AggStateDesc desc("invalid_func", return_type, arg_types, false, 1);
+
+    EXPECT_EQ(nullptr, get_aggregate_function(desc));
 }
 
 TEST(AggregateFactoryCoreTest, unsupportedNonBuiltinReturnsNullWithoutProvider) {

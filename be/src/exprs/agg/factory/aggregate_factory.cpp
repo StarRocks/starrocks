@@ -17,9 +17,11 @@
 #include <memory>
 
 #include "base/failpoint/fail_point.h"
+#include "common/logging.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "types/agg_state_desc.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -253,6 +255,16 @@ AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, co
         return get_aggregate_function(agg_func_name, arg_type.type, ret_type.type, is_result_nullable, binary_type,
                                       func_version);
     }
+}
+
+const AggregateFunction* get_aggregate_function(const AggStateDesc& agg_state_desc) {
+    auto* agg_function = get_aggregate_function(agg_state_desc.get_func_name(), agg_state_desc.get_return_type(),
+                                                agg_state_desc.get_arg_types(), agg_state_desc.is_result_nullable(),
+                                                TFunctionBinaryType::BUILTIN, agg_state_desc.get_func_version());
+    if (agg_function == nullptr) {
+        LOG(WARNING) << "Failed to get aggregate function for " << agg_state_desc.debug_string();
+    }
+    return agg_function;
 }
 
 } // namespace starrocks
