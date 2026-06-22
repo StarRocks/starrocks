@@ -85,6 +85,37 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
         for (size_t i = 0; i < _index_map.size(); i++) {
             chunk->get_column_by_index(i).swap(input_columns[_index_map[i]]);
         }
+        // Re-attach columns the child appended at runtime past its static output schema (the ANN
+        // distance column from SegmentIterator::_read): _index_map covers only static fields, so the
+        // loop above would drop them. Match by slot id, fall back to field id.
+        // TODO: plan the distance column as a virtual column (is_virtual_column /
+        // extend_schema_by_virtual_columns, as for _rowid_) so it rides _index_map and this goes away.
+        const size_t static_n = _child->output_schema().num_fields();
+        for (size_t k = static_n; k < _chunk->num_columns(); k++) {
+            const FieldPtr& f = _chunk->schema()->field(k);
+            SlotId sid = -1;
+            for (const auto& [s, idx] : _chunk->get_slot_id_to_index_map()) {
+                if (idx == k) {
+                    sid = s;
+                    break;
+                }
+            }
+            if (chunk->is_cid_exist(f->id())) {
+                // Reused output column: swap so _chunk keeps a valid column for the next reset().
+                size_t existing = chunk->get_column_id_to_index_map().at(f->id());
+                chunk->get_column_by_index(existing).swap(input_columns[k]);
+            } else {
+                // Fresh output column: move it in, leave an empty clone so the next _chunk->reset()
+                // does not deref a moved-from ColumnPtr.
+                ColumnPtr empty = input_columns[k]->clone_empty();
+                if (sid >= 0) {
+                    chunk->append_vector_column(std::move(input_columns[k]), f, sid);
+                } else {
+                    chunk->append_column(std::move(input_columns[k]), f);
+                }
+                input_columns[k] = std::move(empty);
+            }
+        }
     }
 #ifndef NDEBUG
     if (st.ok()) {

@@ -132,6 +132,12 @@ public:
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
 
+    // True when a predicate for this scan is evaluated ABOVE the segment iterator
+    // (OlapChunkSource not_push_down_conjuncts / _non_pushdown_pred_tree). The iterator cannot fold
+    // such a predicate into the ANN candidate, so a segment-level k-limit would under-return; the
+    // vector filter resolver routes these queries to exact brute-force instead. See design doc §7.
+    bool has_predicate_above_iterator = false;
+
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 

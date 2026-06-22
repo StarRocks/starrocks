@@ -253,6 +253,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     seg_options.runtime_filter_preds = options.runtime_filter_preds;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    seg_options.has_predicate_above_iterator = options.has_predicate_above_iterator;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
@@ -311,6 +312,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         auto f = ChunkHelper::convert_field(cid, col);
         segment_schema->append(std::make_shared<Field>(std::move(f)));
     }
+
+    // Expose the fully-populated SegmentReadOptions so unit tests can verify the read-options
+    // propagation chain (TabletReaderParams -> RowsetReadOptions -> SegmentReadOptions). No-op
+    // outside BE_TEST.
+    TEST_SYNC_POINT_CALLBACK("Rowset::read::seg_options", &seg_options);
 
     std::vector<ChunkIteratorPtr> segment_iterators;
 

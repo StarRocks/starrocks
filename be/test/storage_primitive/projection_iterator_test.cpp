@@ -135,4 +135,108 @@ TEST_F(ProjectionIteratorTest, all) {
     }
 }
 
+// Mirrors SegmentIterator for a vector-index read: the static output schema is [c1], but
+// at runtime do_get_next appends a synthetic "distance" column (with its own planner slot
+// id) to the output chunk -- exactly like SegmentIterator::_read calls append_vector_column
+// and then result->swap_chunk(). The ProjectionIterator must carry that runtime-appended
+// column through to the output instead of dropping it. Regression for the crash where a
+// residual scalar predicate forced a ProjectionIterator that dropped the vector distance
+// column, leaving the upstream slot lookup to dereference a missing column.
+class RuntimeAppendIterator final : public ChunkIterator {
+public:
+    explicit RuntimeAppendIterator(std::vector<int32_t> c1) : ChunkIterator(static_schema()), _c1(std::move(c1)) {}
+
+    Status do_get_next(Chunk* chunk) override {
+        size_t n = std::min(kBatch, _c1.size() - _idx);
+        if (n == 0) {
+            return Status::EndOfFile("eof");
+        }
+        ChunkPtr built = ChunkFactory::new_chunk(internal_schema(), kBatch);
+        for (size_t i = 0; i < n; i++) {
+            built->get_column_raw_ptr_by_index(0)->append_datum(Datum(_c1[_idx + i]));
+            built->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<float>(_c1[_idx + i]) * 0.5f));
+        }
+        // The distance column carries a planner slot id, exactly like append_vector_column.
+        built->set_slot_id_to_index(kDistSlot, 1);
+        chunk->swap_chunk(*built);
+        _idx += n;
+        return Status::OK();
+    }
+
+    void close() override {}
+
+    static Schema static_schema() {
+        FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+        f1->set_is_key(true);
+        return Schema(std::vector<FieldPtr>{f1});
+    }
+
+    static Schema internal_schema() {
+        FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+        f1->set_is_key(true);
+        FieldPtr fd = std::make_shared<Field>(kDistCid, kDistName, get_type_info(TYPE_FLOAT), false);
+        return Schema(std::vector<FieldPtr>{f1, fd});
+    }
+
+    static constexpr ColumnId kDistCid = 10;
+    static constexpr SlotId kDistSlot = 13;
+    static constexpr size_t kBatch = 10;
+    static const std::string kDistName;
+
+private:
+    size_t _idx = 0;
+    std::vector<int32_t> _c1;
+};
+const std::string RuntimeAppendIterator::kDistName = "__vector_distance";
+
+// NOLINTNEXTLINE
+TEST_F(ProjectionIteratorTest, preserve_runtime_appended_column) {
+    std::vector<int32_t> c1;
+    for (int i = 0; i < 15; i++) {
+        c1.push_back(i); // two batches: 10 + 5
+    }
+
+    auto child = std::make_shared<RuntimeAppendIterator>(c1);
+    Schema out_schema = RuntimeAppendIterator::static_schema(); // project only [c1]
+    auto iter = new_projection_iterator(out_schema, child);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->encoded_schema(), config::vector_chunk_size);
+
+    // Batch 1: fresh output chunk -> the fix must APPEND the runtime distance column.
+    auto st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(10u, chunk->num_rows());
+    ASSERT_EQ(2u, chunk->num_columns()); // c1 (projected) + distance (runtime-appended)
+    ASSERT_TRUE(chunk->is_slot_exist(RuntimeAppendIterator::kDistSlot));
+    {
+        ColumnPtr& dist = chunk->get_column_by_slot_id(RuntimeAppendIterator::kDistSlot);
+        for (int i = 0; i < 10; i++) {
+            ASSERT_EQ(c1[i], chunk->get_column_by_index(0)->get(i).get_int32());
+            ASSERT_FLOAT_EQ(static_cast<float>(c1[i]) * 0.5f, dist->get(i).get_float());
+        }
+    }
+
+    // Batch 2: reused output chunk -> exercises ProjectionIterator::_chunk->reset() (the
+    // move-vs-swap safety) and the "column already exists" branch of the fix.
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(5u, chunk->num_rows());
+    ASSERT_EQ(2u, chunk->num_columns());
+    ASSERT_TRUE(chunk->is_slot_exist(RuntimeAppendIterator::kDistSlot));
+    {
+        ColumnPtr& dist = chunk->get_column_by_slot_id(RuntimeAppendIterator::kDistSlot);
+        for (int i = 0; i < 5; i++) {
+            ASSERT_EQ(c1[10 + i], chunk->get_column_by_index(0)->get(i).get_int32());
+            ASSERT_FLOAT_EQ(static_cast<float>(c1[10 + i]) * 0.5f, dist->get(i).get_float());
+        }
+    }
+
+    // EOF.
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.is_end_of_file());
+}
+
 } // namespace starrocks

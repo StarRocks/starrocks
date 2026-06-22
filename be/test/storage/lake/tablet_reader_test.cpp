@@ -40,6 +40,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/primitive/rowid_types.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -1245,6 +1246,68 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     auto st = reader->open(params);
     ASSERT_FALSE(st.ok());
     ASSERT_GE(total_hits.load(), 2);
+}
+
+// Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
+// through the lake reader path (TabletReader::get_segment_iterators builds RowsetReadOptions,
+// Rowset::read builds SegmentReadOptions). Before the fix, lake/tablet_reader.cpp dropped the
+// flag when copying params into RowsetReadOptions, so the whole chain delivered the default
+// (false) to SegmentIterator even when an above-iterator residual was present.
+TEST_F(LakeDuplicateTabletReaderTest, test_propagate_has_predicate_above_iterator) {
+    std::vector<int> k0{1, 2, 3, 4, 5};
+    std::vector<int> v0{2, 4, 6, 8, 10};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    bool seen = false;
+    bool propagated = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* seg_options = static_cast<SegmentReadOptions*>(arg);
+        seen = true;
+        propagated = seg_options->has_predicate_above_iterator;
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    TabletReaderParams params;
+    params.has_predicate_above_iterator = true;
+    ASSERT_OK(reader->open(params));
+
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
+    (void)reader->get_next(read_chunk_ptr.get());
+    reader->close();
+
+    ASSERT_TRUE(seen);
+    EXPECT_TRUE(propagated);
 }
 
 } // namespace starrocks::lake

@@ -374,6 +374,33 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
     return QueryRuntimeState::DEFAULT_EXPIRE_SECONDS;
 }
 
+// Mark every scan whose output is reduced by a row-filtering operator (a SELECT carrying a residual
+// predicate that could not be pushed into the scan) sitting ABOVE it but below the TopN limit. An ANN
+// top-k scan consumes this so its filter resolver uses the exact brute-force path instead of a
+// segment-level k-limit that would under-return. This observes the real execution tree (not a planner
+// heuristic), so it stays correct regardless of how single-column predicates are placed. A TopN resets
+// the marker: a filter above the limit is applied post-limit and cannot break completeness.
+static void mark_filtered_above_scans(ExecNode* node, bool saw_filter) {
+    switch (node->type()) {
+    case TPlanNodeType::SORT_NODE:
+        saw_filter = false;
+        break;
+    case TPlanNodeType::SELECT_NODE:
+        saw_filter = true;
+        break;
+    default:
+        break;
+    }
+    if (saw_filter) {
+        if (auto* scan = dynamic_cast<ScanNode*>(node); scan != nullptr) {
+            scan->set_filtered_above_iterator(true);
+        }
+    }
+    for (auto* child : node->children()) {
+        mark_filtered_above_scans(child, saw_filter);
+    }
+}
+
 static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
     for (const auto* child : node->children()) {
         collect_non_broadcast_rf_ids(child, filter_ids);
@@ -495,6 +522,10 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     std::vector<TupleSlotMapping> empty_mappings;
     plan->push_down_tuple_slot_mappings(runtime_state, empty_mappings);
     runtime_state->set_fragment_root_id(plan->id());
+
+    // Flag scans whose output is filtered above (below the TopN) so an ANN top-k scan falls back to
+    // exact brute-force instead of an unsafe segment-level k-limit. See mark_filtered_above_scans.
+    mark_filtered_above_scans(plan, false);
 
     // Set senders of exchange nodes before pipeline build
     std::vector<ExecNode*> exch_nodes;
