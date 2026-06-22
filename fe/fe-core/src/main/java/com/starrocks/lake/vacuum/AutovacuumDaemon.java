@@ -244,16 +244,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp =
                     startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
-<<<<<<< HEAD
                     Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
-            vacuumRequest.minActiveTxnId = minActiveTxnId;
-=======
-                    Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
-            vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
-                                           db.getId(), table.getId(), partition.getParentId(), partition.getId());
             vacuumRequest.minActiveTxnId = txnLogSweepWatermark;
->>>>>>> a10c264de6 ([BugFix] Debounce autovacuum minActiveTxnId before txn-log deletion (#74906))
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             // The longest this FE waits for the response (the brpc timeout of the vacuum RPC).
