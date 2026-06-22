@@ -61,12 +61,16 @@ public class DateVariant extends Variant {
         LocalDateTime dateTime = LocalDateTime.ofEpochSecond(seconds, (int) nanos, ZoneOffset.UTC);
         switch (type.getPrimitiveType()) {
             case DATE:
-                return dateTime.format(DateUtils.DATE_FORMATTER);
+                return dateTime.format(DateUtils.DATE_FORMATTER_UNIX);
             case DATETIME:
+                // Render via the %Y-based *_UNIX DateTimeFormatters (the family parseStrictDateTime
+                // uses), whose digits are ASCII through DecimalStyle.STANDARD. String.format("%06d", ...)
+                // for the microsecond fraction would instead follow the JVM default locale and emit
+                // non-ASCII digits (Arabic/Persian), which datum_from_string then rejects.
                 if (nanos == 0) {
-                    return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
+                    return dateTime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
                 }
-                return dateTime.format(DateUtils.DATE_TIME_FORMATTER) + "." + String.format("%06d", nanos / 1000);
+                return dateTime.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
             default:
                 return Instant.ofEpochSecond(seconds, nanos).toString();
         }

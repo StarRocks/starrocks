@@ -14,7 +14,10 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.common.util.DateUtils;
+
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * The value window the meta tier accepts for DATE/DATETIME sort-key boundaries:
@@ -32,9 +35,10 @@ import java.time.LocalDate;
  * </ul>
  *
  * <p>This lives in one place — rather than being duplicated per reader like the
- * integer-stat conversion — because the constraint is format-agnostic: it operates on
- * an already-decoded {@link LocalDate}, identical whether the value came from a Parquet
- * INT32/INT64 stat or an ORC day-of-epoch stat.
+ * integer-stat conversion — because both responsibilities are format-agnostic: the
+ * window check operates on an already-decoded {@link LocalDate}, and the microsecond
+ * datetime renderer on an already-decoded {@link LocalDateTime}, identical whether the
+ * value came from a Parquet INT32/INT64 stat or an ORC day-of-epoch / timestamp stat.
  */
 final class MetaTierTemporalWindow {
 
@@ -54,5 +58,26 @@ final class MetaTierTemporalWindow {
                     "DATE/DATETIME meta tier supports [1970-01-01, 9999-12-31] only; value "
                             + date + " is outside that window");
         }
+    }
+
+    /**
+     * Render a decoded UTC {@link LocalDateTime} as StarRocks canonical datetime text
+     * ("yyyy-MM-dd HH:mm:ss[.ffffff]"): second precision unless there is a sub-second part,
+     * then a fixed 6-digit microsecond fraction. {@link DateUtils#parseStrictDateTime} and the
+     * BE {@code datum_from_string} parser round-trip both. Shared by the Parquet and ORC footer
+     * readers (mirrors {@code DateVariant.getStringValue}).
+     *
+     * <p>Both branches use the {@code %Y}-based {@code *_UNIX} formatters (the same family
+     * {@code parseStrictDateTime} uses), not the deprecated {@code yyyy} ones: a
+     * {@link java.time.format.DateTimeFormatter} renders numeric fields as ASCII via
+     * DecimalStyle.STANDARD, so the output is locale-independent — unlike {@code String.format("%06d", …)},
+     * whose digits would follow the FE JVM's default locale and emit non-ASCII digits
+     * (Arabic/Persian), breaking {@code parseStrictDateTime} / BE boundary parsing.
+     */
+    static String renderDateTime(LocalDateTime dateTime) {
+        if (dateTime.getNano() == 0) {
+            return dateTime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
+        }
+        return dateTime.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
     }
 }
