@@ -26,7 +26,7 @@ public class EsRestClientTest {
     public void testGetRowCount() {
         new MockUp<EsRestClient>() {
             @Mock
-            private String execute(String path) {
+            String execute(String path) {
                 return "[{\"docs.count\":\"1234567\"}]";
             }
         };
@@ -38,7 +38,7 @@ public class EsRestClientTest {
     public void testGetRowCountNullResponse() {
         new MockUp<EsRestClient>() {
             @Mock
-            private String execute(String path) {
+            String execute(String path) {
                 return null;
             }
         };
@@ -50,7 +50,7 @@ public class EsRestClientTest {
     public void testGetRowCountOnException() {
         new MockUp<EsRestClient>() {
             @Mock
-            private String execute(String path) {
+            String execute(String path) {
                 throw new StarRocksConnectorException("connection failed");
             }
         };
@@ -62,11 +62,23 @@ public class EsRestClientTest {
     public void testGetRowCountEmptyArray() {
         new MockUp<EsRestClient>() {
             @Mock
-            private String execute(String path) {
+            String execute(String path) {
                 return "[]";
             }
         };
         EsRestClient client = new EsRestClient(new String[] {"http://localhost:9200"}, "", "");
         Assertions.assertEquals(-1L, client.getRowCount("my_index"));
+    }
+
+    @Test
+    public void testGetRowCountMultipleIndices() {
+        new MockUp<EsRestClient>() {
+            @Mock
+            String execute(String path) {
+                return "[{\"docs.count\":\"1000000\"},{\"docs.count\":\"2000000\"},{\"docs.count\":\"500000\"}]";
+            }
+        };
+        EsRestClient client = new EsRestClient(new String[] {"http://localhost:9200"}, "", "");
+        Assertions.assertEquals(3500000L, client.getRowCount("logs-*"));
     }
 }

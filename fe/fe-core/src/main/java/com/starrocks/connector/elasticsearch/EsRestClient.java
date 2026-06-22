@@ -182,14 +182,19 @@ public class EsRestClient {
                 return -1L;
             }
             List list = mapper.readValue(response, List.class);
-            if (!list.isEmpty()) {
-                Object row = list.get(0);
+            long total = 0;
+            boolean found = false;
+            for (Object row : list) {
                 if (row instanceof Map) {
                     Object val = ((Map) row).get("docs.count");
                     if (val != null) {
-                        return Long.parseLong(val.toString());
+                        total += Long.parseLong(val.toString());
+                        found = true;
                     }
                 }
+            }
+            if (found) {
+                return total;
             }
         } catch (Exception e) {
             LOG.warn("Failed to get docs.count for ES index {}: {}", indexName, e.getMessage());
