@@ -96,7 +96,7 @@ public class RowCountEstimatorTest {
     @Test
     public void testNullFormatUsesConfigDefault() {
         List<Column> cols = Arrays.asList(intCol("a"));
-        long rowCount = RowCountEstimator.estimate(100_000_000L, cols, null);
+        long rowCount = RowCountEstimator.estimate(100_000_000L, cols, (HiveStorageFormat) null);
         long expected = 100_000_000L / Math.max(Config.connector_row_size_estimate_bytes, 8L);
         assertEquals(expected, rowCount);
     }

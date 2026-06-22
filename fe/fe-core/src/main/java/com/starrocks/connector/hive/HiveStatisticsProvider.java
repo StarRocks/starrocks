@@ -23,6 +23,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.statistics.RowCountEstimator;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -150,17 +151,23 @@ public class HiveStatisticsProvider {
             }
         }
 
-        List<Column> dataColumns = table.getColumns().stream()
-                .filter(column -> table.getDataColumnNames().contains(column.getName()))
-                .collect(Collectors.toList());
-
         if (totalBytes <= 0) {
             return 1;
         }
 
-        long presentRowNums = totalBytes / dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
-        long presentPartitionSize = remoteFileInfos.size();
-        return presentRowNums / presentPartitionSize * partitionKeys.size();
+        List<Column> dataColumns = table.getColumns().stream()
+                .filter(column -> table.getDataColumnNames().contains(column.getName()))
+                .collect(Collectors.toList());
+
+        RemoteFileInputFormat format = partitions.stream()
+                .map(Partition::getFileFormat)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+
+        long totalEstimatedRows = RowCountEstimator.estimate(totalBytes, dataColumns, format);
+        long presentPartitionSize = Math.max(remoteFileInfos.size(), 1);
+        return totalEstimatedRows / presentPartitionSize * partitionKeys.size();
     }
 
     public Statistics createUnknownStatistics(

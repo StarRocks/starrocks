@@ -17,6 +17,7 @@ package com.starrocks.connector.statistics;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.type.ScalarType;
 
 import java.util.List;
@@ -57,12 +58,22 @@ public class RowCountEstimator {
         if (totalBytes <= 0) {
             return 1L;
         }
-        long rowSize = computeRowSize(dataColumns, format);
+        long rowSize = computeRowSize(dataColumns, factorFor(format));
         return Math.max(totalBytes / rowSize, 1L);
     }
 
-    private static long computeRowSize(List<Column> dataColumns, HiveStorageFormat format) {
-        Double factor = factorFor(format);
+    /**
+     * Overload for callers that have a {@link RemoteFileInputFormat} (e.g. Hive {@code Partition}).
+     */
+    public static long estimate(long totalBytes, List<Column> dataColumns, RemoteFileInputFormat format) {
+        if (totalBytes <= 0) {
+            return 1L;
+        }
+        long rowSize = computeRowSize(dataColumns, factorFor(format));
+        return Math.max(totalBytes / rowSize, 1L);
+    }
+
+    private static long computeRowSize(List<Column> dataColumns, Double factor) {
         if (factor == null) {
             // Unknown format — use the config default directly as bytes/row.
             return Math.max(Config.connector_row_size_estimate_bytes, MIN_ROW_SIZE_BYTES);
@@ -78,10 +89,6 @@ public class RowCountEstimator {
         return Math.max((long) (rawSize * factor), MIN_ROW_SIZE_BYTES);
     }
 
-    /**
-     * Returns the compression factor for the given format, or {@code null} if unknown
-     * (meaning the config default should be used instead of the schema-based estimate).
-     */
     private static Double factorFor(HiveStorageFormat format) {
         if (format == null) {
             return null;
@@ -94,6 +101,23 @@ public class RowCountEstimator {
             case AVRO:
             case RCTEXT:
             case RCBINARY:
+                return ROW_FORMAT_FACTOR;
+            default:
+                return null;
+        }
+    }
+
+    private static Double factorFor(RemoteFileInputFormat format) {
+        if (format == null) {
+            return null;
+        }
+        switch (format) {
+            case PARQUET:
+            case ORC:
+                return COLUMNAR_FORMAT_FACTOR;
+            case TEXTFILE:
+            case AVRO:
+            case RCFILE:
                 return ROW_FORMAT_FACTOR;
             default:
                 return null;
