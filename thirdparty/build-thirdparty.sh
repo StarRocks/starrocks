@@ -1241,7 +1241,8 @@ build_mariadb() {
                   -DBUILD_SHARED_LIBS=OFF                               \
                   -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                  \
                   -DOPENSSL_USE_STATIC_LIBS=TRUE                        \
-                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}               \
+                  ${CMAKE_POLICY_VERSION_MINIMUM_ARG}
     # we only need build libmariadbclient and headers
     ${BUILD_SYSTEM} -j$PARALLEL mariadbclient
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/libmariadb
@@ -1538,7 +1539,8 @@ build_clucene() {
         -DUSE_STAT64=0 \
         -DCMAKE_BUILD_TYPE=Release \
         -DUSE_AVX2=$THIRD_PARTY_BUILD_WITH_AVX2 \
-        -DBUILD_CONTRIBS_LIB=ON ..
+        -DBUILD_CONTRIBS_LIB=ON \
+        ${CMAKE_POLICY_VERSION_MINIMUM_ARG} ..
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
 
