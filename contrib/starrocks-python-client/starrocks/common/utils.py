@@ -255,7 +255,7 @@ class TableAttributeNormalizer:
         if canonicalize:
             sql = TableAttributeNormalizer._canonicalize_statement(sql)
         # Strip trailing semicolons together with any surrounding whitespace.
-        sql = sql.rstrip(" ;").rstrip(";")
+        sql = sql.rstrip(" ;")
         return sql
 
     @staticmethod
