@@ -133,6 +133,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
 
+    // Purpose: the previous autovacuum round's computeMinActiveTxnId(), used to debounce a
+    //   transiently-too-high value (begin-vs-vacuum race) before allowing txn-log deletion.
+    // Persistence: in-memory only, NOT persisted (no @SerializedName); resets to 0 on restart/failover.
+    private volatile long lastMinActiveTxnId = 0;
+
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
     
@@ -292,6 +297,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
         this.lastSuccVacuumVersion.set(lastSuccVacuumVersion);
+    }
+
+    public long getLastMinActiveTxnId() {
+        return lastMinActiveTxnId;
+    }
+
+    public void setLastMinActiveTxnId(long lastMinActiveTxnId) {
+        this.lastMinActiveTxnId = lastMinActiveTxnId;
     }
 
     public long getExtraFileSize() {
