@@ -45,6 +45,7 @@
 #include "agent/agent_server.h"
 #include "agent/finish_task.h"
 #include "agent/publish_version.h"
+#include "agent/publish_version_manager.h"
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
@@ -59,8 +60,11 @@
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/util/misc.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "data_workflows/load/engine_batch_load_task.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/runtime/query_context_manager.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/DataCache_types.h"
 #include "gen_cpp/Types_types.h"
@@ -70,11 +74,9 @@
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/primitive/storage_ids.h"
-#include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
-#include "storage/task/engine_batch_load_task.h"
 #include "storage/task/engine_clone_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
@@ -305,7 +307,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     }
 
     while (true) {
-        AgentStatus status = STARROCKS_SUCCESS;
+        Status status;
         AgentTaskRequestPtr agent_task_req;
         do {
             agent_task_req = worker_pool_this->_pop_task(priority);
@@ -329,17 +331,11 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
 
-#ifndef __APPLE__
-        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
+        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        // EngineBatchLoadTask execute always return OK
-        (void)(StorageEngine::instance()->execute_task(&engine_task));
-#else
-        LOG(WARNING) << "push is not supported on MacOS, signature: " << agent_task_req->signature;
-        status = STARROCKS_ERROR;
-#endif
+        status = StorageEngine::instance()->execute_task(&engine_task);
 
-        if (status == STARROCKS_PUSH_HAD_LOADED) {
+        if (status.is_already_exist()) {
             // remove the task and not return to fe
             remove_task_info(agent_task_req->task_type, agent_task_req->signature);
             continue;
@@ -353,7 +349,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
 
-        if (status == STARROCKS_SUCCESS) {
+        if (status.ok()) {
             VLOG(3) << "push ok. signature: " << agent_task_req->signature << ", push_type: " << push_req.push_type;
             error_msgs.emplace_back("push success");
 
@@ -361,13 +357,9 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
             task_status.__set_status_code(TStatusCode::OK);
             finish_task_request.__set_finish_tablet_infos(tablet_infos);
-        } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
-            LOG(WARNING) << "push request push_type invalid. type: " << push_req.push_type
-                         << ", signature: " << agent_task_req->signature;
-            error_msgs.emplace_back("push request push_type invalid.");
-            task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
         } else {
-            LOG(WARNING) << "push failed, error_code: " << status << ", signature: " << agent_task_req->signature;
+            LOG(WARNING) << "push failed, push_type: " << push_req.push_type << ", status: " << status
+                         << ", signature: " << agent_task_req->signature;
             error_msgs.emplace_back("push failed");
             task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
         }
@@ -400,7 +392,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     }
 
     while (true) {
-        AgentStatus status = STARROCKS_SUCCESS;
+        Status status;
         AgentTaskRequestPtr agent_task_req;
         do {
             agent_task_req = worker_pool_this->_pop_task(priority);
@@ -450,17 +442,11 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         VLOG(3) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
                 << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
-#ifndef __APPLE__
-        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
+        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
-        // EngineBatchLoadTask execute always return OK
-        (void)(StorageEngine::instance()->execute_task(&engine_task));
-#else
-        LOG(WARNING) << "delete is not supported on MacOS, signature: " << agent_task_req->signature;
-        status = STARROCKS_ERROR;
-#endif
+        status = StorageEngine::instance()->execute_task(&engine_task);
 
-        if (status == STARROCKS_PUSH_HAD_LOADED) {
+        if (status.is_already_exist()) {
             // remove the task and not return to fe
             remove_task_info(agent_task_req->task_type, agent_task_req->signature);
             continue;
@@ -477,7 +463,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             finish_task_request.__set_request_version(push_req.version);
         }
 
-        if (status == STARROCKS_SUCCESS) {
+        if (status.ok()) {
             VLOG(3) << "delete push ok. signature: " << agent_task_req->signature
                     << ", push_type: " << push_req.push_type;
             error_msgs.emplace_back("push success");
@@ -486,13 +472,8 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
             task_status.__set_status_code(TStatusCode::OK);
             finish_task_request.__set_finish_tablet_infos(tablet_infos);
-        } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
-            LOG(WARNING) << "delete push request push_type invalid. type: " << push_req.push_type
-                         << ", signature: " << agent_task_req->signature;
-            error_msgs.emplace_back("push request push_type invalid.");
-            task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
         } else {
-            LOG(WARNING) << "delete push failed, error_code: " << status
+            LOG(WARNING) << "delete push failed, push_type: " << push_req.push_type << ", status: " << status
                          << ", signature: " << agent_task_req->signature;
             error_msgs.emplace_back("delete push failed");
             task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
@@ -599,9 +580,9 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 int64_t t0 = MonotonicMillis();
                 StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
                 int64_t t1 = MonotonicMillis();
-                StorageEngine::instance()->publish_version_manager()->wait_publish_task_apply_finish(
-                        std::move(finish_task_requests));
-                StorageEngine::instance()->wake_finish_publish_vesion_thread();
+                auto* publish_version_manager = agent_server->publish_version_manager();
+                DCHECK(publish_version_manager != nullptr);
+                publish_version_manager->wait_publish_task_apply_finish(std::move(finish_task_requests));
                 affected_dirs.clear();
                 batch_publish_latency = 0;
                 VLOG(1) << "batch submit " << finish_task_size << " finish publish version task "

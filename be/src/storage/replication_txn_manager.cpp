@@ -38,7 +38,6 @@
 #include "http/http_client.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/protobuf_file.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset.h"
@@ -423,7 +422,8 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
         // Make snapshot in remote olap engine
         status = ReplicationUtils::make_remote_snapshot(src_be.host, src_be.be_port, request.src_tablet_id,
                                                         request.src_schema_hash, request.src_visible_version, timeout_s,
-                                                        missed_versions, missing_version_ranges, src_snapshot_path);
+                                                        missed_versions, missing_version_ranges, src_snapshot_path,
+                                                        _snapshot_client);
         if (!status.ok()) {
             continue;
         }
@@ -1056,7 +1056,8 @@ void ReplicationTxnManager::clear_txn_snapshots(TTransactionId transaction_id) {
         if (src_backend_host.empty() || src_backend_port == 0 || src_snapshot_path.empty()) {
             continue;
         }
-        (void)ReplicationUtils::release_remote_snapshot(src_backend_host, src_backend_port, src_snapshot_path);
+        (void)ReplicationUtils::release_remote_snapshot(src_backend_host, src_backend_port, src_snapshot_path,
+                                                        _snapshot_client);
     }
 
     for (DataDir* data_dir : StorageEngine::instance()->get_stores()) {

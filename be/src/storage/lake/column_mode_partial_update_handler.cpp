@@ -347,29 +347,33 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
     const auto& txn_meta = params.op_write.txn_meta();
 
+    // cid may shift across schema versions; recompute it from uid against the current
+    // tablet schema. partial_update_column_ids in txn_meta is kept for compatibility only.
+    DCHECK_EQ(txn_meta.partial_update_column_ids_size(), txn_meta.partial_update_column_unique_ids_size());
     std::vector<ColumnId> update_column_ids;
     std::vector<ColumnUID> unique_update_column_ids;
-    for (ColumnId cid : txn_meta.partial_update_column_ids()) {
-        if (cid >= params.tablet_schema->num_key_columns()) {
-            if (!params.tablet_schema->column(cid).is_auto_increment()) {
-                update_column_ids.push_back(cid);
-            }
-        }
-    }
-    for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
-        auto cid = params.tablet_schema->field_index(uid);
+    for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
+        const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
+        const auto cid = params.tablet_schema->field_index(uid);
         if (cid == -1) {
             std::string msg = strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
                                                   params.tablet->tablet_id());
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!params.tablet_schema->column(cid).is_key() && !params.tablet_schema->column(cid).is_auto_increment()) {
-            unique_update_column_ids.push_back(uid);
+        const auto& col = params.tablet_schema->column(cid);
+        if (col.is_key() || col.is_auto_increment()) {
+            continue;
+        }
+        update_column_ids.push_back(cid);
+        unique_update_column_ids.push_back(uid);
+
+        if (cid != static_cast<ColumnId>(txn_meta.partial_update_column_ids(i))) {
+            LOG(INFO) << "lake pcu schema drift detected: tablet=" << params.tablet->tablet_id() << " uid=" << uid
+                      << " frozen_cid=" << txn_meta.partial_update_column_ids(i) << " current_cid=" << cid
+                      << " schema_id=" << params.tablet_schema->id();
         }
     }
-
-    DCHECK(update_column_ids.size() == unique_update_column_ids.size());
 
     // When condition update is enabled together with column-mode PCU, delta_writer has validated
     // that the condition column is part of the partial column set; we force a single column batch
@@ -416,6 +420,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
     std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
     std::map<uint32_t, std::vector<std::pair<std::string, std::string>>> dcg_column_file_with_encryption_metas;
+    // Parallel to dcg_column_file_with_encryption_metas: byte size of each `.cols` file,
+    // captured from finalize() so readers can avoid a stat/HeadObject when opening the segment.
+    std::map<uint32_t, std::vector<int64_t>> dcg_column_file_sizes;
     // 3. read from raw segment file and update file, and generate `.col` files
     // The inner segment loop is parallelized: each (column_batch, rssid) combination is independent
     // since they read different source segments and write to different .col files (UUID-based names).
@@ -456,7 +463,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
                          upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids,
-                         &dcg_column_file_with_encryption_metas, &result_mutex, &shared_status]() {
+                         &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex,
+                         &shared_status]() {
                 // 3.3 read from source segment
                 auto source_chunk_or = _read_from_source_segment(params, partial_schema, rssid);
                 if (!source_chunk_or.ok()) {
@@ -505,6 +513,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     dcg_column_file_with_encryption_metas[rssid].emplace_back(
                             file_name(delta_column_group_writer->segment_path()),
                             delta_column_group_writer->encryption_meta());
+                    dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
                 }
                 TRACE_COUNTER_INCREMENT("pcu_handle_cnt", 1);
             };
@@ -527,7 +536,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     }
     // 4 generate delta columngroup
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
-        builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first]);
+        builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first],
+                            dcg_column_file_sizes[each.first]);
     }
     builder->apply_column_mode_partial_update(params.op_write);
 
@@ -539,7 +549,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
 bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                                      const TabletMetadata& metadata, MetaFileBuilder* builder) {
-    if (metadata.dcg_meta().dcgs().empty()) {
+    const bool has_dcg = !metadata.dcg_meta().dcgs().empty();
+    const bool has_idg = metadata.has_idg_meta() && !metadata.idg_meta().idgs().empty();
+    if (!has_dcg && !has_idg) {
         return false;
     }
     std::unordered_set<uint32_t> input_rowsets; // all rowsets that have been compacted
@@ -549,25 +561,44 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     }
     // 1. find all segments that have been compacted
     for (const auto& rowset : metadata.rowsets()) {
-        if (input_rowsets.count(rowset.id()) > 0 && rowset.segments_size() > 0) {
-            for (int i = 0; i < rowset.segments_size(); ++i) {
+        if (input_rowsets.count(rowset.id()) > 0 && rowset.segment_metas_size() > 0) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                 input_segments.push_back(get_rssid(rowset, i));
             }
         }
     }
-    // 2. find out if these segments have been updated
+    // 2. find out if these segments have been updated (DCG) or had indexes
+    //    added (IDG) since the compaction started. Either race forces the
+    //    compaction to land as an "with_conflict" no-op so the newer delta
+    //    is preserved.
     for (uint32_t segment : input_segments) {
-        auto dcg_ver_iter = metadata.dcg_meta().dcgs().find(segment);
-        if (dcg_ver_iter != metadata.dcg_meta().dcgs().end()) {
-            for (int64_t ver : dcg_ver_iter->second.versions()) {
-                if (ver > op_compaction.compact_version()) {
-                    // conflict happens
-                    builder->apply_opcompaction_with_conflict(op_compaction);
-                    LOG(INFO) << fmt::format(
-                            "PK compaction conflict with partial column update, tablet_id: {} txn_id: {} "
-                            "op_compaction: {}",
-                            metadata.id(), txn_id, op_compaction.ShortDebugString());
-                    return true;
+        if (has_dcg) {
+            auto dcg_ver_iter = metadata.dcg_meta().dcgs().find(segment);
+            if (dcg_ver_iter != metadata.dcg_meta().dcgs().end()) {
+                for (int64_t ver : dcg_ver_iter->second.versions()) {
+                    if (ver > op_compaction.compact_version()) {
+                        builder->apply_opcompaction_with_conflict(op_compaction);
+                        LOG(INFO) << fmt::format(
+                                "PK compaction conflict with partial column update, tablet_id: {} txn_id: {} "
+                                "op_compaction: {}",
+                                metadata.id(), txn_id, op_compaction.ShortDebugString());
+                        return true;
+                    }
+                }
+            }
+        }
+        if (has_idg) {
+            auto idg_ver_iter = metadata.idg_meta().idgs().find(segment);
+            if (idg_ver_iter != metadata.idg_meta().idgs().end()) {
+                for (const auto& entry : idg_ver_iter->second.entries()) {
+                    if (entry.has_version() && entry.version() > op_compaction.compact_version()) {
+                        builder->apply_opcompaction_with_conflict(op_compaction);
+                        LOG(INFO) << fmt::format(
+                                "Compaction conflict with ADD INDEX fast path, tablet_id: {} txn_id: {} "
+                                "op_compaction: {}",
+                                metadata.id(), txn_id, op_compaction.ShortDebugString());
+                        return true;
+                    }
                 }
             }
         }

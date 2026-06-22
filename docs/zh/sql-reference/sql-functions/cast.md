@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将输入转换为指定的数据类型。"
 ---
 
 # CAST

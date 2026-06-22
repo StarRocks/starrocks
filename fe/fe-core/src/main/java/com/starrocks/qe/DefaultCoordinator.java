@@ -763,6 +763,12 @@ public class DefaultCoordinator extends Coordinator {
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
             throws StarRocksException, RpcException {
+        if (returnedAllResults && status.isCancelled()) {
+            // Receiver already got EOS; any in-flight deploy that races with our QUERY_FINISHED cancel
+            // returns Cancelled("QueryFinished") or Cancelled("Query terminates prematurely") on the BE.
+            // These are not real errors.
+            return;
+        }
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
                 cancelInternal(PPlanFragmentCancelReason.TIMEOUT);
@@ -978,14 +984,19 @@ public class DefaultCoordinator extends Coordinator {
                         hint = null;
                     }
                     if (hint == null) {
-                        hint = String.format("please increase the '%s' session variable and retry",
-                                SessionVariable.QUERY_TIMEOUT);
+                        hint = buildSessionTimeoutHint();
                     }
                     ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, "Query", timeoutS, hint);
                 }
                 throw new StarRocksException(ec, errMsg);
             }
         }
+    }
+
+    private String buildSessionTimeoutHint() {
+        String timeoutVariable = connectContext != null
+                ? connectContext.getTimeoutHintVariable() : SessionVariable.QUERY_TIMEOUT;
+        return String.format("please increase the '%s' session variable and retry", timeoutVariable);
     }
 
     @Override

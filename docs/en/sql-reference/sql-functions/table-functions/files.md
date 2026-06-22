@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
-description: "Defines data files in remote storage, used for loading and unloading data:"
+description: "Table function for defining data files in remote storage (HDFS, S3, GCS) for use in loading data into or unloading data from StarRocks."
 ---
 
 # `FILES`
@@ -136,6 +136,18 @@ Example of the Parquet format:
 "parquet.use_legacy_encoding" = "true",   -- for unloading only
 "parquet.version" = "2.6"                 -- for unloading only
 ```
+
+When reading Parquet files (for example, via `FILES()` or Broker Load), StarRocks maps the Parquet TIMESTAMP logical type to DATETIME according to the type's `isAdjustedToUTC` attribute:
+
+- **Instant Semantics**: If `isAdjustedToUTC` is `true`, the value identifies an instant on the timeline normalized to UTC. StarRocks converts it to the wall-clock reading in the current session time zone.
+- **Local Semantics**: If `isAdjustedToUTC` is `false`, the value is a wall-clock reading without a time zone. StarRocks returns it as written, regardless of the session time zone.
+- The legacy INT96 physical type carries no `isAdjustedToUTC` attribute. StarRocks treats an INT96 column as an instant normalized to UTC and converts it to the session time zone, whether the INT96 timestamp is a top-level column or nested inside a STRUCT, ARRAY, or MAP.
+
+:::note
+
+**Behavior change**: In earlier versions, StarRocks shifted timestamps with Local Semantics (`isAdjustedToUTC` = `false`) by the session time zone offset on read. Such values are now returned as written. If your session time zone is not UTC, the same file now returns different values than in earlier versions. The new values are correct per the Parquet specification.
+
+:::
 
 ###### `parquet.use_legacy_encoding`
 

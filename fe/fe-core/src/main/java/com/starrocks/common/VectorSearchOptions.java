@@ -24,7 +24,9 @@ public class VectorSearchOptions {
     private static final int RESULT_ORDER_DESC = 1;
 
     private boolean enableUseANN = false;
-    private boolean useIVFPQ = false;
+    // When true, re-rank the ANN result by recomputing the exact distance on the full-precision
+    // vectors (used for a quantized index whose index distance is lossy).
+    private boolean refineDistance = false;
 
     private String distanceColumnName = "";
     private int distanceSlotId = 0;
@@ -43,12 +45,12 @@ public class VectorSearchOptions {
         this.enableUseANN = enableUseANN;
     }
 
-    public boolean isUseIVFPQ() {
-        return useIVFPQ;
+    public boolean isRefineDistance() {
+        return refineDistance;
     }
 
-    public void setUseIVFPQ(boolean useIVFPQ) {
-        this.useIVFPQ = useIVFPQ;
+    public void setRefineDistance(boolean refineDistance) {
+        this.refineDistance = refineDistance;
     }
 
     public String getDistanceColumnName() {
@@ -88,14 +90,18 @@ public class VectorSearchOptions {
         opts.setQuery_vector(queryVector);
         opts.setVector_range(predicateRange);
         opts.setResult_order(resultOrder);
-        opts.setUse_ivfpq(useIVFPQ);
+        opts.setRefine_distance(refineDistance);
+        // Also set the deprecated use_ivfpq to the same value during the deprecation window: an older BE
+        // (which only understands use_ivfpq) then runs the same path under a rolling upgrade. The two
+        // flags always mean the same thing -- "run the refine path". Remove once no old BE remains.
+        opts.setUse_ivfpq(refineDistance);
         return opts;
     }
 
     public String getExplainString(String prefix) {
         return prefix + "VECTORINDEX: ON" + "\n" +
                 prefix + prefix +
-                "IVFPQ: " + (useIVFPQ ? "ON" : "OFF") + ", " +
+                "Refine: " + (refineDistance ? "ON" : "OFF") + ", " +
                 "Distance Column: <" + distanceSlotId + ":" + distanceColumnName + ">, " +
                 "LimitK: " + limitK + ", " +
                 "Order: " + (resultOrder == RESULT_ORDER_ASC ? "ASC" : "DESC") + ", " +

@@ -44,7 +44,10 @@
 #include "common/thread/thread.h"
 #include "compute_env/result/result_queue_mgr.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/runtime_metrics.h"
@@ -124,7 +127,7 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
             if (auto fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id); fragment_ctx != nullptr) {
                 std::stringstream msg;
                 msg << "FragmentContext(id=" << print_id(fragment_instance_id) << ") cancelled by close_scanner";
-                fragment_ctx->cancel(Status::Cancelled(msg.str()));
+                pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(msg.str()));
             }
         }
         LOG(INFO) << "close scan context: context id [ " << context_id << " ], fragment instance id [ "

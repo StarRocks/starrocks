@@ -16,6 +16,7 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
+#include <arrow/type.h>
 #include <gutil/strings/substitute.h>
 
 #include <memory>
@@ -26,6 +27,7 @@
 #include "common/runtime_profile.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "fmt/format.h"
+#include "parquet/arrow/schema.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
@@ -33,6 +35,109 @@
 
 namespace starrocks {
 // ====================================================================================================================
+
+namespace {
+
+// Recursively re-tag ONLY the timezone-naive TIMESTAMP leaves that originate from an INT96 parquet
+// column as UTC, walking the Arrow ArrayData tree in lockstep with the parquet SchemaField tree.
+// The two trees are isomorphic by child index (STRUCT: child i <-> field i; LIST / LARGE_LIST /
+// FIXED_SIZE_LIST: the single element child; MAP: Arrow's struct<key,value> entries <-> the
+// SchemaField key_value group), so we descend both together and match strictly by child index --
+// never by field name, because Arrow does not rename list/map child fields to canonical names on
+// read. A sibling INT64 isAdjustedToUTC=false (wall-clock) leaf is therefore left untouched even
+// when it shares a complex column with an INT96 leaf. The enclosing LIST/.../STRUCT/MAP type
+// metadata is rebuilt bottom-up; ArrayData::Copy() is a shallow copy, so the underlying
+// value/offset/validity buffers are aliased unchanged -- this is a metadata-only rewrite with no
+// per-row cost. Returns the (possibly) rewritten ArrayData and sets `*changed` when any leaf was
+// re-tagged; otherwise returns `data` untouched.
+std::shared_ptr<arrow::ArrayData> rectify_int96_array_data(const std::shared_ptr<arrow::ArrayData>& data,
+                                                           const ::parquet::arrow::SchemaField& field,
+                                                           const ::parquet::SchemaDescriptor& descr, bool* changed) {
+    if (field.is_leaf()) {
+        // INT96 is a UTC-normalized instant that Arrow decodes timezone-naive. Tag it as UTC so the
+        // downstream converter overrides it with the session timezone and shifts the value (matching
+        // the native parquet reader's Int96ToDateTimeConverter). A genuinely naive INT64
+        // isAdjustedToUTC=false leaf has a non-INT96 physical type and is left untouched so it stays
+        // wall-clock.
+        if (data->type->id() == arrow::Type::TIMESTAMP &&
+            descr.Column(field.column_index)->physical_type() == ::parquet::Type::INT96) {
+            auto ts_type = std::static_pointer_cast<arrow::TimestampType>(data->type);
+            if (ts_type->timezone().empty()) {
+                auto new_data = data->Copy();
+                new_data->type = arrow::timestamp(ts_type->unit(), "UTC");
+                *changed = true;
+                return new_data;
+            }
+        }
+        return data;
+    }
+
+    // Interior node: recurse children in lockstep with the SchemaField children. Bail out if the
+    // structures somehow disagree (should not happen for parquet::arrow-produced trees).
+    if (field.children.size() != data->child_data.size()) {
+        return data;
+    }
+    bool child_changed = false;
+    std::vector<std::shared_ptr<arrow::ArrayData>> new_children;
+    new_children.reserve(data->child_data.size());
+    for (size_t i = 0; i < data->child_data.size(); ++i) {
+        new_children.push_back(rectify_int96_array_data(data->child_data[i], field.children[i], descr, &child_changed));
+    }
+    if (!child_changed) {
+        return data;
+    }
+    // Rebuild the enclosing type from the re-tagged child types, preserving child field names and
+    // nullability via the field-taking Arrow factories.
+    const auto& type = data->type;
+    std::shared_ptr<arrow::DataType> new_type;
+    switch (type->id()) {
+    case arrow::Type::LIST:
+        new_type = arrow::list(type->field(0)->WithType(new_children[0]->type));
+        break;
+    // LARGE_LIST and FIXED_SIZE_LIST are handled so this stays a complete Arrow ArrayData
+    // re-tagger, but the parquet->Arrow read path that currently calls it never produces them:
+    // parquet repeated groups map to LIST by default (the reader does not request
+    // list_type=LARGE_LIST), and parquet has no fixed-size-list concept. They are kept for forward
+    // compatibility (e.g. if a future reader enables LARGE_LIST for very large array columns) and
+    // are therefore not exercised by the current tests.
+    case arrow::Type::LARGE_LIST:
+        new_type = arrow::large_list(type->field(0)->WithType(new_children[0]->type));
+        break;
+    case arrow::Type::FIXED_SIZE_LIST: {
+        auto list_type = std::static_pointer_cast<arrow::FixedSizeListType>(type);
+        new_type = arrow::fixed_size_list(type->field(0)->WithType(new_children[0]->type), list_type->list_size());
+        break;
+    }
+    case arrow::Type::MAP: {
+        // A MapArray's single child is a struct<key, value>; the recursion above already rebuilt it
+        // as new_children[0]. Derive the key type and (possibly re-tagged) value field from that
+        // struct so keys()/items() see the rewritten types.
+        auto map_type = std::static_pointer_cast<arrow::MapType>(type);
+        auto entries = std::static_pointer_cast<arrow::StructType>(new_children[0]->type);
+        new_type = arrow::map(entries->field(0)->type(), entries->field(1), map_type->keys_sorted());
+        break;
+    }
+    case arrow::Type::STRUCT: {
+        auto struct_type = std::static_pointer_cast<arrow::StructType>(type);
+        arrow::FieldVector new_fields;
+        new_fields.reserve(struct_type->num_fields());
+        for (int j = 0; j < struct_type->num_fields(); ++j) {
+            new_fields.push_back(struct_type->field(j)->WithType(new_children[j]->type));
+        }
+        new_type = arrow::struct_(new_fields);
+        break;
+    }
+    default:
+        return data; // not a nested type we rebuild; leave untouched
+    }
+    auto new_data = data->Copy();
+    new_data->type = std::move(new_type);
+    new_data->child_data = std::move(new_children);
+    *changed = true;
+    return new_data;
+}
+
+} // namespace
 
 ParquetReaderWrap::~ParquetReaderWrap() {
     close();
@@ -143,8 +248,17 @@ Status ParquetReaderWrap::_init_parquet_reader() {
             auto parquet_schema = _file_metadata->schema();
             for (int i = 0; i < parquet_schema->num_columns(); i++) {
                 auto column_desc = parquet_schema->Column(i);
-                std::string field_name = column_desc->path()->ToDotVector()[0];
+                const auto dot_vector = column_desc->path()->ToDotVector();
+                const std::string& field_name = dot_vector[0];
                 _map_column_nested[field_name].push_back(i);
+                // Record the top-level column whenever any of its leaves is INT96 (including leaves
+                // nested inside ARRAY/MAP/STRUCT, since dot_vector[0] is the top-level column name).
+                // This is only a coarse filter so _rectify_int96_timezone() can skip columns with no
+                // INT96 leaf; the precise per-leaf re-tag (which leaf is INT96 vs an INT64
+                // wall-clock sibling) is resolved there via the FileReader schema manifest.
+                if (column_desc->physical_type() == ::parquet::Type::INT96) {
+                    _int96_columns.insert(field_name);
+                }
             }
         }
 
@@ -314,7 +428,65 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
     return Status::OK();
 }
 
+void ParquetReaderWrap::_rectify_int96_timezone() {
+    // _batch is guaranteed non-null by the caller: get_batch() is only reached after a
+    // successful read_record_batch()/next_batch(), which always populates _batch.
+    //
+    // _int96_columns is a coarse filter: it holds every top-level column that contains at least one
+    // INT96 leaf, so columns with no INT96 leaf are skipped entirely (zero overhead). The precise
+    // per-leaf decision -- re-tag only genuine INT96 leaves, leaving any sibling INT64 wall-clock
+    // leaf untouched -- is made by rectify_int96_array_data() while it walks the parquet
+    // SchemaField tree (from the FileReader manifest) in lockstep with the column's ArrayData tree.
+    if (_int96_columns.empty()) {
+        return;
+    }
+    // Why SchemaManifest: Arrow decodes INT96 and INT64 isAdjustedToUTC=false to the SAME
+    // timezone-naive timestamp type, so the decoded ArrayData alone cannot tell which leaf came
+    // from INT96. The parquet SchemaDescriptor still records each leaf's physical type, but it is
+    // indexed by flat leaf-column index whereas the data is a nested tree. SchemaManifest is Arrow's
+    // bridge between the two: its SchemaField tree is isomorphic (by child index) to the produced
+    // Arrow field/array tree, and every leaf SchemaField carries the parquet column_index. Walking
+    // the manifest in lockstep with the ArrayData tree therefore lets us re-tag exactly the genuine
+    // INT96 leaves and nothing else (a top-level-column-name set cannot, because one nested column
+    // can contain both an INT96 leaf and an INT64 wall-clock leaf).
+    const ::parquet::arrow::SchemaManifest& manifest = _reader->manifest();
+    const ::parquet::SchemaDescriptor* descr = _file_metadata->schema();
+
+    auto fields = _batch->schema()->fields();
+    auto columns = _batch->columns();
+    bool changed = false;
+    for (size_t i = 0; i < fields.size(); ++i) {
+        if (_int96_columns.find(fields[i]->name()) == _int96_columns.end()) {
+            continue;
+        }
+        // Locate the matching top-level parquet SchemaField by top-level column name. Matching by
+        // name is safe here because this is the user's column name, not an Arrow-synthesized
+        // list/map child name; the descent below is purely structural (by child index).
+        const ::parquet::arrow::SchemaField* schema_field = nullptr;
+        for (const auto& sf : manifest.schema_fields) {
+            if (sf.field->name() == fields[i]->name()) {
+                schema_field = &sf;
+                break;
+            }
+        }
+        if (schema_field == nullptr) {
+            continue;
+        }
+        bool column_changed = false;
+        auto new_data = rectify_int96_array_data(columns[i]->data(), *schema_field, *descr, &column_changed);
+        if (column_changed) {
+            columns[i] = arrow::MakeArray(new_data);
+            fields[i] = fields[i]->WithType(new_data->type);
+            changed = true;
+        }
+    }
+    if (changed) {
+        _batch = arrow::RecordBatch::Make(arrow::schema(fields), _batch->num_rows(), columns);
+    }
+}
+
 const std::shared_ptr<arrow::RecordBatch>& ParquetReaderWrap::get_batch() {
+    _rectify_int96_timezone();
     _current_line_of_batch += _batch->num_rows();
     _current_line_of_group += _batch->num_rows();
     return _batch;

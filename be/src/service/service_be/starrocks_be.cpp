@@ -18,6 +18,7 @@
 #include <sanitizer/lsan_interface.h>
 #endif
 
+#include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "base/brpc/brpc.h"
@@ -27,13 +28,12 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
-#include "common/config_object_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "connector/connector_bootstrap.h"
-#include "fs/s3/poco_common.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -43,6 +43,7 @@
 #include "service/service_be/arrow_flight_sql_service.h"
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
+#include "storage/storage_env.h"
 #ifndef __APPLE__
 #include "service/service_be/lake_service.h"
 #include "storage/lake/tablet_manager.h"
@@ -51,9 +52,9 @@
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
 #include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
-#include "util/logging.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -118,7 +119,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
     auto* platform_env = PlatformEnv::GetInstance();
-    EXIT_IF_ERROR(platform_env->init(process_metrics_registry->root_registry()));
+    PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    EXIT_IF_ERROR(platform_env->init(std::move(platform_env_options)));
     LOG(INFO) << process_name << " start step " << start_step++ << ": platform env init successfully";
 
     // cache env should be initialized before init_storage_engine,
@@ -149,6 +153,18 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
+
+    auto agent_server = std::make_unique<AgentServer>(exec_env, false);
+    // AgentServer::start() starts workers that can read ExecEnv::agent_server()
+    // immediately, so publish the pointer before starting those workers.
+    exec_env->set_agent_server(agent_server.get());
+    auto agent_status = agent_server->start();
+    if (!agent_status.ok()) {
+        exec_env->set_agent_server(nullptr);
+        LOG(ERROR) << agent_status.message();
+        exit(1);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": agent server start successfully";
 
 #if !defined(__APPLE__) && defined(WITH_STARCACHE)
     cache_env->attach_peer_cache_stub_cache(platform_env->brpc_stub_cache());
@@ -208,7 +224,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
 #ifndef __APPLE__
-    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
+    LakeServiceImpl lake_service(exec_env, StorageEnv::GetInstance()->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
@@ -339,6 +355,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     daemon.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": daemon threads exit successfully";
 
+    // Keep AgentServer stop before StorageEngine stop: AgentServer pools may submit
+    // storage cleanup work, and StorageEngine::stop() drains the cleanup executor.
+    agent_server->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server stop successfully";
+
     exec_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec engine destroy successfully";
 
@@ -346,18 +367,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
 
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    StorageEnv::GetInstance()->stop_lake_tablet_manager();
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
-#endif
-
-#ifndef __APPLE__
-    if (config::enable_poco_client_for_aws_sdk) {
-        starrocks::poco::HTTPSessionPools::instance().shutdown();
-        LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
-    }
 #endif
 
     http_server->join();
@@ -372,6 +384,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     thrift_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
 
+    exec_env->set_agent_server(nullptr);
+    agent_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server destroy successfully";
+
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
@@ -379,6 +395,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
 
     delete storage_engine;
+
+    // Tear down the SR-owned VectorIndexCache before global_env->stop()
+    // destroys the MemTracker hierarchy the entry deleters consume against.
+    // See ExecEnv::destroy_vector_index_cache().
+    exec_env->destroy_vector_index_cache();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": vector index cache destroy successfully";
 
 #ifndef __APPLE__
     cache_env->destroy();

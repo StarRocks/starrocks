@@ -395,13 +395,15 @@ public class TaskManager implements MemoryTrackable {
             return false;
         }
         try {
-            taskRunScheduler.removePendingTask(task);
-        } catch (Exception ex) {
-            LOG.warn("failed to kill task.", ex);
+            try {
+                taskRunScheduler.removePendingTask(task);
+            } catch (Exception ex) {
+                LOG.warn("failed to kill task.", ex);
+            }
+            taskRunManager.killTaskRun(task.getId(), force, "killed by DROP TASK or manual cancel");
         } finally {
             taskRunManager.taskRunUnlock();
         }
-        taskRunManager.killTaskRun(task.getId(), force);
         return true;
     }
 
@@ -1168,6 +1170,11 @@ public class TaskManager implements MemoryTrackable {
                         .build();
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
+                // The rebuilt run has no submitter context; keep the persisted submitter when present.
+                // Runs persisted before this field existed have none, so initStatus's "system" fallback stands.
+                if (!Strings.isNullOrEmpty(status.getSubmitUser())) {
+                    taskRun.getStatus().setSubmitUser(status.getSubmitUser());
+                }
                 if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
                     LOG.warn("Submit task run to pending queue failed in follower, reject the submit:{}", taskRun);
                 }
@@ -1339,6 +1346,10 @@ public class TaskManager implements MemoryTrackable {
     }
 
     private void removeTimeoutTaskRuns() {
+        // timeout cleanup is a leader responsibility; followers obtain the FAILED record via replay
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
         // cancel long-running task runs to avoid resource waste
         long currentTimeMs = System.currentTimeMillis();
         Set<TaskRun> runningTaskRuns = taskRunManager.getTaskRunScheduler().getCopiedRunningTaskRuns();
@@ -1359,15 +1370,15 @@ public class TaskManager implements MemoryTrackable {
             LOG.warn("task run [{}] has been running for a long time, cancel it," +
                     " created(ms):{}, timeout(s):{}", taskRun, taskRunCreatedTime, taskRunTimeout);
 
-            if (!tryTaskLock()) {
+            if (!taskRunManager.tryTaskRunLock()) {
                 continue;
             }
             try {
-                taskRunManager.killRunningTaskRun(taskRun, true);
+                taskRunManager.killRunningTaskRun(taskRun, true, "killed by TaskCleaner due to timeout");
             } catch (Exception e) {
                 LOG.warn("failed to cancel long-running task run: {}", taskRun, e);
             } finally {
-                taskUnlock();
+                taskRunManager.taskRunUnlock();
             }
         }
     }

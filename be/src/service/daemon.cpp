@@ -44,7 +44,7 @@
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/util/minidump.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group.h"
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -59,6 +59,7 @@
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
+#include "common/glog_init.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
@@ -75,11 +76,11 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
+#include "service/failure_handler.h"
 #include "service/mem_hook.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 #include "util/memory_lock.h"
 
 namespace starrocks {
@@ -325,6 +326,7 @@ void init_signals() {
     if (ret < 0) {
         exit(-1);
     }
+    signal(SIGPIPE, SIG_IGN);
 }
 
 void init_minidump() {
@@ -347,6 +349,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
     } else {
         init_glog("be", true);
     }
+    init_runtime_logging_hooks();
 
     LOG(INFO) << get_version_string(false);
 
@@ -389,7 +392,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
 
     if (config::enable_jemalloc_memory_tracker) {
         std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
-        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
+        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_track");
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
 #endif

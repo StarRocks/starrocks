@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PROCESSLIST は、サーバー内で実行中のスレッドが現在行っている操作を一覧表示します。"
 ---
 
 # SHOW PROCESSLIST

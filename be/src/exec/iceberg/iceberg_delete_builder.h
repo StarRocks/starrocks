@@ -23,9 +23,9 @@ struct IcebergColumnMeta;
 
 class IcebergDeleteBuilder {
 public:
-    IcebergDeleteBuilder(SkipRowsContextPtr skip_rows_ctx, RuntimeState* state, const HdfsScannerParams& scanner_params)
+    IcebergDeleteBuilder(SkipRowsContextPtr skip_rows_ctx, RuntimeState* state, const HdfsScannerContext& ctx)
             : _skip_rows_ctx(std::move(skip_rows_ctx)),
-              _params(scanner_params),
+              _ctx(ctx),
               _runtime_state(state),
               _deletion_bitmap(std::make_shared<DeletionBitmap>(roaring64_bitmap_create())) {}
 
@@ -37,18 +37,18 @@ public:
 
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
-            const TIcebergDeleteFile& delete_file, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
+            const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     static void update_delete_file_io_counter(
-            RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
+            RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,
             const std::shared_ptr<CacheInputStream>& cache_input_stream,
             const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream);
     Status fill_skip_rowids(const ChunkPtr& chunk) const;
 
     SkipRowsContextPtr _skip_rows_ctx;
-    const HdfsScannerParams& _params;
+    const HdfsScannerContext& _ctx;
     RuntimeState* _runtime_state;
     DeletionBitmapPtr _deletion_bitmap;
 };

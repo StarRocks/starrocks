@@ -103,10 +103,10 @@ THRIFT_SOURCE=thrift-0.23.0
 THRIFT_MD5SUM="7b62f4258ded41e233a638fe8b9fcf64"
 
 # protobuf
-PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
-PROTOBUF_NAME=protobuf-3.14.0.tar.gz
-PROTOBUF_SOURCE=protobuf-3.14.0
-PROTOBUF_MD5SUM="0c9d2a96f3656ba7ef3b23b533fb6170"
+PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.16.1.tar.gz"
+PROTOBUF_NAME=protobuf-3.16.1.tar.gz
+PROTOBUF_SOURCE=protobuf-3.16.1
+PROTOBUF_MD5SUM="6294f01dedea72a76b9e113369f55097"
 
 # gflags
 GFLAGS_DOWNLOAD="https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
@@ -210,8 +210,8 @@ SASL_NAME=cyrus-sasl-2.1.28.tar.gz
 SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
-# kerberos MIT
-KRB5_DOWNLOAD="https://kerberos.org/dist/krb5/1.19/krb5-1.19.4.tar.gz"
+# MIT Kerberos publishes release archives from web.mit.edu/kerberos/dist.
+KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz"
 KRB5_NAME=krb5-1.19.4.tar.gz
 KRB5_SOURCE=krb5-1.19.4
 KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"

@@ -35,6 +35,7 @@
 #include <gtest/gtest.h>
 
 #include <mutex>
+#include <string>
 
 #include "agent/agent_metrics.h"
 #include "base/testutil/assert.h"
@@ -43,7 +44,7 @@
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "exec/catalog_scan_metrics.h"
-#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/query_scan_metrics.h"
 #include "http/http_metrics.h"
 #include "runtime/exec_env.h"
@@ -297,6 +298,37 @@ TEST_F(BackendMetricsTest, Normal) {
                                           MetricLabels().add("type", "delete").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("22", metric->to_string().c_str());
+    }
+    {
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "lake_add_index").add("status", "total"));
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_add_index_requests_total.increment(24);
+        ASSERT_EQ(std::to_string(before + 24), metric->to_string());
+    }
+    {
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "lake_add_index").add("status", "failed"));
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_add_index_requests_failed.increment(25);
+        ASSERT_EQ(std::to_string(before + 25), metric->to_string());
+    }
+    {
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "lake_drop_index").add("status", "total"));
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_drop_index_requests_total.increment(26);
+        ASSERT_EQ(std::to_string(before + 26), metric->to_string());
+    }
+    {
+        auto metric = metrics->get_metric("lake_idg_files_written_total");
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_idg_files_written_total.increment(27);
+        ASSERT_EQ(std::to_string(before + 27), metric->to_string());
     }
     {
         agent_metrics->clone_requests_total.increment(23);

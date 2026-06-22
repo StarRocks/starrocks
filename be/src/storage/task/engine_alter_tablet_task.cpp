@@ -41,6 +41,8 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/schema_change.h"
 #include "storage/schema_change.h"
+#include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks {
@@ -67,7 +69,8 @@ Status EngineAlterTabletTask::execute() {
                                                        _alter_tablet_req.base_tablet_id);
     std::string task_detail_msg = "";
     if (_alter_tablet_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        lake::SchemaChangeHandler handler(ExecEnv::GetInstance()->lake_tablet_manager());
+        lake::SchemaChangeHandler handler(StorageEnv::GetInstance()->lake_tablet_manager(),
+                                          StorageEngine::instance()->lake_schema_change_thread_pool());
         res = handler.process_alter_tablet(_alter_tablet_req);
     } else {
         SchemaChangeHandler handler;

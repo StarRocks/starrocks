@@ -52,7 +52,6 @@ ADD_BE_LIB(Connector
         partition_chunk_writer.cpp
         connector_sink_executor.cpp
         deletion_vector/deletion_vector.cpp
-        deletion_vector/deletion_bitmap.cpp
         iceberg_delete_sink.cpp
         iceberg_row_delta_sink.cpp
 )

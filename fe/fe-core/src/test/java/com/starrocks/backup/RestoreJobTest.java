@@ -66,6 +66,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.KeysType;
@@ -1033,6 +1034,62 @@ public class RestoreJobTest {
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
 
         job.addRestoredFunctions(db);
+    }
+
+    @Test
+    public void testRestoreAddFunctionWritesTargetDbNameToEditLogForRenamedRestore() {
+        // Simulate "RESTORE ... AS <new_db>": the backed-up db-level function still carries
+        // its ORIGINAL source db name, but it is being restored into db `test_db`.
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Function backedUpFunction = new Function(new FunctionName("original_source_db", "test_function"),
+                new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
+        backupMeta.setFunctions(Lists.newArrayList(backedUpFunction));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        // Capture the db name carried by the function at the exact moment it is written to the
+        // OP_ADD_FUNCTION_V2 journal. This is what FE followers deserialize and route by via
+        // Database.replayCreateFunctionLog -> getDb(functionName.getDb()), so the assertion fails
+        // if the db rewrite happens after (or instead of) the journal write, which is precisely
+        // the case that leaves followers without the UDF.
+        List<String> dbNamesWrittenToEditLog = Lists.newArrayList();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAddFunction(Function function, WALApplier walApplier) {
+                dbNamesWrittenToEditLog.add(function.getFunctionName().getDb());
+                walApplier.apply(function);
+            }
+        };
+
+        job.addRestoredFunctions(db);
+
+        Assertions.assertEquals(Lists.newArrayList(db.getFullName()), dbNamesWrittenToEditLog);
+    }
+
+    @Test
+    public void testRestoreAddFunctionSetsErrorStatusWhenAddFunctionFails() {
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Function backedUpFunction = new Function(new FunctionName("original_source_db", "test_function"),
+                new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
+        backupMeta.setFunctions(Lists.newArrayList(backedUpFunction));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        // Force the function add to fail; the restore must surface it as an error status
+        // (and still release the db lock via the finally block).
+        new MockUp<Database>() {
+            @Mock
+            public void addFunction(Function function, boolean allowExists, boolean createIfNotExists)
+                    throws StarRocksException {
+                throw new StarRocksException("mocked add function failure");
+            }
+        };
+
+        job.addRestoredFunctions(db);
+
+        Assertions.assertFalse(job.getStatus().ok());
     }
 
     @Test

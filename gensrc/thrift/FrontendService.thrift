@@ -58,12 +58,27 @@ struct TSetSessionParams {
     1: required string user
 }
 
+enum TPrivilegeRequirement {
+    // Identity-only authentication, no role/privilege check beyond AuthN.
+    NONE = 0,
+    // Caller must hold System-level OPERATE privilege.
+    // Maps to Authorizer.checkSystemAction(OPERATE) on the FE side.
+    OPERATE = 1,
+    // Caller must hold System-level NODE privilege.
+    // Maps to Authorizer.checkSystemAction(NODE) on the FE side.
+    NODE = 2,
+}
+
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
     3: optional string host
     4: optional string db_name
     5: optional list<string> table_names;
+    // Required role/privilege the caller must have, in addition to identity AuthN.
+    // Used by FE.checkAuth on the BE HTTP auth path so BE handlers can demand
+    // admin/operate-level checks without round-tripping the role check themselves.
+    6: optional TPrivilegeRequirement required_privilege;
 }
 
 struct TColumnDesc {
@@ -410,6 +425,14 @@ struct TMaterializedViewStatus {
     29: optional string last_refresh_process_time
     30: optional string last_refresh_job_id
     31: optional string last_refresh_time
+    32: optional string warehouse
+    33: optional string refresh_mode
+    34: optional string refresh_trigger
+    35: optional string refresh_policy
+    36: optional string resource_group
+    37: optional string query_rewrite_status_reason
+    38: optional string last_freshness_confirmed_at
+    39: optional string base_table_refresh_version_times
 }
 
 struct TListPipesParams {
@@ -480,6 +503,36 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+struct TMaterializedViewRefreshJobInfo {
+    1: optional string job_id
+    2: optional string materialized_view_id
+    3: optional string table_schema
+    4: optional string table_name
+    5: optional string task_id
+    6: optional string warehouse
+    7: optional string resource_group
+    8: optional string creator
+    9: optional string submit_user
+    10: optional string run_as_user
+    11: optional string submit_time
+    12: optional string refresh_state
+    13: optional string finish_time
+    14: optional string duration_time
+    15: optional string refresh_trigger
+    16: optional string refresh_mode
+    17: optional string imv_source_version_range
+    18: optional string imv_source_timestamp_range
+    19: optional string imv_source_pinned_snapshot_id_map
+    20: optional string failed_task_run_id
+    21: optional string failed_query_id
+    22: optional string error_code
+    23: optional string error_message
+}
+
+struct TListMaterializedViewRefreshJobsResult {
+    1: optional list<TMaterializedViewRefreshJobInfo> jobs
+}
+
 // Pagination cursor for request segmentation
 struct TRequestPagination {
     1: optional i64 offset
@@ -537,6 +590,8 @@ struct TTaskRunInfo {
 
     16: optional string job_id
     17: optional i64 process_time
+
+    18: optional string task_source
 }
 
 struct TGetTaskRunInfoResult {
@@ -1597,6 +1652,10 @@ struct TPartitionMetaInfo {
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
     32: optional i64 path_id // deprecated
+    // [min, max] vector-index built-version span across the partition's base-index
+    // tablets. Only meaningful for tables with an async vector index (shared-data).
+    33: optional i64 min_vi_built_version
+    34: optional i64 max_vi_built_version
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1723,6 +1782,7 @@ struct TQueryStatisticsInfo {
     15: optional string resourceGroupName
     16: optional string execProgress
     17: optional string execState
+    18: optional string queryType
 }
 
 struct TGetQueryStatisticsResponse {
@@ -2421,6 +2481,7 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+    TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(1: optional TGetTasksParams params)
     TListPipesResult listPipes(1: TListPipesParams params)
     TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 
@@ -2532,4 +2593,9 @@ service FrontendService {
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 
     TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
+
+    // Verify Basic Auth credentials. Used by BE to authenticate external HTTP requests
+    // when `enable_http_auth` is on. Returns OK status when the user/password pair is
+    // valid for the given host, or an error status otherwise.
+    TFeResult checkAuth(1: optional TAuthenticateParams request)
 }

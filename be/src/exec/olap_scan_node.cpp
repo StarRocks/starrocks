@@ -31,11 +31,15 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/thread/priority_thread_pool.hpp"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
@@ -52,7 +56,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/primitive/storage_ids.h"
 #include "storage/primitive/storage_version.h"
@@ -981,7 +984,7 @@ StatusOr<pipeline::OpFactories> OlapScanNode::decompose_to_pipeline(pipeline::Pi
     pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto ops = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
-    return context->maybe_interpolate_debug_ops(runtime_state(), _id, ops);
+    return ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, ops);
 }
 
 } // namespace starrocks

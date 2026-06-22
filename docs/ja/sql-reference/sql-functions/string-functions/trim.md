@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列の先頭と末尾から連続するスペースまたは指定文字を削除します。"
 ---
 
 # trim

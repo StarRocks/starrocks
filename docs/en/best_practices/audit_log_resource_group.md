@@ -1,6 +1,6 @@
 ---
 sidebar_position: 120
-description: "In StarRocks, **Resource Groups** provide an effective mechanism for resource isolation by allocating CPU, memory, and concurrency limits based on classifiers such as user identity and query type."
+description: "How to use StarRocks audit logs to analyze query patterns and configure resource groups for workload isolation."
 ---
 
 # Audit Log-based Resource Group Configuration

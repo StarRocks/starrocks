@@ -366,6 +366,10 @@ public class AutovacuumDaemon extends LeaderDaemon {
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
             vacuumRequest.enableSharedFileCleanup = enableSharedFileCleanup;
+            // The longest this FE waits for the response (the brpc timeout of the vacuum RPC).
+            // The BE checks it periodically during execution and aborts the task once it has
+            // elapsed, instead of running on as a zombie that no caller is waiting for.
+            vacuumRequest.timeoutMs = LakeService.TIMEOUT_VACUUM;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {

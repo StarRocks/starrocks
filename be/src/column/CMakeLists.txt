@@ -24,8 +24,12 @@ ADD_BE_LIB(ColumnCore
         column_filter_range.cpp
         column_visitor.cpp
         column_visitor_mutable.cpp
+        type_converter.cpp
         mysql_row_buffer.cpp
         german_string.cpp
+        global_dict/decoder.cpp
+        global_dict/miscs.cpp
+        global_dict/types.cpp
         object_column.cpp
         variant_column.cpp
         variant_converter.cpp
@@ -54,6 +58,7 @@ ADD_BE_LIB(ColumnCore
         variant_builder.cpp
         variant_merger.cpp
         column_hash/column_hash.cpp
+        adaptive_offsets.cpp
 )
 
 target_link_libraries(ColumnCore PRIVATE arrow)

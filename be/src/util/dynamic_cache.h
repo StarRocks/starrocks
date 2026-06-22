@@ -91,9 +91,25 @@ public:
         _list.clear();
     }
 
+    // Additive accounting: cached bytes are consumed on `mem_tracker` and propagate
+    // up to all ancestors including the root (process) tracker.
     void set_mem_tracker(MemTracker* mem_tracker) {
         DCHECK(_mem_tracker == nullptr);
         _mem_tracker = mem_tracker;
+    }
+
+    // Like set_mem_tracker, but accounts cached bytes via
+    // consume_without_root/release_without_root: the cache tracker labels the usage
+    // WITHOUT re-adding it to the root (process) tracker. Use this for caches whose
+    // objects live in the normal heap -- the global allocator hook already charges
+    // those bytes to process once, so plain additive accounting would count them a
+    // second time on process and can spuriously trip the process mem_limit. The cache
+    // tracker then acts as a non-additive label/view of process. Same idiom as
+    // segment_replicate_executor's brpc send buffer. See MemTracker::consume_without_root.
+    void set_mem_tracker_excluding_root(MemTracker* mem_tracker) {
+        DCHECK(_mem_tracker == nullptr);
+        _mem_tracker = mem_tracker;
+        _tracker_exclude_root = true;
     }
 
     // get or return null
@@ -127,7 +143,7 @@ public:
             _object_size++;
             if (insert->_size > 0) {
                 _size += insert->_size;
-                if (_mem_tracker) _mem_tracker->consume(insert->_size);
+                _tracker_consume(insert->_size);
                 _evict();
             }
             return *ret;
@@ -153,7 +169,7 @@ public:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
+            _tracker_release(entry->_size);
             delete entry;
         }
     }
@@ -169,7 +185,7 @@ public:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
+            _tracker_release(entry->_size);
             delete entry;
             return true;
         }
@@ -195,7 +211,7 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
+            _tracker_release(entry->_size);
             delete entry;
         }
         return true;
@@ -219,7 +235,7 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
+            _tracker_release(entry->_size);
             delete entry;
         }
         return true;
@@ -228,12 +244,24 @@ public:
     // size used by object may change, this method
     // track size changes and evict objects accordingly
     // return false if actual memory usage is larger than capacity
+    //
+    // Defers `delete entry` to AFTER releasing _lock so a cached value whose
+    // destructor re-enters the cache (e.g. VectorIndexCache entries holding
+    // tenann handles back into the same cache) cannot self-deadlock on _lock.
     bool update_object_size(Entry* entry, size_t new_size) {
-        std::lock_guard<Lock> lg(_lock);
-        _size += new_size - entry->_size;
-        if (_mem_tracker) _mem_tracker->consume(new_size - entry->_size);
-        entry->_size = new_size;
-        return _evict();
+        std::vector<Entry*> entry_list;
+        bool ret;
+        {
+            std::lock_guard<Lock> lg(_lock);
+            _size += new_size - entry->_size;
+            _tracker_consume(new_size - entry->_size);
+            entry->_size = new_size;
+            ret = _evict(_capacity, &entry_list);
+        }
+        for (Entry* e : entry_list) {
+            delete e;
+        }
+        return ret;
     }
 
     // clear all unused *and* expired objects
@@ -251,7 +279,7 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    if (_mem_tracker) _mem_tracker->release(entry->_size);
+                    _tracker_release(entry->_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -277,7 +305,7 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    if (_mem_tracker) _mem_tracker->release(entry->_size);
+                    _tracker_release(entry->_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -296,10 +324,22 @@ public:
 
     // adjust capacity
     // return false if actual memory usage is larger than capacity
+    //
+    // Same deferred-delete rationale as update_object_size: keep entry
+    // destructors out from under _lock to avoid self-deadlock when an
+    // entry's value chain re-enters the cache on release.
     bool set_capacity(size_t capacity) {
-        std::lock_guard<Lock> lg(_lock);
-        _capacity = capacity;
-        return _evict();
+        std::vector<Entry*> entry_list;
+        bool ret;
+        {
+            std::lock_guard<Lock> lg(_lock);
+            _capacity = capacity;
+            ret = _evict(_capacity, &entry_list);
+        }
+        for (Entry* e : entry_list) {
+            delete e;
+        }
+        return ret;
     }
 
     std::vector<std::pair<Key, size_t>> get_entry_sizes() const {
@@ -359,7 +399,7 @@ private:
                 itr = _list.erase(itr);
                 _object_size--;
                 _size -= entry->_size;
-                if (_mem_tracker) _mem_tracker->release(entry->_size);
+                _tracker_release(entry->_size);
                 entry_list->push_back(entry);
             } else {
                 itr++;
@@ -377,6 +417,26 @@ private:
         return ret;
     }
 
+    // Route tracker accounting through consume_without_root when _tracker_exclude_root
+    // is set, so heap-resident cache bytes already charged to process by the allocator
+    // hook are not counted a second time on process.
+    void _tracker_consume(int64_t bytes) {
+        if (_mem_tracker == nullptr) return;
+        if (_tracker_exclude_root) {
+            _mem_tracker->consume_without_root(bytes);
+        } else {
+            _mem_tracker->consume(bytes);
+        }
+    }
+    void _tracker_release(int64_t bytes) {
+        if (_mem_tracker == nullptr) return;
+        if (_tracker_exclude_root) {
+            _mem_tracker->release_without_root(bytes);
+        } else {
+            _mem_tracker->release(bytes);
+        }
+    }
+
     mutable Lock _lock;
     List _list;
     Map _map;
@@ -385,6 +445,7 @@ private:
     size_t _capacity = 0;
 
     MemTracker* _mem_tracker = nullptr;
+    bool _tracker_exclude_root = false;
 };
 
 } // namespace starrocks

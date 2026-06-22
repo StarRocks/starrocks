@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Shows the status of Tablets in a cloud-native table or cloud-native materialized view in a shared-data cluster, including whether metadata or data files are missing."
+description: "Shows the status of Tablets in a cloud-native table or cloud-native materialized view in a shared-data cluster, including whether metadata or data files are..."
 ---
 
 # ADMIN SHOW TABLET STATUS

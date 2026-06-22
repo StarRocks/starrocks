@@ -17,6 +17,7 @@
 #include <exprs/predicate.h>
 
 #include <atomic>
+#include <memory>
 
 #include "base/concurrency/race_detect.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
@@ -29,6 +30,7 @@
 namespace starrocks::pipeline {
 
 using HashJoiner = starrocks::HashJoiner;
+class PartialRuntimeFilterMerger;
 
 class HashJoinBuildOperator : public Operator {
 public:
@@ -77,7 +79,7 @@ public:
                                  std::unique_ptr<PartialRuntimeFilterMerger>&& partial_rf_merger,
                                  TJoinDistributionMode::type distribution_mode,
                                  SpillProcessChannelFactoryPtr spill_channel_factory);
-    ~HashJoinBuildOperatorFactory() override = default;
+    ~HashJoinBuildOperatorFactory() override;
     bool support_event_scheduler() const override { return true; }
 
     Status prepare(RuntimeState* state) override;

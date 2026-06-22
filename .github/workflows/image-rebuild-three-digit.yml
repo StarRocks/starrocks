@@ -1,0 +1,99 @@
+name: IMAGE REBUILD (three-digit branches)
+
+# Mirrors only the `thirdparty-filter` + `thirdparty-update-image` jobs
+# from ci-merged.yml, scoped to three-digit patch branches
+# (branch-X.Y.Z) which ci-merged.yml's branch pattern `branch-[0-9].[0-9]`
+# does NOT match. Without this, a PR that touches thirdparty/** merged
+# into a three-digit branch leaves the official dev-env image stale,
+# causing:
+#   - silent CVE-scan blind spot (the scan reads the official image)
+#   - probabilistic BUILD failures on subsequent PRs that hit the
+#     thirdparty change
+#   - dockerhub public dev-env image stays stale (see
+#     elastic-update-image.sh:26-29, StarRocks-side rebuild also pings
+#     the Jenkins job that publishes to dockerhub)
+#
+# Why a separate workflow (not extending ci-merged.yml's `on:`):
+# ci-merged.yml's `update_backport_merged_msg` job calls
+# `get_next_release_tag.sh` which assumes `GITHUB_BASE_REF` is two-digit
+# (`branch-X.Y`). On a three-digit base it produces a four-digit
+# `version:4.1.1.X` label (cosmetic bug — visible to issue trackers).
+# By keeping this workflow independent we avoid that side effect; only
+# the image-rebuild path runs.
+#
+# Branch pattern uses `[0-9]+` per segment so multi-digit minors like
+# branch-4.10.0 are also covered. Pre-release suffixes (branch-4.1.1-rc01)
+# are NOT matched — same convention as ci-merged.yml's two-digit pattern.
+
+on:
+  pull_request_target:
+    branches:
+      - "branch-[0-9]+.[0-9]+.[0-9]+"
+    types:
+      - closed
+
+permissions:
+  pull-requests: write
+  issues: write
+  actions: write
+
+env:
+  PR_NUMBER: ${{ github.event.number }}
+
+jobs:
+  thirdparty-filter:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    outputs:
+      thirdparty: ${{ steps.filter-info.outputs.thirdparty }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: linux-thirdparty-filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            thirdparty:
+              - 'thirdparty/**'
+              - '!thirdparty/build-thirdparty-darwin.sh'
+              - '!thirdparty/vars-darwin-aarch64.sh'
+            dev_env:
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+      - name: Prepare filter info
+        id: filter-info
+        run: |
+          thirdparty=false
+          if [[ "${{ steps.linux-thirdparty-filter.outputs.thirdparty }}" == 'true' || "${{ steps.linux-thirdparty-filter.outputs.dev_env }}" == 'true' ]]; then
+            thirdparty=true
+          fi
+          echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
+
+  thirdparty-update-image:
+    needs: thirdparty-filter
+    runs-on: [self-hosted, normal]
+    name: Thirdparty Update Image
+    if: github.event.pull_request.merged == true && needs.thirdparty-filter.outputs.thirdparty == 'true'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: update image - ubuntu
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ubuntu
+
+      - name: update image - centos7
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*

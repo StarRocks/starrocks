@@ -42,6 +42,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.proto.UpdateShardGroupInfo;
+import com.staros.proto.UpdateShardInfo;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
@@ -543,6 +544,35 @@ public class StarOSAgent {
             client.deleteShardGroup(serviceId, groupIds, true);
         } catch (StarClientException e) {
             LOG.warn("Failed to delete shard group. error: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Moves a shard between shard groups by applying an add/remove group-id delta through the
+     * StarOS UpdateShard RPC, leaving the shard's other group memberships (e.g. its SPREAD group)
+     * untouched. Used to migrate a range-colocate tablet into its expected PACK shard group after
+     * a split's post-publish range reclassification. A no-op (no RPC) when both deltas are empty.
+     */
+    public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds)
+            throws DdlException {
+        boolean noAdd = addGroupIds == null || addGroupIds.isEmpty();
+        boolean noRemove = removeGroupIds == null || removeGroupIds.isEmpty();
+        if (noAdd && noRemove) {
+            return;
+        }
+        prepare();
+        UpdateShardInfo.Builder builder = UpdateShardInfo.newBuilder().setShardId(shardId);
+        if (!noAdd) {
+            builder.addAllAddGroupIds(addGroupIds);
+        }
+        if (!noRemove) {
+            builder.addAllRemoveGroupIds(removeGroupIds);
+        }
+        try {
+            client.updateShard(serviceId, List.of(builder.build()));
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to reassign shard " + shardId + " groups (add=" + addGroupIds
+                    + ", remove=" + removeGroupIds + "). error: " + e.getMessage());
         }
     }
 

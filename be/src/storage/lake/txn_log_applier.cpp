@@ -35,6 +35,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_manager.h"
 #include "util/dynamic_cache.h"
@@ -87,8 +88,8 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
                     auto schema_id = metadata->schema().id();
                     auto& item = (*metadata->mutable_historical_schemas())[schema_id];
                     item.CopyFrom(metadata->schema());
-                    for (int i = 0; i < metadata->rowsets_size(); i++) {
-                        (*metadata->mutable_rowset_to_schema())[metadata->rowsets(i).id()] = schema_id;
+                    for (const auto& rowset : metadata->rowsets()) {
+                        (*metadata->mutable_rowset_to_schema())[rowset.id()] = schema_id;
                     }
                 }
                 // no need to update
@@ -177,7 +178,7 @@ std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplic
         }
         bool included = false;
         if (is_pk) {
-            included = op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
+            included = op_write.dels_meta_size() > 0 || op_write.rowset().num_rows() > 0 ||
                        op_write.rowset().has_delete_predicate();
         } else {
             included = op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate();
@@ -227,6 +228,28 @@ void collect_dcg_orphan_files(const DeltaColumnGroupMetadataPB& old_dcg_meta,
             if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
+            metadata->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+    }
+}
+
+// Mirror of collect_dcg_orphan_files for IDG (.idx) files. Used at full
+// replication snapshot to retire pre-replication .idx files whose owning
+// rowset/segment is being replaced. Without this, the old idg_meta entries
+// would either (a) leak forever, or (b) collide with a new segment that
+// happens to land on the same rssid (source's next_rowset_id is adopted by
+// the target, so rssid spaces can overlap) and silently apply a stale
+// bitmap/bloom payload to fresh data.
+void collect_idg_orphan_files(const IndexDeltaGroupMetadataPB& old_idg_meta,
+                              const std::unordered_set<std::string>& new_referenced_files, TabletMetadataPB* metadata) {
+    for (const auto& [_, idg_ver] : old_idg_meta.idgs()) {
+        for (const auto& entry : idg_ver.entries()) {
+            if (!entry.has_index_file()) continue;
+            if (new_referenced_files.count(entry.index_file()) > 0) continue;
+            FileMetaPB file_meta;
+            file_meta.set_name(entry.index_file());
+            if (entry.has_file_size()) file_meta.set_size(entry.file_size());
+            file_meta.set_shared(entry.shared_file());
             metadata->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -323,6 +346,12 @@ public:
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
+        }
+        if (log.has_op_add_index()) {
+            _builder.apply_add_index(log.op_add_index());
+        }
+        if (log.has_op_drop_index()) {
+            _builder.apply_drop_index(log.op_drop_index());
         }
         if (log.has_op_alter_metadata()) {
             DCHECK_EQ(_base_version + 1, _new_version);
@@ -507,7 +536,7 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
+        if (op_write.dels_meta_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
@@ -535,14 +564,14 @@ private:
                 return Status::OK();
             }
             RETURN_IF_ERROR(prepare_primary_index());
-            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(_metadata, op_compaction));
             return Status::OK();
         }
         RETURN_IF_ERROR(prepare_primary_index());
 
         // Single output compaction
-        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
-                                                                _index_entry, &_builder, _base_version);
+        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, _metadata, _tablet, _index_entry,
+                                                                &_builder, _base_version);
     }
 
     // Apply parallel compaction log: process multiple subtask compactions
@@ -575,7 +604,7 @@ private:
             // Reuse publish_primary_compaction for each subtask
             // - Internal conflict check is performed per subtask
             // - Primary index and metadata are updated
-            RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, *_metadata, _tablet,
+            RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, _metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
         }
 
@@ -594,7 +623,7 @@ private:
             for (const auto& output_sst : op_parallel.output_sstables()) {
                 sst_op.add_output_sstables()->CopyFrom(output_sst);
             }
-            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, sst_op));
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(_metadata, sst_op));
             _builder.remove_compacted_sst(sst_op);
         }
 
@@ -691,10 +720,17 @@ private:
             auto old_delvec_meta = std::move(*_metadata->mutable_delvec_meta());
             auto old_sstable_meta = std::move(*_metadata->mutable_sstable_meta());
             auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
+            // Take ownership of the old idg_meta the same way we do for dcg
+            // above. Without this swap, the old IDG entries would persist
+            // through the replication and could collide with new segments that
+            // land on the same rssid (since the target adopts the source's
+            // next_rowset_id, rssid spaces can overlap).
+            auto old_idg_meta = std::move(*_metadata->mutable_idg_meta());
             _metadata->mutable_rowsets()->Clear();
             _metadata->mutable_delvec_meta()->Clear();
             _metadata->mutable_sstable_meta()->Clear();
             _metadata->mutable_dcg_meta()->Clear();
+            _metadata->mutable_idg_meta()->Clear();
 
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
@@ -706,6 +742,9 @@ private:
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
                 _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
+                if (copied_tablet_meta.has_idg_meta()) {
+                    _metadata->mutable_idg_meta()->CopyFrom(copied_tablet_meta.idg_meta());
+                }
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 // In lake replication scenario, we need to carefully handle compaction_inputs.
@@ -767,6 +806,11 @@ private:
                         new_referenced_files.insert(cf);
                     }
                 }
+                for (const auto& [_, idg_ver] : _metadata->idg_meta().idgs()) {
+                    for (const auto& entry : idg_ver.entries()) {
+                        if (entry.has_index_file()) new_referenced_files.insert(entry.index_file());
+                    }
+                }
             }
 
             // Clear delvec_meta and add to orphan files.
@@ -788,6 +832,7 @@ private:
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
+            collect_idg_orphan_files(old_idg_meta, new_referenced_files, _metadata.get());
 
             _tablet.update_mgr()->unload_primary_index(_tablet.id());
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
@@ -848,6 +893,18 @@ public:
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
+        if (log.has_op_add_index() || log.has_op_drop_index()) {
+            // NonPrimaryKeyTxnLogApplier doesn't carry a persistent MetaFileBuilder,
+            // but apply_add_index / apply_drop_index only mutate the embedded
+            // TabletMetadata; construct a transient builder scoped to this log.
+            MetaFileBuilder builder(_tablet, _metadata);
+            if (log.has_op_add_index()) {
+                builder.apply_add_index(log.op_add_index());
+            }
+            if (log.has_op_drop_index()) {
+                builder.apply_drop_index(log.op_drop_index());
+            }
+        }
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication()));
         }
@@ -867,11 +924,7 @@ public:
         // Collect all rowset information to be merged
         int64_t total_num_rows = 0;
         int64_t total_data_size = 0;
-        std::vector<std::string> all_segments;
-        std::vector<int64_t> all_segment_sizes;
-        std::vector<std::string> all_segment_encryption_metas;
         std::vector<SegmentMetadataPB> all_segment_metas;
-        std::vector<int64_t> all_bundle_file_offsets;
         bool has_bundle_offsets = false;
         bool has_segments_without_bundle_offsets = false;
         uint32_t assigned_segment_idx = 0;
@@ -887,7 +940,12 @@ public:
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
                 RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
-                if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
+                // Decide segment contribution by SEGMENTS, not num_rows: a cross-published op_write
+                // has its num_rows scaled per child (update_rowset_data_stats), so a statement with
+                // num_rows < split_count scales to 0 on some children even though its segments carry
+                // data. Gating on num_rows would drop those segments; segment count is structural
+                // and identical across children.
+                if (op_write.has_rowset() && op_write.rowset().segment_metas_size() > 0) {
                     const auto& rowset = op_write.rowset();
 
                     // Check for delete predicate - not supported in batch mode
@@ -901,54 +959,35 @@ public:
                     total_num_rows += rowset.num_rows();
                     total_data_size += rowset.data_size();
 
-                    // Collect all segments
-                    all_segments.reserve(all_segments.size() + rowset.segments_size());
-                    for (int i = 0; i < rowset.segments_size(); i++) {
-                        all_segments.emplace_back(rowset.segments(i));
-                    }
-
-                    // Collect segment sizes
-                    all_segment_sizes.reserve(all_segment_sizes.size() + rowset.segment_size_size());
-                    for (int i = 0; i < rowset.segment_size_size(); i++) {
-                        all_segment_sizes.emplace_back(rowset.segment_size(i));
-                    }
-
-                    // Collect encryption metas directly as strings
-                    all_segment_encryption_metas.reserve(all_segment_encryption_metas.size() +
-                                                         rowset.segment_encryption_metas_size());
-                    for (int i = 0; i < rowset.segment_encryption_metas_size(); i++) {
-                        all_segment_encryption_metas.emplace_back(rowset.segment_encryption_metas(i));
-                    }
-
-                    // Collect segment metas and remap segment_id into the merged rowset's local id space.
+                    // Collect segment metas (canonical: carry filename/size/encryption/shared/bundle_offset)
+                    // and remap segment_id into the merged rowset's local id space.
                     // Keep one SegmentMetadataPB per segment to preserve index alignment.
-                    all_segment_metas.reserve(all_segment_metas.size() + rowset.segments_size());
-                    for (int i = 0; i < rowset.segments_size(); i++) {
+                    all_segment_metas.reserve(all_segment_metas.size() + rowset.segment_metas_size());
+                    for (int i = 0; i < rowset.segment_metas_size(); i++) {
                         all_segment_metas.emplace_back();
-                        if (i < rowset.segment_metas_size()) {
-                            all_segment_metas.back().CopyFrom(rowset.segment_metas(i));
-                        }
+                        all_segment_metas.back().CopyFrom(rowset.segment_metas(i));
                         all_segment_metas.back().set_segment_idx(assigned_segment_idx + get_segment_idx(rowset, i));
                     }
                     assigned_segment_idx += get_rowset_id_step(rowset);
 
-                    // Collect bundle file offsets for bundled data files.
+                    // Validate bundle file offsets for bundled data files.
                     // Each TxnLog's rowset either has all offsets (bundled) or none (standalone).
-                    if (rowset.bundle_file_offsets_size() > 0) {
-                        if (rowset.bundle_file_offsets_size() != rowset.segments_size()) {
-                            return Status::InternalError(fmt::format(
-                                    "bundle_file_offsets size mismatch in txn log for tablet {}: "
-                                    "offsets={} segments={}",
-                                    _tablet.id(), rowset.bundle_file_offsets_size(), rowset.segments_size()));
+                    int bundle_offset_cnt = 0;
+                    for (const auto& segment_meta : rowset.segment_metas()) {
+                        if (segment_meta.has_bundle_file_offset()) {
+                            bundle_offset_cnt++;
+                        }
+                    }
+                    if (bundle_offset_cnt > 0) {
+                        if (bundle_offset_cnt != rowset.segment_metas_size()) {
+                            return Status::InternalError(
+                                    fmt::format("bundle_file_offsets size mismatch in txn log for tablet {}: "
+                                                "offsets={} segments={}",
+                                                _tablet.id(), bundle_offset_cnt, rowset.segment_metas_size()));
                         } else {
                             has_bundle_offsets = true;
-                            all_bundle_file_offsets.reserve(all_bundle_file_offsets.size() +
-                                                            rowset.bundle_file_offsets_size());
-                            for (int i = 0; i < rowset.bundle_file_offsets_size(); i++) {
-                                all_bundle_file_offsets.emplace_back(rowset.bundle_file_offsets(i));
-                            }
                         }
-                    } else if (rowset.segments_size() > 0) {
+                    } else if (rowset.segment_metas_size() > 0) {
                         has_segments_without_bundle_offsets = true;
                     }
                 }
@@ -958,8 +997,10 @@ public:
             }
         }
 
-        // If no valid rowset data, return directly
-        if (total_num_rows == 0) {
+        // If no segments to apply, return directly. Keyed on segments (not total_num_rows)
+        // for the same reason as the per-op gate above: a fully cross-published txn can scale
+        // every contributing op_write's num_rows to 0 while its segments still carry data.
+        if (all_segment_metas.empty()) {
             VLOG(2) << "No valid rowset data to apply for tablet " << _tablet.id();
             return Status::OK();
         }
@@ -970,24 +1011,13 @@ public:
         auto merged_rowset = _metadata->add_rowsets();
         merged_rowset->set_num_rows(total_num_rows);
         merged_rowset->set_data_size(total_data_size);
-        merged_rowset->set_overlapped(all_segments.size() > 1);
+        merged_rowset->set_overlapped(all_segment_metas.size() > 1);
+        // MERGE dedup identity: adopt the first log's uid. All logs of one txn share a producer
+        // version and uids are CopyFrom-preserved across cross-publish, so this is stable across
+        // cross-published split children.
+        tablet_reshard_helper::inherit_or_set_uid(merged_rowset, txn_logs.front()->op_write().rowset());
 
-        // Set segments using move semantics
-        for (auto&& segment : std::move(all_segments)) {
-            merged_rowset->add_segments(std::move(segment));
-        }
-
-        // Set segment sizes
-        for (int64_t size : all_segment_sizes) {
-            merged_rowset->add_segment_size(size);
-        }
-
-        // Set segment encryption metas directly
-        for (const auto& meta : all_segment_encryption_metas) {
-            merged_rowset->add_segment_encryption_metas(meta);
-        }
-
-        // Set segment metas
+        // Set segment metas (each entry already carries filename/size/encryption/shared/bundle_offset).
         for (const auto& segment_meta : all_segment_metas) {
             merged_rowset->add_segment_metas()->CopyFrom(segment_meta);
         }
@@ -1002,14 +1032,6 @@ public:
                     fmt::format("Inconsistent bundle_file_offsets across txn logs for tablet {}: "
                                 "some logs have offsets, some don't. Cannot safely merge rowsets.",
                                 _tablet.id()));
-        }
-
-        // Set bundle file offsets if all TxnLogs consistently have them.
-        if (has_bundle_offsets) {
-            DCHECK_EQ(all_bundle_file_offsets.size(), static_cast<size_t>(merged_rowset->segments_size()));
-            for (int64_t offset : all_bundle_file_offsets) {
-                merged_rowset->add_bundle_file_offsets(offset);
-            }
         }
 
         // Set rowset ID and update next_rowset_id
@@ -1175,8 +1197,8 @@ private:
 
         // Update historical schema and rowset schema id
         if (!_metadata->rowset_to_schema().empty()) {
-            for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
-                _metadata->mutable_rowset_to_schema()->erase(op_compaction.input_rowsets(i));
+            for (const auto& input_rowset : op_compaction.input_rowsets()) {
+                _metadata->mutable_rowset_to_schema()->erase(input_rowset);
             }
 
             if (has_output_rowset) {
@@ -1288,13 +1310,21 @@ private:
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
+            // Same reasoning as the PK applier: take ownership of old idg_meta
+            // so stale IDG entries cannot collide with new rssids the source
+            // is about to introduce.
+            auto old_idg_meta = std::move(*_metadata->mutable_idg_meta());
             _metadata->mutable_rowsets()->Clear();
             _metadata->mutable_dcg_meta()->Clear();
+            _metadata->mutable_idg_meta()->Clear();
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
+                if (copied_tablet_meta.has_idg_meta()) {
+                    _metadata->mutable_idg_meta()->CopyFrom(copied_tablet_meta.idg_meta());
+                }
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 // In lake replication scenario, we need to carefully handle compaction_inputs.
@@ -1325,8 +1355,14 @@ private:
                     new_referenced_files.insert(cf);
                 }
             }
-            // Clear dcg_meta and add to orphan files.
+            for (const auto& [_, idg_ver] : _metadata->idg_meta().idgs()) {
+                for (const auto& entry : idg_ver.entries()) {
+                    if (entry.has_index_file()) new_referenced_files.insert(entry.index_file());
+                }
+            }
+            // Clear dcg_meta / idg_meta and add to orphan files.
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
+            collect_idg_orphan_files(old_idg_meta, new_referenced_files, _metadata.get());
             _metadata->set_cumulative_point(0);
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version

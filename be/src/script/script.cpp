@@ -23,7 +23,6 @@
 #include "common/logging.h"
 #include "common/stack_util.h"
 #include "common/vlog_cntl.h"
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
@@ -38,7 +37,9 @@
 #include "storage/lake/vacuum.h"
 #include "storage/manual_compaction.h"
 #include "storage/primary_key_dump.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -296,7 +297,7 @@ public:
     }
 
     static std::string get_lake_tablet_metadata_json(int64_t tablet_id, int64_t version) {
-        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         RETURN_IF(nullptr == tablet_manager, "");
         auto meta_st = tablet_manager->get_tablet_metadata(tablet_id, version, false);
         RETURN_IF(!meta_st.ok(), meta_st.status().to_string());

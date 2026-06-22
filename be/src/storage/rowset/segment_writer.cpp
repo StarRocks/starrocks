@@ -331,17 +331,6 @@ void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
     file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
 }
 
-void SegmentWriter::write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const {
-    _sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-    _sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-    for (const auto& sample : _sort_key_samples) {
-        sample.to_proto(segment_meta->add_sort_key_samples());
-    }
-    if (!_sort_key_samples.empty() && _sort_key_sample_row_interval > 0) {
-        segment_meta->set_sort_key_sample_row_interval(_sort_key_sample_row_interval);
-    }
-}
-
 // TODO(lingbin): Currently this function does not include the size of various indexes,
 // We should make this more precise.
 // NOTE: This function will be called when any row of data is added, so we need to

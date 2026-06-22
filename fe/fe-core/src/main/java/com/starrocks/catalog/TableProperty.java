@@ -295,6 +295,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private boolean enableLoadProfile = false;
 
+    // Per-table override for OlapTableSink.getOpenPartitions().
+    // INVALID (default) means use the partition-type aware default plus global Config fallback.
+    // 0 opens all partitions; positive N opens the latest N partitions.
+    private int loadInitialOpenPartitionNumber = INVALID;
+
     private String baseCompactionForbiddenTimeRanges = "";
 
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
@@ -339,6 +344,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
+
+    @SerializedName(value = "enableStatisticCollectOnFirstLoadSet")
+    private boolean enableStatisticCollectOnFirstLoadSet = false;
 
     // table level query timeout in seconds
     // default value -1 means use cluster query_timeout
@@ -399,6 +407,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.bucketSize = other.bucketSize;
         this.mutableBucketNum = other.mutableBucketNum;
         this.enableLoadProfile = other.enableLoadProfile;
+        this.loadInitialOpenPartitionNumber = other.loadInitialOpenPartitionNumber;
         this.baseCompactionForbiddenTimeRanges = other.baseCompactionForbiddenTimeRanges;
         this.hasDelete = other.hasDelete;
         this.hasForbiddenGlobalDict = other.hasForbiddenGlobalDict;
@@ -418,6 +427,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.compactionStrategy = other.compactionStrategy;
         this.lakeCompactionMaxParallel = other.lakeCompactionMaxParallel;
         this.enableStatisticCollectOnFirstLoad = other.enableStatisticCollectOnFirstLoad;
+        this.enableStatisticCollectOnFirstLoadSet = other.enableStatisticCollectOnFirstLoadSet;
         this.tableQueryTimeout = other.tableQueryTimeout;
         this.cloudNativeFastSchemaEvolutionV2 = other.cloudNativeFastSchemaEvolutionV2;
     }
@@ -506,8 +516,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
+                buildLightWeightTabletCreation();
                 buildTableQueryTimeout();
                 buildDataCacheEnable();
+                buildLoadInitialOpenPartitionNumber();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -644,6 +656,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
             partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER));
         }
         return this;
+    }
+
+    public TableProperty buildLoadInitialOpenPartitionNumber() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            try {
+                loadInitialOpenPartitionNumber = Integer.parseInt(
+                        properties.get(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER));
+            } catch (NumberFormatException e) {
+                loadInitialOpenPartitionNumber = INVALID;
+            }
+        }
+        return this;
+    }
+
+    public int getLoadInitialOpenPartitionNumber() {
+        return loadInitialOpenPartitionNumber;
     }
 
     public TableProperty buildAutoRefreshPartitionsLimit() {
@@ -1259,8 +1287,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableStatisticCollectOnFirstLoad;
     }
 
+    public boolean isSetEnableStatisticCollectOnFirstLoad() {
+        // Older versions persisted "false" only when the user explicitly disabled this table property,
+        // but also wrote the default "true" on table creation. Preserve explicit false while avoiding
+        // treating old default true as a table-level override.
+        return enableStatisticCollectOnFirstLoadSet ||
+                (properties != null &&
+                        "false".equalsIgnoreCase(properties.get(
+                                PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)));
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enableStatisticCollectOnFirstLoad) {
         this.enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad;
+        this.enableStatisticCollectOnFirstLoadSet = true;
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -1467,6 +1506,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildLoadInitialOpenPartitionNumber();
         // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }

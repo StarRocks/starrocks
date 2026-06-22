@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Shows the SQL command used to create a database."
 ---
 
 # SHOW CREATE DATABASE

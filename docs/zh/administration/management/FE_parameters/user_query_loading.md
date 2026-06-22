@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for authentication, query execution, and data loading."
 sidebar_label: "用户管理、查询引擎和导入导出"
 ---
 
@@ -530,6 +531,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: DELETE 语句中 IN 谓词允许的最大元素数量。
 - 引入版本: -
 
+### `enable_non_primary_key_delete_warning`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，对非主键 OLAP 表（明细表、聚合表、更新表）执行成功的 `DELETE` 后，StarRocks 会在 MySQL OK 包的 `info` 字段中返回一条提示，提醒用户 `DELETE` 会写入删除谓词、在 base compaction 完成前每次查询都需要 merge-on-read，并建议批量按分区删除时改用 `ALTER TABLE ... TRUNCATE PARTITION`。设置为 `false` 可关闭此提示。该提示不会改变 DELETE 的语义或执行流程，只是额外向客户端返回一段 info 字符串。详见 [DELETE](../../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)。
+- 引入版本: -
+
 ### `max_create_table_timeout_second`
 
 - 默认值: 600
@@ -761,7 +771,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- 默认值: 10
+- 默认值: 5
 - 类型: Int
 - 单位: -
 - 是否可变: No
@@ -802,6 +812,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 统计信息缓存的更新间隔。
+- 引入版本: -
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制 Follower（以及重启恢复）在回放统计信息日志时如何刷新 Connector（外部表）统计信息缓存。设为 `true` 时，按日志中持久化的表 UUID 失效缓存，并在下次查询时惰性重新加载，从而避免在回放期间解析外部表元数据（`MetadataMgr.getTable`）——该解析可能因 Hive Metastore 或对象存储变慢而阻塞日志回放线程。设为 `false`（默认）时使用原有的主动刷新方式，保持现有行为。在该 UUID 被持久化之前写入的统计信息日志，无论该配置如何都会回退到主动刷新。
+
+### `statistics_large_string_column_merge_threshold`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 默认关闭（`0`）。设为正值后，在统计信息收集的过程中，会单独生成一条 SQL 来收集声明长度超过该阈值的字符串列（`VARCHAR` / `CHAR`）的统计信息，不与其他列合并起来收集。抽样统计和全量统计都遵循该策略。这样做是为了限制单条统计 SQL 在 Exchange 阶段的内存峰值，避免长字符串列与其他列合并后进一步放大聚合算子的状态。保持为 `0` 时，所有列走原先的合并批量收集路径。注意，`STRING` 在内部会表示为最大长度的 `VARCHAR`，因此启用该配置并设置正值阈值后，`STRING` 列也可能被单独拆分出来收集。
 - 引入版本: -
 
 ### `task_check_interval_second`
@@ -1061,6 +1089,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: StarRocks 集群中允许的最大并发 Broker Load 作业数。此参数仅对 Broker Load 有效。此参数的值必须小于 `max_running_txn_num_per_db` 的值。从 v2.5 开始，默认值从 `10` 更改为 `5`。
+- 引入版本: -
+
+### `max_load_initial_open_partition_number`
+
+- 默认值: 4096
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 单次导入开始时最多预先打开的分区数。该值在以下两种场景作为上限生效:(1) LIST 分区表(默认全部打开);(2) RANGE 分区表通过 INSERT / Broker Load / Spark Load 导入(默认全部打开)。Stream Load 与 Routine Load 写入 RANGE 分区表时不受该上限限制,保留更保守的「最新 32」默认行为。表属性 `load_initial_open_partition_number` 优先级最高,可覆盖该值并突破此上限。从 v4.0 起,默认值从 32 调整为 4096。
 - 引入版本: -
 
 ### `max_load_timeout_second`

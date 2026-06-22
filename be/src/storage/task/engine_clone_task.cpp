@@ -40,9 +40,6 @@
 #include <filesystem>
 #include <set>
 
-#include "agent/agent_common.h"
-#include "agent/finish_task.h"
-#include "agent/task_signatures_manager.h"
 #include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
@@ -63,7 +60,6 @@
 #include "http/http_client.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
@@ -85,12 +81,12 @@ const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
 
 EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req, int64_t signature,
-                                 std::vector<string>* error_msgs, std::vector<TTabletInfo>* tablet_infos,
-                                 AgentStatus* res_status)
+                                 std::vector<std::string>* error_msgs, std::vector<TTabletInfo>* tablet_infos,
+                                 Status* clone_status)
         : _clone_req(clone_req),
           _error_msgs(error_msgs),
           _tablet_infos(tablet_infos),
-          _res_status(res_status),
+          _clone_status(clone_status),
           _signature(signature) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "clone task", mem_tracker);
 }
@@ -338,8 +334,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         }
 
         // Clean useless dir, if failed, ignore it.
-        if (!status.ok() /*&& status != STARROCKS_CREATE_TABLE_EXIST*/) {
-            //                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ always true now
+        if (!status.ok()) {
             LOG(WARNING) << "Removing " << tablet_dir;
             (void)fs::remove_all(tablet_dir);
         } else {
@@ -392,7 +387,7 @@ void EngineCloneTask::_set_tablet_info(Status status, bool is_new_tablet) {
             _tablet_infos->push_back(tablet_info);
         }
     }
-    *_res_status = status.ok() ? STARROCKS_SUCCESS : STARROCKS_ERROR;
+    *_clone_status = status;
 }
 
 Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_path, std::vector<string>* error_msgs,

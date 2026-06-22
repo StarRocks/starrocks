@@ -21,19 +21,23 @@
 #include <unordered_set>
 #include <vector>
 
-#include "runtime/global_dict/types.h"
-#include "storage/disjunctive_predicates.h"
+#include "column/global_dict/types.h"
+#include "compute_env/runtime_range_pruner.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/disjunctive_predicates.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 
 namespace starrocks {
 class ColumnAccessPath;
 class DeltaColumnGroupLoader;
 class DelvecLoader;
+
+namespace lake {
+class IndexDeltaGroupLoader;
+} // namespace lake
 class ObjectPool;
 class RuntimeProfile;
 class TabletSchema;
@@ -71,6 +75,10 @@ public:
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    // Lake-only: resolves IndexDeltaGroup (.idx) entries visible at `version`.
+    // Readers prefer IDG-backed indexes over footer-embedded ones. Nullptr
+    // leaves the reader on the original footer path (existing behaviour).
+    std::shared_ptr<lake::IndexDeltaGroupLoader> idg_loader;
     std::string rowset_path;
 
     // REQUIRED (null is not allowed)

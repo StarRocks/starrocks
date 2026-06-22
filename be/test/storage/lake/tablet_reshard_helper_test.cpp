@@ -21,6 +21,7 @@
 #include <numeric>
 #include <optional>
 #include <random>
+#include <roaring/roaring.hh>
 
 #include "storage/datum_variant.h"
 #include "storage/types.h"
@@ -205,8 +206,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         auto* op_write = txn_log.mutable_op_write();
         auto* rowset = op_write->mutable_rowset();
-        rowset->add_segments("seg1.dat");
-        rowset->add_segments("seg2.dat");
+        rowset->add_segment_metas()->set_filename("seg1.dat");
+        rowset->add_segment_metas()->set_filename("seg2.dat");
         auto* del = rowset->add_del_files();
         del->set_name("del1.dat");
 
@@ -222,7 +223,7 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         auto* op_compaction = txn_log.mutable_op_compaction();
         auto* output_rowset = op_compaction->mutable_output_rowset();
-        output_rowset->add_segments("compact_seg.dat");
+        output_rowset->add_segment_metas()->set_filename("compact_seg.dat");
 
         op_compaction->mutable_output_sstable()->set_filename("output.sst");
         op_compaction->mutable_output_sstable()->set_shared(false);
@@ -243,7 +244,7 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         auto* op_schema_change = txn_log.mutable_op_schema_change();
         auto* rowset = op_schema_change->add_rowsets();
-        rowset->add_segments("sc_seg.dat");
+        rowset->add_segment_metas()->set_filename("sc_seg.dat");
         auto* del = rowset->add_del_files();
         del->set_name("sc_del.dat");
         auto& delvec_file = (*op_schema_change->mutable_delvec_meta()->mutable_version_to_file())[1];
@@ -258,9 +259,9 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         const auto& op_write = txn_log.op_write();
         // Rowset shared_segments
-        ASSERT_EQ(op_write.rowset().shared_segments_size(), 2);
-        EXPECT_TRUE(op_write.rowset().shared_segments(0));
-        EXPECT_TRUE(op_write.rowset().shared_segments(1));
+        ASSERT_EQ(op_write.rowset().segment_metas_size(), 2);
+        EXPECT_TRUE(op_write.rowset().segment_metas(0).shared());
+        EXPECT_TRUE(op_write.rowset().segment_metas(1).shared());
         // Del files
         EXPECT_TRUE(op_write.rowset().del_files(0).shared());
         // SSTs in OpWrite
@@ -273,8 +274,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     {
         const auto& op_compaction = txn_log.op_compaction();
         // Output rowset shared_segments
-        ASSERT_EQ(op_compaction.output_rowset().shared_segments_size(), 1);
-        EXPECT_TRUE(op_compaction.output_rowset().shared_segments(0));
+        ASSERT_EQ(op_compaction.output_rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(op_compaction.output_rowset().segment_metas(0).shared());
         // Output sstable
         EXPECT_TRUE(op_compaction.output_sstable().shared());
         // Output sstables (repeated)
@@ -289,8 +290,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     // Verify OpSchemaChange
     {
         const auto& op_schema_change = txn_log.op_schema_change();
-        ASSERT_EQ(op_schema_change.rowsets(0).shared_segments_size(), 1);
-        EXPECT_TRUE(op_schema_change.rowsets(0).shared_segments(0));
+        ASSERT_EQ(op_schema_change.rowsets(0).segment_metas_size(), 1);
+        EXPECT_TRUE(op_schema_change.rowsets(0).segment_metas(0).shared());
         EXPECT_TRUE(op_schema_change.rowsets(0).del_files(0).shared());
         const auto& vtf = op_schema_change.delvec_meta().version_to_file();
         auto it = vtf.find(1);
@@ -299,25 +300,24 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
     }
 }
 
-// Verify that set_all_data_files_shared populates op_write.shared_dels (parallel to
-// op_write.dels) so that new del files produced by an in-flight write that is
-// cross-published during tablet split are persisted with shared=true in the child
-// tablets' rowset.del_files.
-TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_populates_shared_dels) {
+// Verify that set_all_data_files_shared marks every op_write.dels_meta[].shared so that
+// new del files produced by an in-flight write that is cross-published during tablet
+// split are persisted with shared=true in the child tablets' rowset.del_files.
+TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_marks_dels_meta_shared) {
     TxnLogPB txn_log;
     auto* op_write = txn_log.mutable_op_write();
-    op_write->add_dels("del1.del");
-    op_write->add_dels("del2.del");
-    op_write->add_dels("del3.del");
-    // Start with shared_dels empty (pre-split state).
-    ASSERT_EQ(op_write->shared_dels_size(), 0);
+    op_write->add_dels_meta()->set_name("del1.del");
+    op_write->add_dels_meta()->set_name("del2.del");
+    op_write->add_dels_meta()->set_name("del3.del");
+    // Start with each del's shared flag unset (pre-split state).
+    ASSERT_FALSE(op_write->dels_meta(0).shared());
 
     set_all_data_files_shared(&txn_log);
 
-    ASSERT_EQ(txn_log.op_write().shared_dels_size(), 3);
-    EXPECT_TRUE(txn_log.op_write().shared_dels(0));
-    EXPECT_TRUE(txn_log.op_write().shared_dels(1));
-    EXPECT_TRUE(txn_log.op_write().shared_dels(2));
+    ASSERT_EQ(txn_log.op_write().dels_meta_size(), 3);
+    EXPECT_TRUE(txn_log.op_write().dels_meta(0).shared());
+    EXPECT_TRUE(txn_log.op_write().dels_meta(1).shared());
+    EXPECT_TRUE(txn_log.op_write().dels_meta(2).shared());
 }
 
 // Verify that set_all_data_files_shared marks every SST-related field inside each
@@ -334,7 +334,7 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_parallel_c
         auto* subtask = op_parallel->add_subtask_compactions();
 
         auto* output_rowset = subtask->mutable_output_rowset();
-        output_rowset->add_segments("sub_seg.dat");
+        output_rowset->add_segment_metas()->set_filename("sub_seg.dat");
         auto* del = output_rowset->add_del_files();
         del->set_name("sub_del.dat");
 
@@ -362,8 +362,8 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_parallel_c
     ASSERT_EQ(txn_log.op_parallel_compaction().subtask_compactions_size(), 2);
     for (const auto& subtask : txn_log.op_parallel_compaction().subtask_compactions()) {
         // Nested rowset data files
-        ASSERT_EQ(subtask.output_rowset().shared_segments_size(), 1);
-        EXPECT_TRUE(subtask.output_rowset().shared_segments(0));
+        ASSERT_EQ(subtask.output_rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(subtask.output_rowset().segment_metas(0).shared());
         EXPECT_TRUE(subtask.output_rowset().del_files(0).shared());
         // Nested SST fields
         EXPECT_TRUE(subtask.output_sstable().shared());
@@ -394,14 +394,14 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_op_replica
         auto* op_write = op_replication->add_op_writes();
 
         auto* rowset = op_write->mutable_rowset();
-        rowset->add_segments("rep_seg.dat");
+        rowset->add_segment_metas()->set_filename("rep_seg.dat");
         auto* del = rowset->add_del_files();
         del->set_name("rep_existing.del");
 
-        op_write->add_dels("rep_new1.del");
-        op_write->add_dels("rep_new2.del");
+        op_write->add_dels_meta()->set_name("rep_new1.del");
+        op_write->add_dels_meta()->set_name("rep_new2.del");
         // shared_dels starts empty — must be populated by set_all_data_files_shared.
-        ASSERT_EQ(op_write->shared_dels_size(), 0);
+        ASSERT_FALSE(op_write->dels_meta(0).shared());
 
         auto* sst = op_write->add_ssts();
         sst->set_name("rep_sst.sst");
@@ -413,13 +413,13 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_op_replica
     ASSERT_EQ(txn_log.op_replication().op_writes_size(), 2);
     for (const auto& op_write : txn_log.op_replication().op_writes()) {
         // Rowset segment & existing del_file shared flags
-        ASSERT_EQ(op_write.rowset().shared_segments_size(), 1);
-        EXPECT_TRUE(op_write.rowset().shared_segments(0));
+        ASSERT_EQ(op_write.rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(op_write.rowset().segment_metas(0).shared());
         EXPECT_TRUE(op_write.rowset().del_files(0).shared());
         // New-del shared_dels parallel to dels
-        ASSERT_EQ(op_write.shared_dels_size(), 2);
-        EXPECT_TRUE(op_write.shared_dels(0));
-        EXPECT_TRUE(op_write.shared_dels(1));
+        ASSERT_EQ(op_write.dels_meta_size(), 2);
+        EXPECT_TRUE(op_write.dels_meta(0).shared());
+        EXPECT_TRUE(op_write.dels_meta(1).shared());
         // ssts shared flag
         ASSERT_EQ(op_write.ssts_size(), 1);
         EXPECT_TRUE(op_write.ssts(0).shared());
@@ -733,34 +733,199 @@ TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_empty_childr
     EXPECT_FALSE(result.value()[0].has_upper_bound());
 }
 
-// effective_child_local_range --------------------------------------------------
+// effective_old_tablet_local_range --------------------------------------------------
 
-TEST_F(TabletReshardHelperTest, test_effective_child_local_range_rowset_present) {
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_rowset_present) {
     RowsetMetadataPB rowset;
     *rowset.mutable_range() = co_range(0, 10);
     TabletMetadataPB ctx;
     *ctx.mutable_range() = co_range(0, 30);
 
-    const auto& result = effective_child_local_range(rowset, ctx);
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
     EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result));
 }
 
-TEST_F(TabletReshardHelperTest, test_effective_child_local_range_rowset_absent_ctx_present) {
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_rowset_absent_ctx_present) {
     RowsetMetadataPB rowset; // no range
     TabletMetadataPB ctx;
     *ctx.mutable_range() = co_range(0, 30);
 
-    const auto& result = effective_child_local_range(rowset, ctx);
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
     EXPECT_TRUE(ranges_pb_equal(co_range(0, 30), result));
 }
 
-TEST_F(TabletReshardHelperTest, test_effective_child_local_range_both_absent) {
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_both_absent) {
     RowsetMetadataPB rowset;
     TabletMetadataPB ctx;
 
-    const auto& result = effective_child_local_range(rowset, ctx);
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
     EXPECT_FALSE(result.has_lower_bound());
     EXPECT_FALSE(result.has_upper_bound());
+}
+
+// -----------------------------------------------------------------------------
+// Per-segment shared refactor: set_non_segment_files_shared / rowset uid helpers /
+// the segment+non-segment wrapper.
+// -----------------------------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, SetNonSegmentFilesShared_leaves_segments_untouched) {
+    TabletMetadataPB md;
+    auto* rs = md.add_rowsets();
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg0");
+        sm->set_shared(false);
+    }
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg1");
+        sm->set_shared(false);
+    }
+    auto& dv = (*md.mutable_delvec_meta()->mutable_version_to_file())[1];
+    dv.set_name("dv1");
+    dv.set_shared(false);
+
+    set_non_segment_files_shared(&md);
+
+    // shared_segments left untouched (caller handles per-segment).
+    EXPECT_FALSE(rs->segment_metas(0).shared());
+    EXPECT_FALSE(rs->segment_metas(1).shared());
+    // non-segment file (delvec) flipped to shared.
+    EXPECT_TRUE(md.delvec_meta().version_to_file().at(1).shared());
+}
+
+TEST_F(TabletReshardHelperTest, SetAllDataFilesShared_TabletMetadata_shares_segments_and_non_segment) {
+    TabletMetadataPB md;
+    auto* rs = md.add_rowsets();
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg0");
+        sm->set_shared(false);
+    }
+    auto* del = rs->add_del_files();
+    del->set_name("del0");
+    del->set_shared(false);
+    auto& dv = (*md.mutable_delvec_meta()->mutable_version_to_file())[1];
+    dv.set_shared(false);
+
+    set_all_data_files_shared(&md);
+
+    EXPECT_TRUE(rs->segment_metas(0).shared());
+    EXPECT_TRUE(rs->del_files(0).shared());
+    EXPECT_TRUE(md.delvec_meta().version_to_file().at(1).shared());
+}
+
+TEST_F(TabletReshardHelperTest, MakeRowsetUid_is_fresh_and_nonzero) {
+    auto a = make_rowset_uid();
+    auto b = make_rowset_uid();
+    EXPECT_TRUE(a.hi() != 0 || a.lo() != 0);
+    EXPECT_TRUE(b.hi() != 0 || b.lo() != 0);
+    // Two independent mints must differ.
+    EXPECT_FALSE(a.hi() == b.hi() && a.lo() == b.lo());
+}
+
+TEST_F(TabletReshardHelperTest, SetRowsetUid_set_if_absent) {
+    RowsetMetadataPB rs;
+    EXPECT_FALSE(has_valid_uid(rs));
+
+    ensure_rowset_uid(&rs);
+    ASSERT_TRUE(has_valid_uid(rs));
+    auto minted = rs.uid();
+
+    // Idempotent: a second call preserves the existing uid (inherited via CopyFrom
+    // across split / cross-publish must not be overwritten).
+    ensure_rowset_uid(&rs);
+    EXPECT_EQ(minted.hi(), rs.uid().hi());
+    EXPECT_EQ(minted.lo(), rs.uid().lo());
+}
+
+TEST_F(TabletReshardHelperTest, HasValidUid_rejects_absent_and_zero) {
+    RowsetMetadataPB rs;
+    EXPECT_FALSE(has_valid_uid(rs)); // absent
+    rs.mutable_uid()->set_hi(0);
+    rs.mutable_uid()->set_lo(0);
+    EXPECT_FALSE(has_valid_uid(rs)); // present but zero
+    rs.mutable_uid()->set_lo(1);
+    EXPECT_TRUE(has_valid_uid(rs));
+}
+
+namespace {
+DcgRowWindow make_window(size_t owner, rowid_t begin, rowid_t end, bool is_gap = false) {
+    return DcgRowWindow{owner, Range<rowid_t>(begin, end), is_gap};
+}
+void expect_window(const DcgRowWindow& w, rowid_t begin, rowid_t end, bool is_gap) {
+    EXPECT_EQ(w.range.begin(), begin);
+    EXPECT_EQ(w.range.end(), end);
+    EXPECT_EQ(w.is_gap, is_gap);
+}
+} // namespace
+
+TEST_F(TabletReshardHelperTest, Reconcile_NullGapBits_ContiguousOK) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 10, 30)};
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/30, &out);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(out.size(), 2u);
+    expect_window(out[0], 0, 10, false);
+    expect_window(out[1], 10, 30, false);
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_NullGapBits_HoleFails) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/30, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_GapMasked_FillsGapWindow) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
+    roaring::Roaring gap_bits;
+    gap_bits.addRange(10, 20);
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(out.size(), 3u);
+    expect_window(out[0], 0, 10, false);
+    expect_window(out[1], 10, 20, true);
+    expect_window(out[2], 20, 30, false);
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_GapPartiallyMasked_Fails) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
+    roaring::Roaring gap_bits;
+    gap_bits.addRange(10, 18); // misses [18, 20)
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_Overlap_Fails) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 20), make_window(1, 10, 30)}; // distinct owners overlap [10, 20)
+    roaring::Roaring gap_bits;
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_ZeroRows_Fails) {
+    std::vector<DcgRowWindow> in;
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/0, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_LeadingAndTrailingGap) {
+    std::vector<DcgRowWindow> in{make_window(0, 10, 20)}; // gaps [0, 10) and [20, 30)
+    roaring::Roaring gap_bits;
+    gap_bits.addRange(0, 10);
+    gap_bits.addRange(20, 30);
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(out.size(), 3u);
+    expect_window(out[0], 0, 10, true);
+    expect_window(out[1], 10, 20, false);
+    expect_window(out[2], 20, 30, true);
 }
 
 } // namespace starrocks::lake

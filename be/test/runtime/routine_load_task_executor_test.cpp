@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/logging.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
 #include "gen_cpp/BackendService_types.h"
@@ -44,7 +45,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

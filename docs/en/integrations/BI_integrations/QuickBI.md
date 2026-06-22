@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "For details about how to connect to StarRocks on QuickBI, see [Add a user-created StarRocks data source](https://www.alibabacloud.com/help/en/quick-bi/user-guide/add-a-user-created-starrocks-data-s..."
+description: "How to connect QuickBI to StarRocks for visualized data analysis."
 ---
 
 # QuickBI

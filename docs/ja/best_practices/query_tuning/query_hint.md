@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "クエリオプティマイザの実行方法を明示的に指示するための SET_VAR、SET_USER_VARIABLE、Join ヒント。"
 sidebar_position: 70
 ---
 

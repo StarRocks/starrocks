@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns true if at least one row for `expr` is true."
+description: "Returns true if at least one row for expr is true."
 ---
 
 # bool_or

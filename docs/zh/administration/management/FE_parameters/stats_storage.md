@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for statistics collection and storage settings."
 sidebar_label: "统计报告和存储"
 ---
 
@@ -87,6 +88,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: schema 变更操作 (ALTER TABLE) 的超时时长。
+- 引入版本: -
+
+### `enable_concurrent_add_partition_during_alter`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
 - 引入版本: -
 
 ### `capacity_used_percent_high_water`
@@ -580,13 +590,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为 Broker Load 启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
 - 引入版本: v4.1.0
 
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入（INSERT-from-OLAP-table）启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 引入版本: v4.1.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
-- 默认值: 30
+- 默认值: 300
 - 类型: Long
 - 单位: Seconds
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂的「提交前阶段」墙钟时间预算（采样 + 规划边界 + 构建 reshard 作业）。超时后协调器跳过预分裂，导入沿用原始单 Tablet 路径继续执行。
+- 描述: 基于采样的 Tablet 预分裂的「提交前阶段」墙钟时间预算（采样 + 规划边界 + 构建 reshard 作业）。超时后协调器跳过预分裂，导入沿用原始单 Tablet 路径继续执行。默认 300 秒：数据层采样器在大数据集／慢对象存储上可能耗时数十秒（测试中一个 ~40GB 多文件 Parquet 导入采样耗时约 78 秒），且该预算主要影响大导入 —— 而大导入恰恰是预分裂最受益的场景；小导入无论如何都在一秒内完成采样。采样期间导入最多停留 `PENDING` 此时长，因此应将其设置为小于导入自身的超时时间。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_post_submit_wait_seconds`
@@ -595,7 +614,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Seconds
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂协调器等待已提交 reshard 作业到达 `FINISHED` 的最长时间。各导入路径语义不同：INSERT-from-FILES 同步等待，超时后 **不中止地继续执行** —— INSERT 随后按当时可见的 Tablet 布局做计划（守护线程还未推进则仍为原单 tablet 布局；若守护线程在我们放弃等待之后才完成则可能已部分／完全分裂）；`tablet_pre_split_post_submit_hard_cap` 计数器记录超时事件。测试使用的严格 `runPreSplit` 包装路径在超时后抛出 `PreSplitPostSubmitTimeoutException` 中止调用方的导入。Broker Load 采用 fire-and-forget，根本不等待（导入永远不会等 reshard 守护线程）。
+- 描述: 基于采样的 Tablet 预分裂协调器等待已提交 reshard 作业到达 `FINISHED` 的最长时间。INSERT-from-FILES 与 Broker Load 均同步等待，超时后 **不中止地继续执行** —— 导入随后按当时可见的 Tablet 布局做计划（守护线程还未推进则仍为原单 tablet 布局；若守护线程在我们放弃等待之后才完成则可能已部分／完全分裂）；`tablet_pre_split_post_submit_hard_cap` 计数器记录超时事件。测试使用的严格 `runPreSplit` 包装路径在超时后抛出 `PreSplitPostSubmitTimeoutException` 中止调用方的导入。Broker Load 路径上，等待发生在 broker pending task 解析完文件列表之后、`beginTxn` 打开 `T_load` 之前 —— 每个表最多占用一个 `pending_load_task_scheduler` 线程达此秒数，当大量并发 Broker Load 命中可预分裂的目标表时，请相应调整 `max_broker_load_job_concurrency`。**运维提示：** 等待期间该 Broker Load 在 `SHOW LOAD` 中仍显示为 `PENDING`，且仍受 Load 自身 `timeoutSecond` 约束 —— 应将该值设置为远小于常规 Broker Load 超时时间的最小值。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_sample_byte_limit`
@@ -629,7 +648,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将 `enable_tablet_pre_split_for_insert_from_files = false` 和 `enable_tablet_pre_split_for_broker_load = false` 同时设为 `false`，新导入将立即跳过预分裂。
+1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 

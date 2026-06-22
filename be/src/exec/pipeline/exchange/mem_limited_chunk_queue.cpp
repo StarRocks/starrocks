@@ -22,15 +22,16 @@
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
+#include "compute_env/spill/block_manager.h"
+#include "compute_env/spill/data_stream.h"
+#include "compute_env/spill/dir_manager.h"
+#include "compute_env/spill/mem_table.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/task_executor.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/spill/block_manager.h"
-#include "exec/spill/data_stream.h"
-#include "exec/spill/dir_manager.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/mem_table.h"
-#include "exec/spill/options.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gen_cpp/InternalService_types.h"
@@ -486,7 +487,7 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         }
     };
 
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(flush_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_runtime_state()->workgroup(), std::move(flush_task));
     io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
@@ -562,7 +563,7 @@ Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
             _update_io_task_status(status);
         }
     };
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(load_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_runtime_state()->workgroup(), std::move(load_task));
     io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();

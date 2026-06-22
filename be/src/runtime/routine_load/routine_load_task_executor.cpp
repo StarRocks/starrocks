@@ -59,7 +59,7 @@ namespace {
 
 // Build a JSON anchor that identifies the streaming source of a routine
 // load task fragment. Threaded into TQueryOptions.routine_load_source_info
-// so BE's RuntimeStateHelper::append_rejected_record_to_file can populate
+// so BE's LoadPathStateHelper::append_rejected_record_to_file can populate
 // _statistics_.rejected_records.source_info with the kafka topic/offsets
 // instead of the hardcoded "stream-load-pipe" SequentialFile name.
 std::string build_kafka_source_info(const TKafkaLoadInfo& info) {

@@ -16,12 +16,24 @@
 
 #include <memory>
 
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/spiller.hpp"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+Status SpillProcessOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    // The pump sleeps INPUT_EMPTY on has_output() (has_task && !is_full), so it belongs on the spiller's
+    // source list: flush completion notifies both lists, and the channel handshake (enqueue / set_finishing)
+    // wakes the source side. The spiller is set on the channel before prepare (create() wired it). The gate
+    // for poller mode is inside subscribe_source.
+    if (_channel->spiller() != nullptr) {
+        _channel->spiller()->observable().subscribe_source(state, observer());
+    }
+    return Status::OK();
+}
 
 bool SpillProcessOperator::has_output() const {
     return !_is_finished && _channel->has_output();
@@ -29,6 +41,32 @@ bool SpillProcessOperator::has_output() const {
 
 bool SpillProcessOperator::is_finished() const {
     return _is_finished || _channel->is_finished();
+}
+
+std::optional<BlockReason> SpillProcessOperator::_blocked_on() const {
+    // Read only when the pump is parked (has_output() == false). A finished channel is not a block.
+    // Otherwise either the channel has no task (waiting on the writer's enqueue, WAIT_CHANNEL), or a task is
+    // queued but the spiller writer is full (waiting on flush/restore IO, WAIT_RESTORE). The full-writer
+    // case is named WAIT_RESTORE here, not the sink's WAIT_FLUSH for the same is_full(), because this pump
+    // is a source woken off the spiller's source list, and WAIT_RESTORE is the reason that list covers.
+    // Null-safe on the spiller (close() resets it; when it is absent the writer is not full -> nullopt,
+    // matching the channel's own null-spiller park).
+    if (_is_finished || _channel->is_finished()) {
+        return std::nullopt;
+    }
+    // Both named branches pass through named<R, kCoveredWakeups>(): a reason outside this pump's coverage
+    // mask does not compile, so the value block_reason() returns is always a covered reason.
+    if (!_channel->has_task()) {
+        return named<BlockReason::WAIT_CHANNEL, kCoveredWakeups>();
+    }
+    if (_channel->spiller() != nullptr && _channel->spiller()->is_full()) {
+        return named<BlockReason::WAIT_RESTORE, kCoveredWakeups>();
+    }
+    return std::nullopt;
+}
+
+BlockReason SpillProcessOperator::block_reason() const {
+    return _blocked_on().value_or(BlockReason::NONE);
 }
 
 Status SpillProcessOperator::set_finished(RuntimeState* state) {
@@ -43,9 +81,12 @@ void SpillProcessOperator::close(RuntimeState* state) {
 
 StatusOr<ChunkPtr> SpillProcessOperator::pull_chunk(RuntimeState* state) {
     if (!_channel->current_task()) {
+        // acquire_spill_task is now non-blocking. An empty queue is only transient (has_output gates us,
+        // and the writer's enqueue notify reschedules us), so return a no-op instead of an error; a
+        // genuinely closed channel shows up through is_finished()/set_finished() upstream.
         bool res = _channel->acquire_spill_task();
         if (!res) {
-            return Status::InternalError("couldn't get task from spill channel");
+            return nullptr;
         }
     }
     DCHECK(_channel->current_task());
@@ -58,7 +99,9 @@ StatusOr<ChunkPtr> SpillProcessOperator::pull_chunk(RuntimeState* state) {
             RETURN_IF_ERROR(spiller->spill(state, chunk_st.value(), TRACKER_WITH_SPILLER_GUARD(state, spiller)));
         }
     } else if (chunk_st.status().is_end_of_file()) {
-        _channel->current_task().reset();
+        // The task drained; drop it from the channel count and wake the writer
+        // blocked on has_task().
+        _channel->on_current_task_finished();
     } else if (!chunk_st.status().ok()) {
         return chunk_st.status();
     }

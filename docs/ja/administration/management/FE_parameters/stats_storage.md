@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：統計情報収集とストレージに関連する設定項目。"
 sidebar_label: "統計とストレージ"
 ---
 
@@ -87,6 +88,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：スキーマ変更操作 (ALTER TABLE) のタイムアウト期間。
+- 導入時期：-
+
+### `enable_concurrent_add_partition_during_alter`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`true` の場合、パーティション作成（手動の `ALTER TABLE ... ADD PARTITION`、ロード中の自動作成、および動的パーティションスケジューラ）は、安全であることが証明されているメタデータのみの ALTER 操作（現在は存算分離モードの ADD/DROP INDEX ファストパスジョブ、および fast schema evolution の一時的な `UPDATING_META` 状態）と並行して実行できます。DDL を拒否したり ALTER ジョブをキャンセルしたりしません。`false` に設定すると、従来の排他的な動作に戻ります。この設定はパーティション作成のみを緩和し、その他のすべての ALTER ジョブと `ADD PARTITION` 以外のすべての DDL は従来の状態チェックを維持します。
 - 導入時期：-
 
 ### `capacity_used_percent_high_water`
@@ -580,13 +590,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Broker Load に対してサンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。
 - 導入時期：v4.1.0
 
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込み（INSERT-from-OLAP-table）に対して、サンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
+- 導入時期：v4.1.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
-- デフォルト：30
+- デフォルト：300
 - タイプ：Long
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：サンプリングベースのタブレット事前分割における「提出前フェーズ」（サンプリング + 境界プランニング + reshard ジョブの構築）の壁時計予算。超過するとコーディネーターは事前分割をスキップし、取り込みは元の単一タブレット経路で続行されます。
+- 説明：サンプリングベースのタブレット事前分割における「提出前フェーズ」（サンプリング + 境界プランニング + reshard ジョブの構築）の壁時計予算。超過するとコーディネーターは事前分割をスキップし、取り込みは元の単一タブレット経路で続行されます。デフォルト 300 秒：データ階層サンプラーは大規模データセット／低速なオブジェクトストレージでは数十秒かかることがあり（テストでは ~40GB の多数ファイル Parquet 取り込みのサンプリングに約 78 秒）、この予算は主に大規模な取り込みに影響します ── まさに事前分割の恩恵を受ける取り込みです。小規模な取り込みはいずれにせよ 1 秒未満でサンプリングが完了します。サンプリング中、取り込みは最大でこの時間だけ `PENDING` にとどまるため、取り込み自体のタイムアウトより小さい値に設定してください。
 - 導入時期：v4.1.0
 
 ### `tablet_pre_split_post_submit_wait_seconds`
@@ -595,7 +614,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：サンプリングベースのタブレット事前分割のコーディネーターが、受理済み reshard ジョブの `FINISHED` を待機する最長時間。取り込み経路ごとに意味が異なります：INSERT-from-FILES は同期的に待機し、タイムアウト時は **中止せずに継続実行** します — INSERT はその時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウトとなり得ます）。`tablet_pre_split_post_submit_hard_cap` カウンタがタイムアウトを記録します。テスト用の厳格な `runPreSplit` ラッパーはタイムアウト時に `PreSplitPostSubmitTimeoutException` を送出して呼び出し元の取り込みを中止します。Broker Load は fire-and-forget で全く待機しません（取り込みが reshard デーモンを待つことはありません）。
+- 説明：サンプリングベースのタブレット事前分割のコーディネーターが、受理済み reshard ジョブの `FINISHED` を待機する最長時間。INSERT-from-FILES と Broker Load のどちらも同期的に待機し、タイムアウト時は **中止せずに継続実行** します — 取り込みはその時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウトとなり得ます）。`tablet_pre_split_post_submit_hard_cap` カウンタがタイムアウトを記録します。テスト用の厳格な `runPreSplit` ラッパーはタイムアウト時に `PreSplitPostSubmitTimeoutException` を送出して呼び出し元の取り込みを中止します。Broker Load では、待機は broker pending task がファイル一覧を解決した後、`beginTxn` が `T_load` を開く前に行われます — 1 テーブルあたり最大この秒数だけ `pending_load_task_scheduler` のスレッドを占有しますので、事前分割可能なテーブルを対象とする Broker Load が並行して多数走る環境では `max_broker_load_job_concurrency` を適切に設定してください。**運用上の注意：** 待機中も Broker Load は `SHOW LOAD` 上 `PENDING` として報告され、Load 自身の `timeoutSecond` の対象となります — 通常運用における最小の Broker Load タイムアウトより十分小さい値に設定してください。
 - 導入時期：v4.1.0
 
 ### `tablet_pre_split_sample_byte_limit`
@@ -629,7 +648,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
 
-1. `enable_tablet_pre_split_for_insert_from_files = false` と `enable_tablet_pre_split_for_broker_load = false` を同時に設定します。新規取り込みは即座に事前分割をスキップします。
+1. 3 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`。新規取り込みは即座に事前分割をスキップします。
 2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
 3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
 ---
 
@@ -774,13 +775,13 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
-### pk_index_parallel_load_dels_mem_ratio
+### pk_index_parallel_rebuild_mem_ratio
 
 - デフォルト: 50
 - タイプ: Int
 - 単位: パーセント (0-100)
 - 変更可能: はい
-- 説明: 共有データモードで、update メモリトラッカーの使用量が上限のこの割合を超えている場合、`LakePersistentIndex::load_dels` における並列二段階の delete ファイルプリフェッチをスキップし、一度に 1 つのデコード済み del ファイルカラムのみを保持するシングルパスループにフォールバックします。このメモリ圧迫下では、コールドスタートのレイテンシ改善を諦め、ピークメモリを抑制します。値を大きくすると、より高いメモリ圧迫下でも最適化を許可します。`100` に設定するとメモリゲートが無効化され、`enable_pk_index_parallel_execution=true` かつ複数の del ファイルがある場合は常に並列実行されます。
+- 説明: 共有データモードで、Primary Key インデックスの再構築時に使用される並列プリフェッチ経路に対するメモリ圧迫ゲートです。update メモリトラッカーの使用量が上限のこの割合を超えている場合、再構築は一度に 1 つのデコード済みカラムのみを保持するシングルパスループにフォールバックし、コールドスタートのレイテンシ改善を諦めてピークメモリを抑制します。再構築中の del ファイル、segment ファイルなどの並列読み込みを制御します。値を大きくすると、より高いメモリ圧迫下でも最適化を許可します。`100` に設定するとメモリゲートが無効化され、`enable_pk_index_parallel_execution=true` の場合は常に並列実行されます。
 - 導入バージョン: -
 
 ### lake_partial_update_thread_pool_max_threads
@@ -971,6 +972,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: Yes
 - 説明: sender ジョブのメモリ使用量が高いとき、`stale_memtable_flush_time_sec` 秒より長く更新されていない memtable はメモリ圧力を下げるためにフラッシュされます。この動作はメモリ制限に近づいている場合（`limit_exceeded_by_ratio(70)` 以上）のみ考慮されます。`LocalTabletsChannel` ではさらに高いメモリ使用時（`limit_exceeded_by_ratio(95)`）に、`write_buffer_size / 4` より大きいサイズの memtable をフラッシュする追加パスが存在します。値が `0` の場合、年齢に基づく stale-memtable のフラッシュは無効になります（immutable-partition の memtable はアイドル時や高メモリ時に即座にフラッシュされます）。
 - 導入バージョン: v3.2.0
+
+### storage_cleanup_worker_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ストレージファイルをクリーンアップするために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
+- 導入バージョン: -
 
 ### storage_flood_stage_left_capacity_bytes
 

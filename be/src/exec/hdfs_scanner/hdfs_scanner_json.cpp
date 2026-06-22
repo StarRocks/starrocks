@@ -15,8 +15,8 @@
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 
 #include "base/compression/compression_utils.h"
+#include "base/string/utf8.h"
 #include "common/simdjson_util.h"
-#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/avro/nullable_column.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
@@ -52,7 +52,10 @@ Status HdfsJsonReader::next_record(Chunk* chunk, int32_t rows_to_read) {
         if (Status st = _read_rows(chunk, rows_to_read - rows_read, &cur_rows_read); !st.ok()) {
             if (st.is_end_of_file()) {
                 rows_read += cur_rows_read;
-                size_t truncated_bytes = _parser->truncated_bytes();
+                // The parser only saw [0, limit - _utf8_partial_tail); the partial UTF-8
+                // tail held back in _read_and_parse_json must be carried over as well, so
+                // add it back to the truncated (unconsumed) byte count.
+                size_t truncated_bytes = _parser->truncated_bytes() + _utf8_partial_tail;
                 if (truncated_bytes == _buf->limit) {
                     // TODO: support later
                     return Status::NotSupported(fmt::format(
@@ -76,7 +79,13 @@ Status HdfsJsonReader::_read_and_parse_json() {
     _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
     _empty_parser = false;
     _buf->flip_to_read();
-    return _parser->parse(_buf->ptr, _buf->limit, _buf->capacity);
+    // simdjson validates UTF-8 across the whole buffer and raises UTF8_ERROR when the
+    // physical end of the buffer falls in the middle of a multi-byte character, which
+    // happens when a fixed-size read boundary splits a character. Hold such a trailing
+    // partial sequence back from this parse; it is carried over (see next_record) and
+    // completed by the following bytes on the next read.
+    _utf8_partial_tail = incomplete_trailing_utf8_len(_buf->ptr, _buf->limit);
+    return _parser->parse(_buf->ptr, _buf->limit - _utf8_partial_tail, _buf->capacity);
 }
 
 Status HdfsJsonReader::_read_file_stream() const {
@@ -177,8 +186,8 @@ Status HdfsJsonReader::_construct_column(simdjson::ondemand::value& value, Colum
     return add_nullable_column(column, type_desc, col_name, &value, true);
 }
 
-Status HdfsJsonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    const auto& text_file_desc = _scanner_params.scan_range->text_file_desc;
+Status HdfsJsonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
+    const auto& text_file_desc = _scanner_ctx->scan_range->text_file_desc;
     return _setup_compression_type(text_file_desc);
 }
 
@@ -189,7 +198,7 @@ Status HdfsJsonScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
 
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    _reader = std::make_unique<HdfsJsonReader>(_file.get(), _scanner_ctx.slot_descs);
+    _reader = std::make_unique<HdfsJsonReader>(_file.get(), _scanner_ctx->slot_descs);
     RETURN_IF_ERROR(_reader->init());
 
     return Status::OK();
@@ -219,16 +228,8 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 
     if ((*chunk)->num_rows() > 0) {
         size_t rows_read = (*chunk)->num_rows();
-        RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
-        _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
-
-        for (auto& [_, ctxs] : _scanner_ctx.conjunct_ctxs_by_slot) {
-            SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, chunk->get()));
-            if ((*chunk)->num_rows() == 0) {
-                break;
-            }
-        }
+        RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, rows_read));
+        RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
     }
 
     return st;
@@ -242,7 +243,7 @@ Status HdfsJsonScanner::_setup_compression_type(const TTextFileDesc& text_file_d
         compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
     } else {
         // if FE does not specify a compress type, we choose it by looking at the filename.
-        compression_type = get_compression_type_from_path(_scanner_params.path);
+        compression_type = get_compression_type_from_path(_scanner_ctx->file_path);
     }
     if (compression_type != UNKNOWN_COMPRESSION) {
         _compression_type = compression_type;

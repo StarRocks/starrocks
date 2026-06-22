@@ -34,6 +34,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "common",
     "connector",
     "compute_env",
+    "data_workflows",
     "exec",
     "exprs",
     "formats",

@@ -15,6 +15,7 @@
 #include "chunks_sorter_topn.h"
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
 #include "base/orlp/pdqsort.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
@@ -749,7 +750,7 @@ void ChunksSorterTopn::_rank_pruning() {
 
     const auto& merged_runs = _merged_runs;
     for (int i = 0; i < merged_runs.num_chunks(); ++i) {
-        if (target_index > merged_runs.at(i).num_rows()) {
+        if (target_index >= merged_runs.at(i).num_rows()) {
             target_index -= merged_runs.at(i).num_rows();
         } else {
             index_in_runs = i;

@@ -67,6 +67,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -171,6 +172,7 @@ public class MergeTabletJobTest {
     @Test
     public void testRunMergeTabletReshardJob() throws Exception {
         TabletReshardJob splitJob = createSplitTabletReshardJob();
+        splitJob.init();
         splitJob.run();
         splitJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
@@ -187,6 +189,10 @@ public class MergeTabletJobTest {
 
         TabletReshardJob mergeJob = createMergeTabletReshardJob();
         Assertions.assertNotNull(mergeJob);
+
+        // Admission reserves the table.
+        mergeJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         mergeJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
@@ -417,12 +423,14 @@ public class MergeTabletJobTest {
 
     @Test
     public void testSetTableStateMismatch() throws Exception {
+        // The table-state reservation moved to init() (admission). When the table is not NORMAL,
+        // init() fail-fasts with a StarRocksException instead of admitting a doomed job.
         OlapTable.OlapTableState original = table.getState();
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         try {
             MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(), table.getId(), new HashMap<>());
-            Assertions.assertThrows(TabletReshardException.class, mergeJob::runPendingJob);
+            Assertions.assertThrows(StarRocksException.class, mergeJob::init);
         } finally {
             table.setState(original);
         }
@@ -452,6 +460,7 @@ public class MergeTabletJobTest {
     @Test
     public void testRunRunningUsesBackgroundComputeResource() throws Exception {
         MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        mergeJob.init();
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         ComputeResource expectedResource = WarehouseComputeResource.of(10010L);
         AtomicReference<ComputeResource> actualResource = new AtomicReference<>();
@@ -514,10 +523,16 @@ public class MergeTabletJobTest {
 
     @Test
     public void testGetLockedTableNotFound() throws Exception {
+        // A dropped table during the reshard is surfaced via run()'s abort wrapper: PENDING -> ABORTED
+        // (no force-ABORTING from getOlapTable when canAbort() is true). The errorMessage is set on
+        // the ABORTING-via-getOlapTable step inside runAbortingJob.
         MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), -1, new HashMap<>());
-        Assertions.assertThrows(TabletReshardException.class, mergeJob::runPendingJob);
-        Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, mergeJob.getJobState());
+        // First tick: PENDING -> ABORTING via run()'s catch wrapper. Second tick: ABORTING -> ABORTED
+        // via runAbortingJob, which also restores errorMessage from the throwing getOlapTable.
+        mergeJob.run();
+        mergeJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, mergeJob.getJobState());
         Assertions.assertEquals("Table not found", mergeJob.getErrorMessage());
     }
 
@@ -538,6 +553,8 @@ public class MergeTabletJobTest {
 
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, mergeJob.getJobState());
         mergeJob.replay();
+        // replayPendingJob now performs the table reservation (moved here from replayPreparingJob).
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         mergeJob.setJobState(TabletReshardJob.JobState.PREPARING);
         mergeJob.replay();
@@ -564,6 +581,10 @@ public class MergeTabletJobTest {
     public void testAbortMergeTabletReshardJob() throws Exception {
         MergeTabletJob mergeJob = createMergeTabletReshardJob();
         Assertions.assertNotNull(mergeJob);
+
+        // Admission reserves the table; abort must release it back to NORMAL.
+        mergeJob.init();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         mergeJob.abort("test abort");
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, mergeJob.getJobState());
@@ -746,7 +767,9 @@ public class MergeTabletJobTest {
         long[] sizes = {40L, 90L, 30L, 30L};
         for (int i = 0; i < orderedTablets.size(); i++) {
             LakeTablet tablet = (LakeTablet) orderedTablets.get(i);
-            tablet.setDataSize(sizes[i]);
+            // Tablets beyond the first 4 get a large size so they are excluded from merging
+            // (>= pairThresh = 80) and do not affect the expected merge groups.
+            tablet.setDataSize(i < sizes.length ? sizes[i] : 200L);
             tablet.setDataSizeUpdateTime(visibleVersionTime);
         }
 
@@ -780,6 +803,103 @@ public class MergeTabletJobTest {
         clause.setTabletReshardTargetSize(-1L);
         MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
         Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+    }
+
+    @Test
+    public void testMergeTabletJobFactoryStopsAtParallelismFloor() throws Exception {
+        ensureTabletCount(5);
+        // floor = parallelismFloor(4, 1024) = max(2, min(4, 1024)) = 4; 5 tiny fresh tablets
+        // => budget = 5 - 4 = 1 => exactly one adjacent pair may merge, the rest must stay split.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 4 matters.
+                return Collections.nCopies(4, 1L);
+            }
+        };
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        for (Tablet orderedTablet : orderedTablets) {
+            LakeTablet tablet = (LakeTablet) orderedTablet;
+            tablet.setDataSize(10L);
+            tablet.setDataSizeUpdateTime(visibleVersionTime);
+        }
+
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(100L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        ReshardingMaterializedIndex reshardingIndex = mergeJob.getReshardingPhysicalPartitions()
+                .get(physicalPartition.getId()).getReshardingIndexes().get(oldIndex.getId());
+        Assertions.assertNotNull(reshardingIndex);
+
+        List<List<Long>> mergedTabletGroups = new ArrayList<>();
+        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+            if (reshardingTablet.getMergingTablet() != null) {
+                mergedTabletGroups.add(reshardingTablet.getMergingTablet().getOldTabletIds());
+            }
+        }
+        Assertions.assertEquals(
+                List.of(List.of(orderedTablets.get(0).getId(), orderedTablets.get(1).getId())),
+                mergedTabletGroups);
+    }
+
+    @Test
+    public void testMergeTabletJobFactoryNoMergeBelowParallelismFloor() throws Exception {
+        ensureTabletCount(3);
+        // floor = parallelismFloor(5, 1024) = max(2, min(5, 1024)) = 5 > 3 tablets
+        // => budget = 3 - 5 <= 0 => nothing merges.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 5 matters.
+                return Collections.nCopies(5, 1L);
+            }
+        };
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        for (Tablet orderedTablet : oldIndex.getTablets()) {
+            LakeTablet tablet = (LakeTablet) orderedTablet;
+            tablet.setDataSize(10L);
+            tablet.setDataSizeUpdateTime(visibleVersionTime);
+        }
+
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(100L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+    }
+
+    @Test
+    public void testManualTabletGroupMergeSkipsParallelismFloorLookup() throws Exception {
+        ensureTabletCount(3);
+        // Explicit tablet-group merges must NOT consult the warehouse CN count; even if the lookup
+        // throws, the manual merge still succeeds (the floor only applies to size-based auto-merge).
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                throw new RuntimeException("CN lookup must not be called for manual tablet-group merge");
+            }
+        };
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        long firstTabletId = orderedTablets.get(0).getId();
+        long secondTabletId = orderedTablets.get(1).getId();
+
+        TabletGroupList tabletGroupList = new TabletGroupList(List.of(List.of(firstTabletId, secondTabletId)));
+        MergeTabletClause clause = new MergeTabletClause(null, tabletGroupList, null);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        Assertions.assertNotNull(mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId()));
     }
 
     private TabletReshardJob createSplitTabletReshardJob() throws Exception {
@@ -896,6 +1016,7 @@ public class MergeTabletJobTest {
         int maxTries = 5;
         while (materializedIndex.getTablets().size() < count && maxTries-- > 0) {
             TabletReshardJob splitJob = createSplitTabletReshardJob();
+            splitJob.init();
             splitJob.run();
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());

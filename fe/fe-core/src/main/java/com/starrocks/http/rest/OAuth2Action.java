@@ -69,8 +69,14 @@ public class OAuth2Action extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/oauth2", new OAuth2Action(controller));
     }
 
+    // OAuth2 callback endpoint is itself the auth handshake; cannot require Basic.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String authorizationCode = getSingleParameter(request, "code", r -> r);
         String connectionIdStr = getSingleParameter(request, "state", r -> r);
         long connectionId = Long.parseLong(connectionIdStr);

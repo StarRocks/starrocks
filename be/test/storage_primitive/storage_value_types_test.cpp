@@ -253,7 +253,7 @@ TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     option.query_params = {{"metric_type", "l2"}};
     option.vector_range = 0.5;
     option.result_order = 1;
-    option.use_ivfpq = true;
+    option.refine_distance = true;
     option.pq_refine_factor = 2.5;
     option.k_factor = 1.5;
 
@@ -268,7 +268,7 @@ TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     EXPECT_EQ("l2", option.query_params["metric_type"]);
     EXPECT_DOUBLE_EQ(0.5, option.vector_range);
     EXPECT_EQ(1, option.result_order);
-    EXPECT_TRUE(option.use_ivfpq);
+    EXPECT_TRUE(option.refine_distance);
     EXPECT_DOUBLE_EQ(2.5, option.pq_refine_factor);
     EXPECT_DOUBLE_EQ(1.5, option.k_factor);
 }

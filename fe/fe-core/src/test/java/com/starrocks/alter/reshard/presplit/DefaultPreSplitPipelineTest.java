@@ -20,6 +20,7 @@ import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -141,6 +142,46 @@ public class DefaultPreSplitPipelineTest {
     }
 
     @Test
+    public void testDataTierSampleBoundedByRemainingBudget() throws Exception {
+        // "Make the soft deadline hard": the data tier must hand its sampler a
+        // SampleRequest whose query_timeout equals the remaining pre-submit
+        // budget, so an over-budget BE sample is cancelled rather than running
+        // the deadline over by a full sample phase. A fixed clock makes the
+        // remaining budget exactly PRE_SUBMIT_TIMEOUT.
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> {
+            throw new MetaTierUnavailableException("test: force data-tier fallback");
+        };
+        AtomicReference<SampleRequest> dataTierCallCapture = new AtomicReference<>();
+        Sampler dataTier = request -> {
+            dataTierCallCapture.set(request);
+            return new SampleSet(
+                    List.of(bigintTuple(10), bigintTuple(20), bigintTuple(30), bigintTuple(40)),
+                    new Estimates(FILE_TOTAL_BYTES, 4L));
+        };
+        Clock fixedClock = Clock.fixed(Instant.ofEpochSecond(1_000_000L), ZoneId.of("UTC"));
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
+                    .thenReturn(fakeJob);
+
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, fixedClock);
+            pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            SampleRequest captured = dataTierCallCapture.get();
+            Assertions.assertNotNull(captured, "data tier must be invoked on meta-tier fallback");
+            Assertions.assertEquals((int) PRE_SUBMIT_TIMEOUT.toSeconds(), captured.getQueryTimeoutSeconds(),
+                    "data-tier sample must be capped at the remaining pre-submit budget");
+            // withQueryTimeoutSeconds is a pure copy — every other field carries through.
+            Assertions.assertEquals(sampleRequest.getSampleByteLimit(), captured.getSampleByteLimit());
+            Assertions.assertEquals(sampleRequest.getSeed(), captured.getSeed());
+            Assertions.assertEquals(sampleRequest.getSortKey(), captured.getSortKey());
+            // The original request the coordinator built is left uncapped (0).
+            Assertions.assertEquals(0, sampleRequest.getQueryTimeoutSeconds());
+        }
+    }
+
+    @Test
     public void testMetaTierNoSplitShortCircuitsBeforeFactory() throws Exception {
         MetaTierSampler metaTier = (request, requestedTabletCount) -> BoundaryPlannerResult.NO_SPLIT;
         Sampler dataTier = request -> {
@@ -227,7 +268,7 @@ public class DefaultPreSplitPipelineTest {
 
         DefaultPreSplitPipeline pipeline = newPipeline(
                 (r, k) -> BoundaryPlannerResult.NO_SPLIT, r -> SampleSet.EMPTY, Clock.systemUTC());
-        pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob), POST_SUBMIT_TIMEOUT);
+        pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob), POST_SUBMIT_TIMEOUT, () -> false);
     }
 
     @Test
@@ -241,7 +282,7 @@ public class DefaultPreSplitPipelineTest {
         DefaultPreSplitPipeline pipeline = newPipeline(
                 (r, k) -> BoundaryPlannerResult.NO_SPLIT, r -> SampleSet.EMPTY, Clock.systemUTC());
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                () -> pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob), POST_SUBMIT_TIMEOUT));
+                () -> pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob), POST_SUBMIT_TIMEOUT, () -> false));
         Assertions.assertTrue(thrown.getMessage().contains("99"));
         Assertions.assertTrue(thrown.getMessage().contains("simulated shard creation error"));
     }
@@ -261,7 +302,28 @@ public class DefaultPreSplitPipelineTest {
         DefaultPreSplitPipeline pipeline = newPipeline(
                 (r, k) -> BoundaryPlannerResult.NO_SPLIT, r -> SampleSet.EMPTY, clock);
         Assertions.assertThrows(PreSplitPostSubmitTimeoutException.class,
-                () -> pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob), Duration.ofSeconds(120)));
+                () -> pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob),
+                        Duration.ofSeconds(120), () -> false));
+    }
+
+    @Test
+    public void testAwaitFinishedAbortsWhenShouldAbortReturnsTrue() {
+        // Cancel-aware path: a supplier that returns true short-circuits the
+        // helper before it polls the reshard manager. The helper throws
+        // StarRocksException with an "await abandoned" message so the caller
+        // routes through the fail-safe wrapper.
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        when(fakeJob.getJobId()).thenReturn(55L);
+
+        DefaultPreSplitPipeline pipeline = newPipeline(
+                (r, k) -> BoundaryPlannerResult.NO_SPLIT, r -> SampleSet.EMPTY, Clock.systemUTC());
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob),
+                        POST_SUBMIT_TIMEOUT, () -> true));
+        Assertions.assertTrue(thrown.getMessage().contains("await abandoned"),
+                "shouldAbort short-circuit must signal the cancellation reason");
+        // shouldAbort fires before any reshard-manager poll.
+        Mockito.verifyNoInteractions(tabletReshardJobManager);
     }
 
     @Test
@@ -273,7 +335,7 @@ public class DefaultPreSplitPipelineTest {
         DefaultPreSplitPipeline pipeline = newPipeline(
                 (r, k) -> BoundaryPlannerResult.NO_SPLIT, r -> SampleSet.EMPTY, Clock.systemUTC());
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                () -> pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob), POST_SUBMIT_TIMEOUT));
+                () -> pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(fakeJob), POST_SUBMIT_TIMEOUT, () -> false));
         Assertions.assertTrue(thrown.getMessage().contains("disappeared"));
     }
 
@@ -304,6 +366,30 @@ public class DefaultPreSplitPipelineTest {
         Assertions.assertEquals(2, ranges.size());
         Assertions.assertTrue(ranges.get(0).getRange().isMinimum());
         Assertions.assertTrue(ranges.get(1).getRange().isMaximum());
+    }
+
+    @Test
+    public void forLoadKindInsertFromTableSinglePartitionForcesDataTier() {
+        // Unpartitioned OlapTable; forLoadKind with INSERT_FROM_TABLE must install a
+        // meta-tier stub that throws MetaTierUnavailableException — the OLAP source
+        // has no Parquet/ORC footer so the meta tier is never usable for this load kind.
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(table.getPartitionInfo()).thenReturn(partitionInfo);
+
+        DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
+                database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES, LoadKind.INSERT_FROM_TABLE);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> pipeline.getMetaTierSamplerForTest().tryPlan(sampleRequest, 3),
+                "INSERT_FROM_TABLE must force data tier via MetaTierUnavailableException");
+    }
+
+    @Test
+    public void sampleSubqueryExecutorForInsertFromTableIsTableExecutor() {
+        SampleSubqueryExecutor executor = DefaultPreSplitPipeline.sampleSubqueryExecutorFor(LoadKind.INSERT_FROM_TABLE);
+        Assertions.assertInstanceOf(InsertFromTableSampleSubqueryExecutor.class, executor,
+                "INSERT_FROM_TABLE load kind must produce an InsertFromTableSampleSubqueryExecutor");
     }
 
     /** A test-only {@link Clock} whose "now" advances only when callers say so. */

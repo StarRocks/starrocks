@@ -33,10 +33,10 @@ set(STARROCKS_LIBS
     FileSystem
     FSCore
     Formats
-    orc
     Gutil
     HttpCore
     IO
+    Platform
     Serde
     Storage
     Rowset
@@ -49,6 +49,7 @@ set(STARROCKS_LIBS
     Webserver
     Cache
     ${WL_END_GROUP}
+    FormatOrc
 )
 
 add_library(hdfs_so SHARED IMPORTED GLOBAL)

@@ -237,6 +237,11 @@ public class LoadJobTest {
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor)
             throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
+        // BrokerLoadJob now defers beginTxn + the PENDING -> LOADING transition
+        // out of unprotectedExecute and into createLoadingTask (after the
+        // pre-split hook returns). execute() only submits the BrokerLoadPendingTask;
+        // state stays PENDING and transactionId stays 0 until the pending task
+        // finishes and createLoadingTask opens the load txn under the write lock.
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
             {
@@ -264,9 +269,11 @@ public class LoadJobTest {
         } catch (LoadException e) {
             Assertions.fail(e.getMessage());
         }
-        Assertions.assertEquals(JobState.LOADING, loadJob.getState());
-        Assertions.assertEquals(1, loadJob.getTransactionId());
-
+        Assertions.assertEquals(JobState.PENDING, loadJob.getState());
+        Assertions.assertEquals(0L, loadJob.getTransactionId());
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(loadJob, "idToTasks");
+        Assertions.assertEquals(1, idToTasks.size(),
+                "execute() submits a BrokerLoadPendingTask before deferring beginTxn");
     }
 
     @Test

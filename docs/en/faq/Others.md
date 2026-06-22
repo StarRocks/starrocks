@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic provides answers to some general questions."
+description: "General FAQ for miscellaneous StarRocks questions."
 ---
 
 # Other FAQ
@@ -248,7 +248,7 @@ Yes. You can add the disks to the directory specified by the BE configuration it
 
 ## How can I prevent expression partition conflicts caused by concurrent execution of loading tasks and partition creation tasks?
 
-Currently, for tables with the expression partitioning strategy, partitions created during loading tasks conflict with those created during ALTER TABLE tasks. Since loading tasks take priority, any conflicting ALTER tasks will fail. To prevent this issue, consider the following workarounds:
+Currently, for tables with the expression partitioning strategy, partitions created during loading tasks can conflict with those created during ALTER TABLE tasks. Since loading tasks take priority, a conflicting ALTER task is cancelled or fails. This applies only to alter operations that rewrite data or table-level metadata, such as a full schema change, rollup, or `OPTIMIZE`. Metadata-only alter operations no longer conflict: when the FE configuration `enable_concurrent_add_partition_during_alter` is set to `true` (the default), partition creation proceeds concurrently with the shared-data ADD/DROP INDEX fast-path jobs and with the transient metadata-update state of fast schema evolution. To prevent conflicts for the still-affected alter types, consider the following workarounds:
 
 - If you use coarse time-based partitions (or example, partitioning by day or month), you can prevent ALTER operations from crossing time boundaries, reducing the risk of partition creation failures.
 - If you use fine-grained time-based partitions (or example, partitioning by hour), you can manually create partitions for a future time range to ensure that ALTER operations are not disrupted by new partition created by loading tasks. You can use the [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) feature to trigger partition creation by executing an INSERT statement without committing the transaction. This allows you to create the necessary partitions without affecting actual data. The following example demonstrates how to create partitions for the next 8 hours:

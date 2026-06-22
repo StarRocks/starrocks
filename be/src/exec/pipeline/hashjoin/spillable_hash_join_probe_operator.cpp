@@ -22,17 +22,19 @@
 #include "base/failpoint/fail_point.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/operator_mem_resource_manager.h"
+#include "compute_env/spill/partition.h"
+#include "compute_env/spill/spill_components.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller.hpp"
+#include "compute_env/spill/task_executor.h"
+#include "compute_env/spill/yield.h"
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/operator_mem_resource_manager.h"
-#include "exec/spill/partition.h"
-#include "exec/spill/spill_components.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller.hpp"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -55,7 +57,7 @@ Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     metrics.peak_processing_partition_count = _unique_metrics->AddHighWaterMarkCounter(
             "SpillPeakProcessingPartitionCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
-    auto wg = state->fragment_ctx()->workgroup();
+    auto wg = state->fragment_runtime_state()->workgroup();
     return Status::OK();
 }
 
@@ -583,11 +585,11 @@ Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "hash-join-probe";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
-    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
     _spill_options->spill_hash_join_probe_op_max_bytes = state->spill_hash_join_probe_op_max_bytes();

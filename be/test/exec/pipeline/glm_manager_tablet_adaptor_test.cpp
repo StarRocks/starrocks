@@ -19,11 +19,11 @@
 
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/pipeline/lookup/tablet_adaptor.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/rowset.h"
 #include "storage/rowset/rowset.h"
@@ -295,7 +295,7 @@ static lake::RowsetPtr make_lake_rowset(int num_segments, ObjectPool* pool) {
     auto meta = pool->add(new RowsetMetadataPB());
     meta->set_num_rows(100);
     for (int i = 0; i < num_segments; ++i) {
-        meta->add_segments("seg_" + std::to_string(i) + ".dat");
+        meta->add_segment_metas()->set_filename("seg_" + std::to_string(i) + ".dat");
     }
     return std::make_shared<lake::Rowset>(nullptr, next_id++, std::move(meta), 0, nullptr);
 }

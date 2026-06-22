@@ -56,7 +56,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/chunk_helper.h"
-#include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/metadata_util.h"
@@ -880,9 +879,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
-            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
-                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
-            }
             if (rowsets_to_change.back() == nullptr) {
                 std::vector<Version> base_tablet_versions;
                 base_tablet->list_versions(&base_tablet_versions);
@@ -896,6 +892,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
                     ss << ver << ",";
                 }
                 return Status::InternalError(fmt::format("fail to get rowset by version: {}", ss.str()));
+            }
+            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
+                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
             }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =

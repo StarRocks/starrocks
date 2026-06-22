@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "TPC-DS benchmark comparing StarRocks and Trino on 99 complex SQL queries across 24 tables at 1 TB scale, covering retail sales and return data."
+description: "TPC-DS benchmark on 1 TB dataset: StarRocks is 8.13x faster than Trino on OLAP tables and 6.93x faster on Iceberg Catalog queries (99 queries)."
 ---
 
 # TPC-DS Benchmarking

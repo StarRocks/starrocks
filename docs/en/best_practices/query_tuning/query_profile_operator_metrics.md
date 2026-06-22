@@ -1,8 +1,8 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
-description: "Basic information about the query execution:"
+description: "Reference for all raw metrics emitted by StarRocks Query Profile, organized by operator type."
 ---
 
 # Query Profile Metrics

@@ -38,6 +38,10 @@ public class TabletReshardJobMgrTest {
         }
 
         @Override
+        public void init() throws StarRocksException {
+        }
+
+        @Override
         protected void runPendingJob() {
             setJobState(JobState.PREPARING);
         }
@@ -161,7 +165,6 @@ public class TabletReshardJobMgrTest {
 
         TestNormalTabletReshardJob normalJob = new TestNormalTabletReshardJob(1, null);
         jobMgr.addTabletReshardJob(normalJob);
-        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(normalJob));
 
         TestAbnormalTabletReshardJob abnormalJob = new TestAbnormalTabletReshardJob(2, null);
         jobMgr.addTabletReshardJob(abnormalJob);
@@ -190,6 +193,23 @@ public class TabletReshardJobMgrTest {
         jobMgr.runAfterLeaseValid();
 
         Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
+    }
+
+    @Test
+    public void testAddJobRejectedWhenInitFails() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+
+        // A job whose init() (admission-time table reservation) fails must not be queued.
+        TabletReshardJob job = new TestNormalTabletReshardJob(1, null) {
+            @Override
+            public void init() throws StarRocksException {
+                throw new StarRocksException("table not reservable");
+            }
+        };
+
+        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(job));
+        Assertions.assertNull(jobMgr.getTabletReshardJob(1));
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
     }
 
     @Test

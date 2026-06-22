@@ -74,11 +74,30 @@ CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 
-// Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
-// mem tracker is already past this percent (0-100) of its limit. In that regime the function
-// falls back to a single-pass loop that holds only one decoded del-file column at a time,
-// trading the cold-start latency win for bounded peak memory.
-CONF_mInt32(pk_index_parallel_load_dels_mem_ratio, "50");
+// Maximum number of per-output-segment .lcrm reads kept in flight by
+// RowsMapperIterator during light COMPACTION publish. The unit is **sub-chunks**
+// (each lake_rows_mapper_sub_chunk_bytes in size, never crossing a segment
+// boundary): K controls how many sub-chunk reads stay in flight, decoupled from
+// segment count. Memory bound = K * lake_rows_mapper_sub_chunk_bytes. Each chunk
+// owns its own RandomAccessFile (no shared file-class state across tasks) and
+// is consumed in segment order via vector::swap (zero memcpy when a segment
+// fits one sub-chunk). Set to 1 to disable pipelining and fall back to the
+// sequential single-shot read path.
+CONF_mInt32(lake_rows_mapper_read_parallelism, "32");
+
+// Sub-chunk granularity for RowsMapperIterator pipelined reads. Each segment is
+// split into ceil(segment_bytes / sub_chunk_bytes) sub-chunks that the iterator
+// pipelines independently. Smaller values raise the achievable parallelism for
+// few-but-large output segments at the cost of more range-reads and an extra
+// memcpy on consume. Defaults to 4 MiB (starcache disk-tier block-friendly).
+CONF_mInt64(lake_rows_mapper_sub_chunk_bytes, "4194304");
+
+// Memory-pressure gate for the parallel prefetch paths used while rebuilding the shared-data
+// primary key index. When the update mem tracker is already past this percent (0-100) of its
+// limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a
+// time, trading the cold-start latency win for bounded peak memory. Gates parallel reads of
+// del, segment, and other files during the rebuild.
+CONF_mInt32(pk_index_parallel_rebuild_mem_ratio, "50");
 
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
@@ -119,6 +138,9 @@ CONF_mInt32(retry_apply_timeout_second, "7200");
 
 // The value must be power of two.
 CONF_Int32(pk_index_map_shard_size, "4096");
+
+// The chunk size for vector query engine
+CONF_Int32(vector_chunk_size, "4096");
 
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write

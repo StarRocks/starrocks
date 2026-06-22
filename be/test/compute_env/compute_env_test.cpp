@@ -16,39 +16,13 @@
 
 #include <gtest/gtest.h>
 
-#include <string>
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
-#include "compute_env/pipeline/observer.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
-namespace {
-
-class FakePipelineObserver final : public pipeline::PipelineObserver {
-public:
-    explicit FakePipelineObserver(std::string debug_string) : _debug_string(std::move(debug_string)) {}
-
-    void source_trigger() override { ++source_trigger_count; }
-    void sink_trigger() override { ++sink_trigger_count; }
-    void cancel_trigger() override { ++cancel_trigger_count; }
-    void all_trigger() override { ++all_trigger_count; }
-    void runtime_filter_timeout_trigger() override { ++runtime_filter_timeout_count; }
-    std::string debug_string() const override { return _debug_string; }
-
-    int source_trigger_count = 0;
-    int sink_trigger_count = 0;
-    int cancel_trigger_count = 0;
-    int all_trigger_count = 0;
-    int runtime_filter_timeout_count = 0;
-
-private:
-    std::string _debug_string;
-};
-
-} // namespace
 
 TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     ComputeEnv env;
@@ -83,56 +57,18 @@ TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     EXPECT_EQ(env.result_queue_mgr(), nullptr);
 }
 
-TEST(ComputeEnvTest, ObservableNotifiesObservers) {
-    RuntimeState state;
-    state.set_enable_event_scheduler(true);
-    pipeline::Observable observable;
-    FakePipelineObserver observer("fake_driver");
+TEST(ComputeEnvTest, LoadPathLifecycle) {
+    ComputeEnv env;
+    EXPECT_EQ(env.load_path_mgr(), nullptr);
 
-    observable.add_observer(&state, &observer);
-    EXPECT_EQ(observable.num_observers(), 1);
-    EXPECT_EQ(observable.to_string(), "fake_driver\n");
+    ASSERT_OK(env.init_load_path({}, true));
+    ASSERT_NE(env.load_path_mgr(), nullptr);
 
-    observable.notify_source_observers();
-    observable.notify_sink_observers();
-    observable.notify_runtime_filter_timeout();
-    EXPECT_EQ(observer.source_trigger_count, 1);
-    EXPECT_EQ(observer.sink_trigger_count, 1);
-    EXPECT_EQ(observer.runtime_filter_timeout_count, 1);
+    std::string prefix;
+    EXPECT_FALSE(env.load_path_mgr()->allocate_dir("db", "label", &prefix).ok());
 
-    observable.detach_observers();
-    EXPECT_EQ(observable.num_observers(), 0);
-    observable.notify_source_observers();
-    EXPECT_EQ(observer.source_trigger_count, 1);
-}
-
-TEST(ComputeEnvTest, ObservableSkipsObserversWhenEventSchedulerDisabled) {
-    RuntimeState state;
-    state.set_enable_event_scheduler(false);
-    pipeline::Observable observable;
-    FakePipelineObserver observer("fake_driver");
-
-    observable.add_observer(&state, &observer);
-    EXPECT_EQ(observable.num_observers(), 0);
-}
-
-TEST(ComputeEnvTest, PipeObservableNotifiesAttachedSides) {
-    RuntimeState state;
-    state.set_enable_event_scheduler(true);
-    pipeline::PipeObservable pipe_observable;
-    FakePipelineObserver sink_observer("sink_driver");
-    FakePipelineObserver source_observer("source_driver");
-
-    pipe_observable.attach_sink_observer(&state, &sink_observer);
-    pipe_observable.attach_source_observer(&state, &source_observer);
-
-    { auto notify = pipe_observable.defer_notify_source(); }
-    EXPECT_EQ(source_observer.source_trigger_count, 1);
-    EXPECT_EQ(sink_observer.source_trigger_count, 0);
-
-    { auto notify = pipe_observable.defer_notify_sink(); }
-    EXPECT_EQ(sink_observer.source_trigger_count, 1);
-    EXPECT_EQ(sink_observer.sink_trigger_count, 0);
+    env.destroy_load_path();
+    EXPECT_EQ(env.load_path_mgr(), nullptr);
 }
 
 } // namespace starrocks

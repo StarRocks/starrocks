@@ -16,6 +16,7 @@
 
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/core/auth/STSCredentialsProvider.h>
 #include <aws/core/client/SpecifiedRetryableErrorsRetryStrategy.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
@@ -90,6 +91,8 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
         credential_provider = std::make_shared<Aws::Auth::DefaultAWSCredentialsProviderChain>();
     } else if (aws_cloud_credential.use_instance_profile) {
         credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
+    } else if (aws_cloud_credential.use_web_identity_profile) {
+        credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleWebIdentityCredentialsProvider>();
     } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
         credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
                 aws_cloud_credential.access_key, aws_cloud_credential.secret_key, aws_cloud_credential.session_token);
@@ -120,6 +123,10 @@ void S3ClientFactory::close() {
     for (auto& item : _clients) {
         item.reset();
     }
+    for (auto& key : _client_cache_keys) {
+        key = ClientCacheKey{};
+    }
+    _items = 0;
 }
 
 // clang-format: off
@@ -260,6 +267,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 // Only use for UT
 bool S3ClientFactory::_find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
                                                              AWSCloudConfiguration* cloud_config) {
+    std::lock_guard l(_lock);
     auto aws_config = cloud_config == nullptr ? AWSCloudConfiguration{} : *cloud_config;
     for (size_t i = 0; i < _items; i++) {
         if (_client_cache_keys[i] == ClientCacheKey{std::make_shared<Aws::Client::ClientConfiguration>(config),

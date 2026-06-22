@@ -15,14 +15,14 @@
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 
 #include "base/utility/defer_op.h"
+#include "compute_env/spill/common.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/spill/common.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
@@ -148,12 +148,12 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "local-sort-spill";
     _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
-    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 

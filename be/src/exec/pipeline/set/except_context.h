@@ -22,12 +22,12 @@
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
 #include "common/statusor.h"
-#include "compute_env/pipeline/observer.h"
 #include "exec/except_hash_set.h"
-#include "exec/olap_common.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "runtime/descriptors_fwd.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks::pipeline {

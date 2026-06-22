@@ -30,6 +30,7 @@
 #include "tablet_manager.h"
 
 namespace starrocks {
+class RemoteSnapshotClient;
 class ThreadPool;
 } // namespace starrocks
 
@@ -50,8 +51,15 @@ struct DelTranscodeContext {
 
 class ReplicationTxnManager {
 public:
-    explicit ReplicationTxnManager(lake::TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {
+    explicit ReplicationTxnManager(lake::TabletManager* tablet_manager, RemoteSnapshotClient* snapshot_client = nullptr)
+            : _tablet_manager(tablet_manager), _snapshot_client(snapshot_client) {
         _lake_replication_txn_manager = std::make_unique<LakeReplicationTxnManager>(tablet_manager);
+    }
+
+    RemoteSnapshotClient* TEST_set_remote_snapshot_client(RemoteSnapshotClient* snapshot_client) {
+        auto* previous = _snapshot_client;
+        _snapshot_client = snapshot_client;
+        return previous;
     }
 
     Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
@@ -127,6 +135,7 @@ private:
 
 private:
     lake::TabletManager* _tablet_manager;
+    RemoteSnapshotClient* _snapshot_client = nullptr;
     std::unique_ptr<LakeReplicationTxnManager> _lake_replication_txn_manager;
 };
 

@@ -34,11 +34,18 @@
 
 #include "http_service.h"
 
+#include <fmt/format.h>
+
+#include <optional>
+
 #include "cache/datacache.h"
+#include "common/config_http_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_update_registry.h"
+#include "common/utils.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
@@ -50,6 +57,7 @@
 #include "http/action/jit_cache_action.h"
 #endif
 #include "common/metrics/process_metrics_registry.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -71,12 +79,13 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
+#include "http/utils.h"
 #include "http/web_page_handler.h"
 #include "platform/store_path.h"
-#include "runtime/base_load_path_mgr.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
+#include "service/service_be/http_auth_response.h"
 
 namespace starrocks {
 
@@ -110,6 +119,8 @@ Status HttpServiceBE::start() {
 
     add_default_path_handlers(_web_page_handler.get(), _global_env);
 
+    _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
+
     // register load
     auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
@@ -137,8 +148,10 @@ Status HttpServiceBE::start() {
 
     // register download action
     std::vector<std::string> allow_paths;
-    for (auto& path : _env->store_paths()) {
-        allow_paths.emplace_back(path.path);
+    const auto* store_path_registry = _env->platform_services().store_path_registry;
+    if (store_path_registry != nullptr) {
+        const auto& store_path_roots = store_path_registry->store_path_roots();
+        allow_paths.assign(store_path_roots.begin(), store_path_roots.end());
     }
     auto* download_action = new DownloadAction(_env, allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_download_load", download_action);
@@ -163,6 +176,7 @@ Status HttpServiceBE::start() {
     // Register Stop Be action
     auto* stop_be_action = new StopBeAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/_stop_be", stop_be_action);
     _http_handlers.emplace_back(stop_be_action);
 
     // register pprof actions

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This document provides detailed instructions on how to compile, run, debug, and test StarRocks on the macOS ARM64 platform (Apple Silicon), making it easier for developers to work on Mac."
+description: "How to compile, run, debug, and test StarRocks on macOS ARM64 (Apple Silicon)."
 ---
 
 # Compile, Run and Test StarRocks on macOS ARM64
@@ -387,13 +387,13 @@ The macOS compilation implementation follows these principles:
 
 **Q: Getting "protobuf version mismatch" error during compilation**
 
-A: Make sure the BE CMake build is using `thirdparty/installed/bin/protoc` (version 3.14.0) instead of system or Homebrew's protobuf:
+A: Make sure the BE CMake build is using `thirdparty/installed/bin/protoc` (version 3.16.1) instead of system or Homebrew's protobuf:
 
 ```bash
 # Check protobuf version
 /Users/kks/git/starrocks/thirdparty/installed/bin/protoc --version
 
-# Should output: libprotoc 3.14.0
+# Should output: libprotoc 3.16.1
 ```
 
 **Q: Out of memory during compilation**

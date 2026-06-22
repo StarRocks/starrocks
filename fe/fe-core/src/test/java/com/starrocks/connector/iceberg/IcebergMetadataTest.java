@@ -245,6 +245,23 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetVersionCommitTimeMillis() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.refresh();
+        Snapshot snapshot = mockedNativeTableA.currentSnapshot();
+        IcebergTable table = new IcebergTable(1, "tableA", CATALOG_NAME, CATALOG_NAME, "iceberg_db",
+                "tableA", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        Assertions.assertEquals(Optional.of(snapshot.timestampMillis()),
+                metadata.getVersionCommitTimeMillis("iceberg_db", table, snapshot.snapshotId()));
+        Assertions.assertEquals(Optional.empty(),
+                metadata.getVersionCommitTimeMillis("iceberg_db", table, snapshot.snapshotId() + 1));
+    }
+
+    @Test
     public void testGetDB(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
         String db = "db";
 
@@ -1688,6 +1705,24 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assertions.assertEquals(newFilter, PredicateSearchKey.of("db", "table", newCallParams));
         Assertions.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", emptyParams));
+    }
+
+    @Test
+    public void testPredicateSearchKeyIgnoresFieldNames() {
+        GetRemoteFilesParams leftParams = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))
+                .setFieldNames(Lists.newArrayList("c1"))
+                .build();
+        GetRemoteFilesParams rightParams = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))
+                .setFieldNames(Lists.newArrayList("c2"))
+                .build();
+
+        PredicateSearchKey leftKey = PredicateSearchKey.of("db", "table", leftParams);
+        PredicateSearchKey rightKey = PredicateSearchKey.of("db", "table", rightParams);
+
+        Assertions.assertEquals(leftKey, rightKey);
+        Assertions.assertEquals(leftKey.hashCode(), rightKey.hashCode());
     }
 
     @Test

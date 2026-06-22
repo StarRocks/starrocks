@@ -26,7 +26,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/conjunctive_predicates.h"
+#include "storage/primitive/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 
