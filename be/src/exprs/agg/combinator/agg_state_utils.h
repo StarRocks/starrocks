@@ -81,9 +81,9 @@ public:
 
     // Get the aggregate state function according to the TAggStateDesc and function name.
     // If the function is not an aggregate state function, return nullptr.
-    static StateCombinatorPtr get_agg_state_function(const TAggStateDesc& desc, const std::string& func_name,
-                                                     const TypeDescriptor& return_type,
-                                                     std::vector<bool> arg_nullables);
+    static StateCombinatorPtr create_state_combinator(const TAggStateDesc& desc, const std::string& func_name,
+                                                      const TypeDescriptor& return_type,
+                                                      std::vector<bool> arg_nullables);
 };
 
 } // namespace starrocks

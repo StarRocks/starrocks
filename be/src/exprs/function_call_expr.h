@@ -15,7 +15,6 @@
 #pragma once
 
 #include "common/object_pool.h"
-#include "exprs/agg/combinator/state_combinator.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr.h"
 
@@ -56,17 +55,10 @@ protected:
 
 private:
     const FunctionDescriptor* _get_function_by_fid(const TFunction& fn);
-    const FunctionDescriptor* _get_function(const TFunction& fn, const std::vector<TypeDescriptor>& arg_types,
-                                            const TypeDescriptor& result_type, std::vector<bool> arg_nullables);
 
     const FunctionDescriptor* _fn_desc{nullptr};
 
     bool _is_returning_random_value = false;
-
-    // only set when it's a agg state combinator function to track its lifecycle be with the expr
-    StateCombinatorPtr _agg_state_func = nullptr;
-    // only set when it's a agg state combinator function to track its lifecycle be with the expr
-    std::shared_ptr<FunctionDescriptor> _agg_func_desc = nullptr;
 };
 
 } // namespace starrocks
