@@ -397,7 +397,6 @@ public class MaterializedViewAnalyzer {
                     queryStatement = result.queryStatement();
                     // re-analyze again
                     Analyzer.analyze(queryStatement, context);
-                    statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
                     statement.setQueryStatement(queryStatement);
                     // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
                     statement.setKeysType(KeysType.PRIMARY_KEYS);
