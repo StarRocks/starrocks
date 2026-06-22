@@ -77,6 +77,12 @@ private:
 // This function always returns a concrete descriptor and never TYPE_UNKNOWN.
 TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field);
 
+// Returns true when the Parquet schema annotates this column as an unsigned integer:
+// a modern logical INTEGER with isSigned=false, or a legacy UINT_* converted type.
+// Used both to zero-extend unsigned INT32 values on load and to derive the unsigned
+// statistics sort order so signed-ordered legacy footer stats are not trusted.
+bool is_unsigned_integer(const tparquet::SchemaElement& schema_element);
+
 struct NullInfos {
     // The number of nulls contained in the null vector.
     size_t num_nulls{};
