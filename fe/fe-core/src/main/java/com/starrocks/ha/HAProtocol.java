@@ -40,4 +40,10 @@ public interface HAProtocol {
     long getLatestEpoch();
 
     void removeUnstableNode(String nodeName, int currentFollowerCnt);
+
+    // Gracefully transfer the master (leader) role to the node named `nodeName` by calling BDBJE
+    // transferMaster in-process. Returns the name of the node that won mastership. `force` supersedes
+    // a master transfer that is already in progress; without it the call fails if one is in progress.
+    // `timeoutMs` bounds how long the target replica has to catch up before the transfer aborts.
+    String transferToMaster(String nodeName, int timeoutMs, boolean force);
 }

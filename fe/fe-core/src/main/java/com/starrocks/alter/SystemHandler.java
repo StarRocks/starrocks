@@ -71,8 +71,10 @@ import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.TransferLeaderClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -156,6 +158,42 @@ public class SystemHandler extends AlterHandler {
         public Void visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 GlobalStateMgr.getCurrentState().getNodeMgr().modifyFrontendHost(clause);
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitTransferLeaderClause(TransferLeaderClause clause, Void context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                String host = clause.getHost();
+                int port = clause.getPort();
+                Frontend target = null;
+                for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null)) {
+                    if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
+                        target = fe;
+                        break;
+                    }
+                }
+                if (target == null) {
+                    throw new DdlException("frontend [" + host + ":" + port + "] not found");
+                }
+                if (target.getRole() != FrontendNodeType.FOLLOWER) {
+                    throw new DdlException("can only transfer leader to a FOLLOWER frontend, but ["
+                            + host + ":" + port + "] is " + target.getRole());
+                }
+                if (!target.isAlive()) {
+                    throw new DdlException("target frontend [" + host + ":" + port + "] is not alive");
+                }
+                String leaderNodeName = GlobalStateMgr.getCurrentState().getHaProtocol().getLeaderNodeName();
+                if (target.getNodeName().equals(leaderNodeName)) {
+                    throw new DdlException("frontend [" + host + ":" + port + "] is already the leader");
+                }
+                // Catch-up window for the target replica before the transfer aborts. This statement is
+                // forwarded to and runs on the current leader, so the transfer triggers the leader's
+                // in-place safe demotion.
+                final int catchUpTimeoutMs = 30000;
+                GlobalStateMgr.getCurrentState().getHaProtocol()
+                        .transferToMaster(target.getNodeName(), catchUpTimeoutMs, clause.isForce());
             });
             return null;
         }
