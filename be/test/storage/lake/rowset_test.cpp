@@ -42,6 +42,7 @@
 #include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "types/type_descriptor.h"
@@ -1545,6 +1546,41 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_m
     // The one segment_meta entry sits at index 0; the new-segment window starts
     // at idx=1 and never reads segment_metas(0), so no spurious .vi paths.
     EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", 100)));
+}
+
+// Regression: the lake read-options propagation chain must carry has_predicate_above_iterator
+// from RowsetReadOptions into SegmentReadOptions. Before the fix, Rowset::read copied ~28 option
+// fields but skipped this one, so a shared-data ANN scan with an above-iterator residual saw the
+// default (false) and could wrongly take segment-level PRE, which under-returns. The non-lake
+// Rowset path already copies it (storage/rowset/rowset.cpp).
+TEST_F(LakeRowsetTest, test_propagate_has_predicate_above_iterator) {
+    create_rowsets_for_testing();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.has_predicate_above_iterator = true;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+
+    bool seen = false;
+    bool propagated = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* seg_options = static_cast<SegmentReadOptions*>(arg);
+        seen = true;
+        propagated = seg_options->has_predicate_above_iterator;
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_TRUE(seen);
+    EXPECT_TRUE(propagated);
 }
 
 } // namespace starrocks::lake
