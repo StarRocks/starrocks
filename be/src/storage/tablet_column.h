@@ -1,0 +1,253 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <cassert>
+#include <cstdint>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "base/string/c_string.h"
+#include "column/column_access_path.h"
+#include "gen_cpp/olap_file.pb.h"
+#include "storage/primitive/aggregate_type.h"
+#include "storage/types.h"
+#include "types/agg_state_desc.h"
+
+namespace starrocks {
+
+class TColumn;
+
+struct ExtendedColumnInfo {
+    ExtendedColumnInfo(ColumnAccessPath* access_path, int32_t source_column_uid)
+            : access_path(access_path), source_column_uid(source_column_uid) {
+        DCHECK(access_path != nullptr);
+    }
+
+    ColumnAccessPath* access_path = nullptr;
+    int32_t source_column_uid = -1;
+};
+
+class TabletColumn {
+    struct ExtraFields {
+        std::string default_value;
+        std::vector<TabletColumn> sub_columns;
+        bool has_default_value = false;
+        bool is_virtual_column = false;
+    };
+
+public:
+    // To developers: if you changed the typedefs, don't forget to reorder class members to
+    // minimize the memory space of TabletColumn, i.e, sizeof(TabletColumn)
+    using ColumnName = CString;
+    using ColumnUID = int32_t;
+    using ColumnLength = int32_t;
+    using ColumnIndexLength = uint8_t;
+    using ColumnPrecision = uint8_t;
+    using ColumnScale = uint8_t;
+
+    TabletColumn();
+    TabletColumn(const ColumnPB& column);
+    TabletColumn(const TColumn& column);
+    TabletColumn(StorageAggregateType agg, LogicalType type);
+    TabletColumn(StorageAggregateType agg, LogicalType type, bool is_nullable);
+    TabletColumn(StorageAggregateType agg, LogicalType type, bool is_nullable, int32_t unique_id, size_t length);
+
+    ~TabletColumn();
+
+    TabletColumn(const TabletColumn& rhs);
+    TabletColumn(TabletColumn&& rhs) noexcept;
+
+    TabletColumn& operator=(const TabletColumn& rhs);
+    TabletColumn& operator=(TabletColumn&& rhs) noexcept;
+
+    void swap(TabletColumn* rhs);
+
+    void init_from_pb(const ColumnPB& column);
+    void init_from_thrift(const TColumn& column);
+    void to_schema_pb(ColumnPB* column) const;
+
+    ColumnUID unique_id() const { return _unique_id; }
+    void set_unique_id(ColumnUID unique_id) { _unique_id = unique_id; }
+
+    std::string_view name() const { return {_col_name.data(), _col_name.size()}; }
+    void set_name(std::string_view name) { _col_name.assign(name.data(), name.size()); }
+
+    LogicalType type() const { return _type; }
+    void set_type(LogicalType type) { _type = type; }
+
+    bool is_key() const { return _check_flag(kIsKeyShift); }
+    void set_is_key(bool value) { _set_flag(kIsKeyShift, value); }
+
+    bool is_nullable() const { return _check_flag(kIsNullableShift); }
+    void set_is_nullable(bool value) { _set_flag(kIsNullableShift, value); }
+
+    bool is_auto_increment() const { return _check_flag(kHasAutoIncrementShift); }
+    void set_is_auto_increment(bool value) { _set_flag(kHasAutoIncrementShift, value); }
+
+    bool is_bf_column() const { return _check_flag(kIsBfColumnShift); }
+    void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }
+
+    bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
+    void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
+
+    bool is_sort_key() const { return _check_flag(kIsSortKey); }
+    void set_is_sort_key(bool value) { _set_flag(kIsSortKey, value); }
+
+    ColumnLength length() const { return _length; }
+    void set_length(ColumnLength length) { _length = length; }
+
+    StorageAggregateType aggregation() const { return _aggregation; }
+    void set_aggregation(StorageAggregateType agg) { _aggregation = agg; }
+
+    bool has_precision() const { return _check_flag(kHasPrecisionShift); }
+    ColumnPrecision precision() const { return _precision; }
+    void set_precision(ColumnPrecision precision) {
+        _precision = precision;
+        _set_flag(kHasPrecisionShift, true);
+    }
+
+    bool has_scale() const { return _check_flag(kHasScaleShift); }
+    ColumnScale scale() const { return _scale; }
+    void set_scale(ColumnScale scale) {
+        _scale = scale;
+        _set_flag(kHasScaleShift, true);
+    }
+
+    ColumnIndexLength index_length() const { return _index_length; }
+    void set_index_length(ColumnIndexLength index_length) { _index_length = index_length; }
+
+    bool has_default_value() const { return _extra_fields && _extra_fields->has_default_value; }
+
+    const std::string& default_value() const {
+        return _extra_fields ? _extra_fields->default_value : kEmptyDefaultValue;
+    }
+
+    void set_default_value(std::string value) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->has_default_value = true;
+        ext->default_value = std::move(value);
+    }
+
+    bool is_virtual_column() const { return _extra_fields && _extra_fields->is_virtual_column; }
+
+    void set_is_virtual_column(bool is_virtual) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->is_virtual_column = is_virtual;
+    }
+
+    bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
+    AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
+
+    void add_sub_column(const TabletColumn& sub_column);
+    void add_sub_column(TabletColumn&& sub_column);
+    uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
+    const TabletColumn& subcolumn(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            throw std::out_of_range("Index i is out of range");
+        }
+        return _extra_fields->sub_columns[i];
+    }
+    const TabletColumn* subcolumn_ptr(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            return nullptr;
+        }
+        return &(_extra_fields->sub_columns[i]);
+    }
+
+    friend bool operator==(const TabletColumn& a, const TabletColumn& b);
+    friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
+
+    size_t estimate_field_size(size_t variable_length) const;
+    static uint32_t get_field_length_by_type(LogicalType type, uint32_t string_length);
+
+    std::string debug_string() const;
+
+    int64_t mem_usage() const {
+        int64_t mem_usage = sizeof(TabletColumn) + _col_name.size() + default_value().capacity();
+        for (int i = 0; i < subcolumn_count(); i++) {
+            mem_usage += subcolumn(i).mem_usage();
+        }
+        return mem_usage;
+    }
+
+    bool is_support_checksum() const;
+
+    // Extended column from the access path
+    bool is_extended() const { return !!_extended_info; }
+    void set_extended_info(std::unique_ptr<ExtendedColumnInfo> info) { _extended_info = std::move(info); }
+    const ExtendedColumnInfo* extended_info() const { return _extended_info.get(); }
+
+private:
+    inline static const std::string kEmptyDefaultValue;
+    constexpr static uint8_t kIsKeyShift = 0;
+    constexpr static uint8_t kIsNullableShift = 1;
+    constexpr static uint8_t kIsBfColumnShift = 2;
+    constexpr static uint8_t kHasBitmapIndexShift = 3;
+    constexpr static uint8_t kHasPrecisionShift = 4;
+    constexpr static uint8_t kHasScaleShift = 5;
+    constexpr static uint8_t kHasAutoIncrementShift = 6;
+    constexpr static uint8_t kIsSortKey = 7;
+
+    ExtraFields* _get_or_alloc_extra_fields() {
+        if (_extra_fields == nullptr) {
+            _extra_fields = new ExtraFields();
+        }
+        return _extra_fields;
+    }
+
+    void _set_flag(uint8_t pos, bool value) {
+        assert(pos < sizeof(_flags) * 8);
+        if (value) {
+            _flags |= (1 << pos);
+        } else {
+            _flags &= ~(1 << pos);
+        }
+    }
+
+    bool _check_flag(uint8_t pos) const {
+        assert(pos < sizeof(_flags) * 8);
+        return _flags & (1 << pos);
+    }
+
+    // To developers: try to order the class members in a way to minimize the required memory space.
+
+    ColumnName _col_name;
+    ColumnUID _unique_id = 0;
+    ColumnLength _length = 0;
+    StorageAggregateType _aggregation = STORAGE_AGGREGATE_NONE;
+    LogicalType _type = TYPE_UNKNOWN;
+
+    ColumnIndexLength _index_length = 0;
+    ColumnPrecision _precision = 0;
+    ColumnScale _scale = 0;
+
+    // Extended access path column
+    std::unique_ptr<ExtendedColumnInfo> _extended_info;
+
+    uint8_t _flags = 0;
+
+    ExtraFields* _extra_fields = nullptr;
+    AggStateDesc* _agg_state_desc = nullptr;
+};
+
+bool operator==(const TabletColumn& a, const TabletColumn& b);
+bool operator!=(const TabletColumn& a, const TabletColumn& b);
+
+} // namespace starrocks

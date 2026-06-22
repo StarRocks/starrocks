@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -28,7 +29,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors_fwd.h"
-#include "storage/tablet_schema.h"
+#include "storage/tablet_column.h"
 
 namespace starrocks {
 

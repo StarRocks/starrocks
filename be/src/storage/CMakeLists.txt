@@ -115,6 +115,7 @@ set(STORAGE_FILES
     snapshot_meta.cpp
     tablet.cpp
     tablet_manager.cpp
+    tablet_column.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
     tablet_index.cpp
