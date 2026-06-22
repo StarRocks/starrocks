@@ -85,6 +85,14 @@ If an error indicating an unknown host is returned when you send a query, you mu
 
 :::
 
+##### Pass HDFS client configurations through Catalog PROPERTIES
+
+In addition to placing **hdfs-site.xml** under the **conf** directories of FEs/BEs/CNs, you can declare HDFS client configurations directly in the `PROPERTIES` of `CREATE EXTERNAL CATALOG` (for example, the HA-related keys `dfs.nameservices`, `dfs.ha.namenodes.<ns>`, `dfs.namenode.rpc-address.<ns>.<nn>`, `dfs.client.failover.proxy.provider.<ns>`, `fs.defaultFS`, etc.). Both FEs and BEs/CNs receive these properties and apply them to the HDFS client.
+
+The main advantage of this approach is that **a single StarRocks cluster can access multiple independent HDFS HA clusters at the same time through different Iceberg Catalogs**. Because the **conf** directory of each FE/BE/CN can hold only one **hdfs-site.xml**, multiple HDFS HA clusters cannot coexist there. Passing the configuration through Catalog PROPERTIES lets each Catalog carry its own HA configuration, with no interference between Catalogs.
+
+For a complete HA example, see the [Examples - HDFS](#examples) section below.
+
 ---
 
 #### Kerberos authentication
@@ -961,6 +969,77 @@ PROPERTIES
 );
 ```
 
+##### Access an HA-enabled HDFS cluster
+
+If the target HDFS cluster has HA enabled, you can declare the HA configurations directly in `PROPERTIES`:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_ha
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    -- HDFS HA configurations
+    "dfs.nameservices" = "my_cluster",
+    "dfs.ha.namenodes.my_cluster" = "nn1,nn2",
+    "dfs.namenode.rpc-address.my_cluster.nn1" = "host1:8020",
+    "dfs.namenode.rpc-address.my_cluster.nn2" = "host2:8020",
+    "dfs.client.failover.proxy.provider.my_cluster" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://my_cluster"
+);
+```
+
+##### Access multiple HDFS HA clusters simultaneously
+
+If you need to query Iceberg tables that live on multiple independent HDFS HA clusters from the same StarRocks cluster, create one Catalog per HDFS cluster and let each Catalog carry its own `dfs.nameservices` and related HA parameters. The Catalogs do not interfere with each other.
+
+```SQL
+-- Catalog A: access HDFS HA cluster cluster_a
+CREATE EXTERNAL CATALOG iceberg_catalog_a
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-a.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+    "username" = "hdfs",
+
+    "dfs.nameservices" = "cluster_a",
+    "dfs.ha.namenodes.cluster_a" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_a.nn1" = "host-a-1:8020",
+    "dfs.namenode.rpc-address.cluster_a.nn2" = "host-a-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_a" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_a"
+);
+
+-- Catalog B: access another HDFS HA cluster cluster_b
+CREATE EXTERNAL CATALOG iceberg_catalog_b
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-b.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_b",
+    "dfs.ha.namenodes.cluster_b" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_b.nn1" = "host-b-1:8020",
+    "dfs.namenode.rpc-address.cluster_b.nn2" = "host-b-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_b" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_b"
+);
+```
+
+
 </TabItem>
 
 <TabItem value="MINIO" label="MinIO" >
@@ -1230,7 +1309,7 @@ PROPERTIES
 
 </Tabs>
  
- ---
+---
 
 ## Use your catalog
 
@@ -1268,7 +1347,7 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
   ```SQL
   USE <catalog_name>.<db_name>
   ```
- 
+
 ---
 
 ### Drop an Iceberg catalog
@@ -1376,13 +1455,13 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 
 ##### iceberg_metadata_memory_cache_expiration_seconds
 
-- Unit: Seconds  
+- Unit: Seconds
 - Default value: `86500`
 - Description: The amount of time after which a cache entry in memory expires counting from its last access.
 
 ##### iceberg_metadata_disk_cache_expiration_seconds
 
-- Unit: Seconds  
+- Unit: Seconds
 - Default value: `604800`, equivalent to one week
 - Description: The amount of time after which a cache entry on disk expires counting from its last access.
 
