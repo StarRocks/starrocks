@@ -128,3 +128,32 @@ scrape_configs:
 
 - Type: Counter
 - Description: Number of times materialized views are used by queries, with labels `usage_type` (`REWRITE` if a query was rewritten to use the materialized view, or `DIRECT` if a query reads the materialized view directly) and `refresh_mode`.
+### mv_global_refresh_jobs_total
+
+- Type: Counter
+- Description: Total number of materialized view refresh jobs across all materialized views, with label `warehouse_name`. This is the fleet-level aggregate of `mv_refresh_jobs`: counted once per job on its terminal task run, excluding `MERGED` runs. Always emitted, regardless of the per-materialized-view metrics privilege.
+
+### mv_global_refresh_success_jobs_total
+
+- Type: Counter
+- Description: Total number of successful materialized view refresh jobs across all materialized views, by `warehouse_name`.
+
+### mv_global_refresh_failed_jobs_total
+
+- Type: Counter
+- Description: Total number of failed materialized view refresh jobs across all materialized views, by `warehouse_name`.
+
+### mv_global_refresh_duration
+
+- Type: Histogram
+- Description: Per-job wall-clock duration of materialized view refresh jobs, in milliseconds, by `warehouse_name`.
+
+### mv_global_refresh_pending_jobs
+
+- Type: Gauge
+- Description: Current number of pending materialized view refresh jobs across all materialized views, aggregated by `warehouse_name`.
+
+### mv_global_refresh_running_jobs
+
+- Type: Gauge
+- Description: Current number of running materialized view refresh jobs across all materialized views, aggregated by `warehouse_name`.
