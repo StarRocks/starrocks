@@ -69,17 +69,6 @@ Flat JSON的核心原理是在导入时检测JSON数据，并从JSON数据中提
 
 1. 在创建表时，您可以设置 `flat_json.enable` 及其他与 Flat JSON 相关的属性。如需详细说明，请参阅 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#在表级别设置-flat-json-属性)。
 
-   或者，您可以使用 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句设置这些属性。
-
-   示例：
-
-   ```SQL
-   ALTER TABLE t1 SET ("flat_json.enable" = "true");
-   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
-   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
-   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
-   ```
-
 2. 启用FE分区裁剪功能：
 
    ```SQL
@@ -231,6 +220,7 @@ SET cbo_json_v2_dict_opt = true;
 - 启用Flat JSON会增加JSON的导入时间，提取的JSON越多，所需时间越长。
 - Flat JSON仅支持物化JSON对象中的常用键，不支持JSON数组中的键。
 - Flat JSON不改变数据排序方式，因此查询性能和数据压缩率仍会受到数据排序的影响。为了达到最佳性能，可能需要进一步调整数据排序。
+- 表级 Flat JSON 属性（`flat_json.*`）仅在建表时设置才会生效。
 
 ## 版本说明
 

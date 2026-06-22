@@ -70,17 +70,6 @@ Setting Flat JSON-related properties on table level is supported from v4.0 onwar
 
 1. When creating the table, you can set `flat_json.enable` and other Flat JSON-related properties. For detailed instructions, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-flat-json-properties-on-table-level).
 
-   Alternatively, you can set these properties using [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
-
-   Example:
-
-   ```SQL
-   ALTER TABLE t1 SET ("flat_json.enable" = "true");
-   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
-   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
-   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
-   ```
-
 2. Enable FE pruning feature:
 
    ```SQL
@@ -232,6 +221,7 @@ SET cbo_json_v2_dict_opt = true;
 - Enabling Flat JSON will increase the time taken to load JSON. The more JSON extracted, the longer it takes.
 - Flat JSON can only support materializing common keys in JSON Objects, not keys in JSON Arrays.
 - Flat JSON does not change the data sorting method, so query performance and data compression rate will still be affected by data sorting. To achieve optimal performance, further adjustments to data sorting may be necessary.
+- Table-level Flat JSON properties (`flat_json.*`) take effect only when set at table creation time.
 
 ## Version Notes
 

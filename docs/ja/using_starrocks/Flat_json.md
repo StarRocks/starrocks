@@ -69,17 +69,6 @@ v4.0 以降では、この機能はテーブルレベルで設定可能です。
 
 1. テーブルを作成する際、`flat_json.enable` を含む Flat JSON に関連するプロパティを設定できます。詳細な手順については、[CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#テーブルレベルの-flat-json-プロパティを設定) を参照してください。
 
-   または、これらのプロパティを [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用して設定することもできます。
-
-   例：
-
-   ```SQL
-   ALTER TABLE t1 SET ("flat_json.enable" = "true");
-   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
-   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
-   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
-   ```
-
 2. FE プルーニング機能を有効化します：
 
    ```SQL
@@ -231,6 +220,7 @@ SET cbo_json_v2_dict_opt = true;
 - Flat JSON を有効にすると、JSON のロードにかかる時間が増加します。抽出される JSON が多いほど、時間がかかります。
 - Flat JSON は JSON オブジェクト内の共通キーのみをマテリアライズすることをサポートし、JSON 配列内のキーはサポートしません。
 - Flat JSON はデータのソート方法を変更しないため、クエリパフォーマンスとデータ圧縮率はデータのソートによって影響を受け続けます。最適なパフォーマンスを達成するためには、データソートのさらなる調整が必要な場合があります。
+- テーブルレベルの Flat JSON プロパティ（`flat_json.*`）は、テーブル作成時に設定した場合にのみ有効になります。
 
 ## バージョンノート
 
