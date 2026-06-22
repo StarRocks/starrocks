@@ -2867,15 +2867,12 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(blake3Impl, str) {
     uint8_t output[Blake3Hash::BLAKE3_HASH_BYTES];
     Blake3Hash::blake3_compute(message, message_len, output);
 
-    // Format as lowercase hex, with a single space separating every 4-byte group.
+    // Format as a continuous lowercase hex string.
     static constexpr char kHex[] = "0123456789abcdef";
     std::string result;
-    result.resize(Blake3Hash::BLAKE3_HASH_BYTES * 2 + (Blake3Hash::BLAKE3_HASH_BYTES / 4 - 1));
+    result.resize(Blake3Hash::BLAKE3_HASH_BYTES * 2);
     size_t pos = 0;
     for (int i = 0; i < Blake3Hash::BLAKE3_HASH_BYTES; ++i) {
-        if (i != 0 && (i % 4) == 0) {
-            result[pos++] = ' ';
-        }
         result[pos++] = kHex[(output[i] >> 4) & 0xF];
         result[pos++] = kHex[output[i] & 0xF];
     }

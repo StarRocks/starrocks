@@ -31,7 +31,7 @@ TEST_F(StringFunctionBlake3Test, abcA1Test) {
     ColumnPtr result = StringFunctions::blake3(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    std::string s = "6437b3ac 38465133 ffb63b75 273a8db5 48c55846 5d79db03 fd359c6c d5bd9d85";
+    std::string s = "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85";
     ASSERT_EQ(s, v->get_slice(0).to_string());
 }
 
@@ -47,7 +47,7 @@ TEST_F(StringFunctionBlake3Test, abcA2Test) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     // Known BLAKE3 hash of the SHA-256 test vector long string
-    std::string s = "c19012cc 2aaf0dc3 d8e5c45a 1b79114d 2df42abb 2a410bf5 4be09e89 1af06ff8";
+    std::string s = "c19012cc2aaf0dc3d8e5c45a1b79114d2df42abb2a410bf54be09e891af06ff8";
     ASSERT_EQ(s, v->get_slice(0).to_string());
 }
 
@@ -61,7 +61,7 @@ TEST_F(StringFunctionBlake3Test, abcConstTest) {
     ColumnPtr result = StringFunctions::blake3(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<ConstColumn>(result)->data_column());
 
-    std::string s = "6437b3ac 38465133 ffb63b75 273a8db5 48c55846 5d79db03 fd359c6c d5bd9d85";
+    std::string s = "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85";
     ASSERT_EQ(s, v->get_slice(0).to_string());
 }
 
@@ -82,7 +82,7 @@ TEST_F(StringFunctionBlake3Test, abcNull1Test) {
 
     for (int j = 0; j < 20; ++j) {
         if (j % 2 != 0) {
-            std::string s = "6437b3ac 38465133 ffb63b75 273a8db5 48c55846 5d79db03 fd359c6c d5bd9d85";
+            std::string s = "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85";
             ASSERT_EQ(s, data_column->get_slice(j).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));
@@ -109,7 +109,7 @@ TEST_F(StringFunctionBlake3Test, abcNullLiteralTest) {
         if (j % 2 != 0) {
             // BLAKE3 digest of the empty (zero-length) message.
             // https://raw.githubusercontent.com/BLAKE3-team/BLAKE3/master/test_vectors/test_vectors.json
-            std::string s = "af1349b9 f5f9a1a6 a0404dea 36dcc949 9bcb25c9 adc112b7 cc9a93ca e41f3262";
+            std::string s = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
             ASSERT_EQ(s, data_column->get_slice(j).to_string());
         } else {
             ASSERT_TRUE(nullable_column->is_null(j));

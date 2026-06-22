@@ -21,7 +21,7 @@ BLAKE3(str);
 
 ## Return value
 
-Returns a value of the VARCHAR type. If the input is NULL, NULL is returned. An empty input string returns the BLAKE3 digest of the zero-length message (`af1349b9 f5f9a1a6 a0404dea 36dcc949 9bcb25c9 adc112b7 cc9a93ca e41f3262`).
+Returns a value of the VARCHAR type. If the input is NULL, NULL is returned. An empty input string returns the BLAKE3 digest of the zero-length message (`af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262`).
 
 This function accepts only one string. More than one input string causes an error.
 
@@ -29,10 +29,10 @@ This function accepts only one string. More than one input string causes an erro
 
 ```Plain Text
 mysql> select blake3('l');
-+-------------------------------------------------------------------------+
-| blake3('l')                                                             |
-+-------------------------------------------------------------------------+
-| b9f63c83 975dadee 9b4dc3fa eeb669dd ef34bbe1 2e3a0626 18316698 2681d81c |
-+-------------------------------------------------------------------------+
++------------------------------------------------------------------+
+| blake3('l')                                                      |
++------------------------------------------------------------------+
+| b9f63c83975dadee9b4dc3faeeb669ddef34bbe12e3a0626183166982681d81c |
++------------------------------------------------------------------+
 1 row in set (0.01 sec)
 ```
