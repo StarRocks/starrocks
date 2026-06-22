@@ -41,7 +41,7 @@ class ReflectionTableDefaults(ReflectionDefaults):
         'fast_schema_evolution': 'true',
         'replicated_storage': 'true',
         'storage_format': 'DEFAULT',
-        'bucket_size': '4294967296',
+        'bucket_size': '1073741824',
         'storage_medium': 'HDD',
 
         # for following properties, they won't explicitly set in the 'properties' field of the table.

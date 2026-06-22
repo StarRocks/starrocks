@@ -21,6 +21,10 @@ from alembic.autogenerate import comparators
 from alembic.autogenerate.api import AutogenContext
 from alembic.ddl import DefaultImpl
 from alembic.operations.ops import AlterColumnOp, AlterTableOp, UpgradeOps
+try:
+    from alembic.util import DispatchPriority
+except ImportError:
+    DispatchPriority = None  # type: ignore[assignment,misc]
 from sqlalchemy import Column
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import ArgumentError
@@ -197,7 +201,7 @@ def compare_complex_type(impl: DefaultImpl, inspector_type: sqltypes.TypeEngine,
     return True
 
 
-def comparators_dispatch_for_starrocks(dispatch_type: str):
+def comparators_dispatch_for_starrocks(dispatch_type: str, *, priority=None):
     """
     StarRocks-specific dispatch decorator.
 
@@ -231,10 +235,17 @@ def comparators_dispatch_for_starrocks(dispatch_type: str):
             # StarRocks dialect, execute actual logic
             return func(*args, **kwargs)
 
+        registration_options = {}
+        if priority is not None and DispatchPriority is not None:
+            registration_options["priority"] = priority
+
         # Register to Alembic dispatch system
-        return comparators.dispatch_for(dispatch_type)(wrapper)
+        return comparators.dispatch_for(dispatch_type, **registration_options)(wrapper)
 
     return decorator
+
+
+_SCHEMA_COMPARATOR_PRIORITY = DispatchPriority.LAST if DispatchPriority is not None else None
 
 
 # ==============================================================================
@@ -299,7 +310,7 @@ def check_similar_string_and_warn(
         )
 
 
-@comparators_dispatch_for_starrocks("schema")
+@comparators_dispatch_for_starrocks("schema", priority=_SCHEMA_COMPARATOR_PRIORITY)
 def _autogen_for_views(
     autogen_context: AutogenContext,
     upgrade_ops: UpgradeOps,
@@ -793,7 +804,7 @@ def _compare_view_columns(conn_view: View, metadata_view: View) -> bool:
 # ==============================================================================
 # Materialized View Comparison
 # ==============================================================================
-@comparators_dispatch_for_starrocks("schema")
+@comparators_dispatch_for_starrocks("schema", priority=_SCHEMA_COMPARATOR_PRIORITY)
 def _autogen_for_mvs(
     autogen_context: AutogenContext,
     upgrade_ops: UpgradeOps,
@@ -960,6 +971,35 @@ def _compare_mvs(
                 conn_mv,
                 metadata_mv,
             )
+
+
+@comparators_dispatch_for_starrocks("schema", priority=_SCHEMA_COMPARATOR_PRIORITY)
+def _order_view_mv_operations(
+    autogen_context: AutogenContext,
+    upgrade_ops: UpgradeOps,
+    schemas: Union[Set[None], Set[Optional[str]]],
+) -> None:
+    """Keep view and MV operations on the correct side of table operations."""
+    del autogen_context, schemas
+
+    drop_types = (DropViewOp, DropMaterializedViewOp)
+    create_or_alter_types = (
+        CreateViewOp,
+        AlterViewOp,
+        CreateMaterializedViewOp,
+        AlterMaterializedViewOp,
+    )
+
+    drop_operations = [op for op in upgrade_ops.ops if isinstance(op, drop_types)]
+    table_operations = [
+        op
+        for op in upgrade_ops.ops
+        if not isinstance(op, drop_types + create_or_alter_types)
+    ]
+    create_or_alter_operations = [
+        op for op in upgrade_ops.ops if isinstance(op, create_or_alter_types)
+    ]
+    upgrade_ops.ops[:] = drop_operations + table_operations + create_or_alter_operations
 
 
 def _compare_mv_definition(
@@ -2071,4 +2111,3 @@ def compare_starrocks_column_autoincrement(
             f"Because we can't inspect the column's autoincrement currently."
         )
     return None
-

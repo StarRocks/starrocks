@@ -782,6 +782,8 @@ class StarRocksTableDefinitionParser(object):
                     moment = parts.pop(0)
                 if parts:
                     type = " ".join(parts)
+                    if type.startswith("SCHEDULE"):
+                        type = "ASYNC" + type[len("SCHEDULE"):]
             state.table_options[TableInfoKeyWithPrefix.REFRESH] = ReflectedRefreshInfo(moment=moment, type=type)
 
     def _parse_properties(self, props_str: str) -> Dict[str, str]:

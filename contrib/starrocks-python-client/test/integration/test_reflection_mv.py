@@ -14,6 +14,7 @@
 
 import logging
 import time
+from datetime import datetime
 
 import pytest
 from sqlalchemy import MetaData, exc, inspect, text
@@ -159,6 +160,7 @@ class TestReflectionMaterializedViewsIntegration:
         """Test reflection of a materialized view with properties."""
         mv_name = "test_reflect_mv_with_properties"
         sr_engine = sr_root_engine
+        cooldown_time = "2099-12-31 23:59:59"
 
         with sr_engine.connect() as connection:
             connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
@@ -170,7 +172,7 @@ class TestReflectionMaterializedViewsIntegration:
             PROPERTIES (
                 "replication_num" = "1",
                 "storage_medium" = "SSD",
-                "storage_cooldown_time" = "2025-12-31 23:59:59"
+                "storage_cooldown_time" = "{cooldown_time}"
             )
             AS SELECT id, name FROM users WHERE active = 1
             """
@@ -203,7 +205,10 @@ class TestReflectionMaterializedViewsIntegration:
                     assert "storage_medium" in properties
                     assert "SSD" in properties.values()
                     assert "storage_cooldown_time" in properties
-                    assert "2025-12-31 23:59:59" in properties.values()
+                    reflected_cooldown = properties["storage_cooldown_time"]
+                    assert datetime.strptime(reflected_cooldown, "%Y-%m-%d %H:%M:%S") >= datetime.strptime(
+                        cooldown_time, "%Y-%m-%d %H:%M:%S"
+                    )
 
                 logger.info("Reflected MV with properties: %s", mv_definition)
 

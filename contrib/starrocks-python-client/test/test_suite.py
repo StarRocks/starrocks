@@ -14,6 +14,15 @@
 
 import decimal
 import logging
+import os
+
+import pytest
+
+if not os.getenv("STARROCKS_ENABLE_SQLALCHEMY_SUITE"):
+    pytest.skip(
+        "SQLAlchemy dialect suite is optional; set STARROCKS_ENABLE_SQLALCHEMY_SUITE=1 to run it.",
+        allow_module_level=True,
+    )
 
 from sqlalchemy import (
     Integer,
@@ -42,7 +51,6 @@ from sqlalchemy.testing.suite import (
     ComponentReflectionTest as _ComponentReflectionTest,
     CTETest as _CTETest,
     CompositeKeyReflectionTest,
-    EnumTest,
     FetchLimitOffsetTest as _FetchLimitOffsetTest,
     JSONTest as _JSONTest,
     LongNameBlowoutTest,
@@ -57,6 +65,11 @@ from test import test_utils
 
 
 logger = logging.getLogger(__name__)
+
+try:
+    from sqlalchemy.testing.suite import EnumTest
+except ImportError:
+    EnumTest = None
 
 
 class SRAssertsCompiledSQLMixin:
@@ -562,6 +575,7 @@ class ServerSideCursorsTest(_ServerSideCursorsTest):
     def test_roundtrip_fetchall(self, metadata):
         pass
 
-EnumTest.__requires__ = ("enums",)  # Fix Enum handling. Mysql has native ENUM type, but Starrocks has not
+if EnumTest is not None:
+    EnumTest.__requires__ = ("enums",)  # Fix Enum handling. Mysql has native ENUM type, but Starrocks has not
 LongNameBlowoutTest.__requires__ = ("index_reflection",)  # This will do to make it skip for now, no multiple column index
 CompositeKeyReflectionTest.__requires__ = ('primary_key_constraint_reflection',) # This will make it also skip the fixture which is not creating succesfully

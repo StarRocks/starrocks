@@ -39,8 +39,9 @@ import textwrap
 from typing import Optional
 from unittest.mock import Mock
 
-from alembic.autogenerate import comparators
+from alembic.autogenerate import api
 from alembic.operations.ops import ModifyTableOps, UpgradeOps
+from alembic.runtime.migration import MigrationContext
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table
 from sqlalchemy.engine import Engine
@@ -119,6 +120,24 @@ class TestAlterTableIntegration:
         autogen_context.inspector = inspect(self.engine)
         return autogen_context
 
+    def _get_table_changes(self, conn, target_metadata: MetaData, table_name: str) -> list:
+        """Run Alembic's public autogenerate flow for one table."""
+        migration_context = MigrationContext.configure(
+            connection=conn,
+            opts={
+                "target_metadata": target_metadata,
+                "include_object": lambda _obj, name, type_, _reflected, _compare_to: (
+                    type_ == "table" and name == table_name
+                ),
+            },
+        )
+        migration_script = api.produce_migrations(migration_context, target_metadata)
+
+        for operation in migration_script.upgrade_ops.ops:
+            if isinstance(operation, ModifyTableOps) and operation.table_name == table_name:
+                return operation.ops
+        return []
+
     def test_table_comment_change_detection(self) -> None:
         """
         Test: Table comment change detection from one value to another.
@@ -145,20 +164,7 @@ class TestAlterTableIntegration:
                     starrocks_properties={"replication_num": "1"}
                 )
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
-
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
-
-                result = modify_table_ops.ops
+                result = self._get_table_changes(conn, metadata_target, table_name)
 
                 assert len(result) == 1
                 op = result[0]
@@ -195,20 +201,7 @@ class TestAlterTableIntegration:
                     starrocks_properties={"replication_num": "1"}
                 )
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
-
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
-
-                result = modify_table_ops.ops
+                result = self._get_table_changes(conn, metadata_target, table_name)
 
                 assert len(result) == 1
                 op = result[0]
@@ -247,20 +240,7 @@ class TestAlterTableIntegration:
                     starrocks_properties={"replication_num": "1"}
                 )
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
-
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
-
-                result = modify_table_ops.ops
+                result = self._get_table_changes(conn, metadata_target, table_name)
 
                 assert len(result) == 1
                 op = result[0]
@@ -298,20 +278,7 @@ class TestAlterTableIntegration:
                     starrocks_PROPERTIES={"replication_num": "1"}
                 )
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
-
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
-
-                result = modify_table_ops.ops
+                result = self._get_table_changes(conn, metadata_target, table_name)
 
                 assert len(result) == 0
             finally:
