@@ -2781,6 +2781,13 @@ static Status url_decode_slice(const char* value, size_t len, std::string* to) {
     to->reserve(len);
     for (size_t i = 0; i < len; i++) {
         if (value[i] == '%') {
+            // A '%' must be followed by two hex digits. Without this bound check, a truncated
+            // escape ("...%" or "...%X") at the end of the slice reads 1-2 bytes past it. The
+            // slice is not NUL-terminated for column input (e.g. url_extract_parameter), so this
+            // is an out-of-bounds read of adjacent memory whose result depends on neighbouring data.
+            if (i + 2 >= len) {
+                return Status::RuntimeError("decode string contains an incomplete percent-encoding");
+            }
             char l = value[i + 1];
             char r = value[i + 2];
             if ((l < 'A' || l > 'F') && (l < '0' || l > '9')) {
