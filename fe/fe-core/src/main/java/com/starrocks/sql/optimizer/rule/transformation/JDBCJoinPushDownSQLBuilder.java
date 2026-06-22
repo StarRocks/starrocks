@@ -18,13 +18,13 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.connector.jdbc.ScalarOperatorToJDBCSQLVisitor;
 import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorToJDBCSQLVisitor;
 
 import java.util.ArrayList;
 import java.util.HashMap;
