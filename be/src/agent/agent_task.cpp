@@ -25,6 +25,7 @@
 #include "common/config_agent_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "data_workflows/clone/engine_clone_task.h"
 #include "data_workflows/compaction/engine_compaction_control_task.h"
 #include "data_workflows/compaction/engine_manual_compaction_task.h"
 #include "data_workflows/consistency/engine_checksum_task.h"
@@ -43,7 +44,6 @@
 #include "storage/snapshot_manager.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
-#include "data_workflows/clone/engine_clone_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
