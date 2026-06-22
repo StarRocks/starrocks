@@ -260,8 +260,8 @@ public final class OrcStripeStatisticsReader {
             // uncaught exception that would skip pre-split entirely.
             MetaTierTemporalWindow.rejectDateOutsideWindow(minDate);
             MetaTierTemporalWindow.rejectDateOutsideWindow(maxDate);
-            minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER));
-            maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER));
+            minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER_UNIX));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER_UNIX));
         } catch (RuntimeException conversionFailure) {
             throw new MetaTierUnavailableException(String.format(
                     "ORC date stats value not representable for sort-key column \"%s\": %s",
@@ -325,8 +325,8 @@ public final class OrcStripeStatisticsReader {
             LocalDateTime maxDateTime = utcTimestampToDateTime(timestampStatistics.getMaximumUTC());
             MetaTierTemporalWindow.rejectDateOutsideWindow(minDateTime.toLocalDate());
             MetaTierTemporalWindow.rejectDateOutsideWindow(maxDateTime.toLocalDate());
-            minVariant = Variant.of(location.starRocksColumn.getType(), renderDateTime(minDateTime));
-            maxVariant = Variant.of(location.starRocksColumn.getType(), renderDateTime(maxDateTime));
+            minVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(minDateTime));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(maxDateTime));
         } catch (RuntimeException conversionFailure) {
             throw new MetaTierUnavailableException(String.format(
                     "ORC timestamp stats value not representable for sort-key column \"%s\": %s",
@@ -342,16 +342,6 @@ public final class OrcStripeStatisticsReader {
         // part correct; ofEpochSecond combines them. The window gate rejects pre-1970 / post-9999.
         long epochSecond = Math.floorDiv(utcTimestamp.getTime(), 1000L);
         return LocalDateTime.ofEpochSecond(epochSecond, utcTimestamp.getNanos(), ZoneOffset.UTC);
-    }
-
-    private static String renderDateTime(LocalDateTime dateTime) {
-        // Mirrors DateVariant.getStringValue / the Parquet reader: second precision unless there is a
-        // sub-second part, then 6-digit microseconds. parseStrictDateTime round-trips both.
-        if (dateTime.getNano() == 0) {
-            return dateTime.format(DateUtils.DATE_TIME_FORMATTER);
-        }
-        return dateTime.format(DateUtils.DATE_TIME_FORMATTER)
-                + "." + String.format("%06d", dateTime.getNano() / 1000);
     }
 
     private record SortKeyLocation(int columnId, Column starRocksColumn) {
