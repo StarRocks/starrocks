@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_union.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -460,7 +461,7 @@ StatusOr<ColumnAggregatorPtr> ColumnAggregatorFactory::create_value_column_aggre
         auto* agg_state_desc = field->get_agg_state_desc();
         auto func_name = agg_state_desc->get_func_name();
         DCHECK_EQ(field->is_nullable(), agg_state_desc->is_result_nullable());
-        auto* agg_func = AggStateDesc::get_agg_state_func(agg_state_desc);
+        auto* agg_func = get_aggregate_function(*agg_state_desc);
         if (agg_func == nullptr) {
             return Status::InternalError(
                     fmt::format("Unknown aggregate function, name={}, type={}, "
