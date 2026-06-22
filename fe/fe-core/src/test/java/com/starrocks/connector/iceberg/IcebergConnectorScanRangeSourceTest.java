@@ -29,8 +29,12 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionSpec;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -764,5 +768,142 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
             scanRangeSource.addPartition(task);
         }
         Assertions.assertEquals(2, scanRangeSource.selectedPartitionCount());
+    }
+
+    /**
+     * Test that for an Iceberg V1 table, dropping an identity partition field does not cause NPE
+     * when scanning files.
+     * Background: For V1 tables, Iceberg's `removeField` does NOT remove the field from the spec.
+     * Instead, the field is kept with its transform rewritten to `VoidTransform` (always-null),
+     * and the field name stays the same as the source column. Such a void field would still pass
+     * the `desc.getColumnSlot(name) != null` check inside `getPartitionFieldIndexes`, but it is
+     * NOT in `indexToField` (which only holds identity fields), so `indexToField.inverse().get(x)`
+     * returns null and later triggers NPE on `field.sourceId()` in `getPartitionKey`.
+     */
+    @Test
+    public void testAddPartitionWithV1DroppedIdentityPartitionFieldDoesNotThrow() throws Exception {
+        PartitionSpec specIdentityK1 = PartitionSpec.builderFor(SCHEMA_F).identity("k1").build();
+        TestTables.TestTable v1Table = create(SCHEMA_F, specIdentityK1, "ti_k1", 1);
+        Assertions.assertEquals(1, v1Table.operations().current().formatVersion());
+
+        DataFile fileBeforeDrop = DataFiles.builder(v1Table.spec())
+                .withPath("/path/to/i-before-drop.parquet")
+                .withFileSizeInBytes(10)
+                .withPartitionPath("k1=1")
+                .withRecordCount(2)
+                .build();
+        v1Table.newFastAppend().appendFile(fileBeforeDrop).commit();
+        // Drop the identity partition field "k1".
+        // For V1, this keeps the field in the spec with VoidTransform.
+        v1Table.updateSpec().removeField("k1").commit();
+        // Sanity check: the new spec still contains a field whose name is "k1"
+        // (V1 semantics), but its transform is no longer identity.
+        PartitionSpec newSpec = v1Table.spec();
+        Assertions.assertTrue(newSpec.fields().stream()
+                        .anyMatch(f -> f.name().equals("k1") && !f.transform().isIdentity()),
+                "V1 drop identity partition field should keep a non-identity (void) field with the same name");
+        DataFile fileAfterDrop = DataFiles.builder(newSpec)
+                .withPath("/path/to/i-after-drop.parquet")
+                .withFileSizeInBytes(10)
+                .withRecordCount(2)
+                .build();
+        v1Table.newFastAppend().appendFile(fileAfterDrop).commit();
+
+        TupleDescriptor localTuple = new TupleDescriptor(new TupleId(101));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTuple);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTuple.addSlot(k1Slot);
+        SlotDescriptor dtSlot = new SlotDescriptor(new SlotId(2), localTuple);
+        dtSlot.setType(INT);
+        dtSlot.setColumn(new Column("dt", INT));
+        localTuple.addSlot(dtSlot);
+
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_v1_drop_id", "iceberg_catalog",
+                "resource", "db", "table", "", schema, v1Table, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        List<FileScanTask> tasks = Lists.newArrayList(v1Table.newScan().planFiles());
+        Assertions.assertFalse(tasks.isEmpty(), "should scan at least one file");
+        for (FileScanTask task : tasks) {
+            long pid = Assertions.assertDoesNotThrow(() -> scanRangeSource.addPartition(task),
+                    "addPartition should not throw NPE for V1 table with dropped identity partition field");
+            Assertions.assertTrue(pid >= 0);
+        }
+    }
+
+    /**
+     * V1 iceberg table with the only identity partition field dropped. The spec
+     * is rewritten to {@code [VoidTransform(k1)]}. Both lists must end up empty so that
+     * BE's {@code _init_partition_values} does NOT read past the end of {@code _partition_values}.
+     */
+    @Test
+    public void testBuildPartitionSlotIdsExcludesVoidFieldAfterDrop() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        new ConnectContext().setThreadLocalInfo();
+        try {
+            PartitionSpec specIdentityK1 = PartitionSpec.builderFor(SCHEMA_F).identity("k1").build();
+            TestTables.TestTable v1Table = create(SCHEMA_F, specIdentityK1, "ti_void_only", 1);
+
+            // Drop the only identity partition field; for V1 this rewrites it to VoidTransform.
+            v1Table.updateSpec().removeField("k1").commit();
+            PartitionSpec newSpec = v1Table.spec();
+            Assertions.assertTrue(newSpec.fields().stream().noneMatch(f -> f.transform().isIdentity()),
+                    "after drop, spec should contain no identity field");
+
+            DataFile fileAfterDrop = DataFiles.builder(newSpec)
+                    .withPath("/path/to/void-only.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(2)
+                    .build();
+            v1Table.newFastAppend().appendFile(fileAfterDrop).commit();
+
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(102));
+            SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTuple);
+            k1Slot.setType(INT);
+            k1Slot.setColumn(new Column("k1", INT));
+            localTuple.addSlot(k1Slot);
+            SlotDescriptor dtSlot = new SlotDescriptor(new SlotId(2), localTuple);
+            dtSlot.setType(INT);
+            dtSlot.setColumn(new Column("dt", INT));
+            localTuple.addSlot(dtSlot);
+
+            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", INT));
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_void_only", "iceberg_catalog",
+                    "resource", "db", "table", "", schema, v1Table, Maps.newHashMap());
+
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            List<FileScanTask> tasks = Lists.newArrayList(v1Table.newScan().planFiles());
+            Assertions.assertFalse(tasks.isEmpty());
+            for (FileScanTask task : tasks) {
+                long pid = scanRangeSource.addPartition(task);
+                THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(task, task.file(), pid);
+
+                List<Integer> identitySlotIds = hdfsScanRange.getIdentity_partition_slot_ids();
+                int identitySlotIdsSize = identitySlotIds == null ? 0 : identitySlotIds.size();
+
+                THdfsPartition partitionValue = hdfsScanRange.getPartition_value();
+                int keyExprsSize = partitionValue == null || partitionValue.getPartition_key_exprs() == null
+                        ? 0 : partitionValue.getPartition_key_exprs().size();
+
+                Assertions.assertEquals(0, identitySlotIdsSize,
+                        "VoidTransform field must NOT contribute to identity_partition_slot_ids");
+                Assertions.assertEquals(0, keyExprsSize,
+                        "VoidTransform field must NOT contribute to partition_key_exprs");
+            }
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
     }
 }

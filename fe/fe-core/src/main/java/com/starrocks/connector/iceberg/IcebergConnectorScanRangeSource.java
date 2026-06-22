@@ -522,6 +522,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private List<Integer> buildPartitionSlotIds(PartitionSpec spec) {
         return spec.fields().stream()
+                .filter(x -> x.transform().isIdentity())
                 .map(x -> desc.getColumnSlot(x.name()))
                 .filter(Objects::nonNull)
                 .map(SlotDescriptor::getId)
@@ -531,6 +532,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private List<Integer> getPartitionFieldIndexes(PartitionSpec spec, BiMap<Integer, PartitionField> indexToField) {
         return spec.fields().stream()
+                .filter(x -> x.transform().isIdentity())
                 .filter(x -> desc.getColumnSlot(x.name()) != null)
                 .map(x -> indexToField.inverse().get(x))
                 .collect(Collectors.toList());
