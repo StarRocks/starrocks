@@ -1140,4 +1140,86 @@ public class JDBCMetadataTest {
                 "Row count should fall back to default when dialect returns -1 (unsupported)");
     }
 
+    @Test
+    public void testBaseSchemaResolverGetTableRowCountReturnsNegativeOne() throws Exception {
+        // OracleSchemaResolver inherits the default JDBCSchemaResolver.getTableRowCount() which returns -1.
+        JDBCSchemaResolver resolver = new OracleSchemaResolver();
+        long count = resolver.getTableRowCount(connection, "anydb", "anytable");
+        Assertions.assertEquals(-1L, count);
+    }
+
+    @Test
+    public void testLoadRowCountExceptionFallsBackToDefault() throws Exception {
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = new SQLException("simulated connection error");
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger async load; the loader will throw and fall into the catch block.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Thread.sleep(500);
+
+        Statistics stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Exception in loadRowCount must fall back to default_statistics_output_row_count");
+    }
+
+    @Test
+    public void testRefreshTableInvalidatesRowCountCache() throws Exception {
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+
+        long expectedRowCount = 7_000_000L;
+        MockResultSet rowCountResult = new MockResultSet("row_count");
+        rowCountResult.addColumn("table_rows", Arrays.asList(expectedRowCount));
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = rowCountResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger async load and wait for real row count to be cached.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        long deadline = System.currentTimeMillis() + 3000;
+        Statistics stats = null;
+        while (System.currentTimeMillis() < deadline) {
+            stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                    java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+            if ((long) stats.getOutputRowCount() != Config.default_statistics_output_row_count) {
+                break;
+            }
+            Thread.sleep(50);
+        }
+        Assertions.assertNotNull(stats);
+        Assertions.assertEquals(expectedRowCount, (long) stats.getOutputRowCount(),
+                "Row count should be loaded from cache after async load completes");
+
+        // Invalidate via refreshTable — covers rowCountCache.synchronous().invalidate().
+        jdbcMetadata.refreshTable("test", jdbcTable, null, false);
+
+        // Cache entry evicted → next call is cold start → returns default.
+        Statistics afterRefresh = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) afterRefresh.getOutputRowCount(),
+                "After refreshTable, row-count cache entry must be invalidated");
+    }
+
 }
