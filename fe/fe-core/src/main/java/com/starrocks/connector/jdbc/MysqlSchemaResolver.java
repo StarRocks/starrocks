@@ -317,6 +317,25 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
      * @param table
      * @return
      */
+    @Override
+    public long getTableRowCount(Connection connection, String dbName, String tableName) throws SQLException {
+        // information_schema.tables.table_rows is an optimizer statistic updated by ANALYZE TABLE.
+        // It is an approximation for InnoDB but zero-cost (no COUNT(*)).
+        String sql = "SELECT table_rows FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, dbName);
+            ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long rows = rs.getLong(1);
+                    return rs.wasNull() ? -1L : rows;
+                }
+            }
+        }
+        return -1L;
+    }
+
     @NotNull
     private static String getPartitionQuery(Table table) {
         final String partitionsQuery = "SELECT PARTITION_DESCRIPTION AS NAME, " +
