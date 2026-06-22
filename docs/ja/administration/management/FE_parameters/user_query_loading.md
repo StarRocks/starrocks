@@ -353,6 +353,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：述語列収集を有効にするかどうか。無効にすると、クエリオプティマイゼーション中に述語列は記録されません。
 - 導入時期：-
 
+### `enable_push_down_local_split_agg_through_union_all`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：物理プランにおいて、GROUP BY を持たない local split 集約を UNION ALL を通してプッシュダウンするかどうか。
+- 導入時期：-
+
 ### `enable_query_queue_v2`
 
 - デフォルト：true

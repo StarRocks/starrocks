@@ -125,6 +125,7 @@ import com.starrocks.sql.optimizer.rule.tree.PruneShuffleDistributionNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
+import com.starrocks.sql.optimizer.rule.tree.PushDownLocalAggregateThroughUnionAll;
 import com.starrocks.sql.optimizer.rule.tree.RemoveUselessScanOutputPropertyRule;
 import com.starrocks.sql.optimizer.rule.tree.SemiJoinDeduplicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
@@ -1037,6 +1038,8 @@ public class QueryOptimizer extends Optimizer {
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
+
+        result = new PushDownLocalAggregateThroughUnionAll().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
