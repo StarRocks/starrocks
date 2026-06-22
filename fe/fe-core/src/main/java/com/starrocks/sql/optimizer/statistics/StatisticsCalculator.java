@@ -925,7 +925,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     optimizerContext, table.getCatalogName(), table, colRefToColumnMetaMap,
                     Collections.emptyList(), null);
             if (connectorStats != null) {
-                rowCount = (long) connectorStats.getOutputRowCount();
+                double cnt = connectorStats.getOutputRowCount();
+                if (!Double.isNaN(cnt) && cnt > 0) {
+                    rowCount = (long) cnt;
+                }
             }
         } catch (Exception e) {
             LOG.warn("Failed to get ES table statistics for {}: {}", table.getName(), e.getMessage());
