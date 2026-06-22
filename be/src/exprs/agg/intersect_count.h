@@ -21,10 +21,10 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/intersect_count_state.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
-#include "util/bitmap_intersect.h"
 
 namespace starrocks {
 template <LogicalType LT, typename = guard::Guard>
