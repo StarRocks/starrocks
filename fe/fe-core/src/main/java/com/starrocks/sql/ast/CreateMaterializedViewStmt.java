@@ -51,8 +51,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
@@ -61,11 +64,13 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -134,6 +139,13 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private final TableName mvTableName;
     private final Map<String, String> properties;
 
+    // CK-compatible `CREATE MATERIALIZED VIEW ... TO <table>`: when non-null, this is a logical
+    // sink MV whose transformed rows are written into an existing user-managed table instead of
+    // being stored as a rollup index on the base table. The MV itself holds no storage.
+    private TableName toTableName;
+    // Target table resolved during analyze() when isLogicalSinkMV() is true.
+    private OlapTable toTable;
+
     private final QueryStatement queryStatement;
     /**
      * origin stmt: select k1, k2, v1, sum(v2) from base_table group by k1, k2, v1
@@ -177,6 +189,24 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     public String getMVName() {
         return mvTableName.getTbl();
+    }
+
+    public TableName getToTableName() {
+        return toTableName;
+    }
+
+    public void setToTableName(TableName toTableName) {
+        this.toTableName = toTableName;
+    }
+
+    // True when this is a logical sink MV created via `... TO <table>` (CK TO-table semantics).
+    public boolean isLogicalSinkMV() {
+        return toTableName != null;
+    }
+
+    // Resolved target table; non-null only after analyze() of a logical sink MV.
+    public OlapTable getToTable() {
+        return toTable;
     }
 
     public List<MVColumnItem> getMVColumnItemList() {
@@ -372,6 +402,92 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
         // analyze table if it has alias
         analyzeExprWithTableAlias(context, this.dbName, table, getMVColumnItemList());
+
+        // CK-compatible `... TO <table>`: validate the existing target table against the MV output.
+        if (isLogicalSinkMV()) {
+            analyzeToTable(context, (OlapTable) table);
+        }
+    }
+
+    // Validate a CK-compatible `... TO <table>` (logical sink) MV: the target table must already
+    // exist as an OLAP table, the MV's produced columns must align with the target schema by
+    // position/type, and (Phase 1) the target distribution must allow node-local routing without a
+    // shuffle, i.e. it is RANDOM-distributed or hash-distributed identically to the base table.
+    private void analyzeToTable(ConnectContext context, OlapTable baseTable) {
+        if (!Config.enable_mv_to_table) {
+            throw new SemanticException("CREATE MATERIALIZED VIEW ... TO <table> is disabled. " +
+                    "Set FE config 'enable_mv_to_table' = true to enable it.");
+        }
+
+        String targetDbName = Strings.isNullOrEmpty(toTableName.getDb()) ? dbName : toTableName.getDb();
+        // The logical sink MV is maintained on the base table's write path; keep the target table in
+        // the same database as the base table to avoid cross-db write coupling (Phase 1 limit).
+        if (!Strings.isNullOrEmpty(targetDbName) && !Strings.isNullOrEmpty(dbName)
+                && !targetDbName.equalsIgnoreCase(dbName)) {
+            throw new SemanticException(String.format(
+                    "TO target table's db '%s' must be the same as the base table's db '%s'",
+                    targetDbName, dbName));
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(targetDbName);
+        if (db == null) {
+            throw new SemanticException("Target table's database '" + targetDbName + "' does not exist");
+        }
+        Table target = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(targetDbName, toTableName.getTbl());
+        if (target == null) {
+            throw new SemanticException(String.format(
+                    "Target table '%s.%s' does not exist; create the target table before the materialized view " +
+                            "(TO-table MV does not create the target table)", targetDbName, toTableName.getTbl()));
+        }
+        if (!(target instanceof OlapTable)) {
+            throw new SemanticException("Target table '" + toTableName.getTbl() + "' must be an OLAP table");
+        }
+        OlapTable targetTable = (OlapTable) target;
+
+        // Column alignment: the MV's produced columns (SELECT output, in order) are written into the
+        // target table; require equal count and per-column implicit castability.
+        List<MVColumnItem> items = getMVColumnItemList();
+        List<Column> targetColumns = targetTable.getBaseSchema();
+        if (items.size() != targetColumns.size()) {
+            throw new SemanticException(String.format(
+                    "Column count mismatch: materialized view produces %d columns but target table '%s' has %d columns",
+                    items.size(), targetTable.getName(), targetColumns.size()));
+        }
+        for (int i = 0; i < items.size(); i++) {
+            Type srcType = items.get(i).getType();
+            Type dstType = targetColumns.get(i).getType();
+            if (srcType == null || dstType == null) {
+                continue;
+            }
+            if (!srcType.matchesType(dstType) && !Type.canCastTo(srcType, dstType)) {
+                throw new SemanticException(String.format(
+                        "Column %d type mismatch: materialized view produces %s but target column '%s' is %s",
+                        i + 1, srcType.toSql(), targetColumns.get(i).getName(), dstType.toSql()));
+            }
+        }
+
+        // Distribution constraint (Phase 1): avoid cross-node shuffle when fanning rows out to the
+        // target. Allowed when the target is RANDOM-distributed, or hash-distributed identically to
+        // the base table (same distribution columns and bucket number).
+        DistributionInfo baseDist = baseTable.getDefaultDistributionInfo();
+        DistributionInfo targetDist = targetTable.getDefaultDistributionInfo();
+        if (targetDist.getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            boolean sameHash = baseDist instanceof HashDistributionInfo
+                    && targetDist instanceof HashDistributionInfo
+                    && ((HashDistributionInfo) targetDist).getBucketNum()
+                            == ((HashDistributionInfo) baseDist).getBucketNum()
+                    && ((HashDistributionInfo) targetDist).getDistributionColumns()
+                            .equals(((HashDistributionInfo) baseDist).getDistributionColumns());
+            if (!sameHash) {
+                throw new SemanticException(String.format(
+                        "Target table '%s' distribution is not supported for TO-table MV (Phase 1): it must be " +
+                                "RANDOM-distributed, or hash-distributed identically to the base table '%s' " +
+                                "(same distribution columns and bucket number) to avoid a shuffle",
+                        targetTable.getName(), baseTable.getName()));
+            }
+        }
+
+        this.toTable = targetTable;
     }
 
     private void analyzeExprWithTableAlias(ConnectContext context,

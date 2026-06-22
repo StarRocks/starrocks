@@ -2005,6 +2005,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
 
+        // CK-compatible `... TO <table>`: target table the logical sink MV writes into.
+        TableName toTableName = context.toTableName == null ? null :
+                qualifiedNameToTableName(getQualifiedName(context.toTableName));
+
         List<ColWithComment> colWithComments = null;
         if (!context.columnNameWithComment().isEmpty()) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
@@ -2104,7 +2108,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
                         distributionDesc.getPos());
             }
-            return new CreateMaterializedViewStmt(tableName, queryStatement, properties);
+            CreateMaterializedViewStmt syncMvStmt = new CreateMaterializedViewStmt(tableName, queryStatement, properties);
+            syncMvStmt.setToTableName(toTableName);
+            return syncMvStmt;
+        }
+        // `TO <table>` is only supported on the synchronous (write-triggered) MV path. Any clause
+        // (e.g. DISTRIBUTION/REFRESH) that routes to an asynchronous MV is incompatible with TO.
+        if (toTableName != null) {
+            throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("ASYNC materialized view", "TO clause"),
+                    createPos(context));
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;

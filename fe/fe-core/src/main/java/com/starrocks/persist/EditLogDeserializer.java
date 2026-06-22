@@ -95,6 +95,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_ERASE_MULTI_TABLES, MultiEraseTableInfo.class)
             .put(OperationType.OP_DISABLE_TABLE_RECOVERY, DisableTableRecoveryInfo.class)
             .put(OperationType.OP_DISABLE_PARTITION_RECOVERY, DisablePartitionRecoveryInfo.class)
+            .put(OperationType.OP_CREATE_LOGICAL_SINK_MV, LogicalSinkMVOpLog.class)
+            .put(OperationType.OP_DROP_LOGICAL_SINK_MV, LogicalSinkMVOpLog.class)
             .put(OperationType.OP_ADD_PARTITION_V2, PartitionPersistInfoV2.class)
             .put(OperationType.OP_ADD_SUB_PARTITIONS_V2, AddSubPartitionsInfoV2.class)
             .put(OperationType.OP_ADD_PARTITIONS_V2, AddPartitionsInfoV2.class)

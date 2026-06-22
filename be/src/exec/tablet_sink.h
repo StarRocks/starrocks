@@ -182,6 +182,40 @@ private:
     TupleDescriptor* _output_tuple_desc = nullptr;
     std::vector<ExprContext*> _output_expr_ctxs;
 
+    // CK-compatible logical sink MV (`CREATE MATERIALIZED VIEW ... TO <table>`) fan-out. Each channel
+    // is a child OlapTableSink writing into a separate target table within the same load transaction.
+    // The child carries the MV's per-target-column transform expressions as its own output exprs, so
+    // feeding it the base chunk yields the transformed rows written into the target table.
+    struct LogicalSinkChannel {
+        int64_t mv_id = 0;
+        std::string mv_name;
+        std::unique_ptr<OlapTableSink> sink;
+        // CK-compatible MV WHERE predicate (`... AS SELECT ... WHERE <pred>`). Evaluated over the base
+        // chunk before fan-out; rows failing it are not forwarded to this child sink. Empty when the MV
+        // has no WHERE clause. Owned by this sink's _pool; prepared/opened/closed alongside the child.
+        std::vector<ExprContext*> where_ctxs;
+    };
+    std::vector<std::unique_ptr<LogicalSinkChannel>> _logical_sinks;
+    // The base TOlapTableSink is stashed in init() and the child sinks are built in prepare(), where
+    // the runtime context (state, descriptors) is fully ready -- building them in init() is too early
+    // in the pipeline engine.
+    TOlapTableSink _base_table_sink;
+    bool _has_logical_sinks = false;
+
+    // Construct one child OlapTableSink per table_sink.logical_sinks entry (shares this sink's
+    // load_id/txn_id/nodes_info). Called from prepare().
+    Status _init_logical_sinks(const TOlapTableSink& table_sink, RuntimeState* state);
+    // Forward `chunk` (the base load chunk) to each child sink, which applies the MV transform and
+    // writes into its target table. Called from send_chunk for every base chunk.
+    Status _fanout_logical_sinks(RuntimeState* state, Chunk* chunk);
+    // Drive child-sink prepare()/open() within this sink's prepare()/open(). The open path follows the
+    // async try_open()/is_open_done()/open_wait() protocol so the child open RPCs are issued alongside
+    // the base sink's (the pipeline operator never calls the synchronous open()).
+    Status _prepare_logical_sinks(RuntimeState* state);
+    Status _try_open_logical_sinks(RuntimeState* state);
+    bool _is_logical_sinks_open_done();
+    Status _open_wait_logical_sinks();
+
     // number of senders used to insert into OlapTable, if we only support single node insert,
     // all data from select should collectted and then send to OlapTable.
     // To support multiple senders, we maintain a channel for each sender.

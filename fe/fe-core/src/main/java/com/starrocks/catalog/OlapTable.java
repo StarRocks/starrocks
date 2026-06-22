@@ -215,6 +215,12 @@ public class OlapTable extends Table {
     @SerializedName(value = "indexNameToId")
     protected Map<String, Long> indexNameToId = Maps.newHashMap();
 
+    // CK-compatible logical sink MVs (`CREATE MATERIALIZED VIEW ... TO <table>`) attached to this
+    // base table, keyed by MV id. These hold no storage/tablets; on every load into this table the
+    // load path fans transformed rows out to each MV's target table within the same transaction.
+    @SerializedName(value = "logicalSinkMVs")
+    protected Map<Long, LogicalSinkMVMeta> logicalSinkMVs = Maps.newHashMap();
+
     @SerializedName(value = "keysType")
     protected KeysType keysType;
 
@@ -1088,6 +1094,29 @@ public class OlapTable extends Table {
 
     public Map<Long, MaterializedIndexMeta> getIndexIdToMeta() {
         return indexIdToMeta;
+    }
+
+    // ---- CK-compatible logical sink MVs (`CREATE MATERIALIZED VIEW ... TO <table>`) ----
+
+    public Map<Long, LogicalSinkMVMeta> getLogicalSinkMVs() {
+        if (logicalSinkMVs == null) {
+            logicalSinkMVs = Maps.newHashMap();
+        }
+        return logicalSinkMVs;
+    }
+
+    public boolean hasLogicalSinkMV() {
+        return logicalSinkMVs != null && !logicalSinkMVs.isEmpty();
+    }
+
+    public void addLogicalSinkMV(LogicalSinkMVMeta meta) {
+        getLogicalSinkMVs().put(meta.getMvId(), meta);
+    }
+
+    public void removeLogicalSinkMV(long mvId) {
+        if (logicalSinkMVs != null) {
+            logicalSinkMVs.remove(mvId);
+        }
     }
 
     public Map<Long, MaterializedIndexMeta> getCopiedIndexIdToMeta() {
