@@ -427,6 +427,7 @@ import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.TaskName;
+import com.starrocks.sql.ast.TransferLeaderClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -5079,6 +5080,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         return new ModifyFrontendAddressClause(clusters.get(0), clusters.get(1), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTransferLeaderClause(
+            com.starrocks.sql.parser.StarRocksParser.TransferLeaderClauseContext context) {
+        String hostPort = ((StringLiteral) visit(context.string())).getStringValue();
+        boolean force = context.FORCE() != null;
+        return new TransferLeaderClause(hostPort, force, createPos(context));
     }
 
     @Override
