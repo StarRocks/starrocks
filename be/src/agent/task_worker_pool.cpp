@@ -62,6 +62,7 @@
 #include "common/util/misc.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "data_workflows/clone/engine_clone_task.h"
 #include "data_workflows/load/engine_batch_load_task.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
@@ -77,7 +78,6 @@
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
-#include "storage/task/engine_clone_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 

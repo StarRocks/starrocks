@@ -580,6 +580,7 @@
         "RuntimeEnv",
         "RuntimeCore",
         "Platform",
+        "HttpCore",
         "FSCore",
         "IO",
         "ChunkCore",
