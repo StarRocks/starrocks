@@ -72,6 +72,16 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | oracle.temporal.to-datetime    | false       | 控制 Oracle `DATE`、`TIMESTAMP` 和 `TIMESTAMP WITH LOCAL TIME ZONE` 的映射。如果设置为 `true`，这些数据类型将映射到 StarRocks 的 `DATETIME` 类型；否则，`DATE` 保持为 `DATE`，而 `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` 将映射到 `VARCHAR(64)`。 |
 | oracle.timestamptz.to-datetime | false       | 控制 Oracle `TIMESTAMP WITH TIME ZONE` 的映射。如果设置为 `true`，则映射为 StarRocks 的 `DATETIME` 类型；否则，则映射为 `VARCHAR(64)`。 |
 
+#### 可选行数缓存属性
+
+StarRocks 会缓存 JDBC 数据源的每张表的行数，以避免在查询规划阶段产生阻塞。这些属性允许您按 Catalog 调整缓存行为。若未设置，则使用全局 FE 配置值。
+
+| **参数**                             | **默认** | **描述**                                                                                                               |
+| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| jdbc_row_count_cache_refresh_sec    | 600      | 后台刷新间隔（秒）。超过此间隔后，立即返回缓存的旧值，同时在后台异步重新加载。                                             |
+| jdbc_row_count_cache_expire_sec     | 1200     | 强制淘汰 TTL（秒）。在此时间窗口内未被访问的缓存条目将被淘汰。必须大于 `jdbc_row_count_cache_refresh_sec`。               |
+| jdbc_row_count_cache_max_size       | 10000    | 该 Catalog 行数缓存的最大表条目数。                                                                                      |
+
 > **说明**
 >
 > FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE（或 CN）会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。

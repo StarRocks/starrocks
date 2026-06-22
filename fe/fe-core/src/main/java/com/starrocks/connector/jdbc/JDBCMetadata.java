@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -21,9 +23,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
@@ -33,6 +37,10 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.zaxxer.hikari.HikariConfig;
@@ -48,8 +56,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
@@ -65,10 +75,15 @@ public class JDBCMetadata implements ConnectorMetadata {
     private JDBCMetaCache<JDBCTableName, Long> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
+    // Async row-count cache: never blocks planning. On cold start returns the default immediately
+    // and loads in background; refreshAfterWrite keeps the value warm with async reload.
+    private AsyncLoadingCache<JDBCTableName, Long> rowCountCache;
 
     private HikariDataSource dataSource;
     private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
+    private static final ExecutorService ROW_COUNT_EXECUTOR = Executors.newFixedThreadPool(
+            2, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-row-count-%d").build());
 
     // HikariCP connection lifecycle constants
     static final long MINIMUM_MAX_LIFETIME_MS = 30_000L;
@@ -182,6 +197,40 @@ public class JDBCMetadata implements ConnectorMetadata {
         tableIdCache = new JDBCMetaCache<>(properties, true);
         tableInstanceCache = new JDBCMetaCache<>(properties, false);
         partitionInfoCache = new JDBCMetaCache<>(properties, false);
+        rowCountCache = buildRowCountCache(properties);
+    }
+
+    private AsyncLoadingCache<JDBCTableName, Long> buildRowCountCache(Map<String, String> properties) {
+        // Row-count cache is always enabled regardless of jdbc_meta_cache_enable.
+        // jdbc_meta_cache_enable controls schema metadata freshness; statistics are a
+        // separate concern and must never block planning — async loading is mandatory.
+        // Each parameter can be overridden per-catalog via the JDBC catalog properties map.
+        long refreshSec = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_refresh_sec",
+                String.valueOf(Config.jdbc_row_count_cache_refresh_sec)));
+        long expireSec = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_expire_sec",
+                String.valueOf(Config.jdbc_row_count_cache_expire_sec)));
+        long maxSize = Long.parseLong(properties.getOrDefault(
+                "jdbc_row_count_cache_max_size",
+                String.valueOf(Config.jdbc_row_count_cache_max_size)));
+        return Caffeine.newBuilder()
+                .maximumSize(maxSize)
+                .refreshAfterWrite(refreshSec, TimeUnit.SECONDS)
+                .expireAfterWrite(expireSec, TimeUnit.SECONDS)
+                .executor(ROW_COUNT_EXECUTOR)
+                .buildAsync(key -> loadRowCount(key));
+    }
+
+    private long loadRowCount(JDBCTableName key) {
+        try (Connection connection = getConnection()) {
+            long count = schemaResolver.getTableRowCount(connection, key.getDatabaseName(), key.getTableName());
+            return count >= 0 ? count : Config.default_statistics_output_row_count;
+        } catch (Exception e) {
+            LOG.warn("Failed to load row count for {}.{}: {}", key.getDatabaseName(), key.getTableName(),
+                    e.getMessage());
+            return Config.default_statistics_output_row_count;
+        }
     }
 
     public void checkAndSetSupportPartitionInformation() {
@@ -468,6 +517,32 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Statistics getTableStatistics(OptimizerContext session, Table table,
+            Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+            ScalarOperator predicate, long limit, TvrVersionRange tableVersionRange) {
+        if (rowCountCache == null) {
+            return Statistics.builder().setOutputRowCount(Config.default_statistics_output_row_count).build();
+        }
+        JDBCTable jdbcTable = (JDBCTable) table;
+        JDBCTableName key = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
+
+        long rowCount = Config.default_statistics_output_row_count;
+        CompletableFuture<Long> future = rowCountCache.getIfPresent(key);
+        if (future == null) {
+            // Cold start: fire async load, return default for this planning round.
+            rowCountCache.get(key);
+        } else if (future.isDone() && !future.isCompletedExceptionally()) {
+            try {
+                rowCount = future.getNow(Config.default_statistics_output_row_count);
+            } catch (Exception e) {
+                LOG.warn("Unexpected error reading row count for {}.{}", key.getDatabaseName(), key.getTableName(), e);
+            }
+        }
+        // Future in-flight or completed exceptionally: fall through to default.
+        return Statistics.builder().setOutputRowCount(rowCount).build();
+    }
+
+    @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         JDBCTable jdbcTable = (JDBCTable) table;
         JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
@@ -476,6 +551,9 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
         partitionNamesCache.invalidate(jdbcTableName);
         partitionInfoCache.invalidate(jdbcTableName);
+        if (rowCountCache != null) {
+            rowCountCache.synchronous().invalidate(jdbcTableName);
+        }
     }
 
     public void refreshCache(Map<String, String> properties) {

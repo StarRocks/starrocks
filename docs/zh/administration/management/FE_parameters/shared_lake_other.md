@@ -1040,6 +1040,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 true 时，新创建的 JDBC Catalog 将默认设置元数据缓存的过期时间。
 - 引入版本: -
 
+### `jdbc_row_count_cache_refresh_sec`
+
+- 默认值: 600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: JDBC 表行数缓存的后台刷新间隔。超过此间隔后，立即返回旧值，同时在后台异步重新加载。可通过 Catalog 属性 `jdbc_row_count_cache_refresh_sec` 按 Catalog 覆盖。
+- 引入版本: -
+
+### `jdbc_row_count_cache_expire_sec`
+
+- 默认值: 1200
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: JDBC 表行数缓存条目的强制淘汰 TTL。在此时间窗口内未访问的条目将被淘汰。必须大于 `jdbc_row_count_cache_refresh_sec`。可通过 Catalog 属性 `jdbc_row_count_cache_expire_sec` 按 Catalog 覆盖。
+- 引入版本: -
+
+### `jdbc_row_count_cache_max_size`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 每个 JDBC Catalog 的行数缓存最大条目数。限制表数量较多的 Catalog 的内存增长。可通过 Catalog 属性 `jdbc_row_count_cache_max_size` 按 Catalog 覆盖。
+- 引入版本: -
+
 ### `jdbc_minimum_idle_connections`
 
 - 默认值: 1
