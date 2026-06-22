@@ -5,7 +5,7 @@ description: "Uses the BLAKE3 digest algorithm to hash a string into a 256-bit h
 
 # blake3
 
-Uses the BLAKE3 digest algorithm to hash a string into a 256-bit hexadecimal string. Every 32 bits are separated by a space.
+Uses the BLAKE3 digest algorithm to hash a string into a 256-bit hexadecimal string.
 
 BLAKE3 is a modern cryptographic hash function that is significantly faster than MD5, SHA-1, SHA-2, and SHA-3, while providing strong security guarantees. It produces a 256-bit (32-byte) digest.
 
