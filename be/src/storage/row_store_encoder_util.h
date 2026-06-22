@@ -19,14 +19,14 @@
 #include "common/status.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "types/bitmap_value.h"
 
 namespace starrocks {
 //declare and defines of template class must be in a file, so we exctract it here
 
 // Note: to_bigendian and encode_integral functions are now available in
-// storage/primary_key_encoder.h under the encoding_utils namespace
+// storage/primitive/primary_key_encoder.h under the encoding_utils namespace
 
 template <class T>
 inline void decode_integral(Slice* src, T* v) {

@@ -21,7 +21,7 @@
 #include "gutil/endian.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/row_store_encoder_util.h"
 #include "storage/tablet_schema.h"
 #include "types/date_value.h"

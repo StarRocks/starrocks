@@ -42,7 +42,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/metadata_util.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/primitive/type_utils.h"
 #include "storage/tablet_schema_map.h"
 #include "tablet_meta.h"

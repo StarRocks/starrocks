@@ -31,7 +31,7 @@
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"

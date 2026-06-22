@@ -77,6 +77,10 @@ set(COMPUTE_ENV_GLOBAL_DICT_FILES
     global_dict/parser.cpp
 )
 
+set(COMPUTE_ENV_DICTIONARY_CACHE_FILES
+    dictionary_cache/chunk_util.cpp
+)
+
 set(COMPUTE_ENV_LOAD_PATH_FILES
     load_path/load_path_state_helper.cpp
     load_path/load_path_mgr.cpp
@@ -103,6 +107,7 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_QUERY_CACHE_FILES}
     ${COMPUTE_ENV_QUERY_FILES}
     ${COMPUTE_ENV_GLOBAL_DICT_FILES}
+    ${COMPUTE_ENV_DICTIONARY_CACHE_FILES}
     ${COMPUTE_ENV_LOAD_PATH_FILES}
 )
 

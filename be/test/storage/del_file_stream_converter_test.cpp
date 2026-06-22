@@ -25,7 +25,7 @@
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "serde/column_array_serde.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_schema.h"
 #include "types/datum.h"
 

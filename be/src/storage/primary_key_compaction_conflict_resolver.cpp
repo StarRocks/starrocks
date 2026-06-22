@@ -24,7 +24,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/primary_index.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
 

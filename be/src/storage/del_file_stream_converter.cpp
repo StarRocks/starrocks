@@ -19,7 +19,7 @@
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "types/logical_type_infra.h"

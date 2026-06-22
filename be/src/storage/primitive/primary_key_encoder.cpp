@@ -33,7 +33,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 
 #include <cstring>
 #include <functional>
@@ -43,14 +43,15 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
-#include "storage/dictionary_cache_manager.h"
-#include "storage/tablet_schema.h"
+#include "storage/primitive/type_utils.h"
 #include "types/date_value.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
@@ -257,7 +258,7 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKe
         if (t == TYPE_VARCHAR || t == TYPE_CHAR) {
             return 0;
         }
-        ret += TabletColumn::get_field_length_by_type(t, 0);
+        ret += TypeUtils::estimate_field_size(t, 0);
     }
     return ret;
 }
@@ -549,7 +550,7 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
                 varchar_containers.push_back(GetContainer<TYPE_VARCHAR>::get_data(chunk.get_column_by_index(i)));
                 varchar_indexes.push_back(i);
             } else {
-                size += TabletColumn::get_field_length_by_type(t, 0);
+                size += TypeUtils::estimate_field_size(t, 0);
             }
             if (size > limit_size) {
                 return true;
@@ -604,7 +605,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
     const int ncol = schema.num_key_fields();
     for (int i = 0; i < len; i++) {
         Slice s = bkeys.get_slice(offset + i);
-        bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
+        bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == PRIMARY_KEY_DECODE_SKIP);
         for (int j = 0; j < ncol; j++) {
             auto& column = *(dest->get_column_raw_ptr_by_index(j));
             if (skip_decode) {
@@ -620,7 +621,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
 #undef M
             case TYPE_VARCHAR: {
                 auto& tc = down_cast<BinaryColumn&>(column);
-                bool fast_decode = value_encode_flags != nullptr ? (bool)((*value_encode_flags)[i]) : false;
+                bool fast_decode = value_encode_flags != nullptr && (*value_encode_flags)[i] == PRIMARY_KEY_DECODE_FAST;
                 if (!fast_decode) {
                     std::string v;
                     RETURN_IF_ERROR(decode_slice(&s, &v, nullptr, j + 1 == ncol, false));

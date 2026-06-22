@@ -22,6 +22,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
+#include "compute_env/dictionary_cache/chunk_util.h"
 #include "exec/tablet_info.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -106,7 +107,7 @@ public:
         }
 
         std::unique_ptr<ChunkPB> pchunk = std::make_unique<ChunkPB>();
-        DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
+        DictionaryCacheChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
 
         TOlapTableSchemaParam tschema;
         tschema.db_id = 1;
@@ -248,6 +249,30 @@ public:
     starrocks::DictionaryCacheManager* dictionary_cache_manager = StorageEngine::instance()->dictionary_cache_manager();
     TabletSharedPtr test_tablet = nullptr;
 };
+
+// NOLINTNEXTLINE
+TEST_F(DictionaryCacheManagerTest, precheck_value_encode_resets_non_normal_flags_for_zero_byte) {
+    Fields fields;
+    fields.emplace_back(new Field(0, "v", TYPE_VARCHAR, false));
+    auto schema = std::make_shared<Schema>(std::move(fields));
+    auto chunk = ChunkFactory::new_chunk(*schema, 4);
+
+    auto* column = down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_raw_ptr_by_index(0));
+    const std::string with_zero("a\0b", 3);
+    column->append_string(with_zero);
+    column->append_string(with_zero);
+    column->append_string(with_zero);
+    column->append_string("plain");
+
+    std::vector<uint8_t> value_encode_flags = {PRIMARY_KEY_DECODE_FAST, PRIMARY_KEY_DECODE_SKIP,
+                                               PRIMARY_KEY_DECODE_NORMAL, PRIMARY_KEY_DECODE_SKIP};
+    DictionaryCacheUtil::precheck_value_encode(chunk.get(), value_encode_flags);
+
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[0]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[1]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[2]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_SKIP, value_encode_flags[3]);
+}
 
 // NOLINTNEXTLINE
 TEST_F(DictionaryCacheManagerTest, concurrent_refresh_and_read) {

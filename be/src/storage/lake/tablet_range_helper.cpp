@@ -27,7 +27,7 @@
 #include "fmt/format.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/types.h"
 #include "types/storage_type_traits.h"
 #include "types/type_descriptor.h"

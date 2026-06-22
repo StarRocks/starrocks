@@ -33,7 +33,7 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"

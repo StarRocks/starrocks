@@ -41,6 +41,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/projection_iterator.cpp
     primitive/range.cpp
     primitive/predicate_parser.cpp
+    primitive/primary_key_encoder.cpp
     primitive/predicate_tree/predicate_tree.cpp
     primitive/storage_ids.cpp
     primitive/union_iterator.cpp
@@ -95,7 +96,6 @@ set(STORAGE_FILES
     olap_server.cpp
     persistent_index.cpp
     primary_index.cpp
-    primary_key_encoder.cpp
     protobuf_file.cpp
     replication_txn_manager.cpp
     remote_snapshot_client.cpp

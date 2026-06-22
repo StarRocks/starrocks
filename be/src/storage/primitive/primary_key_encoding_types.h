@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace starrocks {
 
 /*
@@ -40,5 +42,9 @@ enum class PrimaryKeyEncodingType {
     PK_ENCODING_TYPE_V1 = 1,
     PK_ENCODING_TYPE_V2 = 2,
 };
+
+inline constexpr uint8_t PRIMARY_KEY_DECODE_NORMAL = 0;
+inline constexpr uint8_t PRIMARY_KEY_DECODE_FAST = 1;
+inline constexpr uint8_t PRIMARY_KEY_DECODE_SKIP = 2;
 
 } // namespace starrocks

@@ -34,7 +34,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "test_util.h"
 #include "types/datum.h"
 
