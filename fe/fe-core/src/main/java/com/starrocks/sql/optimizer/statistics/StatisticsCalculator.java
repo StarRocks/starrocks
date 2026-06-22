@@ -24,6 +24,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -33,16 +34,20 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.benchmark.BenchmarkRowCountCalculator;
 import com.starrocks.connector.benchmark.RowCountEstimate;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.RowCountEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -159,6 +164,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.DateType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -370,7 +376,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalTableFunctionTableScan(LogicalTableFunctionTableScanOperator node, ExpressionContext context) {
-        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeTableFunctionScanNode(node, context, node.getColRefToColumnMetaMap(),
+                (TableFunctionTable) node.getTable());
     }
 
     private Void computeOlapScanNode(Operator node, ExpressionContext context, Table table,
@@ -645,26 +652,79 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalFileScan(LogicalFileScanOperator node, ExpressionContext context) {
-        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap(), (FileTable) node.getTable());
     }
 
     @Override
     public Void visitPhysicalFileScan(PhysicalFileScanOperator node, ExpressionContext context) {
-        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap(), (FileTable) node.getTable());
     }
 
     private Void computeFileScanNode(Operator node, ExpressionContext context,
-                                     Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        // Use default statistics for now.
+                                     Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
+                                     FileTable fileTable) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
-        // cause we don't know the real schema in file，just use the default Row Count now
-        builder.setOutputRowCount(1);
+        builder.setOutputRowCount(estimateFileScanRowCount(fileTable));
         context.setStatistics(builder.build());
 
         return visitOperator(node, context);
+    }
+
+    private long estimateFileScanRowCount(FileTable fileTable) {
+        try {
+            // Use getFileDescsFromHdfs() — we only need file sizes, not text-format metadata.
+            List<RemoteFileDesc> fileDescs = fileTable.getFileDescsFromHdfs();
+            long totalBytes = fileDescs.stream().mapToLong(RemoteFileDesc::getLength).sum();
+            return RowCountEstimator.estimate(totalBytes, fileTable.getBaseSchema(), fileTable.getFileFormat());
+        } catch (Exception e) {
+            LOG.warn("Failed to estimate row count for FileTable [{}], fallback to default", fileTable.getName(), e);
+            return Config.default_statistics_output_row_count;
+        }
+    }
+
+    private Void computeTableFunctionScanNode(Operator node, ExpressionContext context,
+                                              Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
+                                              TableFunctionTable table) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+        builder.setOutputRowCount(estimateTableFunctionScanRowCount(table));
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    private long estimateTableFunctionScanRowCount(TableFunctionTable table) {
+        try {
+            List<TBrokerFileStatus> fileStatuses = table.loadFileList();
+            if (fileStatuses == null || fileStatuses.isEmpty()) {
+                return Config.default_statistics_output_row_count;
+            }
+            long totalBytes = fileStatuses.stream().mapToLong(f -> f.size).sum();
+
+            // When the user explicitly provides a "schema" property, the declared columns are
+            // a user-chosen subset and may not reflect the full file layout — so the schema-based
+            // row-size estimate would be too small and would wildly overestimate the row count.
+            // Pass an empty column list so RowCountEstimator falls back to the config default bytes/row.
+            if (table.getProperties().containsKey(TableFunctionTable.PROPERTY_SCHEMA)) {
+                return RowCountEstimator.estimate(totalBytes, Collections.emptyList(), null);
+            }
+
+            // CSV is stored as TEXTFILE in HiveStorageFormat; map it explicitly so the
+            // row-format compression factor (1.5) is applied rather than falling back to
+            // connector_row_size_estimate_bytes.
+            String fmt = table.getFormat();
+            HiveStorageFormat format = "csv".equalsIgnoreCase(fmt)
+                    ? HiveStorageFormat.TEXTFILE : HiveStorageFormat.get(fmt);
+            return RowCountEstimator.estimate(totalBytes, table.getBaseSchema(), format);
+        } catch (Exception e) {
+            LOG.warn("Failed to estimate row count for TableFunctionTable [{}], fallback to default",
+                    table.getName(), e);
+            return Config.default_statistics_output_row_count;
+        }
     }
 
     @Override
