@@ -76,7 +76,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     static final long MINIMUM_KEEPALIVE_TIME_MS = 30_000L;
     static final long KEEPALIVE_DISABLED = 0L;
     private static final List<String> SUPPORTED_SCHEMA_RESOLVERS =
-            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse");
+            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse", "bigquery");
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
@@ -137,6 +137,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             return new OracleSchemaResolver(properties);
         } else if (driverClass.contains("sqlserver")) {
             return new SqlServerSchemaResolver();
+        } else if (driverClass.contains("bigquery")) {
+            return new BigQuerySchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
@@ -160,6 +162,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return new SqlServerSchemaResolver();
             case "clickhouse":
                 return new ClickhouseSchemaResolver(properties);
+            case "bigquery":
+                return new BigQuerySchemaResolver();
             default:
                 throw new StarRocksConnectorException(
                         "Unknown schema_resolver: " + resolverType +
@@ -244,6 +248,9 @@ public class JDBCMetadata implements ConnectorMetadata {
                 int networkTimeoutMs = (int) Math.min(Config.jdbc_network_timeout_ms, (long) Integer.MAX_VALUE);
                 connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, networkTimeoutMs);
             }
+        } catch (java.sql.SQLFeatureNotSupportedException e) {
+            // Some drivers (e.g. BigQuery) don't implement setNetworkTimeout — ignore and continue
+            LOG.debug("JDBC driver does not support setNetworkTimeout, skipping: {}", e.getMessage());
         } catch (SQLException e) {
             connection.close();
             throw e;

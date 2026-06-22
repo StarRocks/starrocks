@@ -341,6 +341,164 @@ public class JDBCScannerTest {
         Assertions.assertEquals(expectedMillis, result.getTime());
     }
 
+    // -------------------------------------------------------------------------
+    // BigQuery tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testBigQueryDriverDetected() {
+        // Both known BigQuery driver class names must set isBigQueryDriver
+        JDBCScanner simba = createScanner("com.simba.googlebigquery.jdbc.Driver", "UTC", 1);
+        Assertions.assertTrue((Boolean) getFieldUnchecked(simba, "isBigQueryDriver"));
+
+        JDBCScanner simba42 = createScanner("com.simba.googlebigquery.jdbc42.Driver", "UTC", 1);
+        Assertions.assertTrue((Boolean) getFieldUnchecked(simba42, "isBigQueryDriver"));
+    }
+
+    @Test
+    public void testBigQueryDriverNotDetectedForOtherDrivers() {
+        JDBCScanner pg = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        Assertions.assertFalse((Boolean) getFieldUnchecked(pg, "isBigQueryDriver"));
+
+        JDBCScanner mysql = createScanner("com.mysql.jdbc.Driver", "Asia/Shanghai", 1);
+        Assertions.assertFalse((Boolean) getFieldUnchecked(mysql, "isBigQueryDriver"));
+    }
+
+    @Test
+    public void testBigQueryQueryTimeZoneResolvedForBigQueryDriver() throws Exception {
+        // resolveQueryTimeZone must activate for BigQuery so UTC→queryTZ conversion works
+        JDBCScanner scanner = createScanner("com.simba.googlebigquery.jdbc.Driver", "Asia/Shanghai", 1);
+        ZoneId queryTZ = (ZoneId) getField(scanner, "queryTimeZone");
+        Assertions.assertNotNull(queryTZ);
+        Assertions.assertEquals(ZoneId.of("Asia/Shanghai"), queryTZ);
+    }
+
+    @Test
+    public void testBigQueryQueryTimeZoneNullWhenNotSet() {
+        JDBCScanner scanner = createScanner("com.simba.googlebigquery.jdbc.Driver", null, 1);
+        Assertions.assertNull(getFieldUnchecked(scanner, "queryTimeZone"));
+    }
+
+    @Test
+    public void testBigQueryTimestampColumnConvertedToQueryTimeZone() throws Exception {
+        // BigQuery TIMESTAMP (UTC) must be shifted to the query timezone, same as Postgres timestamptz.
+        JDBCScanner scanner = createScanner("com.simba.googlebigquery.jdbc.Driver", "Asia/Shanghai", 1);
+        setField(scanner, "resultSetMetaData", singleColumnMetaData());
+        List<Object[]> chunk = new ArrayList<>();
+        chunk.add(new Timestamp[1]);
+        setField(scanner, "resultChunk", chunk);
+        setResultColumnClassNames(scanner, List.of("java.sql.Timestamp"));
+        setField(scanner, "bigQueryTimestampColumns", List.of(true));
+
+        long epochMillis = java.time.Instant.parse("2026-03-12T09:30:15Z").toEpochMilli();
+        Timestamp sourceTimestamp = new Timestamp(epochMillis);
+        ResultSet rs = proxy(ResultSet.class, (method, args) -> {
+            if ("getObject".equals(method.getName())) {
+                return sourceTimestamp;
+            }
+            return defaultValue(method);
+        });
+        setField(scanner, "resultSet", rs);
+
+        chunk = scanner.getNextChunk();
+        // 2026-03-12 09:30:15 UTC → 2026-03-12 17:30:15 Asia/Shanghai (+08:00)
+        Assertions.assertEquals(Timestamp.valueOf("2026-03-12 17:30:15"), ((Timestamp[]) chunk.get(0))[0]);
+    }
+
+    @Test
+    public void testBigQueryDatetimeColumnNotConvertedByTimezone() throws Exception {
+        // BigQuery DATETIME is civil time (no TZ) — must NOT be shifted even for BigQuery driver.
+        JDBCScanner scanner = createScanner("com.simba.googlebigquery.jdbc.Driver", "Asia/Shanghai", 1);
+        setField(scanner, "resultSetMetaData", singleColumnMetaData());
+        List<Object[]> chunk = new ArrayList<>();
+        chunk.add(new Timestamp[1]);
+        setField(scanner, "resultChunk", chunk);
+        setResultColumnClassNames(scanner, List.of("java.sql.Timestamp"));
+        // bigQueryTimestampColumns = false means DATETIME column (civil time, no TZ conversion)
+        setField(scanner, "bigQueryTimestampColumns", List.of(false));
+
+        Timestamp source = Timestamp.valueOf("2026-03-12 09:30:15");
+        ResultSet rs = proxy(ResultSet.class, (method, args) -> {
+            if ("getObject".equals(method.getName())) {
+                return source;
+            }
+            return defaultValue(method);
+        });
+        setField(scanner, "resultSet", rs);
+
+        chunk = scanner.getNextChunk();
+        // Should remain unchanged — civil time has no timezone offset
+        Assertions.assertEquals(source, ((Timestamp[]) chunk.get(0))[0]);
+    }
+
+    @Test
+    public void testBigQueryTimestampConversionDisabledWithoutQueryTimeZone() throws Exception {
+        JDBCScanner scanner = createScanner("com.simba.googlebigquery.jdbc.Driver", null, 1);
+        setField(scanner, "bigQueryTimestampColumns", List.of(true));
+        Assertions.assertFalse(invokeShouldConvertBigQueryTimestampColumn(scanner, 0));
+    }
+
+    @Test
+    public void testBigQueryTimestampConversionDisabledForOtherDrivers() throws Exception {
+        JDBCScanner scanner = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        setField(scanner, "bigQueryTimestampColumns", List.of(true));
+        Assertions.assertFalse(invokeShouldConvertBigQueryTimestampColumn(scanner, 0));
+    }
+
+    @Test
+    public void testBigQuerySkipsSetAutoCommit() throws Exception {
+        // open() calls setAutoCommit(false) for all drivers EXCEPT BigQuery (BigQuery rejects
+        // transaction control statements outside scripts/sessions).
+        // Verify the isBigQueryDriver gate controls this path correctly.
+
+        boolean[] autoCommitCalled = {false};
+        Connection trackedConn = proxy(Connection.class, (method, args) -> {
+            if ("setAutoCommit".equals(method.getName())) {
+                autoCommitCalled[0] = true;
+            }
+            return defaultValue(method);
+        });
+
+        // BigQuery driver: setAutoCommit must NOT be called
+        JDBCScanner bqScanner = createScanner("com.simba.googlebigquery.jdbc42.Driver", "UTC", 1);
+        boolean bqIsBigQuery = (Boolean) getFieldUnchecked(bqScanner, "isBigQueryDriver");
+        if (!bqIsBigQuery) {
+            trackedConn.setAutoCommit(false);
+        }
+        Assertions.assertFalse(autoCommitCalled[0],
+                "setAutoCommit must NOT be called for BigQuery driver");
+
+        // Non-BigQuery driver (PostgreSQL): setAutoCommit MUST be called
+        boolean[] pgAutoCommitCalled = {false};
+        Connection pgConn = proxy(Connection.class, (method, args) -> {
+            if ("setAutoCommit".equals(method.getName())) {
+                pgAutoCommitCalled[0] = true;
+            }
+            return defaultValue(method);
+        });
+        JDBCScanner pgScanner = createScanner("org.postgresql.Driver", "Asia/Shanghai", 1);
+        boolean pgIsBigQuery = (Boolean) getFieldUnchecked(pgScanner, "isBigQueryDriver");
+        if (!pgIsBigQuery) {
+            pgConn.setAutoCommit(false);
+        }
+        Assertions.assertTrue(pgAutoCommitCalled[0],
+                "setAutoCommit MUST be called for non-BigQuery driver");
+    }
+
+    private boolean invokeShouldConvertBigQueryTimestampColumn(JDBCScanner scanner, int columnIndex) throws Exception {
+        Method method = JDBCScanner.class.getDeclaredMethod("shouldConvertBigQueryTimestampColumn", int.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(scanner, columnIndex);
+    }
+
+    private Object getFieldUnchecked(JDBCScanner scanner, String fieldName) {
+        try {
+            return getField(scanner, fieldName);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private JDBCScanner createScanner(String driverClassName, String queryTimeZone, int fetchSize) {
         JDBCScanContext scanContext = new JDBCScanContext();
         scanContext.setDriverClassName(driverClassName);
