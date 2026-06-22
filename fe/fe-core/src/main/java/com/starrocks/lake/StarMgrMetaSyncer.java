@@ -146,6 +146,11 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                 }
             }
         }
+        // Range-colocate PACK shard groups live in ColocateRangeMgr, not on any
+        // PhysicalPartition. Without unioning them in, deleteUnusedShardAndShardGroup would
+        // treat a live PACK shard group as an orphan and reap it (along with its live tablets).
+        groupIds.addAll(GlobalStateMgr.getCurrentState().getColocateTableIndex().getAllPackShardGroupIds());
+
         long elapsedMs = System.currentTimeMillis() - startMs;
         if (elapsedMs > SLOW_COLLECTION_WARN_THRESHOLD_MS) {
             LOG.warn("getAllPartitionShardGroupId is slow: elapsed={}ms, dbCount={}, groupCount={}",

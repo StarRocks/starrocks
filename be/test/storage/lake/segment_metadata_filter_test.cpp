@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/column_predicate.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 #include "types/type_descriptor.h"
 

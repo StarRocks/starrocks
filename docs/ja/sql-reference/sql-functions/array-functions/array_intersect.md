@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_INTERSECT関数は1つ以上の配列の共通部分にある要素の配列を返します。"
 ---
 
 # array_intersect

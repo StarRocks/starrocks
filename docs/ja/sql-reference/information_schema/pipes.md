@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "pipesは現在のまたは指定されたデータベースに保存されているすべてのパイプに関する情報を提供します。"
 ---
 
 # pipes
@@ -23,4 +24,4 @@ displayed_sidebar: docs
 | STATE         | パイプのステータス。有効な値: `RUNNING`, `FINISHED`, `SUSPENDED`, `ERROR`。 |
 | LOAD_STATUS   | パイプを介してロードされるデータファイルの全体的なステータスで、以下のサブフィールドを含みます:<ul><li>`loadedFiles`: ロードされたデータファイルの数。</li><li>`loadedBytes`: ロードされたデータの量（バイト単位）。</li><li>`loadingFiles`: ロード中のデータファイルの数。</li></ul> |
 | LAST_ERROR    | パイプ実行中に発生した最後のエラーに関する詳細。デフォルト値: `NULL`。 |
-| CREATED_TIME  | パイプが作成された日時。形式: `yyyy-MM-dd HH:mm:ss`。例: `2023-07-24 14:58:58`。
+| CREATED_TIME  | パイプが作成された日時。形式: `yyyy-MM-dd HH:mm:ss`。例: `2023-07-24 14:58:58`。|

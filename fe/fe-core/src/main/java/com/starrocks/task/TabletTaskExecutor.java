@@ -68,6 +68,10 @@ public class TabletTaskExecutor {
     public static class CreateTabletOption {
         private boolean enableTabletCreationOptimization;
         private long gtid;
+        // When true, this is a backfill of v1 metadata + schema file for an existing table
+        // (e.g. light_weight_tablet_creation = true -> false). Bypasses the light-weight
+        // early-return so CreateReplicaTask is actually dispatched.
+        private boolean backfill;
 
         public boolean isEnableTabletCreationOptimization() {
             return enableTabletCreationOptimization;
@@ -84,6 +88,14 @@ public class TabletTaskExecutor {
         public void setGtid(long gtid) {
             this.gtid = gtid;
         }
+
+        public boolean isBackfill() {
+            return backfill;
+        }
+
+        public void setBackfill(boolean backfill) {
+            this.backfill = backfill;
+        }
     }
 
     public static void buildPartitionsSequentially(long dbId, OlapTable table, List<PhysicalPartition> partitions,
@@ -91,7 +103,7 @@ public class TabletTaskExecutor {
                                                    int numBackends,
                                                    ComputeResource computeResource,
                                                    CreateTabletOption option) throws DdlException {
-        if (table.isLightWeightTabletCreation()) {
+        if (table.isLightWeightTabletCreation() && !option.isBackfill()) {
             return;
         }
         // Try to bundle at least 200 CreateReplicaTask's in a single AgentBatchTask.
@@ -125,7 +137,7 @@ public class TabletTaskExecutor {
                                                    int numBackends,
                                                    ComputeResource computeResource,
                                                    CreateTabletOption option) throws DdlException {
-        if (table.isLightWeightTabletCreation()) {
+        if (table.isLightWeightTabletCreation() && !option.isBackfill()) {
             return;
         }
         long start = System.currentTimeMillis();

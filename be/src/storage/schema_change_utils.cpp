@@ -18,10 +18,12 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
+#include "column/type_converter.h"
 #include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -239,6 +241,13 @@ StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
 
 bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
                                    const Schema& new_schema, MemPool* mem_pool) {
+    TypeInfoAllocator type_info_allocator;
+    const TypeInfoAllocator* allocator = nullptr;
+    if (mem_pool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mem_pool);
+        allocator = &type_info_allocator;
+    }
+
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
@@ -337,7 +346,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
-                                                      new_col->as_mutable_raw_ptr(), mem_pool);
+                                                      new_col->as_mutable_raw_ptr(), allocator);
                 if (!st.ok()) {
                     LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
                                  << logical_type_to_string(new_type);

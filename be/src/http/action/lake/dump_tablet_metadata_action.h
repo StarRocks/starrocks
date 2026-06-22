@@ -26,15 +26,14 @@ namespace starrocks::lake {
 
 class DumpTabletMetadataAction : public HttpHandler {
 public:
-    explicit DumpTabletMetadataAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+    explicit DumpTabletMetadataAction(ExecEnv*) {}
     ~DumpTabletMetadataAction() override = default;
 
     DISALLOW_COPY_AND_MOVE(DumpTabletMetadataAction);
 
     void handle(HttpRequest* req) override;
 
-private:
-    ExecEnv* _exec_env;
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 };
 
 } // namespace starrocks::lake

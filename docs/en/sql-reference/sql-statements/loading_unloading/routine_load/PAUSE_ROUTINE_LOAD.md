@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "PAUSE ROUTINE LOAD pauses a Routine Load job but does not terminate this job."
+description: "PAUSE ROUTINE LOAD suspends a running Routine Load job without terminating it."
 ---
 
 # PAUSE ROUTINE LOAD

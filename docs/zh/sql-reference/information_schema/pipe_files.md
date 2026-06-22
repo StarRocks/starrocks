@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "pipe_files 提供指定 Pipe 下数据文件的导入状态。"
 ---
 
 # pipe_files

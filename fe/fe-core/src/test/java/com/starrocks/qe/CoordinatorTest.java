@@ -185,6 +185,89 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
+    public void testTimeoutHintUsesMetadataCollectQueryTimeoutForMetadataContext() {
+        ctx.setMetadataContext(true);
+
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(300);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains(SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT));
+        Assertions.assertFalse(ex.getMessage().contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
+    }
+
+    @Test
+    public void testTimeoutHintUsesInsertTimeoutForLoad() {
+        // In practice INSERT/CTAS timeouts are intercepted FE-side in StmtExecutor (which renders a richer
+        // hint including the load timeout property). This test covers the fallback when BE returns TIMEOUT
+        // before that polling fires: dealStatusToTryRetry must still name insert_timeout, not query_timeout.
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        new Expectations(executor) {
+            {
+                executor.isExecLoadType();
+                result = true;
+                minTimes = 0;
+            }
+        };
+        ctx.setExecutor(executor);
+
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(300);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains(SessionVariable.INSERT_TIMEOUT));
+        Assertions.assertFalse(ex.getMessage().contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
+    }
+
+    private static java.lang.reflect.Method handleErrorExecutionMethod() throws NoSuchMethodException {
+        java.lang.reflect.Method m = DefaultCoordinator.class.getDeclaredMethod(
+                "handleErrorExecution", Status.class,
+                com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.class, Throwable.class);
+        m.setAccessible(true);
+        return m;
+    }
+
+    @Test
+    public void testHandleErrorExecutionSuppressesCancelAfterEos() throws Exception {
+        // After the receiver got EOS (returnedAllResults=true), an in-flight stage-2 deploy that races
+        // with our QUERY_FINISHED cancel returns CANCELLED on the BE. Those are not real errors and must
+        // not surface as "[reason=INTERNAL_ERROR] [msg=null]" to the client.
+        // Covers DefaultCoordinator.handleErrorExecution guard at line ~766.
+        Deencapsulation.setField(coordinator, "returnedAllResults", true);
+        java.lang.reflect.Method handle = handleErrorExecutionMethod();
+
+        for (String beMsg : new String[] {"Query terminates prematurely", "QueryFinished", "Cancelled"}) {
+            ctx.getState().reset();
+            Status cancelled = new Status(TStatusCode.CANCELLED, beMsg);
+            Assertions.assertDoesNotThrow(
+                    () -> handle.invoke(coordinator, cancelled, null, null),
+                    "handleErrorExecution must swallow post-EOS cancel: " + beMsg);
+            Assertions.assertTrue(
+                    ctx.getState().getErrorMessage() == null || ctx.getState().getErrorMessage().isEmpty(),
+                    "post-EOS cancel must not set client error, msg was: " + ctx.getState().getErrorMessage());
+        }
+    }
+
+    @Test
+    public void testHandleErrorExecutionStillThrowsBeforeEos() throws Exception {
+        // Sanity: when EOS has not been delivered, a non-internal CANCELLED still falls through to the
+        // default branch and surfaces — i.e. the new guard must not swallow real pre-EOS errors.
+        Deencapsulation.setField(coordinator, "returnedAllResults", false);
+        java.lang.reflect.Method handle = handleErrorExecutionMethod();
+        Status cancelled = new Status(TStatusCode.CANCELLED, "some real cancel reason");
+        java.lang.reflect.InvocationTargetException ite = Assertions.assertThrows(
+                java.lang.reflect.InvocationTargetException.class,
+                () -> handle.invoke(coordinator, cancelled, null, null));
+        Assertions.assertInstanceOf(StarRocksException.class, ite.getCause());
+    }
+
+    @Test
     public void testClearExternalResourcesOnlyOnce() {
         AtomicInteger clearCount = new AtomicInteger();
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));

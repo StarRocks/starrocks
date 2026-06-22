@@ -40,17 +40,17 @@
 #include <utility>
 
 #include "base/concurrency/once.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/rowid_types.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
 #include "types/datum.h"
@@ -132,11 +132,23 @@ public:
     bool has_zone_map() const { return _zonemap_index != nullptr; }
     bool has_bitmap_index() const { return _bitmap_index != nullptr; }
     bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
+    // If the column's bloom-filter index was tombstoned via a lake
+    // metadata-only DROP, the footer bloom is stale and must not be
+    // interpreted as either "original" or "ngram" bloom until compaction
+    // rewrites the segment. dropped_table_indices on the tablet schema
+    // carries that signal. Both flavors share the same footer storage
+    // (_bloom_filter_index), so either tombstone disqualifies the footer.
+    bool _bloom_filter_index_dropped() const {
+        return _segment->tablet_schema().has_dropped_index(_column_unique_id, NGRAMBF) ||
+               _segment->tablet_schema().has_dropped_index(_column_unique_id, BLOOM_FILTER);
+    }
     bool has_original_bloom_filter_index() const {
-        return _bloom_filter_index != nullptr && (!_segment->tablet_schema().has_index(_column_unique_id, NGRAMBF));
+        return _bloom_filter_index != nullptr && !_bloom_filter_index_dropped() &&
+               (!_segment->tablet_schema().has_index(_column_unique_id, NGRAMBF));
     }
     bool has_ngram_bloom_filter_index() const {
-        return _bloom_filter_index != nullptr && _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
+        return _bloom_filter_index != nullptr && !_bloom_filter_index_dropped() &&
+               _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
     }
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
@@ -228,6 +240,18 @@ private:
     Status _load_zonemap_index(const IndexReadOptions& opts);
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
+
+    // Build a fresh BitmapIndexReader backed by a standalone .idx file
+    // (Index Delta Group payload). Used when IndexReadOptions carries an
+    // IDG entry that supersedes the segment footer's bitmap meta. The
+    // returned iterator owns its file handle and reader; the cached
+    // _bitmap_index footer reader is left untouched.
+    // `encryption_meta` is the IDG entry's serialized EncryptionMetaPB
+    // (empty when encryption is off); when non-empty it is unwrapped and
+    // passed through RandomAccessFileOptions so that the .idx file is
+    // read as cleartext rather than ciphertext.
+    Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
+                                                 const std::string& encryption_meta, BitmapIndexIterator** iterator);
 
     // Determines the logical type to use when parsing zone map values for predicate filtering,
     // handling type mismatches between column and predicate types after fast schema evolution

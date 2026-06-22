@@ -28,6 +28,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/sorting/data_segment.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_helper.h"
 #include "compute_env/sorting/sort_permute.h"

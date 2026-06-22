@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <future>
 #include <memory>
 #include <vector>
@@ -21,6 +22,8 @@
 namespace starrocks::pipeline {
 class QueryContext;
 using QueryContextPtr = std::shared_ptr<QueryContext>;
+class QueryRuntimeState;
+class FragmentRuntimeState;
 class QueryContextManager;
 class FragmentContext;
 using FragmentContextPtr = std::shared_ptr<FragmentContext>;
@@ -39,6 +42,8 @@ using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;
 using DriverConstRawPtr = const PipelineDriver*;
 using Drivers = std::vector<DriverPtr>;
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+class DriverObserver;
 class OperatorFactory;
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
 using OpFactories = std::vector<OpFactoryPtr>;
@@ -51,9 +56,12 @@ using Operators = std::vector<OperatorPtr>;
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 class PipelineObserver;
+class Event;
+using EventPtr = std::shared_ptr<Event>;
 class EventScheduler;
 class PipelineTimer;
 class PipelineTimerTask;
+class MorselQueue;
 class MorselQueueFactory;
 class GlobalDriverExecutor;
 class ExecStateReporter;

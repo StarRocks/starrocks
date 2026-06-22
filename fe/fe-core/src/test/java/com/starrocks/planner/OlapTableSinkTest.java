@@ -29,6 +29,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -39,6 +40,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -51,16 +53,24 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TOlapTableIndexSchema;
+import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTableLocationParam;
+import com.starrocks.thrift.TOlapTableSchemaParam;
 import com.starrocks.thrift.TOlapTableSink;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -91,6 +101,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -587,17 +598,224 @@ public class OlapTableSinkTest {
             }
         };
 
+        long savedMax = Config.max_load_initial_open_partition_number;
         Config.max_load_initial_open_partition_number = 1;
+        try {
+            OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                    TWriteQuorumType.MAJORITY, false, false, true);
+            sink.setAutomaticBucketSize(1);
+            sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sink.complete();
+            LOG.info("sink is {}", sink.toThrift());
+            LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        } finally {
+            Config.max_load_initial_open_partition_number = savedMax;
+        }
+    }
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+    @Test
+    public void testGetOpenPartitionsListOpensAllUnderLargeGlobalCap(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        ListPartitionInfo listInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = listInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
                 TWriteQuorumType.MAJORITY, false, false, true);
-        sink.setAutomaticBucketSize(1);
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
 
-        Config.max_load_initial_open_partition_number = 32;
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "LIST should open all partitions when count is below the global cap");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsListCappedByGlobalMax(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        ListPartitionInfo listInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = listInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 2;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(40L, 50L), Sets.newHashSet(open),
+                    "LIST should be capped by max_load_initial_open_partition_number when partitions exceed it");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsTablePropertyCapsTheSet(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = 2;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        List<Long> open = sink.getOpenPartitions();
+        Assertions.assertEquals(Sets.newHashSet(40L, 50L), Sets.newHashSet(open),
+                "Table property load_initial_open_partition_number should cap the open set to the newest N");
+    }
+
+    @Test
+    public void testGetOpenPartitionsTablePropertyBypassesGlobalCap(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = 5;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 2;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "Table property should bypass the global cap and open all 5 partitions");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeStreamingLoadKeeps32(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList();
+        for (long i = 1; i <= 40; i++) {
+            ids.add(i);
+        }
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+        sink.setIsStreamingLoad(true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(32, open.size(),
+                    "RANGE + streaming load should keep the conservative latest-32 cap");
+            Set<Long> expected = Sets.newHashSet();
+            for (long i = 9; i <= 40; i++) {
+                expected.add(i);
+            }
+            Assertions.assertEquals(expected, Sets.newHashSet(open),
+                    "RANGE + streaming load should open the newest 32 partition ids");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeNonStreamingOpensAll(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 4096;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(ids), Sets.newHashSet(open),
+                    "RANGE + non-streaming load should open all partitions when below the global cap");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
+    }
+
+    @Test
+    public void testGetOpenPartitionsRangeNonStreamingCappedByGlobalMax(@Mocked OlapTable mockTable) {
+        List<Long> ids = Lists.newArrayList(10L, 20L, 30L, 40L, 50L);
+        RangePartitionInfo rangeInfo = new RangePartitionInfo();
+        Deencapsulation.setField(rangeInfo, "type", PartitionType.RANGE);
+
+        new Expectations() {{
+            mockTable.getState();
+            result = OlapTable.OlapTableState.NORMAL;
+            mockTable.getLoadInitialOpenPartitionNumber();
+            result = TableProperty.INVALID;
+            mockTable.getPartitionInfo();
+            result = rangeInfo;
+            mockTable.getDoubleWritePartitions();
+            result = Maps.newHashMap();
+        }};
+
+        OlapTableSink sink = new OlapTableSink(mockTable, getTuple(), ids,
+                TWriteQuorumType.MAJORITY, false, false, true);
+
+        long savedConfig = Config.max_load_initial_open_partition_number;
+        Config.max_load_initial_open_partition_number = 3;
+        try {
+            List<Long> open = sink.getOpenPartitions();
+            Assertions.assertEquals(Sets.newHashSet(30L, 40L, 50L), Sets.newHashSet(open),
+                    "RANGE + non-streaming load should respect the global cap when set lower");
+        } finally {
+            Config.max_load_initial_open_partition_number = savedConfig;
+        }
     }
 
     @Test
@@ -868,5 +1086,410 @@ public class OlapTableSinkTest {
         } finally {
             Config.lake_enable_per_partition_coordinator_txn_log = original;
         }
+    }
+
+    // Build the sink output tuple from the table schema, mirroring how
+    // StreamLoadPlanner/InsertPlanner bind one materialized slot per column.
+    private static TupleDescriptor buildOutputTuple(List<Column> schema) {
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
+        for (Column col : schema) {
+            SlotDescriptor slot = descTable.addSlotDescriptor(tuple);
+            slot.setIsMaterialized(true);
+            slot.setColumn(col);
+            slot.setIsNullable(col.isAllowNull());
+        }
+        descTable.computeMemLayout();
+        return tuple;
+    }
+
+    // A DUP-keys index over (k1, k2, v1) whose sort key is (k1, k2). createSchema reads only
+    // metadata off the table; it never touches the cluster/backends, so a mocked table suffices.
+    private MaterializedIndexMeta rangeIndexMeta(long indexMetaId, List<Column> schema) {
+        return new MaterializedIndexMeta(indexMetaId, schema, 0, 0, (short) 2,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, Lists.newArrayList(0, 1));
+    }
+
+    @Test
+    public void testRangeTableEmitsPerIndexDistributedExprs() {
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 100L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        // Routing columns are the index sort key (k1, k2).
+        int expectedExprCount = MetaUtils.getRangeDistributionColumns(dstTable, indexMetaId).size();
+        Assertions.assertEquals(1, schemaParam.getIndexes().size());
+        TOlapTableIndexSchema baseIndex = schemaParam.getIndexes().get(0);
+        Assertions.assertTrue(baseIndex.isSetDistributed_exprs(),
+                "range-distribution base index must carry distributed_exprs");
+        List<TExpr> exprs = baseIndex.getDistributed_exprs();
+        Assertions.assertEquals(expectedExprCount, exprs.size(),
+                "one routing expr per range distribution column");
+        for (TExpr expr : exprs) {
+            Assertions.assertEquals(1, expr.getNodes().size(),
+                    "each routing expr is a single slot-ref node");
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, expr.getNodes().get(0).getNode_type());
+        }
+    }
+
+    @Test
+    public void testRangeTableNonWritePathLeavesDistributedExprsUnset() {
+        // Non-write callers (dictionary cache schema building) use the createSchema overload that
+        // does not emit distributed_exprs (emitDistributedExprs = false). Their BE consumers init
+        // OlapTableSchemaParam without a RuntimeState, which cannot build the per-index expr
+        // contexts. Even on a range-distribution table the field must stay unset on this path.
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 100L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                // isRangeDistribution() is gated out before it is reached on the non-write path,
+                // so it is allowed to be called zero times.
+                dstTable.isRangeDistribution();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        // 4-arg overload == dictionary-style non-write call (emitDistributedExprs defaults to false).
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null);
+
+        Assertions.assertFalse(schemaParam.getIndexes().isEmpty());
+        for (TOlapTableIndexSchema indexSchema : schemaParam.getIndexes()) {
+            Assertions.assertFalse(indexSchema.isSetDistributed_exprs(),
+                    "non-write (dictionary) createSchema must leave distributed_exprs unset on a range table");
+        }
+    }
+
+    @Test
+    public void testRangeTablePerIndexExprsMatchPartitionLevelColumns() {
+        // Behavior-preservation guarantee: for a base-only range table the LIVE per-index routing
+        // path must select exactly the columns (and order) the old partition-level
+        // distributed_columns path used, i.e. MetaUtils.getRangeDistributionColumnIds(table).
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 100L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        // TSlotRef carries only slot_id (no column-name field); resolve slot_id -> colName via the
+        // schema param's slot descriptors.
+        Map<Integer, String> slotIdToColName = Maps.newHashMap();
+        for (TSlotDescriptor slotDesc : schemaParam.getSlot_descs()) {
+            slotIdToColName.put(slotDesc.getId(), slotDesc.getColName());
+        }
+
+        TOlapTableIndexSchema baseIndex = schemaParam.getIndexes().get(0);
+        List<String> perIndexColumnKeys = new ArrayList<>();
+        for (TExpr expr : baseIndex.getDistributed_exprs()) {
+            TExprNode root = expr.getNodes().get(0);
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, root.getNode_type(),
+                    "each routing expr root must be a slot-ref");
+            int slotId = root.getSlot_ref().getSlot_id();
+            Assertions.assertTrue(slotIdToColName.containsKey(slotId),
+                    "routing slot_id must resolve to a schema slot descriptor");
+            perIndexColumnKeys.add(slotIdToColName.get(slotId));
+        }
+
+        // Per-index routing selects exactly the partition-level range distribution columns,
+        // same columns AND same order.
+        Assertions.assertEquals(MetaUtils.getRangeDistributionColumnIds(dstTable), perIndexColumnKeys,
+                "per-index routing must match partition-level distributed columns (same columns, same order)");
+    }
+
+    @Test
+    public void testNonRangeTableLeavesDistributedExprsUnset() {
+        List<Column> schema = Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("k2", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+        long indexMetaId = 200L;
+        MaterializedIndexMeta indexMeta = rangeIndexMeta(indexMetaId, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = indexMetaId;
+                dstTable.getIndexMetaByMetaId(indexMetaId);
+                result = indexMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                // The 4-arg createSchema overload does not emit distributed_exprs, so the
+                // emitDistributedExprs && isRangeDistribution() guard short-circuits before the
+                // distribution check; allow zero invocations.
+                dstTable.isRangeDistribution();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null);
+
+        Assertions.assertFalse(schemaParam.getIndexes().isEmpty());
+        for (TOlapTableIndexSchema indexSchema : schemaParam.getIndexes()) {
+            Assertions.assertFalse(indexSchema.isSetDistributed_exprs(),
+                    "hash-distribution index must leave distributed_exprs unset");
+        }
+    }
+
+    // A single-partition (UNPARTITIONED) table with a base index plus one rollup index. The
+    // target-write id is the index META id: createSchema and createPartition both filter on the
+    // meta id, so the same index is selected on both sides regardless of MaterializedIndex.getId().
+    // (These constants happen to set getId()==getMetaId(), but that equality is NOT relied on.)
+    private static final long TARGET_BASE_INDEX_ID = 10L;
+    private static final long TARGET_ROLLUP_INDEX_ID = 20L;
+    private static final long TARGET_TABLE_ID = 1L;
+    private static final long TARGET_PHYSICAL_PARTITION_ID = 1100L;
+
+    private List<Column> targetIndexSchema() {
+        return Lists.newArrayList(
+                new Column("k1", IntegerType.INT, true, null, false, null, ""),
+                new Column("v1", IntegerType.INT, false, null, true, null, ""));
+    }
+
+    // Mock the schema-side metadata reads for a base + rollup table.
+    private void expectTargetWriteSchema(List<Column> schema) {
+        MaterializedIndexMeta baseMeta = rangeIndexMeta(TARGET_BASE_INDEX_ID, schema);
+        MaterializedIndexMeta rollupMeta = rangeIndexMeta(TARGET_ROLLUP_INDEX_ID, schema);
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(TARGET_BASE_INDEX_ID, baseMeta);
+        indexMetaIdToMeta.put(TARGET_ROLLUP_INDEX_ID, rollupMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = TARGET_TABLE_ID;
+                minTimes = 0;
+                dstTable.getBaseIndexMetaId();
+                result = TARGET_BASE_INDEX_ID;
+                dstTable.getIndexMetaByMetaId(TARGET_BASE_INDEX_ID);
+                result = baseMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                // createSchema is invoked through the 4-arg (non-write) overload here, which short-
+                // circuits the emitDistributedExprs guard before the distribution check.
+                dstTable.isRangeDistribution();
+                result = false;
+                minTimes = 0;
+            }
+        };
+    }
+
+    // Build a real single-partition Partition whose physical partition carries the base index and
+    // one rollup index, and mock the partition-side metadata reads. createPartition then runs its
+    // genuine UNPARTITIONED path (filter + setMaterializedIndexes + loaded-index recording).
+    private Partition expectTargetWritePartition(List<Column> schema) {
+        Column k1 = schema.get(0);
+        HashDistributionInfo distInfo = new HashDistributionInfo(2, Lists.newArrayList(k1));
+        MaterializedIndex baseIndex =
+                new MaterializedIndex(TARGET_BASE_INDEX_ID, MaterializedIndex.IndexState.NORMAL);
+        MaterializedIndex rollupIndex =
+                new MaterializedIndex(TARGET_ROLLUP_INDEX_ID, MaterializedIndex.IndexState.NORMAL);
+        Partition partition = new Partition(900, TARGET_PHYSICAL_PARTITION_ID, "p1", baseIndex, distInfo);
+        partition.getDefaultPhysicalPartition().createRollupIndex(rollupIndex);
+
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(900, (short) 1);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = TARGET_TABLE_ID;
+                minTimes = 0;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(900L);
+                result = partition;
+            }
+        };
+        return partition;
+    }
+
+    @Test
+    public void testTargetWriteIndexFilterRestrictsToOneIndex() throws StarRocksException {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Schema side: only the base index is emitted.
+        TOlapTableSchemaParam schemaParam =
+                OlapTableSink.createSchema(1L, dstTable, tuple, TARGET_BASE_INDEX_ID);
+        Assertions.assertEquals(1, schemaParam.getIndexes().size(),
+                "filter must restrict the schema to a single index");
+        Assertions.assertEquals(TARGET_BASE_INDEX_ID, schemaParam.getIndexes().get(0).getId());
+
+        // Partition side: every partition lists ONLY the base index, and the txn loaded-index
+        // record agrees (the 1:1 invariant the BE relies on).
+        Partition partition = expectTargetWritePartition(schema);
+        TransactionState txnState = new TransactionState();
+        TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
+                1L, dstTable, tuple, false, 0, Lists.newArrayList(900L), txnState, TARGET_BASE_INDEX_ID);
+
+        Assertions.assertFalse(partitionParam.getPartitions().isEmpty());
+        for (TOlapTablePartition tPartition : partitionParam.getPartitions()) {
+            Assertions.assertEquals(1, tPartition.getIndexes().size(),
+                    "filter must restrict every partition to a single index");
+            Assertions.assertEquals(TARGET_BASE_INDEX_ID, tPartition.getIndexes().get(0).getIndex_id());
+        }
+
+        List<MaterializedIndex> loaded = txnState.getPartitionLoadedIndexes(
+                TARGET_TABLE_ID, partition.getDefaultPhysicalPartition());
+        Assertions.assertEquals(1, loaded.size(), "loaded-index state must record only the target index");
+        Assertions.assertEquals(TARGET_BASE_INDEX_ID, loaded.get(0).getId());
+
+        // Schema and partition must agree on the single index id.
+        Assertions.assertEquals(schemaParam.getIndexes().get(0).getId(),
+                partitionParam.getPartitions().get(0).getIndexes().get(0).getIndex_id(),
+                "schema and partition index lists must stay 1:1");
+    }
+
+    @Test
+    public void testTargetWriteIndexFilterUnsetWritesAllIndexes() throws StarRocksException {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Schema side: both indexes emitted when no target is set.
+        TOlapTableSchemaParam schemaParam =
+                OlapTableSink.createSchema(1L, dstTable, tuple, null);
+        Assertions.assertEquals(2, schemaParam.getIndexes().size(),
+                "unset filter must emit all indexes in the schema");
+        Set<Long> schemaIndexIds = Sets.newHashSet();
+        for (TOlapTableIndexSchema indexSchema : schemaParam.getIndexes()) {
+            schemaIndexIds.add(indexSchema.getId());
+        }
+        Assertions.assertEquals(Sets.newHashSet(TARGET_BASE_INDEX_ID, TARGET_ROLLUP_INDEX_ID), schemaIndexIds);
+
+        // Partition side: every partition lists ALL indexes when no target is set.
+        Partition partition = expectTargetWritePartition(schema);
+        TransactionState txnState = new TransactionState();
+        TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
+                1L, dstTable, tuple, false, 0, Lists.newArrayList(900L), txnState, null);
+
+        Assertions.assertFalse(partitionParam.getPartitions().isEmpty());
+        for (TOlapTablePartition tPartition : partitionParam.getPartitions()) {
+            Set<Long> partitionIndexIds = Sets.newHashSet();
+            for (TOlapTableIndexTablets tIndex : tPartition.getIndexes()) {
+                partitionIndexIds.add(tIndex.getIndex_id());
+            }
+            Assertions.assertEquals(Sets.newHashSet(TARGET_BASE_INDEX_ID, TARGET_ROLLUP_INDEX_ID),
+                    partitionIndexIds, "unset filter must list all indexes per partition");
+        }
+
+        List<MaterializedIndex> loaded = txnState.getPartitionLoadedIndexes(
+                TARGET_TABLE_ID, partition.getDefaultPhysicalPartition());
+        Assertions.assertEquals(2, loaded.size(), "loaded-index state must record all indexes when unset");
+    }
+
+    @Test
+    public void testTargetWriteIndexFilterThrowsWhenIndexAbsent() {
+        List<Column> schema = targetIndexSchema();
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        expectTargetWritePartition(schema);
+
+        long absentIndexId = 999L;
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                OlapTableSink.createPartition(
+                        1L, dstTable, tuple, false, 0, Lists.newArrayList(900L), null, absentIndexId));
+        Assertions.assertTrue(e.getMessage().contains("not found in partition"),
+                "missing target index must fail with a 'not found in partition' message, got: " + e.getMessage());
     }
 }

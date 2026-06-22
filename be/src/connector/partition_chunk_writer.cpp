@@ -28,7 +28,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/convert_helper.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/types.h"

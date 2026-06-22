@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -25,6 +26,7 @@ import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
@@ -44,9 +46,13 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -54,6 +60,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
@@ -279,6 +286,45 @@ public class StmtExecutorTest {
         Assertions.assertEquals("Delete", executor.getExecType());
         Assertions.assertTrue(executor.isExecLoadType());
         Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+    }
+
+    @Test
+    public void testProcessQueryStatisticsUpdatesReturnRowsForOutfileOnly() {
+        // OUTFILE (and Arrow Flight) queries do not deliver result rows through the normal row
+        // batches, so context.returnRows is never accumulated from batch row sizes and must be taken
+        // from the BE-reported statistics.returnedRows. Regular queries already count rows per batch,
+        // so they must NOT pull from statistics here, otherwise the count would be doubled.
+
+        // 1) OUTFILE query: returnRows should come from statistics.returnedRows (empty result batch).
+        ConnectContext outfileCtx = UtFrameUtils.createDefaultCtx();
+        StatementBase outfileStmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        outfileStmt.setOrigStmt(new OriginStatement("select 1", 0));
+        StmtExecutor outfileExecutor = new StmtExecutor(outfileCtx, outfileStmt);
+
+        RowBatch outfileBatch = new RowBatch();
+        PQueryStatistics outfileStats = new PQueryStatistics();
+        outfileStats.returnedRows = 42L;
+        outfileBatch.setQueryStatistics(outfileStats);
+
+        outfileCtx.resetReturnRows();
+        outfileExecutor.processQueryStatisticsFromResult(outfileBatch, null, true);
+        Assertions.assertEquals(42L, outfileCtx.getReturnRows());
+
+        // 2) Regular (non-OUTFILE, non-Arrow-Flight) query: returnRows must NOT be pulled from
+        //    statistics; it stays at whatever the per-batch loop accumulated (0 here).
+        ConnectContext plainCtx = UtFrameUtils.createDefaultCtx();
+        StatementBase plainStmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        plainStmt.setOrigStmt(new OriginStatement("select 1", 0));
+        StmtExecutor plainExecutor = new StmtExecutor(plainCtx, plainStmt);
+
+        RowBatch plainBatch = new RowBatch();
+        PQueryStatistics plainStats = new PQueryStatistics();
+        plainStats.returnedRows = 99L;
+        plainBatch.setQueryStatistics(plainStats);
+
+        plainCtx.resetReturnRows();
+        plainExecutor.processQueryStatisticsFromResult(plainBatch, null, false);
+        Assertions.assertEquals(0L, plainCtx.getReturnRows());
     }
 
     @Test
@@ -1602,5 +1648,170 @@ public class StmtExecutorTest {
 
         Deencapsulation.setField(executor, "catalogTypesInvolved", Sets.newHashSet("hive", "hudi"));
         Assertions.assertEquals(Sets.newHashSet("hive", "hudi"), executor.getCatalogTypesInvolved());
+    }
+
+    @Test
+    public void testExecuteNonPrimaryKeyDeleteNormalReturnWithNotice() throws Exception {
+        DeleteStmt stmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "t")), null, NodePosition.ZERO),
+                null,
+                null);
+        stmt.setOkInfoMessage("merge-on-read notice");
+
+        DeleteMgr deleteMgr = new DeleteMgr();
+        new MockUp<DeleteMgr>() {
+            @Mock
+            public void process(DeleteStmt s) {
+                // Normal return without throwing (e.g. partition pruning yielded no work).
+            }
+        };
+
+        QueryState state = StmtExecutor.executeNonPrimaryKeyDelete(stmt, deleteMgr, () -> "delete-stmt");
+
+        Assertions.assertEquals(MysqlStateType.OK, state.getStateType());
+        Assertions.assertEquals("merge-on-read notice", state.getInfoMessage());
+    }
+
+    @Test
+    public void testExecuteNonPrimaryKeyDeleteNormalReturnWithoutNotice() throws Exception {
+        DeleteStmt stmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "t")), null, NodePosition.ZERO),
+                null,
+                null);
+        // No setOkInfoMessage.
+
+        DeleteMgr deleteMgr = new DeleteMgr();
+        new MockUp<DeleteMgr>() {
+            @Mock
+            public void process(DeleteStmt s) {
+                // Normal return.
+            }
+        };
+
+        QueryState state = StmtExecutor.executeNonPrimaryKeyDelete(stmt, deleteMgr, () -> "delete-stmt");
+
+        Assertions.assertEquals(MysqlStateType.OK, state.getStateType());
+        Assertions.assertTrue(state.getInfoMessage() == null || state.getInfoMessage().isEmpty(),
+                "no notice when okInfoMessage was not set");
+    }
+
+    @Test
+    public void testExecuteNonPrimaryKeyDeleteCatchOkAppendsNotice() throws Exception {
+        DeleteStmt stmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "t")), null, NodePosition.ZERO),
+                null,
+                null);
+        stmt.setOkInfoMessage("merge-on-read notice");
+
+        DeleteMgr deleteMgr = new DeleteMgr();
+        new MockUp<DeleteMgr>() {
+            @Mock
+            public void process(DeleteStmt s) throws QueryStateException {
+                throw new QueryStateException(MysqlStateType.OK,
+                        "{'label':'lbl','status':'VISIBLE','txnId':'42'}");
+            }
+        };
+
+        QueryState state = StmtExecutor.executeNonPrimaryKeyDelete(stmt, deleteMgr, () -> "delete-stmt");
+
+        Assertions.assertEquals(MysqlStateType.OK, state.getStateType());
+        String info = state.getInfoMessage();
+        Assertions.assertTrue(info.contains("'VISIBLE'"), "should keep delete job info: " + info);
+        Assertions.assertTrue(info.contains("merge-on-read notice"), "should append notice: " + info);
+    }
+
+    @Test
+    public void testExecuteNonPrimaryKeyDeleteNormalReturnWithEmptyNotice() throws Exception {
+        DeleteStmt stmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "t")), null, NodePosition.ZERO),
+                null,
+                null);
+        stmt.setOkInfoMessage("");
+
+        DeleteMgr deleteMgr = new DeleteMgr();
+        new MockUp<DeleteMgr>() {
+            @Mock
+            public void process(DeleteStmt s) {
+                // Normal return.
+            }
+        };
+
+        QueryState state = StmtExecutor.executeNonPrimaryKeyDelete(stmt, deleteMgr, () -> "delete-stmt");
+
+        Assertions.assertEquals(MysqlStateType.OK, state.getStateType());
+        Assertions.assertTrue(state.getInfoMessage() == null || state.getInfoMessage().isEmpty(),
+                "empty notice should be treated as no notice");
+    }
+
+    @Test
+    public void testExecuteNonPrimaryKeyDeleteCatchErrorDoesNotAppend() throws Exception {
+        DeleteStmt stmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "t")), null, NodePosition.ZERO),
+                null,
+                null);
+        stmt.setOkInfoMessage("merge-on-read notice");
+
+        DeleteMgr deleteMgr = new DeleteMgr();
+        new MockUp<DeleteMgr>() {
+            @Mock
+            public void process(DeleteStmt s) throws QueryStateException {
+                throw new QueryStateException(MysqlStateType.ERR, "boom");
+            }
+        };
+
+        QueryState state = StmtExecutor.executeNonPrimaryKeyDelete(stmt, deleteMgr, () -> "delete-stmt");
+
+        Assertions.assertEquals(MysqlStateType.ERR, state.getStateType());
+        Assertions.assertFalse(state.getInfoMessage() != null
+                && state.getInfoMessage().contains("merge-on-read notice"),
+                "notice must not be attached to a non-OK state");
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoUsesNoticeWhenExistingIsNull() {
+        QueryState state = new QueryState();
+        state.setOk(0L, 0, null);
+        StmtExecutor.attachDeleteOkInfo(state, "notice");
+        Assertions.assertEquals("notice", state.getInfoMessage());
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoAppendsToExistingOk() {
+        QueryState state = new QueryState();
+        state.setOk(5L, 0, "{'label':'lbl','status':'VISIBLE','txnId':'42'}");
+        StmtExecutor.attachDeleteOkInfo(state, "DELETE on Duplicate Key table 'x' writes delete predicates");
+
+        Assertions.assertEquals(MysqlStateType.OK, state.getStateType());
+        Assertions.assertEquals(5L, state.getAffectedRows());
+        String info = state.getInfoMessage();
+        Assertions.assertTrue(info.contains("'VISIBLE'"), "should keep delete job info: " + info);
+        Assertions.assertTrue(info.contains("Duplicate Key"), "should append notice: " + info);
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoUsesNoticeWhenExistingIsEmpty() {
+        QueryState state = new QueryState();
+        state.setOk(0L, 0, "");
+        StmtExecutor.attachDeleteOkInfo(state, "notice");
+        Assertions.assertEquals("notice", state.getInfoMessage());
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoNoOpOnNonOkState() {
+        QueryState state = new QueryState();
+        state.setError("boom");
+        StmtExecutor.attachDeleteOkInfo(state, "notice");
+        Assertions.assertEquals(MysqlStateType.ERR, state.getStateType(),
+                "should not change a non-OK state");
+    }
+
+    @Test
+    public void testAttachDeleteOkInfoNoOpOnEmptyNotice() {
+        QueryState state = new QueryState();
+        state.setOk(0L, 0, "existing");
+        StmtExecutor.attachDeleteOkInfo(state, null);
+        Assertions.assertEquals("existing", state.getInfoMessage());
+        StmtExecutor.attachDeleteOkInfo(state, "");
+        Assertions.assertEquals("existing", state.getInfoMessage());
     }
 }

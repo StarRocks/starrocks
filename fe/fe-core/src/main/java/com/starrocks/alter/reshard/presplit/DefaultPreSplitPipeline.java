@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 /**
  * Production {@link PreSplitPipeline} composing the FE-side sampler tiers,
@@ -50,10 +51,13 @@ import java.util.Optional;
  * sampler throw propagates as {@link StarRocksException} and the coordinator
  * maps it to {@link SkipReason#SAMPLE_FAILED}.
  *
- * <p>Pre-submit timeout is enforced as a soft deadline: the pipeline checks
- * the deadline at sampler-phase boundaries rather than preempting in-flight
- * RPCs. This keeps the abort surface narrow at the cost of allowing one
- * extra phase to complete past the deadline.
+ * <p>Pre-submit timeout is enforced at sampler-phase boundaries via
+ * {@link #checkDeadline}. The data tier additionally caps its BE-side sample
+ * sub-query at the remaining budget ({@link SampleRequest#withQueryTimeoutSeconds}),
+ * so an over-budget sample is cancelled by the BE instead of running the
+ * deadline over by a full sample phase. The meta tier (file-footer reads, no
+ * BE query) is still only boundary-checked, but its cost is bounded by the
+ * file count rather than a sub-query that could hang.
  *
  * <p>{@link #awaitFinished} polls {@link TabletReshardJobMgr} on a fixed
  * interval. No event surface exists today; polling is acceptable because the
@@ -140,13 +144,17 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
         MetaTierSampler metaTierSampler;
-        if (table.getPartitionInfo().isPartitioned()) {
-            // Partitioned tables: force data tier. Throwing MetaTierUnavailableException
-            // routes the pipeline's fallback to runDataTier without any meta-tier RPC.
+        if (loadKind == LoadKind.INSERT_FROM_TABLE || table.getPartitionInfo().isPartitioned()) {
+            // INSERT_FROM_TABLE always uses the data tier: an OLAP source table has no
+            // Parquet/ORC file footer for the meta tier to read.
+            // Partitioned tables also force data tier: meta tier per-column min/max is
+            // lossy under expression-based partitioning.
             metaTierSampler = (request, requestedTabletCount) -> {
                 throw new MetaTierUnavailableException(
-                        "partitioned table forces data tier (meta tier per-column min/max "
-                                + "is lossy under expression-based partitioning)");
+                        loadKind == LoadKind.INSERT_FROM_TABLE
+                                ? "INSERT-from-table forces data tier (OLAP source has no Parquet/ORC footer)"
+                                : "partitioned table forces data tier (meta tier per-column min/max "
+                                        + "is lossy under expression-based partitioning)");
             };
         } else {
             ParquetMetadataSampler parquetMetadataSampler = new ParquetMetadataSampler(
@@ -166,14 +174,24 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
             case BROKER_LOAD -> new BrokerLoadRowGroupStatisticsProvider();
+            // INSERT_FROM_TABLE always forces data tier; the meta tier is bypassed in forLoadKind
+            // before this method is ever reached for that load kind.
+            case INSERT_FROM_TABLE -> throw new IllegalStateException(
+                    "INSERT_FROM_TABLE never uses the meta tier; rowGroupStatisticsProviderFor must not be called");
         };
     }
 
-    private static SampleSubqueryExecutor sampleSubqueryExecutorFor(LoadKind loadKind) {
+    static SampleSubqueryExecutor sampleSubqueryExecutorFor(LoadKind loadKind) {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesSampleSubqueryExecutor();
             case BROKER_LOAD -> new BrokerLoadSampleSubqueryExecutor();
+            case INSERT_FROM_TABLE -> new InsertFromTableSampleSubqueryExecutor();
         };
+    }
+
+    /** Exposes the installed meta-tier sampler for unit tests that verify tier-routing logic. */
+    MetaTierSampler getMetaTierSamplerForTest() {
+        return metaTierSampler;
     }
 
     @Override
@@ -209,15 +227,21 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     }
 
     @Override
-    public void awaitFinished(PreparedReshardJob preparedJob, Duration timeout)
+    public void awaitFinished(PreparedReshardJob preparedJob, Duration timeout,
+                              BooleanSupplier shouldAbort)
             throws PreSplitPostSubmitTimeoutException, StarRocksException {
         Objects.requireNonNull(preparedJob, "preparedJob");
         Objects.requireNonNull(timeout, "timeout");
+        Objects.requireNonNull(shouldAbort, "shouldAbort");
         TabletReshardJob submitted = (TabletReshardJob) preparedJob.payload();
         long jobId = submitted.getJobId();
         Instant deadline = clock.instant().plus(timeout);
 
         while (true) {
+            if (shouldAbort.getAsBoolean()) {
+                throw new StarRocksException("tablet reshard job " + jobId
+                        + " await abandoned: caller signalled abort");
+            }
             TabletReshardJob latest = tabletReshardJobManager.getTabletReshardJob(jobId);
             if (latest == null) {
                 throw new StarRocksException(
@@ -266,11 +290,25 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private TierOutcome runDataTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         checkDeadline(deadline);
-        SampleSet sampleSet = dataTierSampler.sample(request);
+        // Cap the sample at the remaining budget (see class doc); an over-budget
+        // sample is cancelled by the BE → SAMPLE_FAILED → the load proceeds.
+        SampleRequest budgetedRequest = request.withQueryTimeoutSeconds(remainingBudgetSeconds(deadline));
+        SampleSet sampleSet = dataTierSampler.sample(budgetedRequest);
         checkDeadline(deadline);
         BoundaryPlannerResult result =
                 BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, request.getSortKey());
         return new TierOutcome(result, TIER_LABEL_DATA_TIER);
+    }
+
+    /**
+     * Whole-second budget remaining until {@code deadline} (rounded up). Floored
+     * at 1 so we never hand the BE {@code query_timeout = 0}, which it reads as
+     * "no timeout"; the preceding {@link #checkDeadline} guarantees the
+     * remainder is positive.
+     */
+    private int remainingBudgetSeconds(Instant deadline) {
+        long remainingMillis = Duration.between(clock.instant(), deadline).toMillis();
+        return (int) Math.max(1L, (remainingMillis + 999L) / 1000L);
     }
 
     /** Cuts {@code c1 < c2 < ... < c_{K-1}} → tablet ranges

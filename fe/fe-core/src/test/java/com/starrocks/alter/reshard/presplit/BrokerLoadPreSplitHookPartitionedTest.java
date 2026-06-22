@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -41,6 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
@@ -60,16 +62,18 @@ import static org.mockito.Mockito.when;
  * this file focuses on the multi-partition code paths:
  *
  * <ol>
- *   <li>Fire-and-forget invariant: a partitioned Broker Load that submits a
- *       combined reshard MUST NOT call any post-submit await — the load txn
- *       is already open and synchronously waiting would deadlock the reshard
- *       daemon's cleanup-phase prev-txn wait.</li>
+ *   <li>Sync-await invariant: the Broker Load hook sync-awaits the reshard
+ *       daemon's {@code FINISHED} transition on both single- and
+ *       multi-partition paths so the triggering Broker Load itself sees the
+ *       post-pre-split tablet layout — symmetric with the INSERT-from-FILES
+ *       hook. Deadlock-safe because {@code BrokerLoadJob.unprotectedExecute}
+ *       defers {@code beginTxn} until after the hook returns.</li>
  *   <li>Source-level ordering invariant: {@code BrokerLoadJob.createLoadingTask}
- *       calls {@code task.prepare()} BEFORE {@code firePreSplitHooks}. This is
- *       why the triggering Broker Load doesn't benefit from pre-split — its
- *       sink plan is fixed before our hook fires. Pre-created partitions and
- *       the post-reshard layout accelerate ONLY subsequent loads on the same
- *       table.</li>
+ *       calls {@code firePreSplitHooks} BEFORE {@code beginTxn()} and BEFORE
+ *       {@code task.prepare()}. This is what lets the triggering Broker Load
+ *       benefit from pre-split — its sink plan is built against the
+ *       post-reshard layout — and what keeps the daemon's cleanup-phase
+ *       prev-txn wait off the not-yet-allocated load txn.</li>
  *   <li>Persisted session variable ({@link SessionVariable#ENABLE_TABLET_PRE_SPLIT}
  *       in {@code BulkLoadJob.sessionVariables}) survives serialization
  *       round-trip — required so a load submitted with
@@ -77,7 +81,7 @@ import static org.mockito.Mockito.when;
  *       after FE failover.</li>
  * </ol>
  *
- * <p>End-to-end "Broker Load → grouper → pre-create → subsequent load sees
+ * <p>End-to-end "Broker Load → grouper → pre-create → triggering load sees
  * new partitions" coverage requires a full FE fixture (catalog, partitions,
  * tablet inverted index, ConnectContext-bound compute resource) and lives in
  * the TSP regression suite; the two
@@ -102,31 +106,27 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         MetricRepo.hasInit = savedMetricHasInit;
     }
 
-    // ---------- Fire-and-forget invariant ----------
+    // ---------- Sync-await invariant ----------
 
     @Test
-    public void partitionedBrokerLoadDoesNotInvokeAwaitHelper() {
-        // Drive the partitioned branch and assert NO await helper is invoked.
-        // The Broker Load hook is fire-and-forget; the only await helper that
-        // exists in the package (awaitCombinedJobAllowingFallback) lives in
-        // InsertFromFilesPreSplitHook because Broker Load deliberately does
-        // not have one. We verify the structural invariant by asserting that
-        // the BrokerLoadPreSplitHook source itself does NOT reference
-        // awaitCombinedJobAllowingFallback or awaitFinishedAndRecordMetrics.
-        // (Any future regression that adds a wait call would either fail this
-        // grep-style test or fail the source-ordering test below.)
+    public void brokerLoadHookSyncAwaitsOnBothPaths() {
+        // The Broker Load hook now sync-awaits the reshard daemon's FINISHED
+        // transition on both the single-partition and multi-partition paths.
+        // Symmetric with the INSERT-from-FILES hook so the triggering Broker
+        // Load itself benefits from pre-split. Deadlock-safe because
+        // BrokerLoadJob.unprotectedExecute defers beginTxn until after the
+        // hook returns, so the reshard daemon's cleanup-phase prev-txn drain
+        // cannot include T_load. Regression guard: source-level structural
+        // assertion that the two await helpers exist and are called.
         String source = readSource(
-                "fe-core/src/main/java/com/starrocks/alter/reshard/presplit/BrokerLoadPreSplitHook.java");
+                "fe-core/src/main/java/com/starrocks/alter/reshard/presplit/PreSplitFlow.java");
         String codeOnly = stripLineComments(source);
-        Assertions.assertFalse(containsCall(codeOnly, "awaitCombinedJobAllowingFallback"),
-                "BrokerLoadPreSplitHook MUST NOT call awaitCombinedJobAllowingFallback — Broker Load is fire-and-forget");
-        Assertions.assertFalse(containsCall(codeOnly, "awaitFinishedAndRecordMetrics"),
-                "BrokerLoadPreSplitHook MUST NOT call awaitFinishedAndRecordMetrics — Broker Load is fire-and-forget");
-        // The single-partition legacy submitAsynchronously call is allowed (single-partition path),
-        // but the new multi-partition entry must use submitForPartitionsCombined
-        // (which itself never blocks on terminal state).
+        Assertions.assertTrue(containsCall(codeOnly, "awaitFinishedAllowingFallback"),
+                "PreSplitFlow MUST call awaitFinishedAllowingFallback on the single-partition path");
+        Assertions.assertTrue(containsCall(codeOnly, "awaitCombinedJobAllowingFallback"),
+                "PreSplitFlow MUST call awaitCombinedJobAllowingFallback on the multi-partition path");
         Assertions.assertTrue(source.contains("submitForPartitionsCombined"),
-                "BrokerLoadPreSplitHook multi-partition flow MUST call submitForPartitionsCombined");
+                "PreSplitFlow multi-partition flow MUST call submitForPartitionsCombined");
     }
 
     @Test
@@ -150,13 +150,13 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
         SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(sampledRows))) {
-
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(sortKey);
             // Non-empty grouped list -> submitForPartitionsCombined is invoked.
             grouper.when(() -> PartitionSampleGrouper.group(
@@ -172,7 +172,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(Database.class), table, mock(BrokerDesc.class),
                     List.of(mock(BrokerFileGroup.class)),
                     List.of(List.<TBrokerFileStatus>of()),
-                    mock(ComputeResource.class));
+                    mock(ComputeResource.class), () -> false);
 
             // Routing proof: partitioned tables MUST take the multi-partition path...
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -180,6 +180,104 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             // ...and MUST NOT fall through to the single-partition entry.
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+        }
+    }
+
+    @Test
+    public void manuallyPartitionedBrokerLoadSkipsPreSplit() {
+        // A partitioned Broker Load target whose supportedAutomaticPartition() is false (a
+        // manual list/range partition table) must not reach the multi-partition flow: the
+        // automatic-partition gate in PreSplitFlow.dispatch reaches through the Broker Load
+        // entry too. Mirror partitionedBrokerLoadTakesMultiPartitionBranch's scaffolding so
+        // the flow would reach submitForPartitionsCombined if the gate were removed — that is
+        // the bite signal. Override only this instance's supportedAutomaticPartition() to
+        // false; the shared mockPartitionedRangeTable() default (true) stays untouched.
+        OlapTable table = mockPartitionedRangeTable();
+        when(table.supportedAutomaticPartition()).thenReturn(false);
+        List<Column> sortKey = List.of(bigintColumn("sort_col"));
+        List<Column> partitionColumns = List.of(bigintColumn("p_col"));
+        when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(partitionColumns);
+
+        SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(sampledRows))) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(sortKey);
+            grouper.when(() -> PartitionSampleGrouper.group(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), anyLong()))
+                    .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
+
+            BrokerLoadPreSplitHook.maybeRunPreSplit(
+                    mockConnectContextWithSessionPreSplit(true),
+                    mock(Database.class), table, mock(BrokerDesc.class),
+                    List.of(mock(BrokerFileGroup.class)),
+                    List.of(List.<TBrokerFileStatus>of()),
+                    mock(ComputeResource.class), () -> false);
+
+            // The automatic-partition gate must skip before either submit path.
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any()), never());
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+        }
+    }
+
+    @Test
+    public void multiPartitionBrokerLoadCapsSampleAtPreSubmitBudget() {
+        // The multi-partition data-tier sample must be capped at the pre-submit
+        // budget — the same bound the single-partition DefaultPreSplitPipeline path
+        // applies. Without it a slow FILES sample runs until the default
+        // query_timeout while the Broker Load holds a pending_load_task_scheduler
+        // slot in PENDING. Capture the SampleRequest handed to the sampler and
+        // assert its query-timeout equals tablet_pre_split_pre_submit_timeout_seconds.
+        long savedTimeout = Config.tablet_pre_split_pre_submit_timeout_seconds;
+        Config.tablet_pre_split_pre_submit_timeout_seconds = 123L;
+        try {
+            OlapTable table = mockPartitionedRangeTable();
+            List<Column> sortKey = List.of(bigintColumn("sort_col"));
+            List<Column> partitionColumns = List.of(bigintColumn("p_col"));
+            when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(partitionColumns);
+            SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+            AtomicReference<SampleRequest> capturedRequest = new AtomicReference<>();
+
+            try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                    MockedStatic<TabletPreSplitCoordinator> coordinator =
+                            Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                    MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                    MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                    MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                            (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenAnswer(invocation -> {
+                                capturedRequest.set(invocation.getArgument(0));
+                                return sampledRows;
+                            }))) {
+                metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(sortKey);
+                grouper.when(() -> PartitionSampleGrouper.group(
+                                any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                                anyLong(), anyLong()))
+                        .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
+                coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                                any(), any(), anyList(), anyInt(), any()))
+                        .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+                BrokerLoadPreSplitHook.maybeRunPreSplit(
+                        mockConnectContextWithSessionPreSplit(true),
+                        mock(Database.class), table, mock(BrokerDesc.class),
+                        List.of(mock(BrokerFileGroup.class)),
+                        List.of(List.<TBrokerFileStatus>of()),
+                        mock(ComputeResource.class), () -> false);
+
+                Assertions.assertNotNull(capturedRequest.get(), "data-tier sampler must have been invoked");
+                Assertions.assertEquals(123, capturedRequest.get().getQueryTimeoutSeconds(),
+                        "multi-partition Broker Load sample must be capped at pre_submit_timeout");
+            }
+        } finally {
+            Config.tablet_pre_split_pre_submit_timeout_seconds = savedTimeout;
         }
     }
 
@@ -193,8 +291,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(List.of(bigintColumn("p_col")));
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
@@ -207,7 +306,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(Database.class), table, mock(BrokerDesc.class),
                     List.of(mock(BrokerFileGroup.class)),
                     List.of(List.<TBrokerFileStatus>of()),
-                    mock(ComputeResource.class));
+                    mock(ComputeResource.class), () -> false);
 
             // Sampler failed -> no grouping, no submit.
             grouper.verify(() -> PartitionSampleGrouper.group(
@@ -226,8 +325,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(List.of(bigintColumn("p_col")));
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
@@ -240,7 +340,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(Database.class), table, mock(BrokerDesc.class),
                     List.of(mock(BrokerFileGroup.class)),
                     List.of(List.<TBrokerFileStatus>of()),
-                    mock(ComputeResource.class));
+                    mock(ComputeResource.class), () -> false);
 
             grouper.verify(() -> PartitionSampleGrouper.group(
                     any(), any(), any(), anyLong(), anyLong()), never());
@@ -259,8 +359,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
         SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
@@ -276,7 +377,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(Database.class), table, mock(BrokerDesc.class),
                     List.of(mock(BrokerFileGroup.class)),
                     List.of(List.<TBrokerFileStatus>of()),
-                    mock(ComputeResource.class));
+                    mock(ComputeResource.class), () -> false);
 
             // Grouper ran but returned empty -> no submit.
             grouper.verify(() -> PartitionSampleGrouper.group(
@@ -289,25 +390,27 @@ public class BrokerLoadPreSplitHookPartitionedTest {
     // ---------- Source-level ordering invariant ----------
 
     @Test
-    public void taskPrepareRunsBeforeFirePreSplitHooksInBrokerLoadJob() {
-        // Structural test: the triggering Broker Load's LoadLoadingTask.prepare()
-        // builds the sink plan against the pre-hook tablet layout. Therefore
-        // task.prepare() MUST occur BEFORE firePreSplitHooks in the source of
-        // BrokerLoadJob.createLoadingTask — documented behavior, not a bug.
-        // Pre-created partitions and the post-reshard layout accelerate ONLY
-        // subsequent loads on the same table.
+    public void firePreSplitHooksRunsBeforeBeginTxnInBrokerLoadJob() {
+        // Structural deadlock guard: BrokerLoadJob.createLoadingTask must fire
+        // the pre-split hooks BEFORE beginTxn() begins T_load. If T_load were
+        // allocated first the reshard daemon's cleanup-phase prev-txn wait
+        // would include it, deadlocking the hook's sync-await. The "before
+        // task.prepare()" ordering is a transitive consequence — task.prepare()
+        // runs inside buildLoadingTasksUnderReadLock which is called after
+        // beginTransaction — so it doesn't need its own assertion.
         String source = readSource(
                 "fe-core/src/main/java/com/starrocks/load/loadv2/BrokerLoadJob.java");
-        int prepareIdx = source.indexOf("task.prepare()");
-        int firePreSplitIdx = source.indexOf("firePreSplitHooks(");
-        Assertions.assertTrue(prepareIdx > 0,
-                "task.prepare() must exist in BrokerLoadJob source");
+        // Strip comments + javadoc so this ignores prose references to method names.
+        String codeOnly = stripLineComments(source);
+        int firePreSplitIdx = codeOnly.indexOf("firePreSplitHooks(context");
+        int beginTxnCallIdx = codeOnly.indexOf("beginTxn();");
         Assertions.assertTrue(firePreSplitIdx > 0,
-                "firePreSplitHooks( must exist in BrokerLoadJob source");
-        Assertions.assertTrue(prepareIdx < firePreSplitIdx,
-                "task.prepare() MUST run BEFORE firePreSplitHooks — the triggering Broker Load's "
-                        + "sink plan is fixed before pre-split fires, so pre-create only accelerates "
-                        + "subsequent loads");
+                "firePreSplitHooks( call must exist in BrokerLoadJob source");
+        Assertions.assertTrue(beginTxnCallIdx > 0,
+                "beginTxn(); call must exist in BrokerLoadJob source");
+        Assertions.assertTrue(firePreSplitIdx < beginTxnCallIdx,
+                "firePreSplitHooks MUST run BEFORE beginTxn — otherwise the daemon's "
+                        + "cleanup-phase prev-txn drain would deadlock the hook's sync-await");
     }
 
     // ---------- Eligibility skip in the multi-partition path ----------
@@ -327,7 +430,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(Database.class), table, mock(BrokerDesc.class),
                     List.of(mock(BrokerFileGroup.class)),
                     List.of(List.<TBrokerFileStatus>of()),
-                    mock(ComputeResource.class));
+                    mock(ComputeResource.class), () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any()), never());
@@ -335,6 +438,12 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }
     }
+
+    // The await-helper polling semantics (finished, aborted, disappeared, timeout)
+    // are covered by InsertPreSplitHookFilesPartitionedTest's
+    // awaitCombinedJobAllowingFallback* tests now that the helper lives on
+    // TabletPreSplitCoordinator. Broker-side coverage is the source-level
+    // structural assertion above ("MUST call awaitCombinedJobAllowingFallback").
 
     // ---------- Persisted session variable round-trip ----------
 
@@ -377,7 +486,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                                 mock(Database.class), table, mock(BrokerDesc.class),
                                 List.of(mock(BrokerFileGroup.class)),
                                 List.of(List.<TBrokerFileStatus>of()),
-                                mock(ComputeResource.class)),
+                                mock(ComputeResource.class), () -> false),
                 "hook must never propagate a throw");
     }
 
@@ -385,28 +494,33 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
     @Test
     @Disabled("end-to-end: requires full FE fixture (catalog, partitions, tablet inverted index, "
-            + "compute-resource-bound ConnectContext) and a two-step Broker Load sequence. "
-            + "Covered by the TSP regression suite. The unit-level "
-            + "tests above already cover the multi-partition code paths individually. Documents the "
-            + "asymmetry: the FIRST Broker Load's plan is built by task.prepare() before the hook "
-            + "fires, so it goes through BE runtime auto-create; the SECOND Broker Load on the same "
-            + "table sees pre-created partitions + the post-reshard tablet layout.")
-    public void subsequentBrokerLoadSeesPreCreatedPartitions() {
+            + "compute-resource-bound ConnectContext) and a partitioned Broker Load. Covered by "
+            + "the TSP regression suite. The unit-level tests above already cover the multi-"
+            + "partition code paths individually. Documents the sync-await invariant: the "
+            + "triggering Broker Load itself plans against the post-reshard tablet layout because "
+            + "buildLoadingTasksUnderReadLock runs only after awaitCombinedJobAllowingFallback "
+            + "returns — task.prepare() builds the sink plan against the already-split layout, "
+            + "not against the pre-split single tablet.")
+    public void triggeringBrokerLoadSeesPostSplitLayout() {
         // Documented intent:
         //   1. LOAD LABEL ... INSERT INTO partitioned_t SELECT * FROM .../parquet (3 partitions worth)
         //   2. Hook samples, groups into 3 PartitionSamples, pre-creates 2 missing partitions,
-        //      submits combined reshard. The TRIGGERING load goes through BE auto-create unchanged
-        //      because task.prepare() already built its sink plan.
-        //   3. After the reshard daemon drives the combined job to FINISHED, a SECOND Broker Load
-        //      on the same partitioned_t resolves all 3 partitions in PartitionSampleGrouper.group
-        //      with existsInCatalog=true and sees the post-split tablet layout in its sink plan.
+        //      submits combined reshard, then sync-awaits awaitCombinedJobAllowingFallback until
+        //      the reshard daemon drives the combined job to FINISHED (bounded by
+        //      tablet_pre_split_post_submit_wait_seconds).
+        //   3. Only after the await returns does BrokerLoadJob call beginTransaction and
+        //      buildLoadingTasksUnderReadLock — task.prepare() sees the post-reshard tablet
+        //      layout and the BE plan is built against the post-split tablets, not the
+        //      original single tablet. A subsequent Broker Load on the same partitioned_t sees
+        //      identical layout (it skips the reshard because the layout already matches).
     }
 
     @Test
     @Disabled("end-to-end: load-proceeds-on-pre-split-failure semantics. Documents that a Skipped "
             + "outcome (PRE_CREATE_FAILED, SUBMIT_FAILED, etc.) from submitForPartitionsCombined "
-            + "MUST NOT abort the Broker Load — the hook is fire-and-forget and BrokerLoadJob "
-            + "proceeds to submitTask regardless. Covered by TSP regression suite.")
+            + "MUST NOT abort the Broker Load — the await helper fail-safes on submit failure / "
+            + "timeout / wait error and BrokerLoadJob proceeds to submitTask regardless. "
+            + "Covered by TSP regression suite.")
     public void loadProceedsRegardlessOfPreSplitOutcome() {
         // Documented intent:
         //   1. Force submitForPartitionsCombined to return Skipped(PRE_CREATE_FAILED) by
@@ -434,6 +548,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
         when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
         when(table.getName()).thenReturn("partitioned_t");
+        when(table.supportedAutomaticPartition()).thenReturn(true);
         PartitionInfo partitionInfo = mock(PartitionInfo.class);
         when(partitionInfo.isPartitioned()).thenReturn(true);
         when(table.getPartitionInfo()).thenReturn(partitionInfo);
@@ -477,11 +592,10 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
     /**
      * Strip Java line comments and block comments so structural assertions don't
-     * trip on documentation that mentions a method by name (e.g. "NO
-     * awaitCombinedJobAllowingFallback — Broker Load is fire-and-forget"). A
-     * full Java parser is overkill here; a small regex pass over the source is
-     * sufficient because the hook file does not contain string literals that
-     * collide with the matched names.
+     * trip on documentation that mentions a method by name. A full Java parser is
+     * overkill here; a small regex pass over the source is sufficient because the
+     * hook file does not contain string literals that collide with the matched
+     * names.
      */
     private static String stripLineComments(String source) {
         String withoutBlockComments = source.replaceAll("(?s)/\\*.*?\\*/", "");

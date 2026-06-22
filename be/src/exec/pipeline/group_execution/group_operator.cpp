@@ -14,8 +14,8 @@
 
 #include "exec/pipeline/group_execution/group_operator.h"
 
-#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
 #include "gutil/casts.h"
 
 namespace starrocks::pipeline {

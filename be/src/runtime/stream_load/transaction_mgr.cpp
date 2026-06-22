@@ -34,6 +34,7 @@
 #include "common/util/debug_util.h"
 #include "common/util/misc.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -47,7 +48,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -77,7 +77,7 @@ TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
             nap_sleep(interval, [this] { return _is_stopped.load(); });
         }
     });
-    Thread::set_thread_name(_transaction_clean_thread, "transaction_clean");
+    Thread::set_thread_name(_transaction_clean_thread, "txn_clean");
 }
 
 TransactionMgr::~TransactionMgr() {

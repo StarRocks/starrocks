@@ -38,6 +38,7 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -50,7 +51,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -536,7 +536,9 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
         return Status::OK();
     }
 
-    request.__set_thrift_rpc_timeout_ms(config::thrift_rpc_timeout_ms);
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+    TEST_SYNC_POINT_CALLBACK("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout", &request);
     // plan this load
     auto master_addr = get_master_address();
 #ifndef BE_TEST
@@ -547,7 +549,8 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
     int64_t stream_load_put_start_time = MonotonicNanos();
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); }));
+            [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); },
+            rpc_timeout_ms));
     ctx->stream_load_put_cost_nanos = MonotonicNanos() - stream_load_put_start_time;
     ctx->timeout_second = ctx->put_result.params.query_options.query_timeout;
     ctx->request.__set_timeout(ctx->timeout_second);

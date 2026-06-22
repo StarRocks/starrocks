@@ -406,7 +406,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         if (groupId == null) {
             return;
         }
-        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRangeMgr().getColocateRanges(groupId.grpId);
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
             for (ReshardingMaterializedIndex reshardingIndex

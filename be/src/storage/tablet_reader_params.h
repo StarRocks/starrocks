@@ -19,14 +19,14 @@
 #include <vector>
 
 #include "column/column_access_path.h"
+#include "column/global_dict/types.h"
+#include "compute_env/runtime_range_pruner.h"
 #include "options.h"
-#include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/olap_tuple.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
 
 namespace starrocks {
 

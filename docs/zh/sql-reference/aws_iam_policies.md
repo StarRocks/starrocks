@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AWS IAM 策略声明对特定 AWS 资源的访问权限，用于 StarRocks 集成 AWS 的身份认证。"
 ---
 
 # AWS IAM 策略

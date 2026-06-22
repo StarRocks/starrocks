@@ -18,6 +18,8 @@
 #include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
@@ -28,6 +30,7 @@
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
@@ -53,10 +56,10 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -769,7 +772,7 @@ int main(int argc, char** argv) {
     starrocks::CpuInfo::init();
     starrocks::DiskInfo::init();
     starrocks::MemInfo::init();
-    starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
+    CHECK_OK(starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir));
 
     starrocks::date::init_date_cache();
     // Disable time zone cache, save time for unit test
@@ -786,9 +789,12 @@ int main(int argc, char** argv) {
     auto* global_env = starrocks::GlobalEnv::GetInstance();
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
-    (void)global_env->init(process_metrics_registry->root_registry());
+    CHECK_OK(global_env->init(process_metrics_registry->root_registry()));
     auto* platform_env = starrocks::PlatformEnv::GetInstance();
-    (void)platform_env->init(process_metrics_registry->root_registry());
+    starrocks::PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    CHECK_OK(platform_env->init(std::move(platform_env_options)));
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
@@ -804,7 +810,7 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    (void)exec_env->init(paths, process_metrics_registry, global_env);
+    CHECK_OK(exec_env->init(paths, process_metrics_registry, global_env));
     int r = RUN_ALL_TESTS();
 
     sleep(10);
@@ -819,9 +825,7 @@ int main(int argc, char** argv) {
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
     exec_env->destroy();
     platform_env->destroy();

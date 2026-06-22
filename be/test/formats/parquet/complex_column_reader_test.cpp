@@ -21,13 +21,17 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "column/nullable_column.h"
 #include "column/variant_encoder.h"
 #include "common/object_pool.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
-#include "storage/column_predicate.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "formats/parquet/scalar_column_reader.h"
+#include "formats/parquet/schema.h"
+#include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
+#include "types/type_descriptor.h"
 #include "types/type_info.h"
 #include "types/variant.h"
 
@@ -1051,6 +1055,52 @@ TEST(ParquetComplexColumnReaderTest, VariantVirtualZoneMapReaderSkipsWhenSourceI
     EXPECT_FALSE(prepared);
     EXPECT_EQ(nullptr, leaf_reader);
     EXPECT_TRUE(rewritten_predicates.empty());
+}
+
+// White-box coverage for the fail-fast invariants introduced by the dict-code-leak fix.
+//
+// In normal flow fill_dst_column()/_restore_physical_column() are only reached right after read_range()
+// has swapped in the reader's PHYSICAL column, so the "source is not a physical column"
+// and "lost logical destination" guards are unreachable end to end. The test target is built
+// with -fno-access-control, so construct the readers directly and reach into their internals.
+TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource) {
+    ColumnReaderOptions opts;
+    ParquetField field;
+    tparquet::ColumnChunk chunk_meta;
+    TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    GlobalDictMap dict;
+    auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
+
+    // LowCardColumnReader::fill_dst_column: when src is not _code_column
+    // (PHYSICAL dict codes), it is treated as already LOGICAL → swap directly.
+    {
+        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
+        ColumnPtr dst = make_int_col();
+        ColumnPtr src = make_int_col();
+        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
+    }
+
+    // LowRowsColumnReader::fill_dst_column: same LOGICAL fallback.
+    {
+        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        LowRowsColumnReader reader(base, &dict, /*slot_id=*/1);
+        ColumnPtr dst = make_int_col();
+        ColumnPtr src = make_int_col();
+        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
+    }
+
+    // RawColumnReader::_restore_physical_column errors when a PHYSICAL column
+    // is still the caller-visible column but _logical_dst was lost.
+    {
+        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
+        LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
+        ColumnPtr code = make_int_col();
+        reader._code_column = code;
+        reader._logical_dst = nullptr;
+        ColumnPtr col = code;
+        EXPECT_FALSE(reader._restore_physical_column(col).ok());
+    }
 }
 
 } // namespace starrocks::parquet

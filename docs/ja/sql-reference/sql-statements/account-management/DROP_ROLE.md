@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP ROLE removes a role from StarRocks."
 ---
 
 # DROP ROLE

@@ -42,7 +42,9 @@ public:
 
     int result_order;
 
-    bool use_ivfpq = false;
+    // When true, re-rank the ANN result by recomputing the exact distance on the full-precision
+    // vectors (a quantized index returns lossy distances). Set by FE via enable_vector_index_refine.
+    bool refine_distance = false;
 
     double pq_refine_factor;
 

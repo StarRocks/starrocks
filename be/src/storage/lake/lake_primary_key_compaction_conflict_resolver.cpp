@@ -14,7 +14,6 @@
 
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
 
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_delvec_loader.h"

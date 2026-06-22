@@ -55,9 +55,11 @@
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_env.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -79,8 +81,8 @@ public:
             : _tablet_id(next_id()),
               _partition_id(next_id()),
               _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
-              _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
-              _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
+              _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
+              _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
@@ -95,7 +97,7 @@ public:
     void create_tablet() {
         auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
         _tablet_id = metadata->id();
-        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         ASSERT_TRUE(tablet_mgr != nullptr);
         ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
     }
@@ -144,9 +146,12 @@ protected:
         rowset->set_overlapped(false);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("seg_" + std::to_string(tablet_id) + "_0");
-        rowset->add_segment_size(100);
+        // Production rowset producers mint a uid; emulate that here so the
+        // strict-uid invariant in tablet_merger holds when MERGE later runs.
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
         auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("seg_" + std::to_string(tablet_id) + "_0");
+        segment_meta->set_size(100);
         segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
         segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
         segment_meta->set_num_rows(10);
@@ -171,9 +176,12 @@ protected:
         rowset->set_overlapped(false);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
-        rowset->add_segments("seg_" + std::to_string(tablet_id) + "_0");
-        rowset->add_segment_size(100);
+        // Production rowset producers mint a uid; emulate that here so the
+        // strict-uid invariant in tablet_merger holds when MERGE later runs.
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
         auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("seg_" + std::to_string(tablet_id) + "_0");
+        segment_meta->set_size(100);
         segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
         segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
         segment_meta->set_num_rows(10);
@@ -210,9 +218,9 @@ protected:
         log.set_txn_id(txn_id);
         int sort_key = 0;
         for (int i = 0; i < num_segments; i++) {
-            log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file(txn_id));
-            log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
             auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+            segment_meta->set_filename(generate_segment_file(txn_id));
+            segment_meta->set_size(1024);
             segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(sort_key));
             sort_key += 100;
             segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(sort_key));
@@ -240,9 +248,9 @@ protected:
         int64_t total_rows = 0;
         int64_t total_size = 0;
         for (size_t i = 0; i < min_keys.size(); ++i) {
-            log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file(txn_id));
-            log.mutable_op_write()->mutable_rowset()->add_segment_size(segment_sizes[i]);
             auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+            segment_meta->set_filename(generate_segment_file(txn_id));
+            segment_meta->set_size(segment_sizes[i]);
             segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_keys[i]));
             segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_keys[i]));
             segment_meta->set_num_rows(segment_num_rows[i]);
@@ -531,15 +539,17 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         ASSERT_EQ(3, metadata->next_rowset_id());
         ASSERT_EQ(1, metadata->rowsets_size());
         ASSERT_EQ(1, metadata->rowsets(0).id());
-        ASSERT_EQ(2, metadata->rowsets(0).segments_size());
+        ASSERT_EQ(2, metadata->rowsets(0).segment_metas_size());
         ASSERT_TRUE(metadata->rowsets(0).overlapped());
         ASSERT_EQ(logs[1].op_write().rowset().num_rows(), metadata->rowsets(0).num_rows());
         ASSERT_EQ(logs[1].op_write().rowset().data_size(), metadata->rowsets(0).data_size());
-        ASSERT_EQ(logs[1].op_write().rowset().segments(0), metadata->rowsets(0).segments(0));
-        ASSERT_EQ(logs[1].op_write().rowset().segments(1), metadata->rowsets(0).segments(1));
+        ASSERT_EQ(logs[1].op_write().rowset().segment_metas(0).filename(),
+                  metadata->rowsets(0).segment_metas(0).filename());
+        ASSERT_EQ(logs[1].op_write().rowset().segment_metas(1).filename(),
+                  metadata->rowsets(0).segment_metas(1).filename());
         EXPECT_EQ(987654321, metadata->commit_time());
     }
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // TxnLog`s should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
     ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().is_not_found());
@@ -660,9 +670,9 @@ TEST_F(LakeServiceTest, test_publish_version_vector_index_dispatch_gate) {
         log.set_tablet_id(tablet_id);
         log.set_partition_id(_partition_id);
         log.set_txn_id(txn_id);
-        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file_for_tablet(tablet_id, txn_id));
-        log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
         auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        segment_meta->set_filename(generate_segment_file_for_tablet(tablet_id, txn_id));
+        segment_meta->set_size(1024);
         segment_meta->set_num_rows(100);
         segment_meta->add_vector_index_ids(index_id);
         log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
@@ -705,12 +715,15 @@ TEST_F(LakeServiceTest, test_publish_version_vector_index_dispatch_gate) {
                 << "async-mode tablet with new vector_index_ids must be reported";
         EXPECT_EQ(async_tablet_id, response.vector_index_build_infos(0).tablet_id());
         EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+        EXPECT_TRUE(response.vector_index_build_infos(0).build_needed())
+                << "a new rowset carrying vector_index_ids needs a real .vi build";
     }
 }
 
-// Async-mode table whose new rowset has no vector_index_ids (segment under
-// threshold) should also not appear in vector_index_build_infos.
-TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_skipped) {
+// Async-mode table whose new rowset has no vector_index_ids (segment under threshold, or a
+// bundle segment) is still reported on every version-advancing publish, tagged
+// build_needed=false so the FE advances built_version directly without dispatching a CN build.
+TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_reports_no_build) {
     auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
     auto* schema = metadata->mutable_schema();
     auto* idx = schema->add_table_indices();
@@ -726,9 +739,9 @@ TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_skipped) {
     log.set_tablet_id(tablet_id);
     log.set_partition_id(_partition_id);
     log.set_txn_id(txn_id);
-    log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file_for_tablet(tablet_id, txn_id));
-    log.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
     auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+    segment_meta->set_filename(generate_segment_file_for_tablet(tablet_id, txn_id));
+    segment_meta->set_size(1024);
     segment_meta->set_num_rows(100);
     // intentionally do NOT add vector_index_ids: simulates async + below-threshold
     log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
@@ -744,8 +757,12 @@ TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_skipped) {
     PublishVersionResponse response;
     _lake_service.publish_version(nullptr, &request, &response, nullptr);
     ASSERT_EQ(0, response.failed_tablets_size());
-    EXPECT_EQ(0, response.vector_index_build_infos_size())
-            << "async-mode tablet without vector_index_ids must not be reported";
+    ASSERT_EQ(1, response.vector_index_build_infos_size())
+            << "async-mode tablet must be reported on every version advance for frontier tracking";
+    EXPECT_EQ(tablet_id, response.vector_index_build_infos(0).tablet_id());
+    EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+    EXPECT_FALSE(response.vector_index_build_infos(0).build_needed())
+            << "no vector_index_ids -> nothing to build this version -> build_needed=false";
 }
 
 TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
@@ -767,8 +784,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("1.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("2.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
 
@@ -792,14 +809,14 @@ TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
     ASSERT_EQ(3, metadata->next_rowset_id());
     ASSERT_EQ(1, metadata->rowsets_size());
     ASSERT_EQ(1, metadata->rowsets(0).id());
-    ASSERT_EQ(2, metadata->rowsets(0).segments_size());
+    ASSERT_EQ(2, metadata->rowsets(0).segment_metas_size());
     ASSERT_TRUE(metadata->rowsets(0).overlapped());
     ASSERT_EQ(101, metadata->rowsets(0).num_rows());
     ASSERT_EQ(4096, metadata->rowsets(0).data_size());
-    ASSERT_EQ("1.dat", metadata->rowsets(0).segments(0));
-    ASSERT_EQ("2.dat", metadata->rowsets(0).segments(1));
+    ASSERT_EQ("1.dat", metadata->rowsets(0).segment_metas(0).filename());
+    ASSERT_EQ("2.dat", metadata->rowsets(0).segment_metas(1).filename());
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // TxnLog should't have been deleted
     ASSERT_TRUE(tablet.get_txn_log(1002).status().ok());
     ASSERT_TRUE(tablet.get_txn_log(1003).status().ok());
@@ -889,7 +906,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_single_to_batch) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
     }
@@ -909,7 +926,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_single_to_batch) {
         _lake_service.publish_version(nullptr, &publish_request_1001, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog of logs[0] should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
         // the other txn_logs should't have been deleted
@@ -922,7 +939,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_single_to_batch) {
         ASSERT_EQ(3, metadata->next_rowset_id());
         ASSERT_EQ(1, metadata->rowsets_size());
         ASSERT_EQ(1, metadata->rowsets(0).id());
-        ASSERT_EQ(2, metadata->rowsets(0).segments_size());
+        ASSERT_EQ(2, metadata->rowsets(0).segment_metas_size());
         ASSERT_TRUE(metadata->rowsets(0).overlapped());
         ASSERT_EQ(101, metadata->rowsets(0).num_rows());
         ASSERT_EQ(4096, metadata->rowsets(0).data_size());
@@ -958,7 +975,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog should't have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().ok());
         ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().ok());
@@ -983,7 +1000,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         _lake_service.publish_version(nullptr, &publish_request_1001, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog of logs[0] should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
         // TxnLog of logs[1] should't have been deleted
@@ -1010,7 +1027,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         _lake_service.publish_version(nullptr, &publish_request_1002, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog of logs[1] should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().is_not_found());
 
@@ -1338,16 +1355,16 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
     rowset->set_num_rows(150);
     rowset->set_data_size(1500);
 
-    rowset->add_segments("seg_0");
-    rowset->add_segment_size(1000);
     auto* segment_meta0 = rowset->add_segment_metas();
+    segment_meta0->set_filename("seg_0");
+    segment_meta0->set_size(1000);
     segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
     segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(50));
     segment_meta0->set_num_rows(100);
 
-    rowset->add_segments("seg_1");
-    rowset->add_segment_size(500);
     auto* segment_meta1 = rowset->add_segment_metas();
+    segment_meta1->set_filename("seg_1");
+    segment_meta1->set_size(500);
     segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
     segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(150));
     segment_meta1->set_num_rows(50);
@@ -1564,12 +1581,12 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
 
             ASSIGN_OR_ABORT(auto old_metadata_1, _tablet_mgr->get_tablet_metadata(old_tablet_id_1, 3));
             ASSERT_EQ(3, old_metadata_1->version());
-            ASSERT_EQ(old_metadata_1->rowsets(0).segments_size(), old_metadata_1->rowsets(0).shared_segments_size());
-            EXPECT_TRUE(old_metadata_1->rowsets(0).shared_segments(0));
+            ASSERT_EQ(old_metadata_1->rowsets(0).segment_metas_size(), old_metadata_1->rowsets(0).segment_metas_size());
+            EXPECT_TRUE(old_metadata_1->rowsets(0).segment_metas(0).shared());
             ASSIGN_OR_ABORT(auto old_metadata_2, _tablet_mgr->get_tablet_metadata(old_tablet_id_2, 3));
             ASSERT_EQ(3, old_metadata_2->version());
-            ASSERT_EQ(old_metadata_2->rowsets(0).segments_size(), old_metadata_2->rowsets(0).shared_segments_size());
-            EXPECT_TRUE(old_metadata_2->rowsets(0).shared_segments(0));
+            ASSERT_EQ(old_metadata_2->rowsets(0).segment_metas_size(), old_metadata_2->rowsets(0).segment_metas_size());
+            EXPECT_TRUE(old_metadata_2->rowsets(0).segment_metas(0).shared());
             ASSIGN_OR_ABORT(auto new_metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
             ASSERT_EQ(new_tablet_id, new_metadata->id());
             ASSERT_EQ(2, new_metadata->rowsets_size());
@@ -1611,10 +1628,9 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         log1.set_tablet_id(old_tablet_id_1);
         log1.set_partition_id(_partition_id);
         log1.set_txn_id(txn_id);
-        log1.mutable_op_write()->mutable_rowset()->add_segments(
-                generate_segment_file_for_tablet(old_tablet_id_1, txn_id));
-        log1.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
         auto* seg_meta1 = log1.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        seg_meta1->set_filename(generate_segment_file_for_tablet(old_tablet_id_1, txn_id));
+        seg_meta1->set_size(1024);
         seg_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         seg_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(10));
         seg_meta1->set_num_rows(10);
@@ -1627,10 +1643,9 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         log2.set_tablet_id(old_tablet_id_2);
         log2.set_partition_id(_partition_id);
         log2.set_txn_id(txn_id);
-        log2.mutable_op_write()->mutable_rowset()->add_segments(
-                generate_segment_file_for_tablet(old_tablet_id_2, txn_id));
-        log2.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
         auto* seg_meta2 = log2.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        seg_meta2->set_filename(generate_segment_file_for_tablet(old_tablet_id_2, txn_id));
+        seg_meta2->set_size(1024);
         seg_meta2->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
         seg_meta2->mutable_sort_key_max()->CopyFrom(generate_sort_key(60));
         seg_meta2->set_num_rows(10);
@@ -1667,7 +1682,7 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
             ASSERT_EQ(1, inspected_txn_size.load(std::memory_order_relaxed));
             EXPECT_TRUE(saw_rebuild_pindex.load(std::memory_order_relaxed));
 
-            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            StorageEngine::instance()->wait_storage_cleanup_tasks();
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_1, txn_id)));
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_2, txn_id)));
         }
@@ -1865,7 +1880,7 @@ TEST_F(LakeServiceTest, test_publish_identical_tablet) {
             ASSERT_EQ(0, response.tablet_metas_size());
             ASSERT_EQ(0, response.tablet_ranges_size());
 
-            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            StorageEngine::instance()->wait_storage_cleanup_tasks();
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_log.txn_id())));
         }
 
@@ -1952,8 +1967,8 @@ TEST_F(LakeServiceTest, test_abort) {
         TxnLog log;
         log.set_tablet_id(_tablet_id);
         log.set_txn_id(txn_id);
-        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file(txn_id));
-        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file(txn_id));
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(generate_segment_file(txn_id));
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(generate_segment_file(txn_id));
         log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         log.mutable_op_write()->mutable_rowset()->set_overlapped(true);
@@ -1970,8 +1985,10 @@ TEST_F(LakeServiceTest, test_abort) {
         log.mutable_op_compaction()->mutable_output_rowset()->set_overlapped(false);
         log.mutable_op_compaction()->mutable_output_rowset()->set_num_rows(101);
         log.mutable_op_compaction()->mutable_output_rowset()->set_data_size(4096);
-        log.mutable_op_compaction()->mutable_output_rowset()->add_segments(generate_segment_file(txn_id));
-        log.mutable_op_compaction()->mutable_output_rowset()->add_segments(generate_segment_file(txn_id));
+        log.mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename(
+                generate_segment_file(txn_id));
+        log.mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename(
+                generate_segment_file(txn_id));
         log.mutable_op_compaction()->set_new_segment_offset(0);
         log.mutable_op_compaction()->set_new_segment_count(2);
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
@@ -1984,8 +2001,8 @@ TEST_F(LakeServiceTest, test_abort) {
         TxnLog log;
         log.set_tablet_id(_tablet_id);
         log.set_txn_id(txn_id);
-        log.mutable_op_schema_change()->add_rowsets()->add_segments(generate_segment_file(txn_id));
-        log.mutable_op_schema_change()->add_rowsets()->add_segments(generate_segment_file(txn_id));
+        log.mutable_op_schema_change()->add_rowsets()->add_segment_metas()->set_filename(generate_segment_file(txn_id));
+        log.mutable_op_schema_change()->add_rowsets()->add_segment_metas()->set_filename(generate_segment_file(txn_id));
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2015,19 +2032,19 @@ TEST_F(LakeServiceTest, test_abort) {
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // TxnLog`s and segments should have been deleted
     for (auto&& log : logs) {
-        for (auto&& s : log.op_write().rowset().segments()) {
-            EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s)));
+        for (auto&& s : log.op_write().rowset().segment_metas()) {
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
         }
-        for (auto&& s : log.op_compaction().output_rowset().segments()) {
-            EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s)));
+        for (auto&& s : log.op_compaction().output_rowset().segment_metas()) {
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
         }
         for (auto&& r : log.op_schema_change().rowsets()) {
-            for (auto&& s : r.segments()) {
-                EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s)));
+            for (auto&& s : r.segment_metas()) {
+                EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
             }
         }
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
@@ -2150,7 +2167,7 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         request.add_txn_ids(logs.back().txn_id());
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
         ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
     }
@@ -2170,7 +2187,7 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         info->set_combined_txn_log(false);
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
         ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
     }
@@ -2190,7 +2207,7 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         info->set_combined_txn_log(true);
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         auto log_path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
         ASSERT_TRUE(FileSystem::Default()->path_exists(log_path).is_not_found());
     }
@@ -2516,8 +2533,8 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("1.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("2.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
     {
@@ -2567,7 +2584,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 10)));
     }
@@ -2582,7 +2599,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 10)));
     }
@@ -2598,7 +2615,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 10)));
     }
     // Publish combined txn log
@@ -2635,7 +2652,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         for (auto tablet_id : tablet_ids) {
             EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(tablet_id, txn_id)));
             EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(tablet_id, version)));
@@ -2669,8 +2686,8 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
         log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(11);
         log.mutable_op_write()->mutable_rowset()->set_data_size(110);
-        log.mutable_op_write()->mutable_rowset()->add_segments("stmt1_seg1.dat");
-        log.mutable_op_write()->mutable_rowset()->add_segments("stmt1_seg2.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("stmt1_seg1.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("stmt1_seg2.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
     {
@@ -2681,7 +2698,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
         log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(22);
         log.mutable_op_write()->mutable_rowset()->set_data_size(220);
-        log.mutable_op_write()->mutable_rowset()->add_segments("stmt2_seg1.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("stmt2_seg1.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
 
@@ -2710,7 +2727,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // The materialized .vlog must exist and contain the merged segments and
     // accumulated counters across both statements.
@@ -2728,10 +2745,10 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
     const auto& rowset = vlog->op_write().rowset();
     EXPECT_EQ(33, rowset.num_rows());
     EXPECT_EQ(330, rowset.data_size());
-    ASSERT_EQ(3, rowset.segments_size());
-    EXPECT_EQ("stmt1_seg1.dat", rowset.segments(0));
-    EXPECT_EQ("stmt1_seg2.dat", rowset.segments(1));
-    EXPECT_EQ("stmt2_seg1.dat", rowset.segments(2));
+    ASSERT_EQ(3, rowset.segment_metas_size());
+    EXPECT_EQ("stmt1_seg1.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ("stmt1_seg2.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ("stmt2_seg1.dat", rowset.segment_metas(2).filename());
     EXPECT_TRUE(rowset.overlapped());
 
     // Replaying the same request after the sources have been deleted should be a
@@ -2800,7 +2817,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         log.mutable_load_id()->CopyFrom(load_id_1);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(7);
         log.mutable_op_write()->mutable_rowset()->set_data_size(70);
-        log.mutable_op_write()->mutable_rowset()->add_segments("partial_seg.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("partial_seg.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
 
@@ -2830,7 +2847,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
         // The single source .log must remain so the operator can recover.
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
@@ -2846,7 +2863,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         vlog->set_txn_id(txn_id);
         vlog->mutable_op_write()->mutable_rowset()->set_num_rows(99);
         vlog->mutable_op_write()->mutable_rowset()->set_data_size(990);
-        vlog->mutable_op_write()->mutable_rowset()->add_segments("already_published.dat");
+        vlog->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("already_published.dat");
         ASSERT_OK(_tablet_mgr->put_txn_vlog(vlog, version));
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
 
@@ -2867,7 +2884,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // The pre-existing .vlog stays intact and the stale .log is cleaned.
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
@@ -2896,19 +2913,31 @@ TEST_F(LakeServiceTest, test_publish_log_version_merge_repeated_fields) {
         log.mutable_load_id()->CopyFrom(load_id_1);
         auto* op_write = log.mutable_op_write();
         auto* rs = op_write->mutable_rowset();
-        rs->add_segments("a1.dat");
-        rs->add_segments("a2.dat");
-        rs->add_segment_size(100);
-        rs->add_segment_size(200);
-        rs->add_segment_encryption_metas("enc_a1");
-        rs->add_segment_encryption_metas("enc_a2");
+        {
+            auto* sm = rs->add_segment_metas();
+            sm->set_filename("a1.dat");
+            sm->set_size(100);
+            sm->set_encryption_meta("enc_a1");
+        }
+        {
+            auto* sm = rs->add_segment_metas();
+            sm->set_filename("a2.dat");
+            sm->set_size(200);
+            sm->set_encryption_meta("enc_a2");
+        }
         rs->set_num_rows(10);
         rs->set_data_size(300);
         rs->set_num_dels(2);
-        op_write->add_dels("del_a1");
-        op_write->add_dels("del_a2");
-        op_write->add_del_encryption_metas("denc_a1");
-        op_write->add_del_encryption_metas("denc_a2");
+        {
+            auto* d = op_write->add_dels_meta();
+            d->set_name("del_a1");
+            d->set_encryption_meta("denc_a1");
+        }
+        {
+            auto* d = op_write->add_dels_meta();
+            d->set_name("del_a2");
+            d->set_encryption_meta("denc_a2");
+        }
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
     {
@@ -2918,14 +2947,20 @@ TEST_F(LakeServiceTest, test_publish_log_version_merge_repeated_fields) {
         log.mutable_load_id()->CopyFrom(load_id_2);
         auto* op_write = log.mutable_op_write();
         auto* rs = op_write->mutable_rowset();
-        rs->add_segments("b1.dat");
-        rs->add_segment_size(500);
-        rs->add_segment_encryption_metas("enc_b1");
+        {
+            auto* sm = rs->add_segment_metas();
+            sm->set_filename("b1.dat");
+            sm->set_size(500);
+            sm->set_encryption_meta("enc_b1");
+        }
         rs->set_num_rows(20);
         rs->set_data_size(500);
         rs->set_num_dels(3);
-        op_write->add_dels("del_b1");
-        op_write->add_del_encryption_metas("denc_b1");
+        {
+            auto* d = op_write->add_dels_meta();
+            d->set_name("del_b1");
+            d->set_encryption_meta("denc_b1");
+        }
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
 
@@ -2949,7 +2984,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_merge_repeated_fields) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     _tablet_mgr->prune_metacache();
 
     ASSIGN_OR_ABORT(auto vlog, _tablet_mgr->get_txn_vlog(_tablet_id, version));
@@ -2966,30 +3001,27 @@ TEST_F(LakeServiceTest, test_publish_log_version_merge_repeated_fields) {
     EXPECT_TRUE(rs.overlapped());
 
     // Repeated parallel arrays inside rowset are appended in source order.
-    ASSERT_EQ(3, rs.segments_size());
-    EXPECT_EQ("a1.dat", rs.segments(0));
-    EXPECT_EQ("a2.dat", rs.segments(1));
-    EXPECT_EQ("b1.dat", rs.segments(2));
-    ASSERT_EQ(3, rs.segment_size_size());
-    EXPECT_EQ(100u, rs.segment_size(0));
-    EXPECT_EQ(200u, rs.segment_size(1));
-    EXPECT_EQ(500u, rs.segment_size(2));
-    ASSERT_EQ(3, rs.segment_encryption_metas_size());
-    EXPECT_EQ("enc_a1", rs.segment_encryption_metas(0));
-    EXPECT_EQ("enc_a2", rs.segment_encryption_metas(1));
-    EXPECT_EQ("enc_b1", rs.segment_encryption_metas(2));
+    ASSERT_EQ(3, rs.segment_metas_size());
+    EXPECT_EQ("a1.dat", rs.segment_metas(0).filename());
+    EXPECT_EQ("a2.dat", rs.segment_metas(1).filename());
+    EXPECT_EQ("b1.dat", rs.segment_metas(2).filename());
+    EXPECT_EQ(100u, rs.segment_metas(0).size());
+    EXPECT_EQ(200u, rs.segment_metas(1).size());
+    EXPECT_EQ(500u, rs.segment_metas(2).size());
+    EXPECT_EQ("enc_a1", rs.segment_metas(0).encryption_meta());
+    EXPECT_EQ("enc_a2", rs.segment_metas(1).encryption_meta());
+    EXPECT_EQ("enc_b1", rs.segment_metas(2).encryption_meta());
 
     // dels / del_encryption_metas live directly on op_write (not on rowset)
     // and must also accumulate, otherwise tombstones from later statements
     // would be silently dropped from the materialized .vlog.
-    ASSERT_EQ(3, ow.dels_size());
-    EXPECT_EQ("del_a1", ow.dels(0));
-    EXPECT_EQ("del_a2", ow.dels(1));
-    EXPECT_EQ("del_b1", ow.dels(2));
-    ASSERT_EQ(3, ow.del_encryption_metas_size());
-    EXPECT_EQ("denc_a1", ow.del_encryption_metas(0));
-    EXPECT_EQ("denc_a2", ow.del_encryption_metas(1));
-    EXPECT_EQ("denc_b1", ow.del_encryption_metas(2));
+    ASSERT_EQ(3, ow.dels_meta_size());
+    EXPECT_EQ("del_a1", ow.dels_meta(0).name());
+    EXPECT_EQ("del_a2", ow.dels_meta(1).name());
+    EXPECT_EQ("del_b1", ow.dels_meta(2).name());
+    EXPECT_EQ("denc_a1", ow.dels_meta(0).encryption_meta());
+    EXPECT_EQ("denc_a2", ow.dels_meta(1).encryption_meta());
+    EXPECT_EQ("denc_b1", ow.dels_meta(2).encryption_meta());
 }
 
 // abort_txn shares the same load_ids anti-pattern as publish_log_version:
@@ -3013,8 +3045,8 @@ TEST_F(LakeServiceTest, test_abort_with_load_ids) {
         log.set_tablet_id(_tablet_id);
         log.set_txn_id(txn_id);
         log.mutable_load_id()->CopyFrom(load_id_1);
-        log.mutable_op_write()->mutable_rowset()->add_segments(seg_a);
-        log.mutable_op_write()->mutable_rowset()->add_segments(seg_b);
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(seg_a);
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(seg_b);
         log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
@@ -3024,7 +3056,7 @@ TEST_F(LakeServiceTest, test_abort_with_load_ids) {
         log.set_tablet_id(_tablet_id);
         log.set_txn_id(txn_id);
         log.mutable_load_id()->CopyFrom(load_id_2);
-        log.mutable_op_write()->mutable_rowset()->add_segments(seg_c);
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(seg_c);
         log.mutable_op_write()->mutable_rowset()->set_data_size(2048);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(50);
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
@@ -3050,7 +3082,7 @@ TEST_F(LakeServiceTest, test_abort_with_load_ids) {
     AbortTxnResponse response;
     _lake_service.abort_txn(nullptr, &request, &response, nullptr);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // Every per-load_id .log file and every segment they referenced must be
     // gone -- nothing should be left in shared storage from this txn.
@@ -3069,8 +3101,8 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("1.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("2.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
 
         TxnLog txnlog2;
@@ -3079,8 +3111,8 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         txnlog2.mutable_op_write()->mutable_rowset()->set_overlapped(true);
         txnlog2.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         txnlog2.mutable_op_write()->mutable_rowset()->set_data_size(4096);
-        txnlog2.mutable_op_write()->mutable_rowset()->add_segments("3.dat");
-        txnlog2.mutable_op_write()->mutable_rowset()->add_segments("4.dat");
+        txnlog2.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("3.dat");
+        txnlog2.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("4.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog2));
     }
     {
@@ -3122,7 +3154,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         _tablet_mgr->prune_metacache();
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
@@ -3151,7 +3183,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         _tablet_mgr->prune_metacache();
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
@@ -3220,7 +3252,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         for (auto txn_id : txn_ids) {
             for (auto tablet_id : tablet_ids) {
                 EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(tablet_id, txn_id)));
@@ -3256,7 +3288,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
         log.mutable_load_id()->CopyFrom(load_id_1);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(3);
         log.mutable_op_write()->mutable_rowset()->set_data_size(30);
-        log.mutable_op_write()->mutable_rowset()->add_segments("batch_a.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("batch_a.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
     {
@@ -3266,7 +3298,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
         log.mutable_load_id()->CopyFrom(load_id_2);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(5);
         log.mutable_op_write()->mutable_rowset()->set_data_size(50);
-        log.mutable_op_write()->mutable_rowset()->add_segments("batch_b.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("batch_b.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
     // Single-statement txn -> one 2-segment .log file (no load_id set).
@@ -3276,7 +3308,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
         log.set_txn_id(txn_no_loads);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(7);
         log.mutable_op_write()->mutable_rowset()->set_data_size(70);
-        log.mutable_op_write()->mutable_rowset()->add_segments("batch_c.dat");
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("batch_c.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
     }
 
@@ -3313,7 +3345,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // Both .vlogs land; every source .log -- 4-segment for the multi-statement
     // txn, 2-segment for the single one -- is cleaned up by its own branch.
@@ -3332,7 +3364,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
     ASSERT_TRUE(vlog_a->op_write().has_rowset());
     EXPECT_EQ(8, vlog_a->op_write().rowset().num_rows());
     EXPECT_EQ(80, vlog_a->op_write().rowset().data_size());
-    ASSERT_EQ(2, vlog_a->op_write().rowset().segments_size());
+    ASSERT_EQ(2, vlog_a->op_write().rowset().segment_metas_size());
 
     // Non-load_ids txn: straight copy of the source TxnLog, no merge involved.
     ASSIGN_OR_ABORT(auto vlog_b, _tablet_mgr->get_txn_vlog(_tablet_id, version_b));
@@ -3340,8 +3372,8 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
     ASSERT_TRUE(vlog_b->op_write().has_rowset());
     EXPECT_EQ(7, vlog_b->op_write().rowset().num_rows());
     EXPECT_EQ(70, vlog_b->op_write().rowset().data_size());
-    ASSERT_EQ(1, vlog_b->op_write().rowset().segments_size());
-    EXPECT_EQ("batch_c.dat", vlog_b->op_write().rowset().segments(0));
+    ASSERT_EQ(1, vlog_b->op_write().rowset().segment_metas_size());
+    EXPECT_EQ("batch_c.dat", vlog_b->op_write().rowset().segment_metas(0).filename());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
@@ -3372,9 +3404,9 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(4);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(14);
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("4.dat");
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("5.dat");
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("6.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("4.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("5.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("6.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
 
         PublishLogVersionRequest request;
@@ -3400,14 +3432,14 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
         rowset0->set_overlapped(true);
         rowset0->set_num_rows(2);
         rowset0->set_data_size(12);
-        rowset0->add_segments("1.dat");
-        rowset0->add_segments("2.dat");
+        rowset0->add_segment_metas()->set_filename("1.dat");
+        rowset0->add_segment_metas()->set_filename("2.dat");
         auto rowset1 = op_schema_change->add_rowsets();
         rowset1->set_id(3);
         rowset1->set_overlapped(false);
         rowset1->set_num_rows(3);
         rowset1->set_data_size(13);
-        rowset1->add_segments("3.dat");
+        rowset1->add_segment_metas()->set_filename("3.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
 
@@ -3510,19 +3542,19 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     ASSERT_TRUE(rowset0.overlapped());
     ASSERT_EQ(2, rowset0.num_rows());
     ASSERT_EQ(12, rowset0.data_size());
-    ASSERT_EQ(2, rowset0.segments_size());
+    ASSERT_EQ(2, rowset0.segment_metas_size());
     const auto& rowset1 = metadata->rowsets(1);
     ASSERT_FALSE(rowset1.overlapped());
     ASSERT_EQ(3, rowset1.num_rows());
     ASSERT_EQ(13, rowset1.data_size());
-    ASSERT_EQ(1, rowset1.segments_size());
+    ASSERT_EQ(1, rowset1.segment_metas_size());
     const auto& rowset2 = metadata->rowsets(2);
     ASSERT_FALSE(rowset2.overlapped());
     ASSERT_EQ(4, rowset2.num_rows());
     ASSERT_EQ(14, rowset2.data_size());
-    ASSERT_EQ(3, rowset2.segments_size());
+    ASSERT_EQ(3, rowset2.segment_metas_size());
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, 1000)));
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, 1001)));
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 4)));
@@ -3584,7 +3616,7 @@ TEST_F(LakeServiceTest, test_publish_version_issue28244) {
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
-        txnlog.mutable_op_write()->mutable_rowset()->add_segments("xxxxx.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("xxxxx.dat");
         ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
 
@@ -3610,7 +3642,7 @@ TEST_F(LakeServiceTest, test_publish_version_issue28244) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 102301).status().is_not_found());
 }
 
@@ -4076,6 +4108,68 @@ TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
     ASSERT_TRUE(duplicate);
 }
 
+TEST_F(LakeServiceTest, test_vacuum_task_deadline_exceeded) {
+    // Make every deadline check observe a clock far past the deadline. The callback only
+    // fires when the handler threads a positive deadline into the vacuum task, so this also
+    // guards against regressions where the handler stops passing the deadline down.
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline",
+                                          [](void* arg) { *(int64_t*)arg = int64_t{1} << 62; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        // A request carrying timeout_ms aborts with TIMEOUT once the deadline passes.
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        request.set_timeout_ms(60 * 60 * 1000L);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().status_code();
+    }
+
+    {
+        // A request without timeout_ms (older FE versions) carries no deadline: even with the
+        // mocked clock the task runs to completion as before.
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.status().status_code()) << response.status().status_code();
+    }
+
+    {
+        // Setting lake_vacuum_enable_task_timeout to false disables the deadline: a request
+        // carrying timeout_ms still runs to completion.
+        bool old_value = config::lake_vacuum_enable_task_timeout;
+        config::lake_vacuum_enable_task_timeout = false;
+        DeferOp restore_config([old_value] { config::lake_vacuum_enable_task_timeout = old_value; });
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(next_id());
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        request.set_timeout_ms(60 * 60 * 1000L);
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.status().status_code()) << response.status().status_code();
+    }
+}
+
 TEST_F(LakeServiceTest, test_lock_and_unlock_tablet_metadata) {
     {
         LockTabletMetadataRequest request;
@@ -4242,7 +4336,7 @@ TEST_F(LakeServiceTest, test_abort3) {
 
     _lake_service.abort_txn(nullptr, &request, &response, nullptr);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
 }
@@ -4410,7 +4504,7 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_log));
 
         do_test(txn_id, TStatusCode::OK);
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         // CombinedTxnLogPB should still exist
         auto path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
@@ -4458,15 +4552,17 @@ TEST_F(LakeServiceTest, test_publish_version_with_txn_info) {
         ASSERT_EQ(3, metadata->next_rowset_id());
         ASSERT_EQ(1, metadata->rowsets_size());
         ASSERT_EQ(1, metadata->rowsets(0).id());
-        ASSERT_EQ(2, metadata->rowsets(0).segments_size());
+        ASSERT_EQ(2, metadata->rowsets(0).segment_metas_size());
         ASSERT_TRUE(metadata->rowsets(0).overlapped());
         ASSERT_EQ(logs[0].op_write().rowset().num_rows(), metadata->rowsets(0).num_rows());
         ASSERT_EQ(logs[0].op_write().rowset().data_size(), metadata->rowsets(0).data_size());
-        ASSERT_EQ(logs[0].op_write().rowset().segments(0), metadata->rowsets(0).segments(0));
-        ASSERT_EQ(logs[0].op_write().rowset().segments(1), metadata->rowsets(0).segments(1));
+        ASSERT_EQ(logs[0].op_write().rowset().segment_metas(0).filename(),
+                  metadata->rowsets(0).segment_metas(0).filename());
+        ASSERT_EQ(logs[0].op_write().rowset().segment_metas(1).filename(),
+                  metadata->rowsets(0).segment_metas(1).filename());
         EXPECT_EQ(987654321, metadata->commit_time());
     }
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // TxnLog`s should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
 }
@@ -4479,7 +4575,7 @@ TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
         log.set_tablet_id(_tablet_id);
         log.set_txn_id(txn_id);
         log.set_partition_id(_partition_id);
-        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file(txn_id));
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(generate_segment_file(txn_id));
         log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         log.mutable_op_write()->mutable_rowset()->set_overlapped(true);
@@ -4506,11 +4602,11 @@ TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
 
         AbortTxnResponse response;
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         for (auto&& log : combined_log->txn_logs()) {
-            for (auto&& s : log.op_write().rowset().segments()) {
-                EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s)));
+            for (auto&& s : log.op_write().rowset().segment_metas()) {
+                EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
             }
         }
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
@@ -4519,12 +4615,12 @@ TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
         AbortTxnResponse response;
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         // TxnLog`s and segments should have been deleted
         for (auto&& log : combined_log->txn_logs()) {
-            for (auto&& s : log.op_write().rowset().segments()) {
-                EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s)));
+            for (auto&& s : log.op_write().rowset().segment_metas()) {
+                EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
             }
         }
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
@@ -5064,8 +5160,8 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_EQ(0, entry.missing_files_size());
         const auto& metadata = entry.metadata();
         ASSERT_EQ(3, metadata.rowsets_size());
-        ASSERT_EQ(1, metadata.rowsets(0).segments_size());
-        std::string seg_name = metadata.rowsets(0).segments(0);
+        ASSERT_EQ(1, metadata.rowsets(0).segment_metas_size());
+        std::string seg_name = metadata.rowsets(0).segment_metas(0).filename();
 
         response.Clear();
         request.Clear();
@@ -5157,7 +5253,7 @@ TEST_F(LakeServiceTest, test_check_missing_files_across_versions) {
         ASSERT_EQ(3, metadata.rowsets_size());
 
         // Delete the segment from the first rowset (added in version 2)
-        std::string shared_seg = metadata.rowsets(0).segments(0);
+        std::string shared_seg = metadata.rowsets(0).segment_metas(0).filename();
         ASSERT_OK(fs::remove(_tablet_mgr->segment_location(_tablet_id, shared_seg)));
 
         // Now check missing files across versions 2-4
@@ -5210,7 +5306,7 @@ TEST_F(LakeServiceTest, test_check_missing_files_across_versions) {
         ASSERT_EQ(3, metadata.rowsets_size());
 
         // The last rowset's segment is unique to version 4
-        std::string unique_seg = metadata.rowsets(2).segments(0);
+        std::string unique_seg = metadata.rowsets(2).segment_metas(0).filename();
         ASSERT_OK(fs::remove(_tablet_mgr->segment_location(_tablet_id, unique_seg)));
 
         // Check missing files across versions 2-4
@@ -5755,12 +5851,13 @@ protected:
         for (const auto& [rv, seg_name] : rowset_infos) {
             auto* rowset = metadata->add_rowsets();
             rowset->set_id(_next_rowset_id++);
-            rowset->add_segments(seg_name);
             rowset->set_num_rows(10);
             rowset->set_data_size(1024);
             rowset->set_overlapped(false);
             rowset->set_version(rv);
-            rowset->add_segment_metas()->add_vector_index_ids(kIndexId);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(seg_name);
+            segment_meta->add_vector_index_ids(kIndexId);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));

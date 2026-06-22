@@ -40,6 +40,7 @@
 #include <string>
 #include <vector>
 
+#include "base/logging.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/mem_info.h"
@@ -50,7 +51,6 @@
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/logging.h"
 
 using namespace std;
 using namespace starrocks;

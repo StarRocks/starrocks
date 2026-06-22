@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された日時から指定された時間数を減算します。"
 ---
 
 # hours_sub

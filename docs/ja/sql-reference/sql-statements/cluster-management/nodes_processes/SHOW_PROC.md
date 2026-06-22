@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks クラスターの特定の指標を表示します。"
 ---
 
 # SHOW PROC
@@ -572,5 +573,6 @@ MySQL > show proc '/global_current_queries';
 | Warehouse        | クエリを処理するコンピュートウェアハウス。                                   |
 | CustomQueryId    | カスタムクエリ識別子（指定された場合）。                                   |
 | ResourceGroup    | クエリに割り当てられたリソースグループ。                                   |
+| QueryType        | クエリのタイプ：`Query`、`Statistics`（ANALYZE など）、`Task`、`MV`、または `Internal`。 |
 
 ```

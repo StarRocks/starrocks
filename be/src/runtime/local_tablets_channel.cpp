@@ -29,6 +29,8 @@
 #include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
 #include "column/chunk.h"
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_ingest_fwd.h"
@@ -40,8 +42,6 @@
 #include "gutil/strings/join.h"
 #include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
@@ -542,11 +542,15 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     if (response->has_execution_time_us()) {
         last_execution_time_us = response->execution_time_us();
     }
+    int64_t last_wait_writer_time_us = response->has_wait_writer_time_us() ? response->wait_writer_time_us() : 0;
     response->set_execution_time_us(last_execution_time_us + watch.elapsed_time() / 1000);
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
     response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+    // Populate wait_writer_time_us for non-lake loads too, accumulating across repeated-chunk
+    // indexes like execution_time, so the sender's per-node breakdown surfaces writer stalls.
+    response->set_wait_writer_time_us(last_wait_writer_time_us + wait_writer_ns / 1000);
     auto wait_replica_ns = finish_wait_replica_ts - finish_wait_writer_ts;
     RuntimeMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
             wait_memtable_flush_time_us);

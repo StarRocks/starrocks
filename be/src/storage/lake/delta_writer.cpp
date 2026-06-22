@@ -32,7 +32,7 @@
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -45,6 +45,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
@@ -115,7 +116,7 @@ public:
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
                              GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
-                             std::shared_ptr<const TabletSchema> tablet_schema)
+                             std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -136,7 +137,8 @@ public:
               _profile(profile),
               _bundle_writable_file_context(bundle_writable_file_context),
               _global_dicts(global_dicts),
-              _is_multi_statements_txn(is_multi_statements_txn) {}
+              _is_multi_statements_txn(is_multi_statements_txn),
+              _force_build_vector_index_inline(force_build_vector_index_inline) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -312,6 +314,10 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    // When true, the internal TabletWriter builds the vector index inline (overriding async
+    // index_build_mode). Set by lake schema-change conversions (SortedSchemaChange) so the
+    // shadow tablet's existing data is fully indexed during the ALTER, matching DirectSchemaChange.
+    bool _force_build_vector_index_inline = false;
 
     // Record the time when DeltaWriter is opened
     int64_t _begin_time_ms = 0;
@@ -404,6 +410,9 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
                     _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context,
                     _global_dicts);
+        }
+        if (_force_build_vector_index_inline) {
+            _tablet_writer->force_set_build_vector_index_inline();
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
@@ -805,37 +814,25 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     table_schema_key->set_schema_id(_tablet_schema->id());
 
     for (const auto& f : _tablet_writer->segments()) {
-        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
-        op_write->mutable_rowset()->add_segments(f.path);
-        op_write->mutable_rowset()->add_segment_size(f.size.value());
-        op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-        if (f.bundle_file_offset.has_value() && f.bundle_file_offset.value() >= 0) {
-            op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
-        }
-        auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
-        for (int64_t vi_id : f.vector_index_ids) {
-            segment_meta->add_vector_index_ids(vi_id);
-        }
+        uint32_t segment_idx = op_write->rowset().segment_metas_size();
+        f.to_proto(segment_idx, op_write->mutable_rowset()->add_segment_metas());
     }
     for (const auto& f : _tablet_writer->dels()) {
-        op_write->add_dels(f.path);
-        op_write->add_del_encryption_metas(f.encryption_meta);
+        to_file_meta_pb(f, op_write->add_dels_meta());
     }
     for (const auto& sst : _tablet_writer->ssts()) {
-        auto* file_meta = op_write->add_ssts();
-        file_meta->set_name(sst.path);
-        file_meta->set_size(sst.size.value());
-        file_meta->set_encryption_meta(sst.encryption_meta);
+        to_file_meta_pb(sst, op_write->add_ssts());
     }
     for (auto& sst_range : _tablet_writer->sst_ranges()) {
         op_write->add_sst_ranges()->CopyFrom(sst_range);
     }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
-    op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    op_write->mutable_rowset()->set_overlapped(op_write->rowset().segment_metas_size() > 1);
+    // Mint the rowset's global uid here so it lives in the txn log and is inherited
+    // identically by every split child this write may be cross-published to. This is a
+    // freshly built op_write (no uid to inherit), so always assign one.
+    tablet_reshard_helper::set_rowset_uid(op_write->mutable_rowset());
 
     // Column-mode PCU combined with condition update requires the condition column to be part of
     // the partial update column set: the handler compares old vs new values from the partial chunk
@@ -863,8 +860,8 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
                 // rewrite segments are useless now, just for compatibility
-                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                for (auto i = 0; i < op_write->rowset().segment_metas_size(); i++) {
+                    op_write->add_rewrite_segments_meta()->set_name(gen_segment_filename(_txn_id));
                 }
             }
             // handle partial update
@@ -894,10 +891,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 }
             }
 
-            if (op_write->rewrite_segments_size() == 0) {
+            if (op_write->rewrite_segments_meta_size() == 0) {
                 // rewrite segments are useless now, just for compatibility
-                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                for (auto i = 0; i < op_write->rowset().segment_metas_size(); i++) {
+                    op_write->add_rewrite_segments_meta()->set_name(gen_segment_filename(_txn_id));
                 }
             }
         }
@@ -939,7 +936,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         TabletWriteLogManager::instance()->add_load_log(
                 get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
                 _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
-                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
+                op_write->rowset().segment_metas_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
                 sst_output_files, sst_output_bytes);
     }
 
@@ -1274,11 +1271,11 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
         return Status::InvalidArgument(
                 fmt::format("tablet_schema id {} mismatches schema_id {}", _tablet_schema->id(), _schema_id));
     }
-    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                    _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size,
-                                    _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
-                                    _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
-                                    _global_dicts, _is_multi_statements_txn, _tablet_schema);
+    auto impl = new DeltaWriterImpl(
+            _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
+            _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
+            _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
+            _is_multi_statements_txn, _tablet_schema, _force_build_vector_index_inline);
     return std::make_unique<DeltaWriter>(impl);
 }
 

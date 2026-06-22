@@ -47,6 +47,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobExecutor;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.authorization.AccessDeniedException;
@@ -1029,6 +1030,54 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return olapTable;
     }
 
+    /**
+     * Whether a partition may be added to {@code olapTable} while it is in a non-NORMAL state.
+     * Only the metadata-only, provably-safe alter situations are tolerated (gated by
+     * {@link Config#enable_concurrent_add_partition_during_alter}): the transient UPDATING_META
+     * window of fast schema evolution, and the shared-data ADD/DROP INDEX fast-path jobs that
+     * declare {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}. The
+     * consistency guarantee for the newly built tablets is provided by checkIfMetaChange under
+     * the table WRITE lock, not by this coarse table-state check.
+     */
+    private boolean allowAddPartitionDuringAlter(OlapTable olapTable) {
+        if (!Config.enable_concurrent_add_partition_during_alter) {
+            return false;
+        }
+        OlapTable.OlapTableState state = olapTable.getState();
+        return state == OlapTable.OlapTableState.UPDATING_META
+                || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
+                    && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
+    }
+
+    /**
+     * Variant of {@link #checkTable(Database, String)} for the ADD PARTITION path: it keeps the
+     * existence / native-table checks but skips the table-state check when
+     * {@link #allowAddPartitionDuringAlter(OlapTable)} tolerates the current state.
+     */
+    private OlapTable checkTableForAddPartitions(Database db, String tableName) throws DdlException {
+        CatalogUtils.checkTableExist(db, tableName);
+        Table table = getTable(db.getFullName(), tableName);
+        CatalogUtils.checkNativeTable(db, table);
+        OlapTable olapTable = (OlapTable) table;
+        if (!allowAddPartitionDuringAlter(olapTable)) {
+            CatalogUtils.checkTableState(olapTable, tableName);
+        }
+        return olapTable;
+    }
+
+    private OlapTable checkTableForAddPartitions(Database db, Long tableId) throws DdlException {
+        Table table = getTable(db.getId(), tableId);
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableId);
+        }
+        CatalogUtils.checkNativeTable(db, table);
+        OlapTable olapTable = (OlapTable) table;
+        if (!allowAddPartitionDuringAlter(olapTable)) {
+            CatalogUtils.checkTableState(olapTable, table.getName());
+        }
+        return olapTable;
+    }
+
     private void checkPartitionType(PartitionInfo partitionInfo) throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
         if (!partitionInfo.isRangePartition() && partitionType != PartitionType.LIST) {
@@ -1152,6 +1201,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         if (olapTable.getDefaultDistributionInfo().getType() !=
                 copiedTable.getDefaultDistributionInfo().getType()) {
+            metaChanged = true;
+        }
+
+        // The light_weight_tablet_creation snapshot from the lock-free phase decides whether
+        // the loop in buildPartitions sends CreateReplicaTask. If a concurrent ALTER flipped
+        // this property between the snapshot and the commit, the lock-free phase used a stale
+        // value and the new partition would land without v1 metadata under a table that now
+        // claims it has v1 in object storage - which silently undermines the downgrade
+        // backfill in alterLightWeightTabletCreation. Treat this as a meta change and retry.
+        if (olapTable.isLightWeightTabletCreation() != copiedTable.isLightWeightTabletCreation()) {
             metaChanged = true;
         }
 
@@ -1289,7 +1348,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
                                boolean isTempPartition, DistributionDesc distributionDesc) throws DdlException {
         DistributionInfo distributionInfo;
-        OlapTable olapTable = checkTable(db, tableName);
+        OlapTable olapTable = checkTableForAddPartitions(db, tableName);
         OlapTable copiedTable;
 
         Locker locker = new Locker();
@@ -1349,7 +1408,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             try {
                 // Use ID-based lookup to ensure we get the same table we locked,
                 // avoiding lock leak when a concurrent SWAP changes the name-to-table mapping.
-                olapTable = checkTable(db, olapTable.getId());
+                olapTable = checkTableForAddPartitions(db, olapTable.getId());
                 existPartitionNameSet = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable,
                         partitionDescs);
                 if (!existPartitionNameSet.isEmpty()) {
@@ -2018,6 +2077,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions,
                          ComputeResource computeResource) throws DdlException {
+        buildPartitions(db, table, partitions, computeResource, false);
+    }
+
+    void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions,
+                         ComputeResource computeResource, boolean backfill) throws DdlException {
         if (partitions.isEmpty()) {
             return;
         }
@@ -2033,7 +2097,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
         }
-        if (numAliveNodes == 0 && !table.isLightWeightTabletCreation()) {
+        if (numAliveNodes == 0 && (backfill || !table.isLightWeightTabletCreation())) {
             if (RunMode.isSharedDataMode()) {
                 throw new DdlException("no alive compute nodes");
             } else {
@@ -2053,6 +2117,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
                 && (Config.lake_enable_tablet_creation_optimization || table.isFileBundling()));
         option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+        option.setBackfill(backfill);
 
         try {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
@@ -2314,8 +2379,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                                  ColocateTableIndex.GroupId groupId)
             throws DdlException {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRangeMgr()
-                .getColocateRanges(groupId.grpId);
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
         if (colocateRanges.isEmpty()) {
             throw new DdlException("Colocate range metadata is missing for group '"
                     + table.getColocateGroup() + "', cannot create range colocate tablets");
@@ -3019,18 +3083,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             Multimap<Long, Long> tableIdToPartitionIds = changedPartitionsMap.get(dbId);
 
-            // use try lock to avoid blocking a long time.
-            // if block too long, backend report rpc will timeout.
-            // TODO: remove the DB level WRITE lock
-            Locker locker = new Locker();
-            if (!locker.tryLockDatabase(db.getId(), LockType.WRITE, Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                LOG.warn("try get db {}-{} write lock but failed when checking backend storage medium",
-                        db.getFullName(), dbId);
-                continue;
-            }
-            Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
-            try {
-                for (Long tableId : tableIdToPartitionIds.keySet()) {
+            for (Long tableId : tableIdToPartitionIds.keySet()) {
+                // The DataProperty mutation only touches this table's partitions, so scope the
+                // WRITE to the single table. Use a per-table try lock with timeout to avoid
+                // blocking a long time; if block too long the backend report rpc would time out.
+                // The lock wraps the log-and-apply phase so the synchronous WAL callback stays
+                // protected.
+                Locker locker = new Locker();
+                if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE,
+                        Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("try get db {}-{} table {} write lock but failed when checking backend storage medium",
+                            db.getFullName(), dbId, tableId);
+                    continue;
+                }
+                try {
                     Table table = getTable(db.getId(), tableId);
                     if (table == null) {
                         continue;
@@ -3063,10 +3129,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             storageMediumMap.put(partitionId, TStorageMedium.HDD);
                         }
                     } // end for partitions
-                } // end for tables
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
-            }
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+                }
+            } // end for tables
         } // end for dbs
         return storageMediumMap;
     }
@@ -3305,7 +3371,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
         materializedView.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
-        materializedView.setIvmDefineSql(stmt.getIvmViewDef());
+        if (!Strings.isNullOrEmpty(stmt.getIvmViewDef())) {
+            materializedView.setIvmDefineSql(stmt.getIvmViewDef());
+        }
         materializedView.setOriginalDBName(stmt.getOriginalDBName());
         // current refresh mode
         materializedView.setCurrentRefreshMode(stmt.getCurrentRefreshMode());
@@ -3972,6 +4040,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    private void alterLoadInitialOpenPartitionNumber(OlapTable table,
+                                                     Map<String, String> properties,
+                                                     List<Runnable> appliers) {
+        int value = PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, true);
+        TableProperty tableProperty = table.getTableProperty();
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(value));
+            tableProperty.buildLoadInitialOpenPartitionNumber();
+        });
+    }
+
     private void alterStorageMedium(OlapTable table,
                                     Map<String, String> properties,
                                     List<Runnable> appliers) throws DdlException {
@@ -4132,6 +4212,53 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterLightWeightTabletCreation(Database db, OlapTable table,
+                                                Map<String, String> properties,
+                                                List<Runnable> appliers) throws DdlException {
+        if (!table.isCloudNativeTable()) {
+            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                    " can only be set for cloud native tables");
+        }
+        // Strict validation: AlterTableClauseAnalyzer matches at most one branch in its
+        // else-if chain, so if light_weight_tablet_creation comes after another recognized
+        // property in a multi-property ALTER, its analyzer branch is skipped. Validate
+        // here as well to ensure invalid values are always rejected.
+        String value = properties.remove(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION);
+        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
+                    " must be bool type(false/true)");
+        }
+        boolean newValue = Boolean.parseBoolean(value);
+        // true -> false: tablets that never published (visibleVersion == 1) have no v1
+        // metadata or schema file in object storage. Re-dispatch CreateReplicaTask for those
+        // tablets so that downgrade to a version without the CN-side fallback can read v1
+        // from object storage.
+        if (table.isLightWeightTabletCreation() && !newValue) {
+            backfillLightWeightTabletMetadata(db, table);
+        }
+        appliers.add(() -> table.setLightWeightTabletCreation(newValue));
+    }
+
+    private void backfillLightWeightTabletMetadata(Database db, OlapTable table) throws DdlException {
+        ConnectContext ctx = ConnectContext.get();
+        ComputeResource computeResource = ctx != null ? ctx.getCurrentComputeResource()
+                                                      : WarehouseManager.DEFAULT_RESOURCE;
+        List<PhysicalPartition> partitionsToBackfill = new ArrayList<>();
+        for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition pp : partition.getSubPartitions()) {
+                if (pp.getVisibleVersion() == PhysicalPartition.PARTITION_INIT_VERSION) {
+                    partitionsToBackfill.add(pp);
+                }
+            }
+        }
+        if (partitionsToBackfill.isEmpty()) {
+            return;
+        }
+        LOG.info("backfilling tablet metadata for table {}.{}: {} physical partitions",
+                db.getFullName(), table.getName(), partitionsToBackfill.size());
+        buildPartitions(db, table, partitionsToBackfill, computeResource, true /* backfill */);
+    }
+
     private void alterTableQueryTimeout(OlapTable table,
                                        Map<String, String> properties,
                                        List<Runnable> appliers) throws DdlException {
@@ -4203,6 +4330,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             alterPartitionLiveNumber(db, table, properties, appliers);
         }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            alterLoadInitialOpenPartitionNumber(table, properties, appliers);
+        }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             alterStorageMedium(table, properties,  appliers);
         }
@@ -4232,6 +4362,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
             alterLakeCompactionMaxParallel(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
+            alterLightWeightTabletCreation(db, table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
@@ -4644,6 +4777,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 TableProperty tableProperty = olapTable.getTableProperty();
                 tableProperty.modifyTableProperties(properties);
                 tableProperty.buildProperty(opCode);
+                if (opCode == OperationType.OP_ALTER_TABLE_PROPERTIES &&
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                    tableProperty.setEnableStatisticCollectOnFirstLoad(
+                            Boolean.parseBoolean(properties.get(
+                                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)));
+                }
 
                 if (StringUtils.isNotEmpty(comment)) {
                     olapTable.setComment(comment);

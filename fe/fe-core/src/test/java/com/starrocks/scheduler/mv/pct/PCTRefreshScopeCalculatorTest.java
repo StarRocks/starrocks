@@ -26,6 +26,7 @@ import org.mockito.Mockito;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 public class PCTRefreshScopeCalculatorTest {
 
@@ -130,17 +131,19 @@ public class PCTRefreshScopeCalculatorTest {
     }
 
     @Test
-    public void testBuildScopeFailsWhenSnapshotTablesShareTheSameName() {
+    public void testBuildScopeMergesSameNameTablesWithoutCrashing() {
+        // Two base tables sharing an unqualified name across databases resolve to the same diagnostic name
+        // key. The snapshot-keyed map (used by the executor) keeps them distinct, while the diagnostic name
+        // map merges their partitions rather than throw on the duplicate key.
         Table tableA = Mockito.mock(Table.class);
         Table tableB = Mockito.mock(Table.class);
 
         BaseTableSnapshotInfo snapshotInfoA = Mockito.mock(BaseTableSnapshotInfo.class);
         Mockito.when(snapshotInfoA.getBaseTable()).thenReturn(tableA);
-        Mockito.when(snapshotInfoA.getName()).thenReturn("dup_table");
-
+        Mockito.when(snapshotInfoA.getName()).thenReturn("tj");
         BaseTableSnapshotInfo snapshotInfoB = Mockito.mock(BaseTableSnapshotInfo.class);
         Mockito.when(snapshotInfoB.getBaseTable()).thenReturn(tableB);
-        Mockito.when(snapshotInfoB.getName()).thenReturn("dup_table");
+        Mockito.when(snapshotInfoB.getName()).thenReturn("tj");
 
         PCellSortedSet mvPartitionsToRefresh = PCellSortedSet.of();
         mvPartitionsToRefresh.add(PCellWithName.of("mv_p1", new PCellNone()));
@@ -166,7 +169,11 @@ public class PCTRefreshScopeCalculatorTest {
         snapshotBaseTables.put(1L, snapshotInfoA);
         snapshotBaseTables.put(2L, snapshotInfoB);
 
-        Assertions.assertThrows(IllegalStateException.class,
-                () -> calculator.buildScope(topology, snapshotBaseTables, mvPartitionsToRefresh, false, false));
+        PCTRefreshScope scope = calculator.buildScope(topology, snapshotBaseTables, mvPartitionsToRefresh, false, false);
+
+        Assertions.assertEquals(2, scope.getRefTableRefreshPartitions().size());
+        Map<String, Set<String>> byName = scope.getRefTablePartitionNames().getRefTablePartitionNames();
+        Assertions.assertEquals(1, byName.size());
+        Assertions.assertEquals(Set.of("base_a_p1", "base_b_p1"), byName.get("tj"));
     }
 }

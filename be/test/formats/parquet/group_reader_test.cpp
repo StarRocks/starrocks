@@ -24,18 +24,23 @@
 #include "column/const_column.h"
 #include "column/variant_encoder.h"
 #include "common/config_exec_fwd.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "compute_env/global_dict/parser.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "formats/parquet/column_materializer.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "formats/parquet/lazy_materialization_context.h"
+#include "formats/parquet/read_range_planner.h"
 #include "formats/parquet/utils.h"
+#include "formats/parquet/variant_projection.h"
+#include "formats/reserved_columns.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
-#include "storage/column_expr_predicate.h"
+#include "storage/primitive/column_expr_predicate.h"
 #include "testutil/exprs_test_helper.h"
 
 namespace starrocks::parquet {
@@ -235,6 +240,48 @@ private:
     std::vector<SharedBufferedInputStream::IORange> _ranges;
 };
 
+class MockTempColumnReader : public ColumnReader {
+public:
+    explicit MockTempColumnReader() : ColumnReader(nullptr) {}
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter*, ColumnPtr& dst) override {
+        if (_temp_col == nullptr) {
+            _temp_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        }
+        dst = _temp_col;
+        _temp_col->as_mutable_raw_ptr()->append_datum(Datum(int32_t(42)));
+        return Status::OK();
+    }
+
+    Status finalize_lazy_state(ColumnPtr& col) override {
+        if (col.get() == _temp_col.get()) {
+            _finalize_called = true;
+            size_t n = _temp_col->size();
+            auto dest = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+            dest->append_default(n);
+            _temp_col->as_mutable_raw_ptr()->reset_column();
+            col = std::move(dest);
+        }
+        return Status::OK();
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override {
+        dst = src;
+        return Status::OK();
+    }
+
+    void set_need_parse_levels(bool) override {}
+    void get_levels(level_t**, level_t**, size_t*) override {}
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+
+    ColumnPtr _temp_col = nullptr;
+    bool _finalize_called = false;
+};
+
 class GroupReaderTest : public ::testing::Test {
 protected:
     void SetUp() override {}
@@ -330,7 +377,10 @@ static StatusOr<std::string> variant_json_at(const ColumnPtr& column, size_t row
 }
 
 static Status fill_dst_chunk_without_projected(GroupReader* group_reader, ChunkPtr& active_chunk, ChunkPtr* dst_chunk) {
-    return group_reader->_fill_dst_chunk(active_chunk, ChunkPtr{}, dst_chunk);
+    RETURN_IF_ERROR(group_reader->_variant->emit_projections(active_chunk, dst_chunk,
+                                                             group_reader->_variant->projection_timezone()));
+    auto skip_slots = group_reader->_variant->projection_slot_ids();
+    return group_reader->_column_materializer->emit_physical_columns(active_chunk, dst_chunk, &skip_slots);
 }
 
 static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
@@ -436,10 +486,10 @@ static Status create_varchar_eq_conjunct_ctxs(ObjectPool* pool, RuntimeState* st
     return Status::OK();
 }
 
-static StatusOr<GroupReader::VariantVirtualProjection> make_virtual_projection_for_test(
+static StatusOr<VariantProjectionHandler::Projection> make_virtual_projection_for_test(
         const std::string& leaf_path, const TypeDescriptor& target_type, SlotId source_slot_id) {
     ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(std::string_view(leaf_path)));
-    return GroupReader::VariantVirtualProjection{
+    return VariantProjectionHandler::Projection{
             .parsed_path = std::move(parsed_path), .target_type = target_type, .source_slot_id = source_slot_id};
 }
 
@@ -555,11 +605,11 @@ static GroupReaderParam::Column make_variant_virtual_column_for_promotion_test(S
 
 static void attach_hidden_variant_source_for_promotion_test(GroupReader* group_reader, SlotId source_slot_id,
                                                             ColumnReaderPtr reader) {
-    auto& source = group_reader->_hidden_variant_sources
-                           .emplace("data", GroupReader::HiddenVariantSource{.slot_id = source_slot_id,
-                                                                             .reader = std::move(reader)})
+    auto& source = group_reader->_variant->_hidden_sources
+                           .emplace("data", VariantProjectionHandler::HiddenSource{.slot_id = source_slot_id,
+                                                                                   .reader = std::move(reader)})
                            .first->second;
-    group_reader->_hidden_slot_index[source_slot_id] = &source;
+    group_reader->_variant->_hidden_slot_index[source_slot_id] = &source;
 }
 
 ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
@@ -737,7 +787,7 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(ObjectPool*
     return c;
 }
 
-static HdfsScanStats g_hdfs_scan_stats;
+static FormatScannerStats g_hdfs_stats;
 GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c1 =
             _create_group_reader_param_of_column(&_pool, 0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);
@@ -752,6 +802,10 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c6 =
             _create_group_reader_param_of_column(&_pool, 5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
 
+    // Minimal scanner context so GroupReader::_create_column_readers() can
+    // dereference scanner_ctx->options without crashing.
+    auto* scanner_ctx = _pool.add(new HdfsScannerContext());
+
     auto* param = _pool.add(new GroupReaderParam());
     param->read_cols.emplace_back(c1);
     param->read_cols.emplace_back(c2);
@@ -759,7 +813,8 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     param->read_cols.emplace_back(c4);
     param->read_cols.emplace_back(c5);
     param->read_cols.emplace_back(c6);
-    param->stats = &g_hdfs_scan_stats;
+    param->stats = &g_hdfs_stats;
+    param->scanner_ctx = scanner_ctx;
     return param;
 }
 
@@ -791,11 +846,11 @@ TEST_F(GroupReaderTest, TestInit) {
 
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
-    group_reader->_active_column_indices.clear();
+    group_reader->_column_materializer->clear_classification();
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto r = std::make_unique<MockColumnReader>(param->read_cols[i].type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
-        group_reader->_active_column_indices.push_back(i);
+        group_reader->_column_materializer->add_active_column(i);
     }
 }
 
@@ -832,7 +887,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     // replace column readers
     replace_column_readers(group_reader, param);
     // create chunk
-    group_reader->_read_chunk = _create_chunk(param);
+    group_reader->_column_materializer->mutable_read_chunk() = _create_chunk(param);
 
     auto chunk = _create_chunk(param);
 
@@ -2310,7 +2365,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
     ASSERT_OK(group_reader->init());
 
     SlotDescriptor slot(0, "_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
-    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, formats::kIcebergRowIdColumnId);
     ASSERT_OK(result);
     ASSERT_EQ(result.value(), nullptr);
 }
@@ -2318,11 +2373,11 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
 TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2341,11 +2396,11 @@ TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2370,14 +2425,14 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLookupPath) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     auto* scan_range_id_slot = _pool.add(
             new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(scan_range_id_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2406,11 +2461,11 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     std::map<int32_t, TExpr> extended_columns;
     TExpr expr;
@@ -2443,11 +2498,11 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralReturnsNull) {
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     std::map<int32_t, TExpr> extended_columns;
     TExpr expr;
@@ -2509,13 +2564,13 @@ static tparquet::FileMetaData build_t_filemeta_with_iceberg_columns(ObjectPool* 
         schema_elements.push_back(elem);
     }
 
-    // _row_id column with ICEBERG_ROW_ID_COLUMN_ID field_id
+    // _row_id column with the Iceberg reserved row-id field id.
     if (include_row_id) {
         tparquet::SchemaElement elem;
         elem.__set_type(tparquet::Type::INT64);
-        elem.__set_name(HdfsScanner::ICEBERG_ROW_ID);
+        elem.__set_name(formats::kIcebergRowIdColumnName);
         elem.__set_num_children(0);
-        elem.__set_field_id(HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+        elem.__set_field_id(formats::kIcebergRowIdColumnId);
         schema_elements.push_back(elem);
     }
 
@@ -2523,9 +2578,9 @@ static tparquet::FileMetaData build_t_filemeta_with_iceberg_columns(ObjectPool* 
     if (include_seq_num) {
         tparquet::SchemaElement elem;
         elem.__set_type(tparquet::Type::INT64);
-        elem.__set_name(HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER);
+        elem.__set_name(formats::kIcebergLastUpdatedSequenceNumberColumnName);
         elem.__set_num_children(0);
-        elem.__set_field_id(HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID);
+        elem.__set_field_id(formats::kIcebergLastUpdatedSequenceNumberColumnId);
         schema_elements.push_back(elem);
     }
 
@@ -2635,14 +2690,15 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
     param->file = file;
     param->file_metadata = file_meta;
     param->chunk_size = config::vector_chunk_size;
-    param->timezone = "UTC";
+    param->scanner_ctx->timezone = "UTC";
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
     ASSERT_OK(group_reader->init());
 
-    SlotDescriptor slot(200, HdfsScanner::ICEBERG_ROW_ID, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
-    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+    SlotDescriptor slot(200, formats::kIcebergRowIdColumnName,
+                        TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, formats::kIcebergRowIdColumnId);
     ASSERT_OK(result);
     // Physical column found -> non-null reader
     ASSERT_NE(result.value(), nullptr);
@@ -2653,11 +2709,11 @@ TEST_F(GroupReaderTest, TestIcebergRowIdPhysicalColumnReaderCreation) {
 
     // Set up reserved_field_slots with _row_id
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     // Build file metadata WITH physical _row_id column (field_id matches)
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -2682,11 +2738,11 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation
 
     // Set up reserved_field_slots with _last_updated_sequence_number
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     // Build file metadata WITH physical _last_updated_sequence_number column (field_id matches)
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -2739,8 +2795,8 @@ TEST_F(GroupReaderTest, VariantVirtualColumnMapsPrefixAndLeafPathsIndependently)
                     make_virtual_projection_for_test("a.b.c", leaf_slot->type(), source_slot->id()));
     ASSIGN_OR_ABORT(auto prefix_projection,
                     make_virtual_projection_for_test("a.b", prefix_slot->type(), source_slot->id()));
-    group_reader->_variant_virtual_projections.emplace(leaf_slot->id(), std::move(leaf_projection));
-    group_reader->_variant_virtual_projections.emplace(prefix_slot->id(), std::move(prefix_projection));
+    group_reader->_variant->_projections.emplace(leaf_slot->id(), std::move(leaf_projection));
+    group_reader->_variant->_projections.emplace(prefix_slot->id(), std::move(prefix_projection));
     group_reader->_column_readers.emplace(source_slot->id(),
                                           std::make_unique<MockVariantSourceColumnReader>(variant_source->clone()));
 
@@ -2787,7 +2843,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromPhysicalSourceSlot)
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(200)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(200));
@@ -2821,7 +2877,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnReturnsNullForNullAndMi
 
     ASSIGN_OR_ABORT(auto projection,
                     make_virtual_projection_for_test("missing.leaf", virtual_slot->type(), SlotId(300)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(make_nullable_typed_variant_column_for_virtual_column_test(), SlotId(300));
@@ -2854,7 +2910,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourc
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(302)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(make_nullable_typed_variant_column_for_virtual_column_test(), SlotId(302));
@@ -2887,7 +2943,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedDecimalVirtualColumn) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(303)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(303));
@@ -2920,7 +2976,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnWithWidening) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(304)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(304));
@@ -2953,7 +3009,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualVarcharColumnFromPhysicalSour
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(301)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(301));
@@ -2986,9 +3042,9 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(-1)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
-    group_reader->_hidden_variant_sources.emplace(
-            "data", GroupReader::HiddenVariantSource{.slot_id = SlotId(-1), .reader = nullptr});
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_hidden_sources.emplace(
+            "data", VariantProjectionHandler::HiddenSource{.slot_id = SlotId(-1), .reader = nullptr});
 
     // With the new design, _fill_dst_chunk looks up all sources in active_chunk only.
     // The hidden source column (slot -1) must be in the active_chunk argument, not in
@@ -3032,7 +3088,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnWhenVirtualSlotPrecedes
     auto variant_source = make_typed_only_variant_column_for_virtual_column_test();
     ASSIGN_OR_ABORT(auto projection,
                     make_virtual_projection_for_test("a.b.c", virtual_slot->type(), source_slot->id()));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
     group_reader->_column_readers.emplace(source_slot->id(),
                                           std::make_unique<MockVariantSourceColumnReader>(variant_source->clone()));
 
@@ -3070,8 +3126,9 @@ TEST_F(GroupReaderTest, CollectIORangesDeduplicatesIdenticalRangesAcrossReaders)
     ASSERT_OK(group_reader->init());
 
     group_reader->_column_readers.clear();
-    group_reader->_active_column_indices = {0};
-    group_reader->_lazy_column_indices = {1};
+    group_reader->_column_materializer->clear_classification();
+    group_reader->_column_materializer->add_active_column(0);
+    group_reader->_column_materializer->add_lazy_column(1);
     group_reader->_column_readers.emplace(
             0, std::make_unique<MockIORangeColumnReader>(std::vector<SharedBufferedInputStream::IORange>{{100, 20}}));
     group_reader->_column_readers.emplace(
@@ -3126,13 +3183,13 @@ TEST_F(GroupReaderTest, ProcessColumnsDefersVirtualColumnConjunctsUntilAfterProj
 
     ASSIGN_OR_ABORT(auto projection,
                     make_virtual_projection_for_test("a.b.c", virtual_slot->type(), source_slot->id()));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
     group_reader->_column_readers.emplace(source_slot->id(),
                                           std::make_unique<MockVariantSourceColumnReader>(variant_source->clone()));
 
     group_reader->_process_columns_and_conjunct_ctxs();
-    ASSERT_EQ(1, group_reader->_deferred_variant_virtual_conjunct_ctxs.size());
-    ASSERT_TRUE(group_reader->_left_conjunct_ctxs.empty());
+    ASSERT_EQ(1, group_reader->_variant->_deferred_variant_virtual_conjunct_ctxs.size());
+    ASSERT_TRUE(group_reader->_column_materializer->post_read_conjuncts_by_slot().empty());
 
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(variant_source, source_slot->id());
@@ -3144,7 +3201,7 @@ TEST_F(GroupReaderTest, ProcessColumnsDefersVirtualColumnConjunctsUntilAfterProj
     ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     ASSERT_EQ(2, dst_chunk->num_rows());
 
-    ASSERT_OK(ChunkPredicateEvaluator::eval_conjuncts(group_reader->_deferred_variant_virtual_conjunct_ctxs,
+    ASSERT_OK(ChunkPredicateEvaluator::eval_conjuncts(group_reader->_variant->_deferred_variant_virtual_conjunct_ctxs,
                                                       dst_chunk.get()));
     ASSERT_EQ(1, dst_chunk->num_rows());
     EXPECT_EQ(22, dst_chunk->get_column_by_slot_id(virtual_slot->id())->get(0).get_int64());
@@ -3155,14 +3212,14 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
 
     // Set up reserved_field_slots with both _row_id and _last_updated_sequence_number
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
-    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(seq_slot);
-    param->reserved_field_slots = _pool.add(reserved_slots);
-    param->timezone = "UTC";
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
 
     // Build file metadata with both physical iceberg columns
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -3293,32 +3350,35 @@ TEST_F(GroupReaderTest, ProcessColumnsClassifiesHiddenSourcesAsActiveOrLazy) {
     const SlotId lazy_src_id = SlotId(-11);
     ASSIGN_OR_ABORT(auto proj_active, make_virtual_projection_for_test("a", vslot_active->type(), active_src_id));
     ASSIGN_OR_ABORT(auto proj_lazy, make_virtual_projection_for_test("a", vslot_lazy->type(), lazy_src_id));
-    group_reader->_variant_virtual_projections.emplace(vslot_active->id(), std::move(proj_active));
-    group_reader->_variant_virtual_projections.emplace(vslot_lazy->id(), std::move(proj_lazy));
+    group_reader->_variant->_projections.emplace(vslot_active->id(), std::move(proj_active));
+    group_reader->_variant->_projections.emplace(vslot_lazy->id(), std::move(proj_lazy));
 
     auto& active_src =
-            group_reader->_hidden_variant_sources
-                    .emplace("v1", GroupReader::HiddenVariantSource{.slot_id = active_src_id, .reader = nullptr})
+            group_reader->_variant->_hidden_sources
+                    .emplace("v1", VariantProjectionHandler::HiddenSource{.slot_id = active_src_id, .reader = nullptr})
                     .first->second;
-    auto& lazy_src = group_reader->_hidden_variant_sources
-                             .emplace("v2", GroupReader::HiddenVariantSource{.slot_id = lazy_src_id, .reader = nullptr})
-                             .first->second;
-    group_reader->_hidden_slot_index[active_src_id] = &active_src;
-    group_reader->_hidden_slot_index[lazy_src_id] = &lazy_src;
+    auto& lazy_src =
+            group_reader->_variant->_hidden_sources
+                    .emplace("v2", VariantProjectionHandler::HiddenSource{.slot_id = lazy_src_id, .reader = nullptr})
+                    .first->second;
+    group_reader->_variant->_hidden_slot_index[active_src_id] = &active_src;
+    group_reader->_variant->_hidden_slot_index[lazy_src_id] = &lazy_src;
 
     group_reader->_process_columns_and_conjunct_ctxs();
 
     // active_src_id should be in _active_hidden_slot_ids (backed by conjunct)
-    EXPECT_TRUE(std::find(group_reader->_active_hidden_slot_ids.begin(), group_reader->_active_hidden_slot_ids.end(),
-                          active_src_id) != group_reader->_active_hidden_slot_ids.end());
+    EXPECT_TRUE(std::find(group_reader->_variant->_active_hidden_slot_ids.begin(),
+                          group_reader->_variant->_active_hidden_slot_ids.end(),
+                          active_src_id) != group_reader->_variant->_active_hidden_slot_ids.end());
     // lazy_src_id should be in _lazy_hidden_slot_ids (projection-only)
-    EXPECT_TRUE(std::find(group_reader->_lazy_hidden_slot_ids.begin(), group_reader->_lazy_hidden_slot_ids.end(),
-                          lazy_src_id) != group_reader->_lazy_hidden_slot_ids.end());
+    EXPECT_TRUE(std::find(group_reader->_variant->_lazy_hidden_slot_ids.begin(),
+                          group_reader->_variant->_lazy_hidden_slot_ids.end(),
+                          lazy_src_id) != group_reader->_variant->_lazy_hidden_slot_ids.end());
     // active_src_id should also appear in unified _active_slot_ids
-    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
-                          active_src_id) != group_reader->_active_slot_ids.end());
+    const auto& active_slot_ids = group_reader->_column_materializer->active_slot_ids();
+    EXPECT_TRUE(std::find(active_slot_ids.begin(), active_slot_ids.end(), active_src_id) != active_slot_ids.end());
     // _deferred_conjunct_slot_ids must contain vslot_active
-    EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(vslot_active->id()));
+    EXPECT_EQ(1u, group_reader->_variant->_deferred_conjunct_slot_ids.count(vslot_active->id()));
 }
 
 TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsDuplicateTypedLeafReaders) {
@@ -3338,18 +3398,18 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsDuplicateTypedLeafReaders) {
     const SlotId source_slot_id = SlotId(-20);
     ASSIGN_OR_ABORT(auto proj1, make_virtual_projection_for_test("a", vslot1->type(), source_slot_id));
     ASSIGN_OR_ABORT(auto proj2, make_virtual_projection_for_test("a", vslot2->type(), source_slot_id));
-    group_reader->_variant_virtual_projections.emplace(vslot1->id(), std::move(proj1));
-    group_reader->_variant_virtual_projections.emplace(vslot2->id(), std::move(proj2));
+    group_reader->_variant->_projections.emplace(vslot1->id(), std::move(proj1));
+    group_reader->_variant->_projections.emplace(vslot2->id(), std::move(proj2));
 
     ASSIGN_OR_ABORT(auto reader, make_variant_promotion_reader(&_pool, {"a"}, 12, 12, 12));
     attach_hidden_variant_source_for_promotion_test(group_reader, source_slot_id, std::move(reader));
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    ASSERT_OK(group_reader->_promote_variant_virtual_columns());
+    group_reader->_variant->try_promote();
 
-    EXPECT_TRUE(group_reader->_promoted_virtual_slots.empty());
-    EXPECT_EQ(2, group_reader->_variant_virtual_projections.size());
-    EXPECT_FALSE(group_reader->_hidden_slot_index.at(source_slot_id)->fully_promoted);
+    EXPECT_TRUE(group_reader->_variant->_promoted_virtual_slots.empty());
+    EXPECT_EQ(2, group_reader->_variant->_projections.size());
+    EXPECT_FALSE(group_reader->_variant->_hidden_slot_index.at(source_slot_id)->fully_promoted);
     EXPECT_EQ(group_reader->_column_readers.end(), group_reader->_column_readers.find(vslot1->id()));
     EXPECT_EQ(group_reader->_column_readers.end(), group_reader->_column_readers.find(vslot2->id()));
 }
@@ -3371,20 +3431,20 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionPromotesDifferentTypedLeafReaders
     const SlotId source_slot_id = SlotId(-21);
     ASSIGN_OR_ABORT(auto proj1, make_virtual_projection_for_test("a", vslot1->type(), source_slot_id));
     ASSIGN_OR_ABORT(auto proj2, make_virtual_projection_for_test("b", vslot2->type(), source_slot_id));
-    group_reader->_variant_virtual_projections.emplace(vslot1->id(), std::move(proj1));
-    group_reader->_variant_virtual_projections.emplace(vslot2->id(), std::move(proj2));
+    group_reader->_variant->_projections.emplace(vslot1->id(), std::move(proj1));
+    group_reader->_variant->_projections.emplace(vslot2->id(), std::move(proj2));
 
     ASSIGN_OR_ABORT(auto reader, make_variant_promotion_reader(&_pool, {"a", "b"}, 12, 12, 12));
     attach_hidden_variant_source_for_promotion_test(group_reader, source_slot_id, std::move(reader));
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    ASSERT_OK(group_reader->_promote_variant_virtual_columns());
+    group_reader->_variant->try_promote();
 
-    EXPECT_EQ(2, group_reader->_promoted_virtual_slots.size());
-    EXPECT_EQ(1u, group_reader->_promoted_virtual_slots.count(vslot1->id()));
-    EXPECT_EQ(1u, group_reader->_promoted_virtual_slots.count(vslot2->id()));
-    EXPECT_TRUE(group_reader->_variant_virtual_projections.empty());
-    EXPECT_TRUE(group_reader->_hidden_slot_index.at(source_slot_id)->fully_promoted);
+    EXPECT_EQ(2, group_reader->_variant->_promoted_virtual_slots.size());
+    EXPECT_EQ(1u, group_reader->_variant->_promoted_virtual_slots.count(vslot1->id()));
+    EXPECT_EQ(1u, group_reader->_variant->_promoted_virtual_slots.count(vslot2->id()));
+    EXPECT_TRUE(group_reader->_variant->_projections.empty());
+    EXPECT_TRUE(group_reader->_variant->_hidden_slot_index.at(source_slot_id)->fully_promoted);
     ASSERT_NE(group_reader->_column_readers.end(), group_reader->_column_readers.find(vslot1->id()));
     ASSERT_NE(group_reader->_column_readers.end(), group_reader->_column_readers.find(vslot2->id()));
     EXPECT_NE(nullptr, down_cast<VariantTypedValueProxy*>(group_reader->_column_readers.at(vslot1->id()).get()));
@@ -3416,8 +3476,8 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionClassifiesDictFilterConjuncts) {
     const SlotId source_slot_id = SlotId(-26);
     ASSIGN_OR_ABORT(auto dict_proj, make_virtual_projection_for_test("a", dict_slot->type(), source_slot_id));
     ASSIGN_OR_ABORT(auto expr_proj, make_virtual_projection_for_test("b", expr_slot->type(), source_slot_id));
-    group_reader->_variant_virtual_projections.emplace(dict_slot->id(), std::move(dict_proj));
-    group_reader->_variant_virtual_projections.emplace(expr_slot->id(), std::move(expr_proj));
+    group_reader->_variant->_projections.emplace(dict_slot->id(), std::move(dict_proj));
+    group_reader->_variant->_projections.emplace(expr_slot->id(), std::move(expr_proj));
 
     ASSIGN_OR_ABORT(auto reader,
                     make_variant_promotion_reader(&_pool, {"a", "b"}, 12, 12, 12, tparquet::Type::BYTE_ARRAY,
@@ -3425,15 +3485,18 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionClassifiesDictFilterConjuncts) {
     attach_hidden_variant_source_for_promotion_test(group_reader, source_slot_id, std::move(reader));
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    ASSERT_OK(group_reader->_promote_variant_virtual_columns());
+    group_reader->_variant->try_promote();
 
-    EXPECT_EQ(2, group_reader->_promoted_virtual_slots.size());
-    ASSERT_EQ(1, group_reader->_dict_column_indices.size());
-    EXPECT_EQ(0, group_reader->_dict_column_indices[0]);
-    EXPECT_EQ(1u, group_reader->_dict_column_sub_field_paths.count(0));
-    ASSERT_EQ(1u, group_reader->_left_no_dict_filter_conjuncts_by_slot.count(expr_slot->id()));
-    EXPECT_EQ(1, group_reader->_left_no_dict_filter_conjuncts_by_slot.at(expr_slot->id()).size());
-    EXPECT_EQ(0u, group_reader->_left_no_dict_filter_conjuncts_by_slot.count(dict_slot->id()));
+    EXPECT_EQ(2, group_reader->_variant->_promoted_virtual_slots.size());
+    const auto& dict_column_indices = group_reader->_column_materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths = group_reader->_column_materializer->dict_column_sub_field_paths();
+    const auto& post_read_conjuncts = group_reader->_column_materializer->post_read_conjuncts_by_slot();
+    ASSERT_EQ(1, dict_column_indices.size());
+    EXPECT_EQ(0, dict_column_indices[0]);
+    EXPECT_EQ(1u, dict_column_sub_field_paths.count(0));
+    ASSERT_EQ(1u, post_read_conjuncts.count(expr_slot->id()));
+    EXPECT_EQ(1, post_read_conjuncts.at(expr_slot->id()).size());
+    EXPECT_EQ(0u, post_read_conjuncts.count(dict_slot->id()));
 }
 
 TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsNonAllNullFallback) {
@@ -3450,17 +3513,17 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsNonAllNullFallback) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
     const SlotId source_slot_id = SlotId(-22);
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a", vslot->type(), source_slot_id));
-    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_variant->_projections.emplace(vslot->id(), std::move(proj));
 
     ASSIGN_OR_ABORT(auto reader, make_variant_promotion_reader(&_pool, {"a"}, 12, 11, 12));
     attach_hidden_variant_source_for_promotion_test(group_reader, source_slot_id, std::move(reader));
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    ASSERT_OK(group_reader->_promote_variant_virtual_columns());
+    group_reader->_variant->try_promote();
 
-    EXPECT_TRUE(group_reader->_promoted_virtual_slots.empty());
-    EXPECT_EQ(1, group_reader->_variant_virtual_projections.size());
-    EXPECT_FALSE(group_reader->_hidden_slot_index.at(source_slot_id)->fully_promoted);
+    EXPECT_TRUE(group_reader->_variant->_promoted_virtual_slots.empty());
+    EXPECT_EQ(1, group_reader->_variant->_projections.size());
+    EXPECT_FALSE(group_reader->_variant->_hidden_slot_index.at(source_slot_id)->fully_promoted);
 }
 
 TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsIncompatibleTargetType) {
@@ -3477,17 +3540,17 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionSkipsIncompatibleTargetType) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
     const SlotId source_slot_id = SlotId(-23);
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a", vslot->type(), source_slot_id));
-    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_variant->_projections.emplace(vslot->id(), std::move(proj));
 
     ASSIGN_OR_ABORT(auto reader, make_variant_promotion_reader(&_pool, {"a"}, 12, 12, 12));
     attach_hidden_variant_source_for_promotion_test(group_reader, source_slot_id, std::move(reader));
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    ASSERT_OK(group_reader->_promote_variant_virtual_columns());
+    group_reader->_variant->try_promote();
 
-    EXPECT_TRUE(group_reader->_promoted_virtual_slots.empty());
-    EXPECT_EQ(1, group_reader->_variant_virtual_projections.size());
-    EXPECT_FALSE(group_reader->_hidden_slot_index.at(source_slot_id)->fully_promoted);
+    EXPECT_TRUE(group_reader->_variant->_promoted_virtual_slots.empty());
+    EXPECT_EQ(1, group_reader->_variant->_projections.size());
+    EXPECT_FALSE(group_reader->_variant->_hidden_slot_index.at(source_slot_id)->fully_promoted);
 }
 
 TEST_F(GroupReaderTest, VariantVirtualPromotionKeepsUnpromotedMixedSourceActiveAndRebuildsReadOrder) {
@@ -3520,41 +3583,45 @@ TEST_F(GroupReaderTest, VariantVirtualPromotionKeepsUnpromotedMixedSourceActiveA
                     make_virtual_projection_for_test("a", promoted_slot->type(), promoted_source_slot_id));
     ASSIGN_OR_ABORT(auto unpromoted_proj,
                     make_virtual_projection_for_test("a", unpromoted_slot->type(), unpromoted_source_slot_id));
-    group_reader->_variant_virtual_projections.emplace(promoted_slot->id(), std::move(promoted_proj));
-    group_reader->_variant_virtual_projections.emplace(unpromoted_slot->id(), std::move(unpromoted_proj));
+    group_reader->_variant->_projections.emplace(promoted_slot->id(), std::move(promoted_proj));
+    group_reader->_variant->_projections.emplace(unpromoted_slot->id(), std::move(unpromoted_proj));
 
     ASSIGN_OR_ABORT(auto promoted_reader, make_variant_promotion_reader(&_pool, {"a"}, 12, 12, 12));
     ASSIGN_OR_ABORT(auto unpromoted_reader, make_variant_promotion_reader(&_pool, {"a"}, 12, 12, 12));
     auto& promoted_source =
-            group_reader->_hidden_variant_sources
-                    .emplace("data1", GroupReader::HiddenVariantSource{.slot_id = promoted_source_slot_id,
-                                                                       .reader = std::move(promoted_reader)})
+            group_reader->_variant->_hidden_sources
+                    .emplace("data1", VariantProjectionHandler::HiddenSource{.slot_id = promoted_source_slot_id,
+                                                                             .reader = std::move(promoted_reader)})
                     .first->second;
     auto& unpromoted_source =
-            group_reader->_hidden_variant_sources
-                    .emplace("data2", GroupReader::HiddenVariantSource{.slot_id = unpromoted_source_slot_id,
-                                                                       .reader = std::move(unpromoted_reader)})
+            group_reader->_variant->_hidden_sources
+                    .emplace("data2", VariantProjectionHandler::HiddenSource{.slot_id = unpromoted_source_slot_id,
+                                                                             .reader = std::move(unpromoted_reader)})
                     .first->second;
-    group_reader->_hidden_slot_index[promoted_source_slot_id] = &promoted_source;
-    group_reader->_hidden_slot_index[unpromoted_source_slot_id] = &unpromoted_source;
+    group_reader->_variant->_hidden_slot_index[promoted_source_slot_id] = &promoted_source;
+    group_reader->_variant->_hidden_slot_index[unpromoted_source_slot_id] = &unpromoted_source;
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    ASSERT_OK(group_reader->_promote_variant_virtual_columns());
+    group_reader->_variant->try_promote();
 
-    EXPECT_EQ(1u, group_reader->_promoted_virtual_slots.count(promoted_slot->id()));
-    EXPECT_EQ(0u, group_reader->_promoted_virtual_slots.count(unpromoted_slot->id()));
-    EXPECT_TRUE(group_reader->_hidden_slot_index.at(promoted_source_slot_id)->fully_promoted);
-    EXPECT_FALSE(group_reader->_hidden_slot_index.at(unpromoted_source_slot_id)->fully_promoted);
-    EXPECT_EQ(1u, group_reader->_variant_virtual_projections.count(unpromoted_slot->id()));
-    EXPECT_EQ(0u, group_reader->_variant_virtual_projections.count(promoted_slot->id()));
-    EXPECT_NE(group_reader->_active_hidden_slot_ids.end(),
-              std::find(group_reader->_active_hidden_slot_ids.begin(), group_reader->_active_hidden_slot_ids.end(),
-                        unpromoted_source_slot_id));
-    EXPECT_EQ(group_reader->_active_hidden_slot_ids.end(),
-              std::find(group_reader->_active_hidden_slot_ids.begin(), group_reader->_active_hidden_slot_ids.end(),
-                        promoted_source_slot_id));
-    EXPECT_EQ(1u, group_reader->_column_read_order_ctx->get_column_read_order().size());
-    EXPECT_EQ(0, group_reader->_column_read_order_ctx->get_column_read_order()[0]);
+    group_reader->_column_materializer->rebuild_read_order_ctx();
+
+    EXPECT_EQ(1u, group_reader->_variant->_promoted_virtual_slots.count(promoted_slot->id()));
+    EXPECT_EQ(0u, group_reader->_variant->_promoted_virtual_slots.count(unpromoted_slot->id()));
+    EXPECT_TRUE(group_reader->_variant->_hidden_slot_index.at(promoted_source_slot_id)->fully_promoted);
+    EXPECT_FALSE(group_reader->_variant->_hidden_slot_index.at(unpromoted_source_slot_id)->fully_promoted);
+    EXPECT_EQ(1u, group_reader->_variant->_projections.count(unpromoted_slot->id()));
+    EXPECT_EQ(0u, group_reader->_variant->_projections.count(promoted_slot->id()));
+    EXPECT_NE(group_reader->_variant->_active_hidden_slot_ids.end(),
+              std::find(group_reader->_variant->_active_hidden_slot_ids.begin(),
+                        group_reader->_variant->_active_hidden_slot_ids.end(), unpromoted_source_slot_id));
+    EXPECT_EQ(group_reader->_variant->_active_hidden_slot_ids.end(),
+              std::find(group_reader->_variant->_active_hidden_slot_ids.begin(),
+                        group_reader->_variant->_active_hidden_slot_ids.end(), promoted_source_slot_id));
+    auto* read_order_ctx = group_reader->_column_materializer->read_order_ctx();
+    ASSERT_NE(nullptr, read_order_ctx);
+    EXPECT_EQ(1u, read_order_ctx->get_column_read_order().size());
+    EXPECT_EQ(0, read_order_ctx->get_column_read_order()[0]);
 }
 
 TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForHiddenSource) {
@@ -3584,7 +3651,7 @@ TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForHidde
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSERT_OK(group_reader->init());
-    ASSERT_FALSE(group_reader->_hidden_slot_index.empty());
+    ASSERT_FALSE(group_reader->_variant->_hidden_slot_index.empty());
     auto it = group_reader->_column_readers.find(virtual_slot->id());
     ASSERT_NE(it, group_reader->_column_readers.end());
     EXPECT_NE(nullptr, down_cast<VariantVirtualZoneMapReader*>(it->second.get()));
@@ -3629,10 +3696,10 @@ TEST_F(GroupReaderTest, ProcessColumnsPopulatesLazySlotIdsForPhysicalColumnsWith
     // column is expected to land in _lazy_column_indices / _lazy_slot_ids.
     group_reader->_process_columns_and_conjunct_ctxs();
 
-    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
-                          active_slot->id()) != group_reader->_active_slot_ids.end());
-    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), lazy_slot->id()) !=
-                group_reader->_lazy_slot_ids.end());
+    const auto& active_slot_ids = group_reader->_column_materializer->active_slot_ids();
+    const auto& lazy_slot_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_TRUE(std::find(active_slot_ids.begin(), active_slot_ids.end(), active_slot->id()) != active_slot_ids.end());
+    EXPECT_TRUE(std::find(lazy_slot_ids.begin(), lazy_slot_ids.end(), lazy_slot->id()) != lazy_slot_ids.end());
 }
 
 // Covers: physical VARIANT column with no direct conjuncts must be promoted to
@@ -3676,17 +3743,17 @@ TEST_F(GroupReaderTest, ProcessColumnsPromotesPhysicalVariantSourceForDeferredCo
 
     // Wire projection: virtual slot 171 → source is physical slot 170 (non-negative).
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a", virt_slot->type(), phys_slot->id()));
-    group_reader->_variant_virtual_projections.emplace(virt_slot->id(), std::move(proj));
+    group_reader->_variant->_projections.emplace(virt_slot->id(), std::move(proj));
 
     group_reader->_process_columns_and_conjunct_ctxs();
 
     // Physical slot must be active (not lazy) because a deferred conjunct needs it.
-    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
-                          phys_slot->id()) != group_reader->_active_slot_ids.end());
-    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), phys_slot->id()) ==
-                group_reader->_lazy_slot_ids.end());
+    const auto& active_slot_ids = group_reader->_column_materializer->active_slot_ids();
+    const auto& lazy_slot_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_TRUE(std::find(active_slot_ids.begin(), active_slot_ids.end(), phys_slot->id()) != active_slot_ids.end());
+    EXPECT_TRUE(std::find(lazy_slot_ids.begin(), lazy_slot_ids.end(), phys_slot->id()) == lazy_slot_ids.end());
     // The virtual conjunct slot must be registered.
-    EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(virt_slot->id()));
+    EXPECT_EQ(1u, group_reader->_variant->_deferred_conjunct_slot_ids.count(virt_slot->id()));
 }
 
 // ── _apply_deferred_variant_conjuncts ────────────────────────────────────────
@@ -3707,21 +3774,22 @@ TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsReturnsErrorWhenConjunctSou
 
     // Wire projection for vslot pointing to source slot -20 (absent from active_chunk).
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-20)));
-    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_variant->_projections.emplace(vslot->id(), std::move(proj));
     // Mark this slot as having a deferred conjunct (simulating Step 1 output).
-    group_reader->_deferred_conjunct_slot_ids.insert(vslot->id());
+    group_reader->_variant->_deferred_conjunct_slot_ids.insert(vslot->id());
     // Push a dummy conjunct so the early-exit guard doesn't fire.
     RuntimeState runtime_state{TQueryGlobals()};
     std::vector<ExprContext*> conjunct_ctxs;
     ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot->id(), 11, &conjunct_ctxs));
     for (auto* ctx : conjunct_ctxs) {
-        group_reader->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
+        group_reader->_variant->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
     }
 
     // active_chunk is empty — source slot -20 is absent.
     auto active_chunk = std::make_shared<Chunk>();
     auto projected_chunk = std::make_shared<Chunk>();
-    auto status = group_reader->_apply_deferred_variant_conjuncts(active_chunk, 2, &projected_chunk);
+    auto status = group_reader->_variant->filter_subfields(active_chunk, 2, nullptr,
+                                                           group_reader->_variant->projection_timezone());
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.status().is_internal_error());
 }
@@ -3742,15 +3810,15 @@ TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsProjectsSourceAndFilters) {
 
     // Source slot -21 will be present in active_chunk.
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-21)));
-    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
-    group_reader->_deferred_conjunct_slot_ids.insert(vslot->id());
+    group_reader->_variant->_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_variant->_deferred_conjunct_slot_ids.insert(vslot->id());
 
     // Conjunct: v.a == 22  (row 0 has 11, row 1 has 22 → only row 1 passes).
     RuntimeState runtime_state{TQueryGlobals()};
     std::vector<ExprContext*> conjunct_ctxs;
     ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot->id(), 22, &conjunct_ctxs));
     for (auto* ctx : conjunct_ctxs) {
-        group_reader->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
+        group_reader->_variant->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
     }
 
     // active_chunk contains the source variant column with typed path "a.b.c" → [11, 22].
@@ -3758,7 +3826,8 @@ TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsProjectsSourceAndFilters) {
     active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-21));
 
     auto projected_chunk = std::make_shared<Chunk>();
-    ASSIGN_OR_ABORT(auto filter, group_reader->_apply_deferred_variant_conjuncts(active_chunk, 2, &projected_chunk));
+    ASSIGN_OR_ABORT(auto filter, group_reader->_variant->filter_subfields(
+                                         active_chunk, 2, nullptr, group_reader->_variant->projection_timezone()));
     ASSERT_EQ(2u, filter.size());
     EXPECT_EQ(0, filter[0]); // row 0 (value=11) rejected
     EXPECT_EQ(1, filter[1]); // row 1 (value=22) passed
@@ -3787,7 +3856,8 @@ TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterReturnsErrorWhenRo
     projected_chunk->append_column(projected_col, SlotId(2));
 
     Filter filter = {1, 0};
-    auto st = group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2);
+    group_reader->_variant->_deferred_projected_chunk = projected_chunk;
+    auto st = group_reader->_variant->align_after_combined_filter(active_chunk, filter, 2);
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_internal_error());
 }
@@ -3814,7 +3884,8 @@ TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterAppliesFilterForPr
     projected_chunk->append_column(projected_col, SlotId(2));
 
     Filter filter = {1, 0};
-    ASSERT_OK(group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2));
+    group_reader->_variant->_deferred_projected_chunk = projected_chunk;
+    ASSERT_OK(group_reader->_variant->align_after_combined_filter(active_chunk, filter, 2));
     ASSERT_EQ(1u, projected_chunk->num_rows());
     EXPECT_EQ(11, projected_chunk->get_column_by_slot_id(SlotId(2))->get(0).get_int64());
 }
@@ -3842,7 +3913,7 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenSourceSlotMissingFromActiveC
 
     // Wire projection pointing to source slot -30 — NOT present in active_chunk.
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-30)));
-    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_variant->_projections.emplace(vslot->id(), std::move(proj));
 
     auto active_chunk = std::make_shared<Chunk>(); // source slot -30 absent
     auto dst_chunk = std::make_shared<Chunk>();
@@ -3871,7 +3942,7 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnIsNul
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-31)));
-    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_variant->_projections.emplace(vslot->id(), std::move(proj));
 
     auto active_chunk = std::make_shared<Chunk>();
     active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-31));
@@ -3883,7 +3954,9 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnIsNul
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
 
-    auto status = group_reader->_fill_dst_chunk(active_chunk, projected_chunk, &dst_chunk);
+    group_reader->_variant->_deferred_projected_chunk = projected_chunk;
+    auto status = group_reader->_variant->emit_projections(active_chunk, &dst_chunk,
+                                                           group_reader->_variant->projection_timezone());
     ASSERT_FALSE(status.ok());
     ASSERT_TRUE(status.is_internal_error());
 }
@@ -3906,7 +3979,7 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnRowCo
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-32)));
-    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    group_reader->_variant->_projections.emplace(vslot->id(), std::move(proj));
 
     auto active_chunk = std::make_shared<Chunk>();
     active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-32));
@@ -3919,7 +3992,9 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnRowCo
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
 
-    auto status = group_reader->_fill_dst_chunk(active_chunk, projected_chunk, &dst_chunk);
+    group_reader->_variant->_deferred_projected_chunk = projected_chunk;
+    auto status = group_reader->_variant->emit_projections(active_chunk, &dst_chunk,
+                                                           group_reader->_variant->projection_timezone());
     ASSERT_FALSE(status.ok());
     ASSERT_TRUE(status.is_internal_error());
 }
@@ -3938,11 +4013,30 @@ TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyOnInvalidAccessPath) 
     field_arr->children().emplace_back(std::move(offset_0));
     root->children().emplace_back(std::move(field_arr));
     column_access_paths.emplace_back(std::move(root));
-    param->column_access_paths = &column_access_paths;
+    param->scanner_ctx->column_access_paths = std::move(column_access_paths);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
-    auto hints = group_reader->_get_variant_shredded_hints("data");
+    auto hints = group_reader->_variant->_build_shredded_hints("data");
+    EXPECT_TRUE(hints.shredded_paths.empty());
+    EXPECT_TRUE(hints.parsed_shredded_paths.empty());
+}
+
+TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyWhenFullColumnAccessIsPresent) {
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+
+    ASSIGN_OR_ABORT(auto full_root, ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0));
+    column_access_paths.emplace_back(std::move(full_root));
+
+    ASSIGN_OR_ABORT(auto subfield_root, ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0));
+    ASSIGN_OR_ABORT(auto field_a,
+                    ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0, subfield_root->absolute_path()));
+    ASSIGN_OR_ABORT(auto field_b, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0, field_a->absolute_path()));
+    subfield_root->children().emplace_back(std::move(field_a));
+    subfield_root->children()[0]->children().emplace_back(std::move(field_b));
+    column_access_paths.emplace_back(std::move(subfield_root));
+
+    auto hints = build_variant_shredded_hints(&column_access_paths, "data");
     EXPECT_TRUE(hints.shredded_paths.empty());
     EXPECT_TRUE(hints.parsed_shredded_paths.empty());
 }
@@ -3982,7 +4076,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromRawVariantFa
     // Project path "a.b.c" → DECIMAL32(5,2). The raw variant rows hold integer values
     // at that path; they must be cast row-by-row via cast_variant_to_decimal.
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(401)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     // Raw variant: {"a":{"b":{"c":10}}} and {"a":{"b":{"c":20}}} — no typed shredded leaf.
     auto variant_src = make_raw_json_variant_column_for_virtual_column_test(
@@ -4023,7 +4117,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromBigintTypedL
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(403)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     // Typed INT64 leaf at "a.b.c" (values 11 and 22).
     // Target DECIMAL32(7,2): exact match fails (INT64 ≠ DECIMAL32); decimal typed match
@@ -4066,7 +4160,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnOverflowBecomesN
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
 
     ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(405)));
-    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+    group_reader->_variant->_projections.emplace(virtual_slot->id(), std::move(projection));
 
     // Row 0: integer 5 → 5 × 100 = 500, fits in int32_t → non-null.
     // Row 1: integer 21474837 → 21474837 × 100 = 2147483700 > INT32_MAX → overflow → NULL.
@@ -4084,6 +4178,919 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnOverflowBecomesN
     ASSERT_EQ(2, result->size());
     EXPECT_EQ(500, result->get(0).get_int32()); // 5 × 100 = 500
     EXPECT_TRUE(result->is_null(1));            // 21474837 × 100 overflows int32_t → NULL
+}
+
+// ── LazyMaterializationContext tests ─────────────────────────────────────────
+
+// Covers: LazyMaterializationContext::provides MissingColumnProvider
+//         interface for physical lazy slots.
+TEST_F(GroupReaderTest, LazyMaterializationContextCanMaterializeAndProvidePhysicalSlots) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot = _pool.add(
+            new SlotDescriptor(200, "active_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(201, "lazy_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* unrelated_slot = _pool.add(
+            new SlotDescriptor(202, "other_col", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Wire mock readers: active slot has data, lazy slot has mock that records reads.
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    // Verify classification: active_slot in active, lazy_slot in lazy.
+    const auto& lazy_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_TRUE(std::find(lazy_ids.begin(), lazy_ids.end(), lazy_slot->id()) != lazy_ids.end());
+
+    // Init read_chunk so materialize_slot has a valid _read_chunk.
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 2);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
+
+    // can_materialize: true for lazy slot, false for active and unrelated.
+    EXPECT_TRUE(ctx.can_materialize(lazy_slot->id()));
+    EXPECT_FALSE(ctx.can_materialize(active_slot->id()));
+    EXPECT_FALSE(ctx.can_materialize(unrelated_slot->id()));
+
+    // can_provide (MissingColumnProvider interface) mirrors can_materialize.
+    EXPECT_TRUE(ctx.can_provide(lazy_slot->id()));
+    EXPECT_FALSE(ctx.can_provide(unrelated_slot->id()));
+
+    // provide: materializes the lazy slot and returns its column.
+    auto result = ctx.provide(lazy_slot->id());
+    ASSERT_TRUE(result.ok());
+    auto col = result.value();
+    ASSERT_NE(nullptr, col);
+    EXPECT_EQ(2u, col->size());
+
+    // Second provide is idempotent (slot already cached).
+    auto result2 = ctx.provide(lazy_slot->id());
+    ASSERT_TRUE(result2.ok());
+}
+
+// Covers: LazyMaterializationContext::has_slot for both
+//         slot_cache (physical) and active_chunk paths.
+TEST_F(GroupReaderTest, LazyMaterializationContextHasSlotReturnsTrueForCachedAndActiveChunkSlots) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(210, "ac", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(211, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 1);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
+
+    // has_slot: active_chunk has active_slot → true
+    EXPECT_TRUE(ctx.has_slot(active_slot->id()));
+    // has_slot: lazy_slot not in active_chunk or slot_cache → false
+    EXPECT_FALSE(ctx.has_slot(lazy_slot->id()));
+
+    // materialize the lazy slot → populates slot_cache
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_TRUE(ctx.has_slot(lazy_slot->id()));
+}
+
+// Covers: LazyMaterializationContext::materialize_slot dispatches to
+//         ColumnMaterializer for physical lazy slots (variant is nullptr).
+TEST_F(GroupReaderTest, LazyMaterializationContextMaterializeSlotDelegatesToColumnMaterializer) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(220, "aa", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(221, "bb", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 1);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
+
+    // Trigger set starts empty.
+    EXPECT_EQ(0u, group_reader->_column_materializer->lazy_triggered_count());
+
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_EQ(1u, group_reader->_column_materializer->lazy_triggered_count());
+
+    // Idempotent: second materialize on same slot is a no-op.
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_EQ(1u, group_reader->_column_materializer->lazy_triggered_count());
+}
+
+// Covers: LazyMaterializationContext::get_column returns nullptr for
+//         slots that can't be materialized and returns valid column
+//         after materialize_slot (physical path).
+TEST_F(GroupReaderTest, LazyMaterializationContextGetColumnReturnsNullForUnknownSlots) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(230, "x", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(231, "y", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* unknown_slot =
+            _pool.add(new SlotDescriptor(999, "zz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 1);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
+
+    // Unknown slot → nullptr (not in lazy_slots, can't materialize).
+    EXPECT_EQ(nullptr, ctx.get_column(unknown_slot->id()));
+
+    // get_column materializes on demand and returns result.
+    auto col = ctx.get_column(lazy_slot->id());
+    ASSERT_NE(nullptr, col);
+    EXPECT_EQ(1u, col->size());
+
+    // Active slot from active_chunk → returns existing column.
+    auto active_col = ctx.get_column(active_slot->id());
+    ASSERT_NE(nullptr, active_col);
+}
+
+// Covers: ColumnMaterializer::read_lazy_columns separates triggered
+//         (in slot_cache) from untriggered lazy columns.
+TEST_F(GroupReaderTest, ReadLazyColumnsSeparatesTriggeredFromUntriggered) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(240, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_a_slot =
+            _pool.add(new SlotDescriptor(241, "la", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_b_slot =
+            _pool.add(new SlotDescriptor(242, "lb", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cla{};
+    cla.slot_desc = lazy_a_slot;
+    GroupReaderParam::Column clb{};
+    clb.slot_desc = lazy_b_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cla);
+    param->read_cols.emplace_back(clb);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_a_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_b_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    const auto& lazy_ids = group_reader->_column_materializer->lazy_slot_ids();
+    EXPECT_EQ(2u, lazy_ids.size());
+
+    // Build active_chunk manually with the active slot pre-filled to 2 rows.
+    size_t num_rows = 2;
+    Range<uint64_t> full_range(0, num_rows);
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    active_col->append_datum(Datum(int64_t(1)));
+    active_col->append_datum(Datum(int64_t(2)));
+    active_chunk->append_column(active_col, active_slot->id());
+
+    // Simulate: lazy_a was triggered during predicate eval → in slot_cache.
+    // lazy_b was NOT triggered → not in slot_cache.
+    group_reader->_column_materializer->reset_read_chunk();
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr,
+                                   active_chunk);
+    ASSERT_OK(ctx.materialize_slot(lazy_a_slot->id()));
+    EXPECT_NE(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_a_slot->id()));
+    EXPECT_EQ(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_b_slot->id()));
+
+    // read_lazy_columns should:
+    // - Move lazy_a (triggered) from _read_chunk → append → active_chunk
+    // - Read lazy_b (untriggered) via full_range → merge → active_chunk
+    Range<uint64_t> post_filter_range = full_range;
+    Filter empty_filter{};
+    Filter chunk_filter(num_rows, 1);
+    ASSERT_OK(group_reader->_column_materializer->read_lazy_columns(full_range, post_filter_range, empty_filter,
+                                                                    chunk_filter, false, active_chunk));
+
+    // Both lazy columns should now be in active_chunk (3 total: active + lazy_a + lazy_b).
+    EXPECT_TRUE(active_chunk->is_slot_exist(lazy_a_slot->id()));
+    EXPECT_TRUE(active_chunk->is_slot_exist(lazy_b_slot->id()));
+    EXPECT_EQ(3u, active_chunk->num_columns());
+}
+
+// Covers: ColumnMaterializer::read_lazy_columns filters triggered columns
+//         with chunk_filter when has_filter is true.
+TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(250, "act", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(251, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(10)));
+    bigint_col->append_datum(Datum(int64_t(20)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    size_t num_rows = 2;
+    Range<uint64_t> full_range(0, num_rows);
+
+    // Build active_chunk manually: 2 surviving rows for active_slot.
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    active_col->append_datum(Datum(int64_t(1)));
+    active_col->append_datum(Datum(int64_t(2)));
+    active_chunk->append_column(active_col, active_slot->id());
+
+    // Trigger lazy_slot so it is in slot_cache with full_range data.
+    group_reader->_column_materializer->reset_read_chunk();
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr,
+                                   active_chunk);
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+
+    // chunk_filter has 1s for all rows (row 0 and 1 survive).
+    Filter chunk_filter(num_rows, 1);
+    Range<uint64_t> post_filter_range = full_range;
+    Filter empty_filter{};
+    ASSERT_OK(group_reader->_column_materializer->read_lazy_columns(full_range, post_filter_range, empty_filter,
+                                                                    chunk_filter, true, active_chunk));
+
+    EXPECT_TRUE(active_chunk->is_slot_exist(lazy_slot->id()));
+    auto& col = active_chunk->get_column_by_slot_id(lazy_slot->id());
+    EXPECT_EQ(num_rows, col->size());
+}
+
+// Covers: ReadRangePlanner::deduplicate merges duplicate IORanges.
+TEST_F(GroupReaderTest, ReadRangePlannerDeduplicateMergesIdenticalRanges) {
+    using IORange = SharedBufferedInputStream::IORange;
+    std::vector<IORange> ranges;
+    ranges.emplace_back(100, 50, true);
+    ranges.emplace_back(100, 50, false);
+    ranges.emplace_back(200, 30, true);
+    ranges.emplace_back(200, 30, true);
+
+    ReadRangePlanner::deduplicate(&ranges);
+
+    // Two duplicates: (100,50) merged → is_active = true, (200,30) merged → is_active = true.
+    ASSERT_EQ(2u, ranges.size());
+    EXPECT_EQ(100, ranges[0].offset);
+    EXPECT_EQ(50, ranges[0].size);
+    EXPECT_TRUE(ranges[0].is_active);
+    EXPECT_EQ(200, ranges[1].offset);
+    EXPECT_EQ(30, ranges[1].size);
+    EXPECT_TRUE(ranges[1].is_active);
+}
+
+// Covers: ReadRangePlanner::deduplicate sorts by size when offsets are equal.
+TEST_F(GroupReaderTest, ReadRangePlannerDeduplicateSortsBySizeWhenOffsetsEqual) {
+    using IORange = SharedBufferedInputStream::IORange;
+    std::vector<IORange> ranges;
+    // Same offset, different sizes → must be ordered by size.
+    ranges.emplace_back(100, 50, true);
+    ranges.emplace_back(100, 30, true);
+
+    ReadRangePlanner::deduplicate(&ranges);
+
+    ASSERT_EQ(2u, ranges.size());
+    EXPECT_EQ(100, ranges[0].offset);
+    EXPECT_EQ(30, ranges[0].size);
+    EXPECT_EQ(100, ranges[1].offset);
+    EXPECT_EQ(50, ranges[1].size);
+}
+
+// Covers: ReadRangePlanner::should_coalesce_active_lazy returns true
+//         when counter is nullptr (default).
+TEST_F(GroupReaderTest, ReadRangePlannerShouldCoalesceReturnsTrueWhenCounterIsNull) {
+    auto* param = _create_group_reader_param();
+    param->lazy_column_coalesce_counter = nullptr;
+
+    std::unordered_map<int32_t, std::unique_ptr<ColumnReader>> readers;
+    ReadRangePlanner planner(*param, &readers);
+
+    EXPECT_TRUE(planner.should_coalesce_active_lazy());
+}
+
+// Covers: ReadRangePlanner::should_coalesce_active_lazy reads
+//         the adaptive counter.
+TEST_F(GroupReaderTest, ReadRangePlannerShouldCoalesceReadsCounter) {
+    auto* param = _create_group_reader_param();
+    std::atomic<int32_t> counter = -1;
+    param->lazy_column_coalesce_counter = &counter;
+
+    std::unordered_map<int32_t, std::unique_ptr<ColumnReader>> readers;
+    ReadRangePlanner planner(*param, &readers);
+
+    EXPECT_FALSE(planner.should_coalesce_active_lazy());
+
+    counter.store(0, std::memory_order_relaxed);
+    EXPECT_TRUE(planner.should_coalesce_active_lazy());
+}
+
+// ── Temp Column Lifecycle Tests ──────────────────────────────────────────────
+
+// Covers: ColumnMaterializer::materialize_slot finalizes lazy state
+//         before caching, so _slot_cache always holds logical columns.
+TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(300, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(301, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto mock_lazy = std::make_unique<MockTempColumnReader>();
+    auto* mock_lazy_ptr = mock_lazy.get();
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::move(mock_lazy));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    Range<uint64_t> range(0, 2);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, range, nullptr, active_chunk);
+
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called) << "materialize_slot must call finalize_lazy_state before caching";
+
+    const auto* entry = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
+    ASSERT_NE(nullptr, entry);
+    auto col = entry->values;
+    ASSERT_NE(nullptr, col);
+    EXPECT_EQ(1u, col->size());
+
+    auto result = ctx.provide(lazy_slot->id());
+    ASSERT_TRUE(result.ok());
+    auto provided = result.value();
+    ASSERT_NE(nullptr, provided);
+    EXPECT_EQ(1u, provided->size());
+    EXPECT_NE(mock_lazy_ptr->_temp_col.get(), provided.get()) << "provide() must return logical column, not raw temp";
+}
+
+// Contract test / mock reproducer: MockTempColumnReader's read_range() is
+// append-only (simulating StoredColumnReader).  Without reset, two consecutive
+// reads WITHOUT an intervening finalize accret stale data — this is the
+// production bug that reset_column() in ScalarColumnReader / LowCardColumnReader /
+// LowRowsColumnReader read_range() fixes.
+//
+// This is a contract test; production reset_column() coverage is indirect
+// (integration tests exercise the real reader path).
+TEST_F(GroupReaderTest, TempColumnAccretesStaleWithoutReset) {
+    MockTempColumnReader reader;
+
+    ColumnPtr col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col1));
+    EXPECT_EQ(1u, col1->size()) << "First read: 1 row";
+
+    // Simulate skipped fill: don't call finalize_lazy_state
+
+    ColumnPtr col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col2));
+    EXPECT_EQ(2u, col2->size()) << "Without reset, second read accretes stale data: 1 stale + 1 new = 2 rows";
+
+    // finalize_lazy_state produces n logical rows where n = temp size.
+    // With stale accretion: temp has 2 rows, so finalize yields 2 rows.
+    ASSERT_OK(reader.finalize_lazy_state(col2));
+    EXPECT_EQ(2u, col2->size()) << "Stale accretion propagates: 2 logical rows from 2 temp rows";
+    EXPECT_TRUE(reader._finalize_called);
+    EXPECT_EQ(0u, reader._temp_col->size()) << "Temp column is empty after finalize";
+}
+
+// Contract test: finalize_lazy_state resets the temp column so that a
+// subsequent read_range starts fresh — even when the mock itself does
+// not reset before appending.  Verifies the finalize → reset → no-accretion
+// lifecycle contract through the ColumnMaterializer pipeline.
+//
+// Production read_range() reset is exercised by integration tests.
+TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(310, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(311, "lz", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto mock_lazy = std::make_unique<MockTempColumnReader>();
+    auto* mock_lazy_ptr = mock_lazy.get();
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::move(mock_lazy));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    // First materialize: read_range appends 1 row, finalize_lazy_state resets temp.
+    Range<uint64_t> range1(0, 1);
+    auto active_chunk1 = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx1(group_reader->_column_materializer.get(), nullptr, range1, nullptr, active_chunk1);
+    ASSERT_OK(ctx1.materialize_slot(lazy_slot->id()));
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called);
+
+    auto* entry1 = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
+    ASSERT_NE(nullptr, entry1);
+    EXPECT_EQ(1u, entry1->values->size());
+
+    // Reset between iterations.
+    group_reader->_column_materializer->reset_read_chunk();
+    mock_lazy_ptr->_finalize_called = false;
+
+    // Second materialize: because finalize reset _temp_col in range1,
+    // read_range starts fresh → 1 row, not 2.
+    Range<uint64_t> range2(0, 1);
+    auto active_chunk2 = group_reader->_column_materializer->create_active_chunk();
+    LazyMaterializationContext ctx2(group_reader->_column_materializer.get(), nullptr, range2, nullptr, active_chunk2);
+    ASSERT_OK(ctx2.materialize_slot(lazy_slot->id()));
+
+    auto* entry2 = group_reader->_column_materializer->get_slot_cache(lazy_slot->id());
+    ASSERT_NE(nullptr, entry2);
+    EXPECT_EQ(1u, entry2->values->size()) << "After finalize, temp is empty → no stale accretion across iterations";
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called);
+}
+
+// ── Logical-column bypass in emit_physical_columns ───────────────────────────
+
+// Mock reader that models LowCardColumnReader's PHYSICAL-vs-LOGICAL identity
+// dispatch in fill_dst_column().  When src is _code_column (PHYSICAL) it
+// decodes; when src is already LOGICAL it swaps directly.
+class MockGlobalDictColumnReader : public ColumnReader {
+public:
+    MockGlobalDictColumnReader() : ColumnReader(nullptr) {}
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter*, ColumnPtr& dst) override {
+        if (_code_column == nullptr) {
+            _code_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        }
+        _code_column->as_mutable_raw_ptr()->reset_column();
+        _code_column->as_mutable_raw_ptr()->append_datum(Datum(int32_t(100)));
+        _code_column->as_mutable_raw_ptr()->append_datum(Datum(int32_t(200)));
+        dst = _code_column;
+        return Status::OK();
+    }
+
+    Status finalize_lazy_state(ColumnPtr& col) override {
+        if (_finalize_called) return Status::OK();
+        if (col.get() == _code_column.get()) {
+            _finalize_called = true;
+            auto logical = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+            logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("hello")));
+            logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("world")));
+            col = std::move(logical);
+        }
+        return Status::OK();
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override {
+        if (src.get() == _code_column.get()) {
+            auto logical = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+            logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("decoded_hello")));
+            logical->as_mutable_raw_ptr()->append_datum(Datum(Slice("decoded_world")));
+            dst->as_mutable_raw_ptr()->swap_column(*logical);
+            return Status::OK();
+        }
+        // src is already LOGICAL — swap directly (pointer identity fallback)
+        dst->as_mutable_raw_ptr()->swap_column(*(src->as_mutable_raw_ptr()));
+        return Status::OK();
+    }
+
+    void set_need_parse_levels(bool) override {}
+    void get_levels(level_t**, level_t**, size_t*) override {}
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+
+    ColumnPtr _code_column = nullptr;
+    bool _finalize_called = false;
+};
+
+// Covers: global-dict lazy column triggered by compound predicate must bypass
+//         fill_dst_column() in emit_physical_columns() because
+//         materialize_slot() already finalized it to LOGICAL form.
+TEST_F(GroupReaderTest, EmitPhysicalColumnsBypassesFillDstForLogicalSlots) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(350, "act", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(351, "lzc", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cl{};
+    cl.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cl);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto bigint_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    bigint_col->append_datum(Datum(int64_t(42)));
+    bigint_col->append_datum(Datum(int64_t(99)));
+    auto mock_lazy = std::make_unique<MockGlobalDictColumnReader>();
+    auto* mock_lazy_ptr = mock_lazy.get();
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(bigint_col));
+    group_reader->_column_readers.emplace(lazy_slot->id(), std::move(mock_lazy));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    ASSERT_TRUE(group_reader->_column_materializer->lazy_column_indices().size() > 0);
+
+    size_t num_rows = 2;
+    Range<uint64_t> full_range(0, num_rows);
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    active_col->append_datum(Datum(int64_t(1)));
+    active_col->append_datum(Datum(int64_t(2)));
+    active_chunk->append_column(active_col, active_slot->id());
+
+    group_reader->_column_materializer->reset_read_chunk();
+
+    // Compound predicate evaluation triggers on-demand lazy materialization.
+    LazyMaterializationContext ctx(group_reader->_column_materializer.get(), nullptr, full_range, nullptr,
+                                   active_chunk);
+    ASSERT_OK(ctx.materialize_slot(lazy_slot->id()));
+    EXPECT_TRUE(mock_lazy_ptr->_finalize_called)
+            << "materialize_slot() must call finalize_lazy_state(), converting to LOGICAL";
+    EXPECT_NE(nullptr, group_reader->_column_materializer->get_slot_cache(lazy_slot->id()));
+
+    // read_lazy_columns: triggered lazy column must be in active_chunk AND
+    // recorded in _logical_slot_ids so emit_physical_columns can bypass fill_dst_column.
+    Range<uint64_t> post_filter_range = full_range;
+    Filter empty_filter{};
+    Filter chunk_filter(num_rows, 1);
+    ASSERT_OK(group_reader->_column_materializer->read_lazy_columns(full_range, post_filter_range, empty_filter,
+                                                                    chunk_filter, false, active_chunk));
+    EXPECT_TRUE(active_chunk->is_slot_exist(lazy_slot->id()));
+
+    // Build a destination chunk with the output schema.
+    std::vector<SlotDescriptor*> dst_slots{active_slot, lazy_slot};
+    auto dst_chunk = std::make_shared<Chunk>();
+    for (auto* s : dst_slots) {
+        auto col = ColumnHelper::create_column(s->type(), true);
+        dst_chunk->append_column(col, s->id());
+    }
+
+    // The key assertion: before the fix this would fail with InternalError
+    // because fill_dst_column() rejected the already-logical lazy column.
+    ASSERT_OK(group_reader->_column_materializer->emit_physical_columns(active_chunk, &dst_chunk));
+
+    EXPECT_TRUE(dst_chunk->is_slot_exist(lazy_slot->id()));
+    auto& dst_col = dst_chunk->get_column_by_slot_id(lazy_slot->id());
+    EXPECT_EQ(2u, dst_col->size()) << "LOGICAL lazy column must be emitted with correct row count";
+}
+
+// Covers: active global-dict columns finalized by compound conjunct path
+//         must be marked as logical so emit_physical_columns() bypasses
+//         fill_dst_column().  Without the mark, LowCardColumnReader rejects
+//         an already-finalized logical column in fill_dst_column().
+TEST_F(GroupReaderTest, ActiveGlobalDictEmitBypassesFillDstAfterCompoundFinalize) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+    param->read_cols.clear();
+
+    // Two active low-card-like slots, each with a single-slot conjunct.
+    auto* slot_a =
+            _pool.add(new SlotDescriptor(360, "dict_a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+    auto* slot_b =
+            _pool.add(new SlotDescriptor(361, "dict_b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
+
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = slot_a;
+    GroupReaderParam::Column cb{};
+    cb.slot_desc = slot_b;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cb);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> ctx_a, ctx_b;
+    ASSERT_OK(create_varchar_eq_conjunct_ctxs(&_pool, &runtime_state, slot_a->id(), "x", &ctx_a));
+    ASSERT_OK(create_varchar_eq_conjunct_ctxs(&_pool, &runtime_state, slot_b->id(), "y", &ctx_b));
+    param->conjunct_ctxs_by_slot[slot_a->id()] = ctx_a;
+    param->conjunct_ctxs_by_slot[slot_b->id()] = ctx_b;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto mock_a = std::make_unique<MockGlobalDictColumnReader>();
+    auto mock_b = std::make_unique<MockGlobalDictColumnReader>();
+    auto* mock_a_ptr = mock_a.get();
+    auto* mock_b_ptr = mock_b.get();
+    group_reader->_column_readers.emplace(slot_a->id(), std::move(mock_a));
+    group_reader->_column_readers.emplace(slot_b->id(), std::move(mock_b));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+    ASSERT_OK(group_reader->_column_materializer->init_read_chunk());
+
+    ASSERT_TRUE(group_reader->_column_materializer->active_slot_ids().size() > 0);
+
+    size_t num_rows = 2;
+    Range<uint64_t> full_range(0, num_rows);
+    auto active_chunk = group_reader->_column_materializer->create_active_chunk();
+
+    group_reader->_column_materializer->reset_read_chunk();
+
+    // Simulate step 2a: read active columns → PHYSICAL (dict codes).
+    Filter filter(num_rows, 1);
+    ASSERT_OK(group_reader->_column_materializer->read_active_range(full_range, &filter, &active_chunk));
+
+    // Simulate step 2b compound-conjunct prep: finalize all active columns
+    // to LOGICAL.  fill_dst_column() handles already-logical columns via
+    // pointer identity fallback (swap), so no _logical_slot_ids mark needed.
+    for (int col_idx : group_reader->_column_materializer->active_column_indices()) {
+        SlotId slot_id = param->read_cols[col_idx].slot_id();
+        ASSERT_OK(group_reader->_column_materializer->finalize_active_slot(slot_id, active_chunk));
+    }
+    EXPECT_TRUE(mock_a_ptr->_finalize_called);
+    EXPECT_TRUE(mock_b_ptr->_finalize_called);
+
+    // Build output chunk and emit.  Before the fix, emit_physical_columns
+    // would call fill_dst_column() on the already-logical global-dict columns
+    // and fail with "not a dictionary code column".
+    std::vector<SlotDescriptor*> dst_slots{slot_a, slot_b};
+    auto dst_chunk = std::make_shared<Chunk>();
+    for (auto* s : dst_slots) {
+        auto col = ColumnHelper::create_column(s->type(), true);
+        dst_chunk->append_column(col, s->id());
+    }
+
+    ASSERT_OK(group_reader->_column_materializer->emit_physical_columns(active_chunk, &dst_chunk));
+
+    for (auto* s : dst_slots) {
+        EXPECT_TRUE(dst_chunk->is_slot_exist(s->id()));
+        EXPECT_EQ(2u, dst_chunk->get_column_by_slot_id(s->id())->size());
+    }
+}
+
+// Covers: GroupReader::get_next Phase 2b late_materialize_skip_rows
+//         when compound (scanner_ctxs) conjuncts filter all rows.
+TEST_F(GroupReaderTest, LateMaterializeSkipRowsCompoundConjunctFiltersAll) {
+    auto* file = _create_file();
+    auto* param = _create_group_reader_param();
+    param->chunk_size = config::vector_chunk_size;
+    param->file = file;
+
+    // Scanner conjunct on col0: INT32 = 999999 → all rows filtered.
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> scanner_ctxs;
+    ASSERT_OK(
+            create_int_eq_conjunct_ctxs(&_pool, &runtime_state, param->read_cols[0].slot_id(), 999999, &scanner_ctxs));
+    param->scanner_ctx->conjuncts.scanner_ctxs = scanner_ctxs;
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSERT_OK(group_reader->init());
+    group_reader->prepare();
+    replace_column_readers(group_reader, param);
+    group_reader->_column_materializer->mutable_read_chunk() = _create_chunk(param);
+    prepare_row_range(group_reader);
+
+    auto chunk = _create_chunk(param);
+    size_t row_count = 8;
+    auto status = group_reader->get_next(&chunk, &row_count);
+    // All rows filtered by scanner_ctxs → get_next consumes all ranges and returns EOF.
+    ASSERT_TRUE(status.is_end_of_file());
+    // Skip count = first range (8) + second range (4).
+    EXPECT_EQ(12, param->stats->late_materialize_skip_rows);
+}
+
+// Covers: HdfsScannerContext::evaluate_all_predicates evaluates
+//         scanner_ctxs when slot-by-slot conjuncts are absent.
+TEST_F(GroupReaderTest, EvaluateAllPredicatesWithScannerCtxs) {
+    auto* scanner_ctx = _pool.add(new HdfsScannerContext());
+    scanner_ctx->format_scan_context.stats = &g_hdfs_stats;
+
+    // Create a BIGINT chunk with 2 rows: values [0, 1].
+    auto chunk = std::make_shared<Chunk>();
+    auto col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    col->append_datum(Datum(int64_t(0)));
+    col->append_datum(Datum(int64_t(1)));
+    SlotId slot_id = 600;
+    chunk->append_column(col, slot_id);
+
+    // Scanner conjunct: col = 0 → filters row 1, keeps row 0.
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> scanner_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, slot_id, 0, &scanner_ctxs));
+    scanner_ctx->conjuncts.scanner_ctxs = scanner_ctxs;
+
+    ASSERT_OK(scanner_ctx->evaluate_all_predicates(&chunk));
+    EXPECT_EQ(1u, chunk->num_rows());
+    EXPECT_EQ(0, chunk->get_column_by_slot_id(slot_id)->get(0).get_int64());
+
+    ExprExecutor::close(scanner_ctxs, &runtime_state);
 }
 
 } // namespace starrocks::parquet

@@ -17,6 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/compute_env")
 set(COMPUTE_ENV_SORTING_FILES
     sorting/chunk_cursor.cpp
     sorting/compare_column.cpp
+    sorting/data_segment.cpp
     sorting/merge.cpp
     sorting/merge_cascade.cpp
     sorting/merge_column.cpp
@@ -27,6 +28,65 @@ set(COMPUTE_ENV_SORTING_FILES
     sorting/sorted_chunks_merger.cpp
 )
 
+set(COMPUTE_ENV_WORKGROUP_FILES
+    workgroup/lock_free_scan_task_queue.cpp
+    workgroup/lock_free_work_group_scan_task_queue.cpp
+    workgroup/mem_tracker_manager.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
+    workgroup/priority_scan_task_queue.cpp
+    workgroup/scan_executor.cpp
+    workgroup/scan_task_queue_factory.cpp
+    workgroup/work_group.cpp
+    workgroup/work_group_manager.cpp
+    workgroup/work_group_scan_task_queue.cpp
+)
+
+set(COMPUTE_ENV_SPILL_FILES
+    spill/block_group.cpp
+    spill/block_reader.cpp
+    spill/data_stream.cpp
+    spill/dir_manager.cpp
+    spill/file_block_manager.cpp
+    spill/hybird_block_manager.cpp
+    spill/input_stream.cpp
+    spill/log_block_manager.cpp
+    spill/mem_table.cpp
+    spill/operator_mem_resource_manager.cpp
+    spill/query_spill_manager.cpp
+    spill/restore_task.cpp
+    spill/runtime_context.cpp
+    spill/serde.cpp
+    spill/spill_components.cpp
+    spill/spill_metrics.cpp
+    spill/spiller.cpp
+    spill/spiller_factory.cpp
+    spill/task_executor.cpp
+)
+
+set(COMPUTE_ENV_QUERY_CACHE_FILES
+    query_cache/cache_manager.cpp
+    query_cache/lane_arbiter.cpp
+)
+
+set(COMPUTE_ENV_QUERY_FILES
+    query/connector_scan_mem_share_arbitrator.cpp
+    query/file_scan_split_context.cpp
+    query/global_late_materialization_context.cpp
+)
+
+set(COMPUTE_ENV_GLOBAL_DICT_FILES
+    global_dict/fragment_dict_state.cpp
+    global_dict/parser.cpp
+)
+
+set(COMPUTE_ENV_LOAD_PATH_FILES
+    load_path/load_path_state_helper.cpp
+    load_path/load_path_mgr.cpp
+    load_path/dummy_load_path_mgr.cpp
+    load_path/rejected_record_writer.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -34,12 +94,19 @@ ADD_BE_LIB(ComputeEnv
     data_stream/local_pass_through_buffer.cpp
     data_stream/sender_queue.cpp
     pipeline/driver_limiter.cpp
-    pipeline/observer.cpp
+    pipeline/pipeline_timer_context.cpp
+    profile_report_worker.cpp
     result/buffer_control_block.cpp
     result/record_batch_queue.cpp
     result/result_buffer_mgr.cpp
     result/result_queue_mgr.cpp
     ${COMPUTE_ENV_SORTING_FILES}
+    ${COMPUTE_ENV_WORKGROUP_FILES}
+    ${COMPUTE_ENV_SPILL_FILES}
+    ${COMPUTE_ENV_QUERY_CACHE_FILES}
+    ${COMPUTE_ENV_QUERY_FILES}
+    ${COMPUTE_ENV_GLOBAL_DICT_FILES}
+    ${COMPUTE_ENV_LOAD_PATH_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
@@ -50,6 +117,8 @@ target_link_libraries(ComputeEnv PUBLIC
     RuntimeEnv
     RuntimeCore
     Platform
+    FSCore
+    IO
     ChunkCore
     ColumnCore
     Types

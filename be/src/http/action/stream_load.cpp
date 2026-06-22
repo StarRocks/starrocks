@@ -48,6 +48,7 @@
 
 #include "base/auth/auth_info.h"
 #include "base/string/string_parser.hpp"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/url_coding.h"
@@ -58,6 +59,7 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -73,7 +75,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -632,13 +633,12 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid log_rejected_record_num format");
         }
     }
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
     }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+    TEST_SYNC_POINT_CALLBACK("StreamLoadAction::_process_put::rpc_timeout", &request);
     if (!http_req->header(HTTP_MAX_FILTER_RATIO).empty()) {
         ctx->max_filter_ratio = strtod(http_req->header(HTTP_MAX_FILTER_RATIO).c_str(), nullptr);
     }

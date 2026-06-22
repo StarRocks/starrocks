@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Aliases assign shorter names to tables, columns, or expressions in queries."
 sidebar_label: "Alias"
 ---
 

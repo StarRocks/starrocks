@@ -23,10 +23,26 @@
 #include "column/schema.h"
 #include "exec/data_sinks/range_tablet_sink_sender.h"
 #include "exec/tablet_info.h"
+#include "gen_cpp/descriptors.pb.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
+
+// Sender-only invariant: per-index distributed_exprs routing must happen at the sink
+// sender, never on a remote add-chunks BE. The proto POlapTableIndexSchema therefore must
+// NOT carry a distributed_exprs field, so a remote delta-writer BE has no way to route by
+// per-index keys. This is a compile-time guard against accidentally adding such a field.
+template <typename T, typename = void>
+struct HasDistributedExprsField : std::false_type {};
+template <typename T>
+struct HasDistributedExprsField<T, std::void_t<decltype(std::declval<T>().distributed_exprs_size())>> : std::true_type {
+};
+static_assert(!HasDistributedExprsField<POlapTableIndexSchema>::value,
+              "proto POlapTableIndexSchema must not carry distributed_exprs: per-index range routing is sender-only");
 
 class TestRangeTabletSinkSender : public RangeTabletSinkSender {
 public:
@@ -333,6 +349,34 @@ protected:
         chunk->set_slot_id_to_index(0, 0); // slot_id 0 -> column index 0
         chunk->set_slot_id_to_index(1, 1); // slot_id 1 -> column index 1
         return chunk;
+    }
+
+    // Build a BIGINT slot-ref TExpr referencing the given slot of tuple 0.
+    static TExpr _make_slot_ref_texpr(int slot_id) {
+        TExpr texpr;
+        TExprNode node;
+        node.node_type = TExprNodeType::SLOT_REF;
+        node.type = gen_type_desc(TPrimitiveType::BIGINT);
+        node.num_children = 0;
+        TSlotRef t_slot_ref;
+        t_slot_ref.slot_id = slot_id;
+        t_slot_ref.tuple_id = 0;
+        node.__set_slot_ref(t_slot_ref);
+        node.is_nullable = false;
+        texpr.nodes.emplace_back(node);
+        return texpr;
+    }
+
+    RuntimeState* _make_runtime_state() {
+        TUniqueId query_id;
+        TQueryOptions query_options;
+        TQueryGlobals query_globals;
+        TUniqueId fragment_id;
+        auto* exec_env = ExecEnv::GetInstance();
+        auto* state = _object_pool->add(new RuntimeState(query_id, fragment_id, query_options, query_globals,
+                                                         &exec_env->query_execution_services(), exec_env));
+        state->init_mem_trackers(query_id);
+        return state;
     }
 
     std::unique_ptr<ObjectPool> _object_pool;
@@ -1259,6 +1303,242 @@ TEST_F(TabletSinkSenderRangeTest, EmptyInput) {
     Status st = sender.send_chunk(_schema_param, partitions, {}, validate_select_idx, index_id_partition_id, &chunk);
     ASSERT_OK(st);
     ASSERT_TRUE(sender.sent_batches().empty());
+}
+
+// Two indexes route independently: index A carries per-index distributed_exprs over
+// column c2 and routes by c2 boundaries, while index B (no exprs) routes by the shared
+// partition distribution slot c1. With rows whose c1 and c2 orderings disagree, the two
+// indexes must route the same row to different tablets.
+// NOLINTNEXTLINE
+TEST_F(TabletSinkSenderRangeTest, PerIndexDistributedExprsRouting) {
+    // ---- Schema: two columns (c1, c2) BIGINT, two indexes ----
+    TOlapTableSchemaParam tschema;
+    tschema.db_id = _db_id;
+    tschema.table_id = _table_id;
+    tschema.version = 0;
+
+    TTupleDescriptor tuple_desc;
+    tuple_desc.id = 0;
+    tuple_desc.byteSize = 32;
+    tuple_desc.numNullBytes = 0;
+    tuple_desc.tableId = _table_id;
+    tschema.tuple_desc = tuple_desc;
+
+    auto make_bigint_slot = [](int id, const std::string& name) {
+        TSlotDescriptor slot;
+        slot.id = id;
+        slot.parent = 0;
+        slot.colName = name;
+        slot.slotType.types.emplace_back();
+        slot.slotType.types.back().__set_type(TTypeNodeType::SCALAR);
+        slot.slotType.types.back().__set_scalar_type(TScalarType());
+        slot.slotType.types.back().scalar_type.__set_type(TPrimitiveType::BIGINT);
+        return slot;
+    };
+    tschema.slot_descs.push_back(make_bigint_slot(0, "c1"));
+    tschema.slot_descs.push_back(make_bigint_slot(1, "c2"));
+
+    auto make_index = [](int64_t index_id, const std::vector<std::string>& cols, const std::vector<int>& uids) {
+        TOlapTableIndexSchema index_schema;
+        index_schema.id = index_id;
+        index_schema.columns = cols;
+        index_schema.schema_hash = 0;
+        TOlapTableColumnParam column_param;
+        for (size_t k = 0; k < cols.size(); ++k) {
+            TColumn tcol;
+            tcol.column_name = cols[k];
+            tcol.column_type.type = TPrimitiveType::BIGINT;
+            tcol.is_key = true;
+            tcol.is_allow_null = false;
+            tcol.col_unique_id = uids[k];
+            column_param.columns.push_back(tcol);
+            column_param.sort_key_uid.push_back(uids[k]);
+        }
+        index_schema.__set_column_param(column_param);
+        return index_schema;
+    };
+
+    // Index A (100): carries distributed_exprs over c2 (slot 1).
+    TOlapTableIndexSchema index_a = make_index(_index_id, {"c1", "c2"}, {0, 1});
+    index_a.__set_distributed_exprs({_make_slot_ref_texpr(1)});
+    tschema.indexes.push_back(index_a);
+    // Index B (101): no distributed_exprs => falls back to partition slot c1.
+    tschema.indexes.push_back(make_index(_index_id + 1, {"c1", "c2"}, {0, 1}));
+
+    auto* state = _make_runtime_state();
+    ASSERT_OK(_schema_param->init(tschema, state));
+
+    // ---- Partition param: distribute by c1; per-index ranges below. ----
+    auto make_single_bigint_range = [](std::optional<int64_t> lower, bool lower_incl, std::optional<int64_t> upper,
+                                       bool upper_incl) {
+        TTabletRange range;
+        if (lower.has_value()) {
+            TVariant v;
+            v.__set_type(TYPE_BIGINT_DESC.to_thrift());
+            v.__set_value(std::to_string(lower.value()));
+            TTuple t;
+            t.__set_values({v});
+            range.__set_lower_bound(t);
+            range.__set_lower_bound_included(lower_incl);
+        }
+        if (upper.has_value()) {
+            TVariant v;
+            v.__set_type(TYPE_BIGINT_DESC.to_thrift());
+            v.__set_value(std::to_string(upper.value()));
+            TTuple t;
+            t.__set_values({v});
+            range.__set_upper_bound(t);
+            range.__set_upper_bound_included(upper_incl);
+        }
+        return range;
+    };
+
+    // Index A boundaries (interpreted over c2): (-inf,10)->10000, [10,+inf)->10001
+    std::vector<TTabletRange> ranges_a;
+    ranges_a.push_back(make_single_bigint_range(std::nullopt, false, 10, false));
+    ranges_a.push_back(make_single_bigint_range(10, true, std::nullopt, false));
+    // Index B boundaries (over c1): (-inf,5)->10100, [5,+inf)->10101
+    std::vector<TTabletRange> ranges_b;
+    ranges_b.push_back(make_single_bigint_range(std::nullopt, false, 5, false));
+    ranges_b.push_back(make_single_bigint_range(5, true, std::nullopt, false));
+
+    auto* partition_param = _create_partition_param({ranges_a, ranges_b});
+    ASSERT_OK(partition_param->init(state));
+    ASSERT_OK(partition_param->prepare(state));
+    ASSERT_OK(partition_param->open(state));
+
+    PUniqueId load_id;
+    IndexIdToTabletBEMap index_id_to_tablet_be_map;
+    index_id_to_tablet_be_map[_index_id] = {};
+    index_id_to_tablet_be_map[_index_id + 1] = {};
+
+    std::vector<IndexChannel*> channels;
+    channels.push_back(_object_pool->add(new IndexChannel(nullptr, _index_id, nullptr)));
+    channels.push_back(_object_pool->add(new IndexChannel(nullptr, _index_id + 1, nullptr)));
+    std::unordered_map<int64_t, NodeChannel*> node_channels;
+    std::vector<ExprContext*> output_expr_ctxs;
+
+    TestRangeTabletSinkSender sender(load_id, 1, index_id_to_tablet_be_map, partition_param, channels, node_channels,
+                                     output_expr_ctxs, false, TWriteQuorumType::MAJORITY, 1);
+
+    // Rows: (c1, c2)
+    //   row 0: (2, 50)  -> A by c2=50 => 10001 ; B by c1=2 => 10100
+    //   row 1: (7,  3)  -> A by c2=3  => 10000 ; B by c1=7 => 10101
+    auto chunk = _create_two_column_chunk({2, 7}, {50, 3});
+
+    std::vector<OlapTablePartition*> partitions;
+    auto* part = partition_param->get_partitions().begin()->second;
+    partitions.resize(2, part);
+    std::vector<uint16_t> validate_select_idx = {0, 1};
+    std::unordered_map<int64_t, std::set<int64_t>> index_id_partition_id;
+
+    Status st =
+            sender.send_chunk(_schema_param, partitions, {}, validate_select_idx, index_id_partition_id, chunk.get());
+    ASSERT_OK(st);
+    partition_param->close(state);
+
+    const auto& batches = sender.sent_batches();
+    ASSERT_EQ(2, batches.size());
+
+    // Index A routes by c2.
+    EXPECT_EQ(_index_id, batches[0].index_id);
+    ASSERT_EQ(2, batches[0].tablet_ids.size());
+    EXPECT_EQ(10001, batches[0].tablet_ids[0]); // c2=50 -> [10,+inf)
+    EXPECT_EQ(10000, batches[0].tablet_ids[1]); // c2=3  -> (-inf,10)
+
+    // Index B routes by c1 (shared partition slot).
+    EXPECT_EQ(_index_id + 1, batches[1].index_id);
+    ASSERT_EQ(2, batches[1].tablet_ids.size());
+    EXPECT_EQ(10100, batches[1].tablet_ids[0]); // c1=2 -> (-inf,5)
+    EXPECT_EQ(10101, batches[1].tablet_ids[1]); // c1=7 -> [5,+inf)
+}
+
+// K=1: an index whose distributed_exprs is set but empty has a single tablet per
+// partition. The sender must fill that single candidate directly without initializing or
+// invoking the RangeRouter (the router would error on empty boundaries).
+// NOLINTNEXTLINE
+TEST_F(TabletSinkSenderRangeTest, EmptyDistributedExprsSingleTablet) {
+    TOlapTableSchemaParam tschema;
+    tschema.db_id = _db_id;
+    tschema.table_id = _table_id;
+    tschema.version = 0;
+
+    TTupleDescriptor tuple_desc;
+    tuple_desc.id = 0;
+    tuple_desc.byteSize = 16;
+    tuple_desc.numNullBytes = 0;
+    tuple_desc.tableId = _table_id;
+    tschema.tuple_desc = tuple_desc;
+
+    TSlotDescriptor slot1;
+    slot1.id = 0;
+    slot1.parent = 0;
+    slot1.colName = "c1";
+    slot1.slotType.types.emplace_back();
+    slot1.slotType.types.back().__set_type(TTypeNodeType::SCALAR);
+    slot1.slotType.types.back().__set_scalar_type(TScalarType());
+    slot1.slotType.types.back().scalar_type.__set_type(TPrimitiveType::BIGINT);
+    tschema.slot_descs.push_back(slot1);
+
+    TOlapTableIndexSchema index_schema;
+    index_schema.id = _index_id;
+    index_schema.columns = {"c1"};
+    index_schema.schema_hash = 0;
+    TOlapTableColumnParam column_param;
+    TColumn tcol;
+    tcol.column_name = "c1";
+    tcol.column_type.type = TPrimitiveType::BIGINT;
+    tcol.is_key = true;
+    tcol.is_allow_null = false;
+    tcol.col_unique_id = 0;
+    column_param.columns.push_back(tcol);
+    column_param.sort_key_uid.push_back(0);
+    index_schema.__set_column_param(column_param);
+    // K=1: distributed_exprs set but empty (no per-index routing key).
+    index_schema.__set_distributed_exprs(std::vector<TExpr>{});
+    tschema.indexes.push_back(index_schema);
+
+    // distributed_exprs is set but empty => no RuntimeState required for parsing.
+    ASSERT_OK(_schema_param->init(tschema, nullptr));
+    ASSERT_TRUE(_schema_param->indexes()[0]->has_distributed_exprs);
+    ASSERT_TRUE(_schema_param->indexes()[0]->distributed_expr_ctxs.empty());
+
+    // Single (-inf, +inf) tablet for the partition.
+    std::vector<TTabletRange> ranges(1);
+    auto* partition_param = _create_partition_param({ranges});
+    ASSERT_OK(partition_param->init(nullptr));
+
+    PUniqueId load_id;
+    IndexIdToTabletBEMap index_id_to_tablet_be_map;
+    index_id_to_tablet_be_map[_index_id] = {};
+    std::vector<IndexChannel*> channels;
+    channels.push_back(_object_pool->add(new IndexChannel(nullptr, _index_id, nullptr)));
+    std::unordered_map<int64_t, NodeChannel*> node_channels;
+    std::vector<ExprContext*> output_expr_ctxs;
+
+    TestRangeTabletSinkSender sender(load_id, 1, index_id_to_tablet_be_map, partition_param, channels, node_channels,
+                                     output_expr_ctxs, false, TWriteQuorumType::MAJORITY, 1);
+
+    auto chunk = _create_chunk({5, 15, 0, 19});
+    std::vector<OlapTablePartition*> partitions;
+    auto* part = partition_param->get_partitions().begin()->second;
+    partitions.resize(4, part);
+    std::vector<uint16_t> validate_select_idx = {0, 1, 2, 3};
+    std::unordered_map<int64_t, std::set<int64_t>> index_id_partition_id;
+
+    Status st =
+            sender.send_chunk(_schema_param, partitions, {}, validate_select_idx, index_id_partition_id, chunk.get());
+    ASSERT_OK(st);
+
+    const auto& batches = sender.sent_batches();
+    ASSERT_EQ(1, batches.size());
+    const auto& tablet_ids = batches[0].tablet_ids;
+    ASSERT_EQ(4, tablet_ids.size());
+    // All rows go to the single tablet, regardless of value.
+    for (int64_t id : tablet_ids) {
+        EXPECT_EQ(10000, id);
+    }
+    ASSERT_EQ(1, index_id_partition_id[_index_id].size());
 }
 
 } // namespace starrocks

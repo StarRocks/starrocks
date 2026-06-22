@@ -23,6 +23,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
+#include "exprs/sort_exec_exprs.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {

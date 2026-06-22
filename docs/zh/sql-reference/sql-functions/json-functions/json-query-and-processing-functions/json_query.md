@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 json_path 表达式查询 JSON 对象中元素值，并返回 JSON 值。"
 ---
 
 # json_query

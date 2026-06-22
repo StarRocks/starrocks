@@ -38,6 +38,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/bucket_aware_partition.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -311,7 +312,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
         }
     });
 
-    if (!fragment_ctx->is_canceled()) {
+    if (!fragment_ctx->runtime_state()->is_cancelled()) {
         for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
             if (_chunks[driver_sequence] != nullptr) {
                 RETURN_IF_ERROR(res = send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));

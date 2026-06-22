@@ -55,20 +55,25 @@
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/constexpr.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/lookup_request.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "exec/short_circuit.h"
-#include "exec/workgroup/work_group.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -462,9 +467,9 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     }
 
     // prepare_global_state is success when reach here, so we must count down once
-    pipeline::QueryContext* query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
+    auto query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id);
     if (query_context != nullptr) {
-        query_context->count_down_fragments();
+        query_context->count_down_fragment();
     }
 
     status.to_protobuf(response->mutable_status());
@@ -736,7 +741,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                         "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
                         print_id(tid));
             } else {
-                fragment_ctx->cancel(Status::Cancelled(reason_string), true);
+                pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(reason_string), true);
             }
         }
     } else {

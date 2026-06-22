@@ -61,6 +61,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -162,6 +163,16 @@ public class OlapTableSink extends DataSink {
     private boolean enableDynamicOverwrite = false;
     private boolean isFromOverwrite = false;
     private boolean isMultiStatementTxn = false;
+    private boolean isStreamingLoad = false;
+    // When set, only the index with this id is written (schema + partitions + loaded-index state).
+    // null (default) means write all indexes, i.e. today's behavior.
+    private Long targetWriteIndexId = null;
+
+    // Conservative default for RANGE-partitioned tables under stream / routine load.
+    // Both planner paths flag streaming ingest via setIsStreamingLoad(true): StreamLoadPlanner
+    // (legacy stream load and routine load) and LoadPlanner (transaction stream load and batch
+    // write), the latter gated on EtlJobType.STREAM_LOAD / ROUTINE_LOAD.
+    private static final int STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER = 32;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -270,6 +281,14 @@ public class OlapTableSink extends DataSink {
         this.isMultiStatementTxn = isMultiStatementTxn;
     }
 
+    public void setIsStreamingLoad(boolean isStreamingLoad) {
+        this.isStreamingLoad = isStreamingLoad;
+    }
+
+    public void setTargetWriteIndexId(Long targetWriteIndexId) {
+        this.targetWriteIndexId = targetWriteIndexId;
+    }
+
     public void complete(String mergeCondition) throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -289,15 +308,53 @@ public class OlapTableSink extends DataSink {
             return new ArrayList<>(Collections.singletonList(
                     dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
         }
-        if (isFromOverwrite || !enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
-                || partitionIds.size() < Config.max_load_initial_open_partition_number) {
+        if (isFromOverwrite || !enableAutomaticPartition) {
             return partitionIds;
         }
-        // bigger partition id means newer partition
-        // open last max_load_initial_open_partition_number partitions
+
+        // Resolve the initial-open limit. Priority:
+        //   1. Table property `load_initial_open_partition_number` — highest; bypasses the
+        //      global Config.max_load_initial_open_partition_number ceiling.
+        //   2. LIST partition: open all, capped by max_load_initial_open_partition_number.
+        //   3. RANGE partition:
+        //        - Stream / routine load: keep the conservative 32 (id ordering correlates
+        //          well with write recency for time-based ranges, and large fan-out hurts
+        //          continuous-ingest paths).
+        //        - Other load types: open all, capped by max_load_initial_open_partition_number.
+        int tableLimit = dstTable.getLoadInitialOpenPartitionNumber();
+        // Keep the limit a long: Config.max_load_initial_open_partition_number is a long, so a
+        // narrowing (int) cast would wrap values above Integer.MAX_VALUE (e.g. 4294967297 -> 1).
+        long limit;
+        boolean capByGlobalMax;
+        if (tableLimit != TableProperty.INVALID) {
+            limit = tableLimit;
+            capByGlobalMax = false;
+        } else if (dstTable.getPartitionInfo().isListPartition()) {
+            limit = 0;
+            capByGlobalMax = true;
+        } else if (isStreamingLoad) {
+            limit = STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER;
+            capByGlobalMax = false;
+        } else {
+            limit = 0;
+            capByGlobalMax = true;
+        }
+
+        if (capByGlobalMax) {
+            long globalMax = Config.max_load_initial_open_partition_number;
+            if (globalMax > 0 && (limit <= 0 || limit > globalMax)) {
+                limit = globalMax;
+            }
+        }
+
+        if (limit <= 0 || partitionIds.size() < limit) {
+            return partitionIds;
+        }
+
+        // bigger partition id means newer partition; open the newest `limit` partitions
         Set<Long> openPartitionIds = partitionIds.stream().collect(
                 Collectors.toCollection(() -> new TreeSet<>(Collections.reverseOrder())))
-                .stream().limit(Config.max_load_initial_open_partition_number).collect(Collectors.toSet());;
+                .stream().limit(limit).collect(Collectors.toSet());
         if (!dstTable.getDoubleWritePartitions().isEmpty()) {
             openPartitionIds.addAll(dstTable.getDoubleWritePartitions().keySet());
         }
@@ -361,12 +418,12 @@ public class OlapTableSink extends DataSink {
             }
             tSink.setNum_replicas(numReplicas);
             tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
-            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
+            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true));
 
             TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
 
             TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
-                    enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState);
+                    enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState, targetWriteIndexId);
             tSink.setPartition(partitionParam);
             tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
@@ -390,7 +447,7 @@ public class OlapTableSink extends DataSink {
                     tSink2.unsetPartition();
                     tSink2.unsetLocation();
                     TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
-                            false, automaticBucketSize, doubleWritePartitionIds, txnState);
+                            false, automaticBucketSize, doubleWritePartitionIds, txnState, targetWriteIndexId);
                     tSink2.setPartition(partitionParam2);
                     tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, computeResource, txnState));
                     tSink2.setIgnore_out_of_partition(true);
@@ -439,7 +496,18 @@ public class OlapTableSink extends DataSink {
         return tDataSink;
     }
 
-    public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor) {
+    public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
+                                                     @Nullable Long targetWriteIndexId) {
+        return createSchema(dbId, table, tupleDescriptor, targetWriteIndexId, false);
+    }
+
+    // emitDistributedExprs gates the per-index range routing exprs to the OLAP write-sink path only.
+    // Non-write callers (e.g. dictionary cache schema building) pass false: their BE consumers init
+    // OlapTableSchemaParam without a RuntimeState, and distributed_exprs requires one to build the
+    // expr contexts (see be/src/exec/tablet_info.cpp). Only the write sink (OlapTableSink.complete())
+    // passes true.
+    public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
+                                                     @Nullable Long targetWriteIndexId, boolean emitDistributedExprs) {
         TOlapTableSchemaParam schemaParam = new TOlapTableSchemaParam();
         schemaParam.setDb_id(dbId);
         schemaParam.setTable_id(table.getId());
@@ -451,6 +519,11 @@ public class OlapTableSink extends DataSink {
         }
 
         for (Map.Entry<Long, MaterializedIndexMeta> pair : table.getIndexMetaIdToMeta().entrySet()) {
+            // Keep the schema index list 1:1 with the partition index list: when a target index is
+            // specified, only emit that index here (createPartition applies the same filter).
+            if (targetWriteIndexId != null && pair.getKey() != targetWriteIndexId.longValue()) {
+                continue;
+            }
             MaterializedIndexMeta indexMeta = pair.getValue();
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
@@ -487,6 +560,10 @@ public class OlapTableSink extends DataSink {
             indexSchema.setSchema_id(indexMeta.getSchemaId());
             indexSchema.setColumn_to_expr_value(columnToExprValue);
             indexSchema.setIs_shadow(isShadow);
+            if (emitDistributedExprs && table.isRangeDistribution()) {
+                indexSchema.setDistributed_exprs(ExprToThrift.treesToThrift(
+                        buildRangeIndexDistributionExprs(table, pair.getKey(), tupleDescriptor)));
+            }
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -550,6 +627,38 @@ public class OlapTableSink extends DataSink {
         return schemaParam;
     }
 
+    /**
+     * Builds per-index routing exprs for a range-distribution index: one slot-ref over each of the
+     * index's range distribution (sort-key) columns, resolved against the sink's output tuple.
+     *
+     * <p>P1a only handles routing keys that are direct columns in the output tuple (base index).
+     * Added-key literals and retyped casts are deferred.
+     */
+    private static List<Expr> buildRangeIndexDistributionExprs(
+            OlapTable table, long indexMetaId, TupleDescriptor tupleDesc) {
+        // Key the output-tuple slots by the same column->slot name convention this file uses for
+        // the column list (:512) and SlotDescriptor.toThrift (:267): isShadowColumn ? name : columnId.
+        Map<String, SlotDescriptor> slotByColName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (SlotDescriptor slot : tupleDesc.getSlots()) {
+            Column col = slot.getColumn();
+            if (col == null) {
+                continue;
+            }
+            slotByColName.put(col.isShadowColumn() ? col.getName() : col.getColumnId().getId(), slot);
+        }
+
+        List<Column> routingColumns = MetaUtils.getRangeDistributionColumns(table, indexMetaId);
+        List<Expr> exprs = Lists.newArrayListWithCapacity(routingColumns.size());
+        for (Column col : routingColumns) {
+            String colName = col.isShadowColumn() ? col.getName() : col.getColumnId().getId();
+            SlotDescriptor slot = slotByColName.get(colName);
+            Preconditions.checkNotNull(slot,
+                    "no output-tuple slot for range distribution column %s", colName);
+            exprs.add(new SlotRef(slot));
+        }
+        return exprs;
+    }
+
     private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws StarRocksException {
         List<String> distColumns = Lists.newArrayList();
         switch (distInfo.getType()) {
@@ -583,12 +692,38 @@ public class OlapTableSink extends DataSink {
         return false;
     }
 
+    // Restricts the partition's materialized index list to a single target index when requested.
+    // Returns the full list unchanged when targetWriteIndexId is null (write-all, today's behavior).
+    // Throws when the target index is not present in this partition, so the schema and partition
+    // index lists stay consistent with the BE 1:1 invariant.
+    private static List<MaterializedIndex> filterTargetWriteIndexes(List<MaterializedIndex> indexes,
+                                                                    PhysicalPartition physicalPartition,
+                                                                    @Nullable Long targetWriteIndexId)
+            throws StarRocksException {
+        if (targetWriteIndexId == null) {
+            return indexes;
+        }
+        // Key on the index META id: createSchema filters on the meta id, the thrift outputs
+        // (TOlapTableIndexSchema / TOlapTableIndexTablets) carry the meta id, and the BE 1:1 check
+        // compares meta ids. getId() != getMetaId() for split/merge-rewritten indexes.
+        List<MaterializedIndex> filtered = indexes.stream()
+                .filter(idx -> idx.getMetaId() == targetWriteIndexId)
+                .collect(Collectors.toList());
+        if (filtered.isEmpty()) {
+            throw new StarRocksException("target write index " + targetWriteIndexId
+                    + " not found in partition " + physicalPartition.getId());
+        }
+        return filtered;
+    }
+
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
                                                            long automaticBucketSize,
                                                            List<Long> partitionIds,
-                                                           TransactionState txnState) throws StarRocksException {
+                                                           TransactionState txnState,
+                                                           @Nullable Long targetWriteIndexId)
+            throws StarRocksException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -627,7 +762,9 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
+                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
+                                physicalPartition, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -708,7 +845,9 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
+                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
+                                physicalPartition, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -751,7 +890,9 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
-                    List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                    List<MaterializedIndex> indexes = filterTargetWriteIndexes(
+                            physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
+                            physicalPartition, targetWriteIndexId);
                     setMaterializedIndexes(tPartition, indexes);
                     partitionParam.addToPartitions(tPartition);
                     if (txnState != null) {

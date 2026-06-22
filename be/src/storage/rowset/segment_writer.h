@@ -40,12 +40,12 @@
 #include <string>
 #include <vector>
 
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "io/input_stream.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/primitive/flat_json_config.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
@@ -63,7 +63,6 @@ class Chunk;
 class ColumnWriter;
 class Schema;
 struct SegmentFileInfo;
-class SegmentMetadataPB;
 
 extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
@@ -182,13 +181,9 @@ public:
 
     // Transfer sort-key min, max, samples, and interval into a SegmentFileInfo.
     // Moves _sort_key_samples out; preserves the carrier invariant
-    // (samples.empty() <=> interval == 0).
+    // (samples.empty() <=> interval == 0). Callers serialize the resulting
+    // SegmentFileInfo to a SegmentMetadataPB via SegmentFileInfo::to_proto().
     void write_sort_key_fields_to(SegmentFileInfo& file_info);
-
-    // Copy sort-key min, max, samples, and interval into a proto.
-    // Used by update_manager.cpp which reads from SegmentWriter directly
-    // instead of going through a SegmentFileInfo carrier.
-    void write_sort_key_fields_to(SegmentMetadataPB* segment_meta) const;
 
     // Accessors for sort-key samples (used in unit tests).
     int64_t get_sort_key_sample_row_interval() const { return _sort_key_sample_row_interval; }

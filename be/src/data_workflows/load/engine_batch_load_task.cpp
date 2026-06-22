@@ -1,0 +1,295 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/task/engine_batch_load_task.cpp
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "data_workflows/load/engine_batch_load_task.h"
+
+#include <fmt/format.h>
+
+#include <ctime>
+#include <iostream>
+#include <string>
+
+#include "base/utility/defer_op.h"
+#include "base/utility/pretty_printer.h"
+#include "data_workflows/load/push_handler.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "storage/lake/spark_load.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/versioned_tablet.h"
+#include "storage/olap_common.h"
+#include "storage/storage_engine.h"
+#include "storage/storage_env.h"
+#include "storage/storage_metrics.h"
+
+using apache::thrift::ThriftDebugString;
+using std::list;
+using std::string;
+using std::vector;
+
+namespace starrocks {
+
+static StatusOr<int64_t> choose_any_version(int64_t tablet_id) {
+    auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+    if (auto res = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id); res != nullptr) {
+        return res->version();
+    }
+    ASSIGN_OR_RETURN(auto iter, tablet_mgr->list_tablet_metadata(tablet_id));
+    if (iter.has_next()) {
+        ASSIGN_OR_RETURN(auto metadata, iter.next());
+        return metadata->version();
+    } else {
+        return Status::NotFound(fmt::format("cannot find any metadata of tablet {}", tablet_id));
+    }
+}
+
+EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTabletInfo>* tablet_infos, int64_t signature,
+                                         MemTracker* mem_tracker)
+        : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature) {
+    _mem_tracker = std::make_unique<MemTracker>(-1, "BatchLoad", mem_tracker);
+}
+
+EngineBatchLoadTask::~EngineBatchLoadTask() = default;
+
+Status EngineBatchLoadTask::execute() {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+
+    Status status;
+    if (_push_req.push_type == TPushType::LOAD_V2) {
+        status = _init();
+
+        if (status.ok()) {
+            uint32_t retry_time = 0;
+            while (retry_time < PUSH_MAX_RETRY) {
+                status = _process();
+
+                if (status.is_already_exist()) {
+                    LOG(WARNING) << "transaction exists when realtime push, "
+                                    "but unfinished, do not report to fe, signature: "
+                                 << _signature;
+                    break; // not retry anymore
+                }
+                // Internal error, need retry
+                if (!status.ok()) {
+                    LOG(WARNING) << "push internal error, need retry. status: " << status
+                                 << ", signature: " << _signature;
+                    retry_time += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+    } else if (_push_req.push_type == TPushType::DELETE) {
+        status = _delete_data(_push_req, _tablet_infos);
+        if (!status.ok()) {
+            LOG(WARNING) << "delete data failed. status: " << status << ", signature: " << _signature;
+        }
+    } else {
+        status = Status::InvalidArgument(fmt::format("invalid push type: {}", static_cast<int>(_push_req.push_type)));
+    }
+    return status;
+}
+
+Status EngineBatchLoadTask::_init() {
+    if (_is_init) {
+        VLOG(3) << "has been inited";
+        return Status::OK();
+    }
+
+    // not need to check these conditions for lake tablet
+    if (_push_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
+        // Check replica exist
+        TabletSharedPtr tablet;
+        tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
+        if (tablet == nullptr) {
+            LOG(WARNING) << "get tables failed. "
+                         << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
+            return Status::NotFound(fmt::format("not found tablet: {}", _push_req.tablet_id));
+        }
+
+        // check disk capacity
+        if (tablet->data_dir()->capacity_limit_reached(_push_req.__isset.http_file_size)) {
+            return Status::CapacityLimitExceed(
+                    fmt::format("disk capacity limit reached, tablet_id: {}", _push_req.tablet_id));
+        }
+    }
+
+    DCHECK(!_push_req.__isset.http_file_path);
+    _is_init = true;
+    return Status::OK();
+}
+
+Status EngineBatchLoadTask::_process() {
+    if (!_is_init) {
+        LOG(WARNING) << "has not init yet. tablet_id: " << _push_req.tablet_id;
+        return Status::InternalError("has not init yet");
+    }
+
+    // Load delta file
+    time_t push_begin = time(nullptr);
+    Status push_status = _push(_push_req, _tablet_infos);
+    time_t push_finish = time(nullptr);
+    LOG(INFO) << "Push finish, cost time: " << (push_finish - push_begin);
+    return push_status;
+}
+
+Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
+    LOG(INFO) << "begin to process push. "
+              << " txn_id: " << request.transaction_id << " tablet_id=" << request.tablet_id
+              << ", version=" << request.version;
+
+    if (tablet_info_vec == nullptr) {
+        LOG(WARNING) << "The input tablet_info_vec is a null pointer";
+        StorageMetrics::instance()->push_requests_fail_total.increment(1);
+        return Status::InternalError("The input tablet_info_vec is a null pointer");
+    }
+
+    PushType type = PUSH_NORMAL_V2;
+
+    int64_t duration_ns = 0;
+    int64_t write_bytes = 0;
+    int64_t write_rows = 0;
+    DCHECK(request.__isset.transaction_id);
+    SCOPED_RAW_TIMER(&duration_ns);
+
+    Status res;
+
+    if (request.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        auto tablet_id = request.tablet_id;
+        // Starting from 3.3.0, the tablet schema in different versions of the tablet metadata may be different. We
+        // need to read the tablet of a specific version (request.version) to ensure that the tablet schema used
+        // during import meets the expectations. However, if the FE version is lower than 3.3.0, the request.version
+        // will always be set to -1 by the FE. At this time, we can read any version of the tablet metadata, because
+        // if the FE version is lower than 3.3.0, it means that there will be no fast schema evolution, and the tablet
+        // schema in all versions of the tablet metadata will be the same.
+        auto tablet_version = request.version;
+        if (tablet_version == -1) {
+            LOG(WARNING) << "tablet version is missing from request, try to obtain any version number from cache or "
+                            "remote storage. tablet_id="
+                         << tablet_id;
+            ASSIGN_OR_RETURN(tablet_version, choose_any_version(tablet_id));
+        }
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
+        auto tablet_or = tablet_manager->get_tablet(tablet_id, tablet_version);
+        if (!tablet_or.ok()) {
+            LOG(WARNING) << "Fail to read tablet metadata. res=" << res << ", txn_id: " << request.transaction_id
+                         << ", tablet=" << tablet_id << ", version=" << tablet_version
+                         << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
+            return tablet_or.status();
+        }
+
+        auto tablet = tablet_or.value();
+
+        lake::SparkLoadHandler handler;
+        res = handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id: " << request.transaction_id
+                         << ", tablet=" << tablet.id()
+                         << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
+        } else {
+            LOG(INFO) << "Finish to load file."
+                      << ". txn_id: " << request.transaction_id << ", tablet=" << tablet.id()
+                      << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            write_bytes = handler.write_bytes();
+            write_rows = handler.write_rows();
+            StorageMetrics::instance()->push_requests_success_total.increment(1);
+            StorageMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
+            StorageMetrics::instance()->push_request_write_bytes.increment(write_bytes);
+            StorageMetrics::instance()->push_request_write_rows.increment(write_rows);
+        }
+
+    } else {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
+        if (tablet == nullptr) {
+            LOG(WARNING) << "Not found tablet: " << request.tablet_id;
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
+            return Status::NotFound(fmt::format("Not found tablet: {}", request.tablet_id));
+        }
+
+        PushHandler push_handler;
+        res = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id=" << request.transaction_id
+                         << ", tablet=" << tablet->full_name()
+                         << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            StorageMetrics::instance()->push_requests_fail_total.increment(1);
+        } else {
+            LOG(INFO) << "Finish to load file."
+                      << ". txn_id=" << request.transaction_id << ", tablet=" << tablet->full_name()
+                      << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            write_bytes = push_handler.write_bytes();
+            write_rows = push_handler.write_rows();
+            StorageMetrics::instance()->push_requests_success_total.increment(1);
+            StorageMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
+            StorageMetrics::instance()->push_request_write_bytes.increment(write_bytes);
+            StorageMetrics::instance()->push_request_write_rows.increment(write_rows);
+        }
+    }
+
+    return res;
+}
+
+Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
+    VLOG(3) << "begin to process delete data. request=" << ThriftDebugString(request);
+    StorageMetrics::instance()->delete_requests_total.increment(1);
+
+    if (tablet_info_vec == nullptr) {
+        LOG(WARNING) << "The input tablet_info_vec is a null pointer";
+        return Status::InternalError("The input tablet_info_vec is a null pointer");
+    }
+
+    // 1. Get all tablets with same tablet_id
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
+    if (tablet == nullptr) {
+        LOG(WARNING) << "Not found tablet: " << request.tablet_id;
+        return Status::NotFound(fmt::format("Not found tablet: ", request.tablet_id));
+    }
+
+    // 2. Process delete data by push interface
+    DCHECK(request.__isset.transaction_id);
+    PushHandler push_handler;
+    Status res = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
+    if (!res.ok()) {
+        LOG(WARNING) << "Fail to delete data. res: " << res << ", tablet: " << tablet->full_name();
+        StorageMetrics::instance()->delete_requests_failed.increment(1);
+        return res;
+    }
+
+    VLOG(3) << "Finish to delete data. tablet:" << tablet->full_name();
+    return res;
+}
+
+} // namespace starrocks

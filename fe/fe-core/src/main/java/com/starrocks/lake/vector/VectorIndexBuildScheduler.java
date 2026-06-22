@@ -176,9 +176,14 @@ public class VectorIndexBuildScheduler extends LeaderDaemon {
     }
 
     /**
-     * Convenience entry point for publish callers: enqueue all build infos
-     * returned by BE in the publish response. No-op if scheduler is not initialized
-     * or input is empty.
+     * Convenience entry point for publish callers: process all build infos returned by BE
+     * in the publish response. No-op if scheduler is not initialized or input is empty.
+     * <p>
+     * Each info carries {@code buildNeeded}: {@code true} means a new segment needs a real
+     * .vi build (dispatch to CN); {@code false} means this version produced nothing to build
+     * (bundle / below-threshold segments skip the inline .vi), so we advance builtVersion
+     * directly when possible — no CN round-trip — instead of letting it lag and read as
+     * "not built". {@code buildNeeded==null} (older BE) is treated as {@code true} (enqueue).
      */
     public static void onPublishComplete(List<VectorIndexBuildInfoPB> infos, boolean fromCompaction) {
         if (infos == null || infos.isEmpty()) {
@@ -189,10 +194,54 @@ public class VectorIndexBuildScheduler extends LeaderDaemon {
             return;
         }
         for (VectorIndexBuildInfoPB info : infos) {
-            if (info.tabletId != null && info.version != null) {
+            if (info.tabletId == null || info.version == null) {
+                continue;
+            }
+            boolean buildNeeded = info.buildNeeded == null || info.buildNeeded;
+            if (buildNeeded) {
                 scheduler.addPendingTablet(info.tabletId, info.version, fromCompaction);
+            } else {
+                scheduler.advanceBuiltVersionForNoBuild(info.tabletId, info.version, fromCompaction);
             }
         }
+    }
+
+    /**
+     * Handle a published version that needs no real vector index build (bundle /
+     * below-threshold segments). When the recovery scan has run for this leader term and the
+     * tablet has no pending/running build, advance builtVersion directly to this version with
+     * no CN dispatch — nothing needs building, so the frontier just moves forward (and no
+     * pending entry is created, so a stream of no-build loads stays on this zero-RPC path).
+     * Otherwise let the build path carry the frontier: it builds any real index and returns
+     * this version, covering the no-build tail without an extra round-trip.
+     * <p>
+     * Why {@code recoveryScanDone && !hasPending} is leapfrog-safe (never skips an un-built
+     * vi-version): a vi-version always enqueues a pending build (kept until the build
+     * completes, re-enqueued on failure), and publishes are processed in version order per
+     * tablet — so any earlier un-built vi-version is already in {@code pendingTablets} when
+     * this no-build version arrives, making {@code hasPending} true and routing it to the
+     * build path. The {@code recoveryScanDone} guard covers the post-leader-switch window
+     * where the in-memory pending set hasn't been rebuilt yet; until the scan runs we
+     * conservatively enqueue instead of direct-advancing.
+     */
+    void advanceBuiltVersionForNoBuild(long tabletId, long version, boolean fromCompaction) {
+        LakeTablet tablet = findLakeTablet(tabletId);
+        if (tablet == null) {
+            return; // tablet/partition/table deleted — nothing to track
+        }
+        long built = tablet.getVectorIndexBuiltVersion();
+        if (built >= version) {
+            return; // already caught up
+        }
+        boolean hasPending = pendingTablets.containsKey(tabletId) || runningTasks.containsKey(tabletId);
+        if (recoveryScanDone && !hasPending) {
+            // No un-built vi work for this tablet -> just move the frontier forward, no dispatch.
+            tablet.setVectorIndexBuiltVersion(version);
+            return;
+        }
+        // A real build is in flight, or recovery hasn't validated yet -> let the build path
+        // carry the frontier to this version.
+        addPendingTablet(tabletId, version, fromCompaction);
     }
 
     // ========== Recovery scan after leader switch ==========
@@ -233,8 +282,17 @@ public class VectorIndexBuildScheduler extends LeaderDaemon {
                     if (visibleVersion <= 1) {
                         continue;
                     }
+                    // Scan VISIBLE indexes only — never SHADOW. A SHADOW index belongs to an
+                    // in-flight ALTER: its existing data (<= V_snap) is force-inline-built by the
+                    // schema-change conversion, and its incrementally double-written data (> V_snap)
+                    // is enqueued by the conversion's final publish (onPublishComplete at
+                    // commitVersion). Scheduling a shadow tablet here would enqueue it at the
+                    // partition's visibleVersion — a version the shadow tablet has only staged via
+                    // publish_log_version, not applied — so the async build would fail to load that
+                    // metadata. Once the ALTER finishes and the index becomes visible, its tablets
+                    // are picked up here normally (builtVersion < visibleVersion).
                     for (MaterializedIndex index :
-                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             long builtVersion = 0;
                             if (tablet instanceof LakeTablet) {
@@ -566,7 +624,7 @@ public class VectorIndexBuildScheduler extends LeaderDaemon {
         return -1;
     }
 
-    static boolean hasAsyncVectorIndex(OlapTable table) {
+    public static boolean hasAsyncVectorIndex(OlapTable table) {
         if (table.getIndexes() == null) {
             return false;
         }
@@ -581,8 +639,60 @@ public class VectorIndexBuildScheduler extends LeaderDaemon {
         return false;
     }
 
+    /** Whether the table has any vector index (sync or async). */
+    public static boolean hasVectorIndex(OlapTable table) {
+        if (table.getIndexes() == null) {
+            return false;
+        }
+        for (Index index : table.getIndexes()) {
+            if (index.getIndexType() == IndexDef.IndexType.VECTOR) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * {@code [min, max]} vector-index built-version span across the partition's base-index LakeTablets,
+     * for observability (e.g. {@code information_schema.partitions_meta}). Returns {@code null} when the
+     * table has no vector index (callers then leave the columns unset).
+     * <ul>
+     *   <li>Async vector index: the actual per-tablet built-version span. {@code min < visibleVersion}
+     *       means the index is still catching up; {@code min < max} means progress is uneven across
+     *       tablets.</li>
+     *   <li>Sync vector index: built inline on write/compaction, so it is always current as of the
+     *       visible version; both bounds are reported as the partition's visible version.</li>
+     * </ul>
+     * Owns the built-version semantics so observability callers don't reach into LakeTablet directly.
+     */
+    public static long[] getPartitionBuiltVersionSpan(OlapTable table, PhysicalPartition partition) {
+        if (hasAsyncVectorIndex(table)) {
+            MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
+            if (baseIndex == null) {
+                return null;
+            }
+            long minBuilt = Long.MAX_VALUE;
+            long maxBuilt = 0;
+            for (Tablet tablet : baseIndex.getTablets()) {
+                if (tablet instanceof LakeTablet) {
+                    long bv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
+                    minBuilt = Math.min(minBuilt, bv);
+                    maxBuilt = Math.max(maxBuilt, bv);
+                }
+            }
+            return minBuilt == Long.MAX_VALUE ? null : new long[] {minBuilt, maxBuilt};
+        }
+        if (hasVectorIndex(table)) {
+            // Sync-mode vector index: built inline, always current as of the visible version.
+            long visible = partition.getVisibleVersion();
+            return new long[] {visible, visible};
+        }
+        return null;
+    }
+
     // ========== Test helpers ==========
 
+    // Package-private: only same-package tests inspect/mutate the internal maps directly.
     Map<Long, VectorIndexBuildTask> getRunningTasksForTest() {
         return runningTasks;
     }
@@ -591,11 +701,7 @@ public class VectorIndexBuildScheduler extends LeaderDaemon {
         return pendingTablets;
     }
 
-    Map<Long, Long> getCooldownUntilForTest() {
-        return cooldownUntil;
-    }
-
-    Map<Long, ComputeNode> getPreferredNodesForTest() {
-        return preferredNodes;
+    void setRecoveryScanDoneForTest(boolean done) {
+        this.recoveryScanDone = done;
     }
 }

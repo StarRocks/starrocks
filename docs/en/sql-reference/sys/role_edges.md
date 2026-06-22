@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "By default, only users or roles with the `user_admin` role can access this view."
+description: "System view showing which roles have been granted to which users or roles in StarRocks."
 ---
 
 # role_edges

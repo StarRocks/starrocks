@@ -17,12 +17,16 @@
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
 
+#include <memory>
+
+#include "agent/agent_server.h"
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
@@ -32,6 +36,7 @@
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
 #include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "platform/user_function_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -40,10 +45,10 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -95,7 +100,10 @@ int init_test_env(int argc, char** argv) {
     auto st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
     auto* platform_env = PlatformEnv::GetInstance();
-    st = platform_env->init(process_metrics_registry->root_registry());
+    PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    st = platform_env->init(std::move(platform_env_options));
     CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
@@ -139,6 +147,13 @@ int init_test_env(int argc, char** argv) {
     CHECK(st.ok()) << st;
     st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
+    auto agent_server = std::make_unique<AgentServer>(exec_env, false);
+    exec_env->set_agent_server(agent_server.get());
+    st = agent_server->start();
+    if (!st.ok()) {
+        exec_env->set_agent_server(nullptr);
+    }
+    CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();
 
@@ -146,18 +161,18 @@ int init_test_env(int argc, char** argv) {
     CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
     exec_env->wait_for_finish();
-    // delete engine
-    engine->stop();
-    // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
+    // Stop AgentServer before StorageEngine drains storage cleanup work its pools may submit.
+    agent_server->stop();
+    exec_env->set_agent_server(nullptr);
     exec_env->stop();
+    engine->stop();
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
     delete engine;
     exec_env->destroy();
+    agent_server.reset();
     platform_env->destroy();
     cache_env->destroy();
     global_env->stop();

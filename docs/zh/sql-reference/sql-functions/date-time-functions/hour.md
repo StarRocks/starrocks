@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定日期中的小时部分，取值范围 0 到 23。"
 ---
 
 # hour

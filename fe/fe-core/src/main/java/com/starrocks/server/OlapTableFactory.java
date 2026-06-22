@@ -499,11 +499,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setEnableLoadProfile(true);
             }
 
-            if (PropertyAnalyzer.analyzeBooleanProp(properties,
-                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true)) {
-                table.setEnableStatisticCollectOnFirstLoad(true);
-            } else {
-                table.setEnableStatisticCollectOnFirstLoad(false);
+            if (properties != null &&
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                table.setEnableStatisticCollectOnFirstLoad(PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true));
             }
 
             try {
@@ -758,6 +757,14 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
                 int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
                 table.setPartitionLiveNumber(partitionLiveNumber);
+            }
+
+            // load initial open partition number
+            if (properties != null
+                    && properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+                int loadInitialOpenPartitionNumber =
+                        PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, true);
+                table.setLoadInitialOpenPartitionNumber(loadInitialOpenPartitionNumber);
             }
 
             // analyze partition ttl duration

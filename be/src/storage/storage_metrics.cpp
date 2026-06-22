@@ -153,6 +153,10 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_ENGINE_REQUEST_METRIC(create_rollup, failed, create_rollup_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(delete, total, delete_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(delete, failed, delete_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(lake_add_index, total, lake_add_index_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(lake_add_index, failed, lake_add_index_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(lake_drop_index, total, lake_drop_index_requests_total);
+    REGISTER_STORAGE_METRIC(lake_idg_files_written_total);
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, total, base_compaction_request_total);
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, failed, base_compaction_request_failed);
     REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, total, cumulative_compaction_request_total);
@@ -307,6 +311,8 @@ void StorageMetrics::_register_thread_pool_metrics(const std::string& name, Thre
     REGISTER_STORAGE_THREAD_POOL_METRICS(load_spill_block_merge);
     REGISTER_STORAGE_THREAD_POOL_METRICS(memtable_flush);
     REGISTER_STORAGE_THREAD_POOL_METRICS(lake_memtable_flush);
+    REGISTER_STORAGE_THREAD_POOL_METRICS(storage_cleanup);
+    REGISTER_STORAGE_THREAD_POOL_METRICS(lake_schema_change);
     REGISTER_STORAGE_THREAD_POOL_METRICS(segment_replicate);
     REGISTER_STORAGE_THREAD_POOL_METRICS(segment_flush);
     REGISTER_STORAGE_THREAD_POOL_METRICS(update_apply);

@@ -31,6 +31,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/storage_env.h"
 
 namespace starrocks::lake {
 
@@ -54,7 +55,7 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
         }
     }
 
-    TabletManager* tablet_mgr = _exec_env->lake_tablet_manager();
+    TabletManager* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (tablet_mgr == nullptr) {
         HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR, "Not built with --use-staros");
         return;

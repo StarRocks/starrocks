@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HLL (HyperLogLog) 类型用于近似去重，基于 HyperLogLog 算法实现，误差约为 1%。"
 ---
 
 # HLL (HyperLogLog)

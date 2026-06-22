@@ -23,6 +23,7 @@ add_library(TestUtil
     chunk_assert.cpp
     desc_tbl_builder.cc
     function_utils.cpp
+    local_snapshot_client.cpp
     schema_test_helper.cpp
     tablet_test_helper.cpp
     exprs_test_helper.cpp

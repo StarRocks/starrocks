@@ -22,12 +22,26 @@ add_subdirectory(rowset)
 ADD_BE_LIB(StoragePrimitive
     primitive/aggregate_type.cpp
     primitive/chunk_iterator.cpp
+    primitive/column_and_predicate.cpp
+    primitive/column_expr_predicate.cpp
+    primitive/column_in_predicate.cpp
+    primitive/column_not_in_predicate.cpp
+    primitive/column_or_predicate.cpp
+    primitive/column_null_predicate.cpp
+    primitive/column_placeholder_predicate.cpp
+    primitive/column_predicate_cmp.cpp
+    primitive/column_predicate_dict_conjuct.cpp
+    primitive/column_value_range.cpp
+    primitive/conjunctive_predicates.cpp
+    primitive/disjunctive_predicates.cpp
     primitive/edit_version.cpp
     primitive/empty_iterator.cpp
     primitive/flat_json_config.cpp
     primitive/key_coder.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/predicate_parser.cpp
+    primitive/predicate_tree/predicate_tree.cpp
     primitive/storage_ids.cpp
     primitive/union_iterator.cpp
 )
@@ -76,7 +90,6 @@ set(STORAGE_FILES
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
-    publish_version_manager.cpp
     olap_define.cpp
     olap_server.cpp
     persistent_index.cpp
@@ -84,11 +97,14 @@ set(STORAGE_FILES
     primary_key_encoder.cpp
     protobuf_file.cpp
     replication_txn_manager.cpp
+    remote_snapshot_client.cpp
     replication_utils.cpp
     segment_stream_converter.cpp
     del_file_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
+    storage_cleanup_executor.cpp
+    storage_env.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
@@ -161,7 +177,6 @@ set(STORAGE_FILES
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
-    task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_manual_compaction_task.cpp
@@ -172,21 +187,10 @@ set(STORAGE_FILES
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_variant_helper.cpp
-    column_predicate_cmp.cpp
-    column_in_predicate.cpp
-    column_not_in_predicate.cpp
-    column_null_predicate.cpp
-    column_or_predicate.cpp
-    column_and_predicate.cpp
-    column_expr_predicate.cpp
-    conjunctive_predicates.cpp
     runtime_filter_predicate.cpp
-    predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
-    disjunctive_predicates.cpp
     predicate_parser.cpp
-    push_handler.cpp
     row_store_encoder.cpp
     row_store_encoder_simple.cpp
     row_store_encoder_factory.cpp
@@ -209,7 +213,6 @@ set(STORAGE_FILES
     compaction.cpp
     rowset_merger.cpp
     column_predicate_rewriter.cpp
-    column_predicate_dict_conjuct.cpp
     column_predicate_inverted_index_fallback.cpp
     compaction_task.cpp
     compaction_utils.cpp
@@ -248,8 +251,14 @@ set(STORAGE_FILES
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
+    lake/lake_proto_normalizer.cpp
     lake/rowset.cpp
     lake/segment_metadata_filter.cpp
+    lake/segment_task_runner.cpp
+    lake/index_delta_group_loader.cpp
+    lake/index_file_reader.cpp
+    lake/index_file_writer.cpp
+    lake/add_index_schema_change.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
@@ -262,6 +271,7 @@ set(STORAGE_FILES
     lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
+    lake/segment_pk_iterator.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
@@ -330,9 +340,11 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
     index/vector/empty_index_reader.cpp
+    index/vector/vector_index_cache.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
+    index/vector/vector_index_file_reader.cpp
     index/vector/vector_index_reader_factory.cpp
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp

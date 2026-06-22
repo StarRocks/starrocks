@@ -17,9 +17,11 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "base/logging.h"
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/datum_convert.h"
+#include "column/type_converter.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exprs/expr_factory.h"
@@ -27,6 +29,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/delta_writer.h"
@@ -37,7 +40,6 @@
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -76,6 +78,7 @@ protected:
     TabletManager* _tablet_mgr;
     TxnManager* _txn_mgr;
     MemPool _mem_pool;
+    TypeInfoAllocator _type_info_allocator = make_type_info_allocator(&_mem_pool);
     std::vector<SlotDescriptor> _slots;
     MemTracker _mem_tracker;
     OlapReaderStatistics _stats;
@@ -206,7 +209,7 @@ void SchemaChangeTest::test_convert_to_varchar(LogicalType type, int type_size, 
     Datum dst_datum;
 
     auto converter = get_type_converter(type, TYPE_VARCHAR);
-    ASSERT_OK(converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_mem_pool));
+    ASSERT_OK(converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_type_info_allocator));
     EXPECT_EQ(expect_val, dst_datum.get_slice().to_string());
 }
 
@@ -223,7 +226,7 @@ void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size
     Datum dst_datum;
 
     auto converter = get_type_converter(TYPE_VARCHAR, type);
-    ASSERT_OK(converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_mem_pool));
+    ASSERT_OK(converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_type_info_allocator));
     EXPECT_EQ(expect_val, dst_datum.get<T>());
 }
 
@@ -325,7 +328,8 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
     Datum dst_datum;
 
     auto converter = get_type_converter(TYPE_FLOAT, TYPE_DOUBLE);
-    Status st = converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_mem_pool);
+    Status st =
+            converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_type_info_allocator);
 
     ASSERT_TRUE(st.ok());
     EXPECT_EQ(1.2345, dst_datum.get_double());
@@ -349,7 +353,8 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     Datum dst_datum;
     auto converter = get_type_converter(TYPE_DATETIME_V1, TYPE_DATE_V1);
 
-    Status st = converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_mem_pool);
+    Status st =
+            converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_type_info_allocator);
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
@@ -372,7 +377,8 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     Datum dst_datum;
     auto converter = get_type_converter(TYPE_DATE_V1, TYPE_DATETIME_V1);
 
-    Status st = converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_mem_pool);
+    Status st =
+            converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_type_info_allocator);
     ASSERT_TRUE(st.ok());
 
     int64_t dst_value = ((time_tm.tm_year + 1900) * 10000L + (time_tm.tm_mon + 1) * 100L + time_tm.tm_mday) * 1000000L;
@@ -394,7 +400,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     Datum dst_datum;
     auto converter = get_type_converter(TYPE_INT, TYPE_DATE);
 
-    Status st = converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_mem_pool);
+    Status st =
+            converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_type_info_allocator);
     ASSERT_TRUE(st.ok());
 
     EXPECT_EQ("2021-09-28", dst_datum.get_date().to_string());
@@ -415,7 +422,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     Datum dst_datum;
     auto converter = get_type_converter(TYPE_INT, TYPE_DATE_V1);
 
-    Status st = converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_mem_pool);
+    Status st =
+            converter->convert_datum(f1.type().get(), src_datum, f2.type().get(), &dst_datum, &_type_info_allocator);
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
@@ -645,7 +653,7 @@ TEST_F(SchemaChangeTest, convert_varchar_to_json) {
 
         auto converter = get_type_converter(TYPE_VARCHAR, TYPE_JSON);
         Status st = converter->convert_column(_varchar_type.get(), *src_column, _json_type.get(), dst_column.get(),
-                                              &_mem_pool);
+                                              &_type_info_allocator);
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(*dst_column->get_object(0), expected);
     }
@@ -659,8 +667,8 @@ TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     src_column->append(&json);
 
     auto converter = get_type_converter(TYPE_JSON, TYPE_VARCHAR);
-    Status st =
-            converter->convert_column(_json_type.get(), *src_column, _varchar_type.get(), dst_column.get(), &_mem_pool);
+    Status st = converter->convert_column(_json_type.get(), *src_column, _varchar_type.get(), dst_column.get(),
+                                          &_type_info_allocator);
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(dst_column->get_slice(0), json_str);
 }

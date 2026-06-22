@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "StarRocks 2.0 release notes: Primary Key table GA with Stream/Broker/Routine Load support, external table support, expression pushdown to storage layer, and memory management improvements."
+description: "StarRocks 2.0 release notes: Primary Key table GA with Stream/Broker/Routine Load support, external table support, expression pushdown to storage layer, and..."
 ---
 
 # StarRocks version 2.0

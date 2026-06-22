@@ -21,7 +21,6 @@
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
@@ -128,6 +127,10 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
+        // Mirror the duplicate-key path: without this, shared-data primary-key tables never
+        // record vector_index_ids, so async builds are never scheduled and sync-built .vi
+        // files are never vacuumed.
+        record_segment_vector_index_ids(segment_file_info, _seg_writer.get());
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;

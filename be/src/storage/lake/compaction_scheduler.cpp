@@ -38,7 +38,6 @@
 #include "gen_cpp/lake_service.pb.h"
 #include "gutil/stl_util.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
@@ -225,7 +224,7 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
           _contexts(),
           _task_queues(config::compact_threads) {
     CHECK_GT(_task_queues.task_queue_size(), 0);
-    auto st = ThreadPoolBuilder("cloud_native_compact")
+    auto st = ThreadPoolBuilder("lake_compact")
                       .set_min_threads(0)
                       .set_max_threads(INT_MAX)
                       .set_max_queue_size(INT_MAX)

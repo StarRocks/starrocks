@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "向 StarRocks 表中插入或覆盖写入数据，支持同步和异步导入。"
 ---
 
 # INSERT

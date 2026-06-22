@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic describes non-reserved keywords and reserved keywords."
+description: "Reference list of reserved and non-reserved keywords in StarRocks SQL."
 ---
 
 # Keywords

@@ -38,6 +38,8 @@
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "compute_env/runtime_range_pruner.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "glog/logging.h"
@@ -46,9 +48,6 @@
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_expr_predicate.h"
-#include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
@@ -60,6 +59,9 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/update_manager.h"
 #include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/column_expr_predicate.h"
+#include "storage/primitive/column_or_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/projection_iterator.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/roaring2range.h"
@@ -77,8 +79,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
-#include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -297,7 +297,7 @@ private:
         std::map<std::string, std::string> query_params;
         double vector_range = -1.0;
         int result_order = 0;
-        bool use_ivfpq = false;
+        bool refine_distance = false;
 
         // Brute-force fallback fields (when .vi file is missing)
         bool use_brute_force = false;
@@ -313,7 +313,7 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const { return use_vector_index && !refine_distance; }
     };
 
     // Inverted index related context, only created when needed
@@ -475,7 +475,6 @@ private:
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
-    Status _prepare_vector_index();
     Status _init_ann_reader();
     void _setup_brute_force_fallback(const TabletIndex& index);
     void _compute_brute_force_distances(const Column* vector_column, Chunk* chunk);
@@ -812,10 +811,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _vector_index_ctx->vector_slot_id = _opts.vector_search_option->vector_slot_id;
         _vector_index_ctx->vector_range = _opts.vector_search_option->vector_range;
         _vector_index_ctx->result_order = _opts.vector_search_option->result_order;
-        _vector_index_ctx->use_ivfpq = _opts.vector_search_option->use_ivfpq;
+        _vector_index_ctx->refine_distance = _opts.vector_search_option->refine_distance;
         _vector_index_ctx->query_params = _opts.vector_search_option->query_params;
 
-        if (_vector_index_ctx->vector_range >= 0 && _vector_index_ctx->use_ivfpq) {
+        if (_vector_index_ctx->vector_range >= 0 && _vector_index_ctx->refine_distance) {
             _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
                                    _opts.vector_search_option->k_factor;
         } else {
@@ -916,7 +915,6 @@ Status SegmentIterator::_init_internal() {
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
     _init_column_access_paths();
-    RETURN_IF_ERROR(_prepare_vector_index());
     RETURN_IF_ERROR(_init_ann_reader());
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
@@ -991,9 +989,9 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
             break;
         }
     }
-    auto status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs,
-                                                               static_cast<size_t>(_segment->num_rows()),
-                                                               _vector_index_ctx->k, user_set_ef);
+    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs,
+                                                                 static_cast<size_t>(_segment->num_rows()),
+                                                                 _vector_index_ctx->k, user_set_ef);
     // empty ann reader — caller will set up brute-force fallback
     if (status.is_not_supported()) {
         _vector_index_ctx->use_vector_index = false;
@@ -1006,7 +1004,7 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
 }
 
 // Sets up brute-force fallback state and ensures the vector data column is in _schema.
-// Called from _prepare_vector_index and _init_ann_reader, both before _init_column_iterators.
+// Called from _init_ann_reader, before _init_column_iterators.
 void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     int32_t vector_col_uid = index.col_unique_ids()[0];
     _vector_index_ctx->use_vector_index = false;
@@ -1066,43 +1064,16 @@ void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     _vector_index_ctx->added_vector_data_column = true;
 }
 
-// Handles the case where the segment footer explicitly marks no .vi file (skip_vector_index).
-// Adds the vector column to _schema so it's read in the same I/O pass as other columns.
-Status SegmentIterator::_prepare_vector_index() {
-    if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index || _vector_index_ctx->use_ivfpq) {
-        return Status::OK();
-    }
-
-    if (!_segment->skip_vector_index()) {
-        return Status::OK();
-    }
-
-    // Footer marks no .vi file — find the vector index and set up brute-force
-    for (const auto& index : *_segment->tablet_schema().indexes()) {
-        if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
-            _setup_brute_force_fallback(index);
-            break;
-        }
-    }
-    return Status::OK();
-}
-
-// Opens the .vi file and initializes the ANN reader.
-// If the .vi file is missing at runtime (e.g., async build not yet finished),
-// falls back to brute-force — the vector column added to _schema will be
-// initialized by the subsequent _init_column_iterators call.
+// Opens the .vi and inits the ANN reader. If the index is unusable (footer marks no .vi, or the .vi
+// is missing at runtime), turns it off and -- only for the trust path -- sets up the brute-force
+// fallback (refine recomputes above the scan). Runs before _init_column_iterators so any column the
+// fallback adds to _schema is read in the same pass.
 Status SegmentIterator::_init_ann_reader() {
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
     }
 
-    if (_segment->skip_vector_index()) {
-        // Already handled by _prepare_vector_index
-        _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
-    }
-
-    // Find vector index from tablet schema
+    // Locate the vector index (needed to open the .vi or to build a brute-force fallback).
     std::shared_ptr<TabletIndex> tablet_index_meta;
     for (const auto& index : *_segment->tablet_schema().indexes()) {
         if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
@@ -1111,11 +1082,16 @@ Status SegmentIterator::_init_ann_reader() {
         }
     }
     if (!tablet_index_meta) {
-        return Status::OK();
+        // Vector query but no VECTOR index in this segment's schema -- fail rather than deref a null reader.
+        return Status::InternalError(
+                fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
     }
 
+    if (_segment->skip_vector_index()) {
+        // Footer marks no .vi for this segment.
+        _vector_index_ctx->use_vector_index = false;
+    } else {
 #ifdef WITH_TENANN
-    {
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
             index_path =
@@ -1124,19 +1100,16 @@ Status SegmentIterator::_init_ann_reader() {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());
         }
-
         FileSystem* vi_fs = _opts.belonged_to_cloud_native ? _segment->file_system() : nullptr;
+        // Turns off use_vector_index on a runtime NotFound / not-supported.
         RETURN_IF_ERROR(_init_reader_from_file(index_path, tablet_index_meta, _vector_index_ctx->query_params, vi_fs));
-    }
 #else
-    // Without TenANN, ANN index is not available — force brute-force
-    _vector_index_ctx->use_vector_index = false;
+        _vector_index_ctx->use_vector_index = false; // no TenANN
 #endif
+    }
 
-    if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->use_ivfpq) {
-        // .vi file not found, empty reader, or no TenANN support.
-        // Set up brute-force fallback for non-IVFPQ only. IVFPQ computes distance
-        // in the expression layer, not via a BE-produced distance column.
+    if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
+        // No usable index: trust needs brute-force to produce the distance column; refine recomputes above.
         _setup_brute_force_fallback(*tablet_index_meta);
     }
 
@@ -1378,6 +1351,17 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
     iter_opts.has_preaggregation = _opts.has_preaggregation;
+
+    // IDG read-side context (lake only; nullptr loader keeps the iterator on
+    // the legacy footer-only path). Thread through so ScalarColumnIterator
+    // can probe whether a standalone .idx file covers this (segment, col)
+    // and surface it via has_bitmap_index() / has_ngram_bloom_filter_index()
+    // to upper pruning gates.
+    iter_opts.idg_loader = _opts.idg_loader;
+    iter_opts.tablet_id = _opts.tablet_id;
+    iter_opts.segment_id = _opts.rowset_id + segment_id();
+    iter_opts.query_version = _opts.version;
+    iter_opts.col_unique_id = ucid;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
                                  .buffer_size = _opts.lake_io_opts.buffer_size,
@@ -2389,7 +2373,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk = _context->_adapt_global_dict_chunk.get();
     }
 
-    if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->use_ivfpq) {
+    if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
         DCHECK(rowid != nullptr);
         FloatColumn::MutablePtr distance_column = FloatColumn::create();
         vector<rowid_t> rowids;
@@ -3534,10 +3518,19 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
     pred_tree = PredicateTree::create(std::move(new_root));
 }
 
+// Prefer the new double field (which can carry sub-1% values such as 0.5); fall back to the legacy
+// integer field for backward compatibility with an old FE that does not set probability_percent_v2.
+static double sample_probability_percent(const TTableSampleOptions& opts) {
+    if (opts.__isset.probability_percent_v2) {
+        return opts.probability_percent_v2;
+    }
+    return static_cast<double>(opts.probability_percent);
+}
+
 StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
     size_t rows_per_block = _segment->num_rows_per_block();
     size_t total_rows = _segment->num_rows();
-    int64_t probability_percent = _opts.sample_options.probability_percent;
+    double probability_percent = sample_probability_percent(_opts.sample_options);
     int64_t random_seed = _opts.sample_options.random_seed;
 
     auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
@@ -3554,7 +3547,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
     int32_t num_data_pages = column_reader->num_data_pages();
     PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
 
-    int64_t probability_percent = _opts.sample_options.probability_percent;
+    double probability_percent = sample_probability_percent(_opts.sample_options);
     int64_t random_seed = _opts.sample_options.random_seed;
     auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
 
@@ -3572,9 +3565,10 @@ Status SegmentIterator::_apply_data_sampling() {
     RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
-    RETURN_IF(_opts.sample_options.probability_percent <= 0, Status::InvalidArgument("probability_percent must > 0"));
+    RETURN_IF(sample_probability_percent(_opts.sample_options) <= 0,
+              Status::InvalidArgument("probability_percent must > 0"));
 
-    DCHECK(_opts.sample_options.__isset.probability_percent);
+    DCHECK(_opts.sample_options.__isset.probability_percent || _opts.sample_options.__isset.probability_percent_v2);
     DCHECK(_opts.sample_options.__isset.random_seed);
     DCHECK(_opts.sample_options.__isset.sample_method);
 
@@ -3605,6 +3599,17 @@ IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _column_files.at(cid).get();
     opts.stats = _opts.stats;
+
+    // IDG context (lake only; nullptr loader keeps readers on the footer path).
+    opts.idg_loader = _opts.idg_loader;
+    opts.tablet_id = _opts.tablet_id;
+    opts.segment_id = _opts.rowset_id + segment_id();
+    opts.query_version = _opts.version;
+    // Column unique id needed by the IDG loader to match per-column entries;
+    // -1 when column is virtual / synthesized.
+    if (cid < static_cast<ColumnId>(_schema.num_fields()) && _schema.field(cid) != nullptr) {
+        opts.col_unique_id = _schema.field(cid)->uid();
+    }
     return opts;
 }
 
@@ -3642,6 +3647,15 @@ Status SegmentIterator::_apply_bitmap_index() {
             opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
+            // IDG context — without this, the IDG branch in
+            // ColumnReader::new_bitmap_index_iterator is unreachable and
+            // fast-path built bitmap indexes stored in .idx sidecar files
+            // would be invisible to the pruning gate.
+            opts.idg_loader = _opts.idg_loader;
+            opts.tablet_id = _opts.tablet_id;
+            opts.segment_id = _opts.rowset_id + segment_id();
+            opts.query_version = _opts.version;
+            opts.col_unique_id = ucid;
 
             BitmapIndexIterator* bitmap_iter = nullptr;
             RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));

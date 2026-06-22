@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Asynchronous materialized view monitoring metrics support from v3.1 onwards."
 sidebar_position: 20
 ---
 
@@ -36,17 +37,17 @@ scrape_configs:
 ### mv_refresh_jobs
 
 - 类型：Counter
-- 描述：物化视图刷新作业的总数。
+- 描述：物化视图触发的刷新作业总数。一个刷新作业对应一次用户发起或调度的刷新；单个作业内部可能执行多个 Task Run。每个作业在达到终止状态时计数一次。MERGED 状态的 Task Run（被合并到后续批次的子任务）不计入。
 
 ### mv_refresh_total_success_jobs
 
 - 类型：Counter
-- 描述：执行成功的物化视图刷新作业的数量。
+- 描述：执行成功的物化视图刷新作业的数量。每个作业成功时计数一次。
 
 ### mv_refresh_total_failed_jobs
 
 - 类型：Counter
-- 描述：执行失败的物化视图刷新作业的数量。
+- 描述：执行失败的物化视图刷新作业的数量。每个作业失败时计数一次。
 
 ### mv_refresh_total_empty_jobs
 
@@ -111,4 +112,4 @@ scrape_configs:
 ### mv_refresh_duration
 
 - 类型：Histogram
-- 描述：执行成功的物化视图刷新作业的持续时间。
+- 描述：刷新作业的挂钟时长，单位为毫秒。对于多批次作业，从第一个 Task Run 开始到最后一个 Task Run 完成为止计算。

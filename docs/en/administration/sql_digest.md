@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This topic introduces the SQL Digest feature of StarRocks."
+description: "How to use SQL Digest in StarRocks to fingerprint and group SQL queries with the same structure for analysis."
 ---
 
 # SQL Digest

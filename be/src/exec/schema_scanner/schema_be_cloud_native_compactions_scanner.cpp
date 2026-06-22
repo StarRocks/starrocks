@@ -22,6 +22,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 
@@ -55,7 +56,7 @@ Status SchemaBeCloudNativeCompactionsScanner::start(RuntimeState* state) {
     if (UNLIKELY(_chunk_size <= 0)) {
         return Status::InternalError("RuntimeState::chunk_size() cannot be zero or negative");
     }
-    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     if (tablet_manager != nullptr) {
         tablet_manager->compaction_scheduler()->list_tasks(&_infos);
     }

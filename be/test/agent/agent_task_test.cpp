@@ -28,14 +28,18 @@
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/cpu_info.h"
+#include "data_workflows/load/engine_batch_load_task.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
+#include "platform/store_path.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/task/engine_clone_task.h"
+#include "testutil/local_snapshot_client.h"
 
 namespace starrocks {
 
@@ -44,6 +48,10 @@ public:
     AgentTaskTest() = default;
     ~AgentTaskTest() override = default;
     void SetUp() override {
+        _previous_snapshot_client =
+                StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                        local_snapshot_client_for_test());
+
         TCreateTabletReq create_tablet_req = get_create_tablet_request(_tablet_id, _schema_hash, _version);
         Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
                 create_tablet_req, StorageEngine::instance()->get_stores());
@@ -66,6 +74,8 @@ public:
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                _previous_snapshot_client);
     }
 
     TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash, int64_t version) {
@@ -102,6 +112,7 @@ protected:
     int32_t _schema_hash = 368169781;
     int64_t _version = 2;
     int64_t _src_version = 10;
+    RemoteSnapshotClient* _previous_snapshot_client = nullptr;
 };
 
 TEST_F(AgentTaskTest, test_replication_txn) {
@@ -120,7 +131,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
     remote_snapshot_request.__set_src_visible_version(_src_version);
     agent_task_request.__set_remote_snapshot_req(remote_snapshot_request);
 
@@ -255,10 +266,23 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     clone_req.__set_tablet_id(_tablet_id);
     auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
     tablet->set_is_dropping(true);
-    EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, nullptr);
+    Status clone_status;
+    EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, &clone_status);
     Status st = task.execute();
     ASSERT_TRUE(st.is_corruption());
     tablet->set_is_dropping(false);
+}
+
+TEST_F(AgentTaskTest, batch_load_task_reports_invalid_push_type_through_storage_engine) {
+    TPushReq push_req;
+    push_req.__set_push_type(static_cast<TPushType::type>(-1));
+
+    std::vector<TTabletInfo> tablet_infos;
+    EngineBatchLoadTask task(push_req, &tablet_infos, 1, GlobalEnv::GetInstance()->load_mem_tracker());
+    Status st = StorageEngine::instance()->execute_task(&task);
+
+    ASSERT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_NE(std::string::npos, st.message().find("invalid push type")) << st;
 }
 
 TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
@@ -269,7 +293,7 @@ TEST_F(AgentTaskTest, get_thread_pool_returns_registered_pools) {
     EXPECT_NE(nullptr, agent_server->get_thread_pool(TTaskType::REMOTE_SNAPSHOT));
 }
 
-// The dedicated `replicate_file` pool is built by AgentServer::Impl::init() alongside
+// The dedicated `replicate_file` pool is built by AgentServer::Impl::start() alongside
 // `replicate_snapshot`. Verify it's exposed via the public accessor and is a distinct
 // pool from `replicate_snapshot` — the distinct-pool invariant is what makes the
 // outer-task -> ThreadPoolToken::wait() pattern in lake replication safe.
@@ -314,8 +338,10 @@ TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
     ASSERT_NE(nullptr, thread_pool);
 
     constexpr int new_parallelism = 4;
+    const auto* store_path_registry = ExecEnv::GetInstance()->platform_services().store_path_registry;
+    ASSERT_NE(nullptr, store_path_registry);
     const int expected_max_threads =
-            std::max(static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * new_parallelism, 2);
+            std::max(static_cast<int>(store_path_registry->store_path_count()) * new_parallelism, 2);
 
     agent_server->update_max_thread_by_type(TTaskType::CLONE, new_parallelism);
 

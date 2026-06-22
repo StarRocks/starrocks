@@ -187,14 +187,61 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
 
-    @ConfField(mutable = true)
-    public static long slow_lock_log_every_ms = 3000L;
+    /**
+     * Minimum interval in milliseconds for the L2 slow-lock log tier — a full lock-info JSON line
+     * without stack traces. The three slow-lock log tiers are throttled progressively (strictest
+     * first): L1 full info + stacks ({@link #slow_lock_log_l1_stack_interval_ms}), L2 full info no
+     * stacks (this), L3 plain-text brief ({@link #slow_lock_log_l3_brief_interval_ms}). Tune
+     * {@code slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms}.
+     * Set to 0 or negative to disable the L2 gate (always admit a full-info line).
+     *
+     * Renamed from {@code slow_lock_log_every_ms} (kept as an alias for backward compatibility).
+     */
+    @ConfField(mutable = true, aliases = {"slow_lock_log_every_ms"})
+    public static long slow_lock_log_l2_info_interval_ms = 3000L;
 
     @ConfField(mutable = true)
     public static int slow_lock_stack_trace_reserve_levels = 15;
 
     @ConfField(mutable = true)
     public static boolean slow_lock_print_stack = true;
+
+    /**
+     * Minimum interval in milliseconds between slow-lock stack-trace captures across log events.
+     * Within a single event the decision is all-or-nothing for every owner. Only applies when
+     * {@link #slow_lock_print_stack} is true. Setting this to 0 disables the rate limit (the
+     * original behavior, every slow-lock event captures stacks).
+     *
+     * Capturing thread stacks invokes JVM safepoint operations that are expensive in large
+     * clusters where slow-lock events fire frequently. This gate caps how often the costly
+     * capture runs without suppressing the per-event warn log itself.
+     */
+    @ConfField(mutable = true)
+    public static long slow_lock_log_l1_stack_interval_ms = 30000L;
+
+    /**
+     * Maximum number of waiter entries serialized into a single LockManager slow-lock log event.
+     * Beyond this cap, the remaining waiters are summarized with a single "remain N waiters
+     * omitted" trailer instead of being listed individually, to bound Gson serialization and
+     * log-line size under extreme contention. Set to 0 or negative to disable the cap.
+     */
+    @ConfField(mutable = true)
+    public static int slow_lock_max_waiter_count_to_log = 30;
+
+    /**
+     * Floor interval in milliseconds for the L3 slow-lock brief — a single plain-text warn
+     * line (no JSON, no stack) emitted when the richer L1/L2 tiers are throttled. The brief is
+     * emitted at most once per this interval: events arriving while the L3 gate is still closed are
+     * suppressed, so this does NOT guarantee a line per event — it bounds the worst-case silence to
+     * one brief interval during sustained contention. This is the loosest of the three
+     * slow-lock log throttles and should be tuned smaller than {@link #slow_lock_log_l2_info_interval_ms}
+     * (L2) which in turn is smaller than {@link #slow_lock_log_l1_stack_interval_ms} (L1):
+     * {@code slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms}.
+     * Set to 0 or negative to make the brief unthrottled — then every otherwise-throttled
+     * event leaves a line (predictable but potentially many per second under a storm).
+     */
+    @ConfField(mutable = true)
+    public static long slow_lock_log_l3_brief_interval_ms = 1000L;
 
     @ConfField
     public static String custom_config_dir = "/conf";
@@ -852,6 +899,11 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_port = 8030;
 
+    @ConfField(comment = "Whether to require Basic Auth for external HTTP endpoints. " +
+            "Internal endpoints (FE meta sync, health/metrics probes, OAuth2 callback) are always exempt. " +
+            "Default false for backward compatibility. Immutable; requires an FE restart to change.")
+    public static boolean enable_http_auth = false;
+
     /**
      * Fe https port
      * Currently, all FEs' https port must be the same.
@@ -1150,6 +1202,15 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean lake_enable_batch_publish_version = true;
+
+    /**
+     * Route lake ADD INDEX / DROP INDEX alters through the LakeTableAddIndexJob /
+     * LakeTableDropIndexJob fast path (metadata-only, no shadow index). Set to
+     * false to fall back to the regular LakeTableSchemaChangeJob path. Intended
+     * as a safety valve; the fast path is the supported default.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_lake_add_index_fast_path = true;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
@@ -1555,6 +1616,14 @@ public class Config extends ConfigBase {
     public static int max_allowed_in_element_num_of_delete = 10000;
 
     /**
+     * When true, DELETE on a non-Primary-Key OLAP table (Duplicate / Aggregate / Unique Key)
+     * returns an OK-packet info message reminding the user that DELETE writes delete markers
+     * (merge-on-read) and recommending ALTER TABLE ... TRUNCATE PARTITION for bulk removal.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_non_primary_key_delete_warning = true;
+
+    /**
      * control materialized view
      */
     @ConfField(mutable = true)
@@ -1714,8 +1783,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The interval of create partition batch, to avoid too frequent")
     public static long mv_create_partition_batch_interval_ms = 1000;
 
-    @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length varchar column " +
-            "in materialized view creation/ctas")
+    @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length char/varchar column " +
+            "in materialized view creation")
     public static boolean transform_type_prefer_string_for_varchar = true;
 
     @ConfField(mutable = true, comment = "Whether materialized view rewrite should consider underlying table data layout " +
@@ -2489,6 +2558,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_statistic_cache_refresh_after_write = false;
 
+    @ConfField(mutable = true, comment = "When replaying external-table statistics journals on followers " +
+            "(and during restart recovery), invalidate the connector statistics cache by the table UUID " +
+            "persisted in the journal and reload it lazily on the next query, instead of eagerly refreshing " +
+            "it. Eager refresh resolves external table metadata (MetadataMgr.getTable), which may block the " +
+            "replayer thread on HMS/object storage. Disabled by default to preserve the legacy eager-refresh " +
+            "behavior; journals without a persisted UUID always fall back to eager refresh regardless of this flag.")
+    public static boolean enable_external_stats_lazy_refresh_on_replay = false;
+
     @ConfField(mutable = true)
     public static long statistic_collect_too_many_version_sleep = 600000; // 10min
     /**
@@ -2567,6 +2644,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The NDV estimator: DUJ1/GEE/LINEAR/POLYNOMIAL")
     public static String statistics_sample_ndv_estimator =
             NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
+
+    @ConfField(mutable = true, comment = "Declared-length threshold above which a string column " +
+            "is collected by its own dedicated statistics SQL during statistics collection. " +
+            "Disabled by default (0); set a positive value to enable the isolation.")
+    public static long statistics_large_string_column_merge_threshold = 0;
 
     /**
      * The partition size of sample collect, default 300 partitions
@@ -2698,10 +2780,21 @@ public class Config extends ConfigBase {
     public static long auto_partition_wait_alter_finish_timeout_ms = 5000;
 
     /**
+     * If true, partition creation (manual ALTER TABLE ADD PARTITION, automatic creation during
+     * load, dynamic-partition scheduler) is allowed to proceed concurrently with alter jobs that
+     * declare allowConcurrentPartitionCreation() (currently the shared-data ADD/DROP INDEX
+     * fast-path jobs), and with the transient UPDATING_META state of fast schema evolution,
+     * instead of rejecting the DDL or cancelling the alter job. Set to false to restore the
+     * legacy exclusive behavior.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_concurrent_add_partition_during_alter = true;
+
+    /**
      * Used to limit num of partition for load open partition number
      */
     @ConfField(mutable = true)
-    public static long max_load_initial_open_partition_number = 32;
+    public static long max_load_initial_open_partition_number = 4096;
 
     /**
      * enable automatic bucket for random distribution table
@@ -3245,8 +3338,8 @@ public class Config extends ConfigBase {
     public static String azure_adls2_oauth2_client_id = "";
     @ConfField
     public static String azure_adls2_oauth2_client_secret = "";
-    @ConfField
-    public static String azure_adls2_oauth2_oauth2_client_endpoint = "";
+    @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
+    public static String azure_adls2_oauth2_client_endpoint = "";
 
     // gcp gs
     @ConfField
@@ -3625,6 +3718,20 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String profile_info_format = "default";
+
+    /**
+     * When enabled, load profiles (stream load, routine load, broker load, merge commit, etc.) are
+     * additionally written to the profile log (fe.profile.log) when pushed to `ProfileManager`, as a
+     * single-line JSON record in the same format as the query profile log. This makes load profiles
+     * recoverable from the log even after they are evicted from `ProfileManager`
+     * due to `profile_info_reserved_num`. The profile log is used rather than fe.log because its JSON
+     * layout caps strings at `sys_log_json_profile_max_string_length` instead of the much smaller
+     * `sys_log_json_max_string_length`, so large profiles are not truncated. Only profiles with
+     * QUERY_TYPE = "Load" are printed; query profiles are not affected.
+     * Default value: false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_print_load_profile_to_log = false;
 
     /**
      * When the session variable `enable_profile` is set to `false` and `big_query_profile_threshold` is set to 0,
@@ -4055,12 +4162,6 @@ public class Config extends ConfigBase {
     public static boolean allow_system_reserved_names = false;
 
     /**
-     * Whether to use LockManager to manage lock usage
-     */
-    @ConfField
-    public static boolean lock_manager_enabled = true;
-
-    /**
      * Number of Hash of Lock Table
      */
     @ConfField
@@ -4474,21 +4575,37 @@ public class Config extends ConfigBase {
             + "pre-split to run.")
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
+            + "INSERT INTO ... SELECT FROM <table> loads (INSERT-from-OLAP-table). Default on as of "
+            + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
+            + "enable_tablet_pre_split must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_insert_from_table = true;
+
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
             + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
             + "On expiry the coordinator skips pre-split and the load proceeds against the "
-            + "original single tablet.")
-    public static long tablet_pre_split_pre_submit_timeout_seconds = 30L;
+            + "original single tablet. Default 300s: the data-tier sampler can take tens of "
+            + "seconds on large datasets / slow object storage (a ~40GB many-file Parquet "
+            + "load sampled in ~78s in testing), and this budget mainly bites large loads — "
+            + "exactly the ones pre-split benefits; small loads sample in well under a second "
+            + "regardless. The load stays PENDING for at most this long during sampling, so "
+            + "keep it below the load's own timeout.")
+    public static long tablet_pre_split_pre_submit_timeout_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Maximum time the coordinator will wait for an admitted "
-            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Semantics differ by "
-            + "load path: INSERT-from-FILES synchronously waits and on expiry proceeds without "
-            + "abort — the INSERT then plans against the currently visible tablet layout (still "
-            + "the original layout if the daemon has not yet transitioned, or partially / fully "
-            + "post-split if the daemon raced past the wait), and the hard-cap counter records "
-            + "the timeout; the strict runPreSplit wrapper used by tests aborts the calling load "
-            + "via PreSplitPostSubmitTimeoutException; Broker Load is fire-and-forget and does "
-            + "not wait at all.")
+            + "Sample-Based Tablet Pre-Split reshard job to reach FINISHED. Both INSERT-from-FILES "
+            + "and Broker Load synchronously wait and on expiry proceed without abort — the load "
+            + "then plans against the currently visible tablet layout (still the original layout "
+            + "if the daemon has not yet transitioned, or partially / fully post-split if the "
+            + "daemon raced past the wait), and the hard-cap counter records the timeout. The "
+            + "strict runPreSplit wrapper used by tests aborts the calling load via "
+            + "PreSplitPostSubmitTimeoutException. For Broker Load the wait runs after the broker "
+            + "pending task resolves file statuses but before beginTxn opens T_load — the wait "
+            + "occupies a pending_load_task_scheduler thread for at most this many seconds per "
+            + "table, so size max_broker_load_job_concurrency accordingly when many concurrent "
+            + "Broker Loads target a pre-splittable layout. Operator note: the Broker Load remains "
+            + "PENDING in SHOW LOAD during the wait and is still subject to its own timeoutSecond — "
+            + "set this well below the smallest Broker Load timeout in normal use.")
     public static long tablet_pre_split_post_submit_wait_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "

@@ -126,6 +126,9 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 CONF_mInt32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
 CONF_mInt32(drop_tablet_worker_count, "0");
+// The count of thread to clean up storage files.
+// 0 means storage cleanup worker count is equal to half of cpu core count.
+CONF_mInt32(storage_cleanup_worker_count, "0");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
@@ -153,6 +156,17 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_mInt32(alter_tablet_worker_count, "3");
+// Maximum number of segment-level sub-tasks executed in parallel within a single
+// lake schema-change task (per-tablet). Currently only the ADD INDEX fast path
+// (lake AddIndexSchemaChange) submits sub-tasks to the dedicated lake_schema_change
+// thread pool; LinkedSchemaChange / DirectSchemaChange / SortedSchemaChange and
+// the DROP INDEX fast path remain single-threaded and are unaffected.
+//
+// The dedicated storage-owned lake_schema_change thread-pool capacity is auto-derived as:
+//     pool_max = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+// so the outer alter pool and inner segment pool stay physically isolated and
+// never deadlock against each other.
+CONF_mInt32(lake_schema_change_per_tablet_parallelism, "4");
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 // The count of thread to clone. Deprecated
@@ -490,11 +504,28 @@ CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
-// Skip the parallel two-phase prefetch in LakePersistentIndex::load_dels when the update
-// mem tracker is already past this percent (0-100) of its limit. In that regime the function
-// falls back to a single-pass loop that holds only one decoded del-file column at a time,
-// trading the cold-start latency win for bounded peak memory.
-CONF_mInt32(pk_index_parallel_load_dels_mem_ratio, "50");
+// Maximum number of per-output-segment .lcrm reads kept in flight by
+// RowsMapperIterator during light COMPACTION publish. The unit is **sub-chunks**
+// (each lake_rows_mapper_sub_chunk_bytes in size, never crossing a segment
+// boundary): K controls how many sub-chunk reads stay in flight, decoupled from
+// segment count. Memory bound = K * lake_rows_mapper_sub_chunk_bytes. Each chunk
+// owns its own RandomAccessFile (no shared file-class state across tasks) and
+// is consumed in segment order via vector::swap (zero memcpy when a segment
+// fits one sub-chunk). Set to 1 to disable pipelining and fall back to the
+// sequential single-shot read path.
+CONF_mInt32(lake_rows_mapper_read_parallelism, "32");
+// Sub-chunk granularity for RowsMapperIterator pipelined reads. Each segment is
+// split into ceil(segment_bytes / sub_chunk_bytes) sub-chunks that the iterator
+// pipelines independently. Smaller values raise the achievable parallelism for
+// few-but-large output segments at the cost of more range-reads and an extra
+// memcpy on consume. Defaults to 4 MiB (starcache disk-tier block-friendly).
+CONF_mInt64(lake_rows_mapper_sub_chunk_bytes, "4194304");
+// Memory-pressure gate for the parallel prefetch paths used while rebuilding the shared-data
+// primary key index. When the update mem tracker is already past this percent (0-100) of its
+// limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a
+// time, trading the cold-start latency win for bounded peak memory. Gates parallel reads of
+// del, segment, and other files during the rebuild.
+CONF_mInt32(pk_index_parallel_rebuild_mem_ratio, "50");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
@@ -749,6 +780,16 @@ CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
+// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
+// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
+// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+CONF_Bool(enable_http_auth, "false");
+
+// Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
+// to that endpoint are rejected with HTTP 403 and the BE process is not exited.
+// This config is static and requires a BE restart to take effect.
+CONF_Bool(enable_stop_be_action, "true");
+
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
@@ -863,8 +904,11 @@ CONF_Int32(thrift_rpc_max_body_size, "0");
 // The connection will be closed if it has existed in the connection pool for longer than this value.
 CONF_Int32(thrift_rpc_connection_max_valid_time_ms, "5000");
 
-// txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
+// The Thrift RPC timeout (in milliseconds) used by BE stream-load plan (put) and
+// txn prepare/commit calls sent to the FE.
+// NOTE: renamed from `txn_commit_rpc_timeout_ms`, which is kept as a backward-compatible alias.
+CONF_mInt32(stream_load_thrift_rpc_timeout_ms, "60000");
+CONF_Alias(stream_load_thrift_rpc_timeout_ms, txn_commit_rpc_timeout_ms);
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -1306,9 +1350,6 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
-// Config for query debug trace
-CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
-
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
 CONF_mInt32(starlet_cache_thread_num, "16");
@@ -1391,14 +1432,72 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+// Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
+// When writing a txn log takes longer than this threshold, the stack trace of the slow thread
+// is dumped to the log to help diagnose slow object-storage writes.
+// Disabled by default (<= 0); set to a positive value such as 4000 (4 seconds) to enable.
+CONF_mInt64(lake_put_txn_log_timeout_guard_ms, "-1");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
+// Whether vacuum tasks honor the timeout carried in the request (VacuumRequest.timeout_ms)
+// and abort themselves once it elapses. Set to false to let vacuum tasks always run to
+// completion no matter how long the FE caller waits.
+CONF_mBool(lake_vacuum_enable_task_timeout, "true");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
+// below). Enabled by default: low-value sparse mid-tier picks are skipped per the
+// thresholds below. Set to false to turn off the entire gate in one step — every picked
+// level then compacts unconditionally (the pre-gate behavior) and the individual
+// threshold configs below have no effect.
+CONF_mBool(enable_lake_pk_compaction_score_gate, "true");
+// Skip compaction when the size-tiered selector picks a level whose total score is below
+// this threshold and none of the overrides below fire.
+//
+// Score formula (per rowset): io_count * 1MB / read_bytes  (sum across rowsets in level)
+// - Many small/overlapped rowsets => high score => compact (useful work)
+// - Few large non-overlapped rowsets => low score => skip (would just rewrite base)
+//
+// Suppresses sparse mid-tier base merges that re-write GBs of data with low file-count
+// reduction on large PK tables. Levels with overlapped rowsets always compact; the bcr,
+// size_overflow, and emergency overrides below additionally let delete-heavy,
+// overflowing, or read-pressured levels through. Lower toward 0 to skip less aggressively
+// (0 makes the gate a no-op since a level's score is always >= 0).
+CONF_mDouble(lake_pk_compaction_min_level_score, "2.0");
+// Minimum benefit/cost ratio (segments-saved per MB rewritten) for accepting a
+// sparse-mid-tier compaction pick. Together with the read-pressure emergency override
+// below, this turns the binary `min_level_score` gate into a graduated decision:
+// low-pressure partitions skip uneconomical rewrites, high-pressure ones bypass the
+// gate to keep up. Set to 0 to disable this override (only `min_level_score` applies).
+CONF_mDouble(lake_pk_compaction_min_benefit_cost_ratio, "0.005");
+// Read-pressure emergency override. When the partition's read_pressure_score
+// (segment count) exceeds this threshold, the gate auto-relaxes proportionally so that
+// hot partitions with many small rowsets don't get permanently stuck. Set to 0 to
+// disable the override (gate always applies).
+CONF_mDouble(lake_pk_compaction_emergency_score, "50.0");
+// Weight that converts a level's delete pressure into segment-equivalent benefit units,
+// folded into the bcr numerator:
+//   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
+// Intuition: one rowset that is 100% deleted is "worth w segments saved" from the
+// reader's perspective (i.e., cleaning it has the same benefit as eliminating w
+// hypothetical segments). For a sparse mid-tier with 8 input rowsets at 20% level-wide
+// delete_ratio, w=12 contributes 0.20 * 8 * 12 = 19.2 segment-equivalents on top of
+// the segment-count benefit. Tune up (e.g., 20) to be more aggressive against delete
+// accumulation; tune down (e.g., 4) to favor write amplification. Set to 0 to disable
+// the delete contribution (bcr falls back to segment-only benefit).
+CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "12.0");
+// Size accumulation upper-bound. When the picked level's total bytes exceed
+// alpha * max_rowset_bytes * size_tiered_level_multiple (i.e., alpha * next-tier-target),
+// force compaction regardless of min_level_score/bcr. alpha=2 caps long-tail
+// accumulation at 2x the natural size-tiered promotion target, preventing unbounded
+// mid-tier growth. Note: uses max_rowset_bytes from the actual picked rowsets, not the
+// level's compact_level which can be stale after pick_max_level merges levels.
+// Set to 0 to disable the override (no size cap).
+CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
@@ -1412,6 +1511,14 @@ CONF_mBool(enable_strict_delvec_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// When true, shared-data (lake) tablet metadata and txn log files are written with an
+// Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
+// corruption can be detected on read. Readers always auto-detect and verify the checksum when
+// a file has it, regardless of this flag; the flag only controls the write format. Defaults to
+// false: enable it only after the whole cluster has been upgraded to a version that understands
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses
+// the legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "false");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
@@ -1673,8 +1780,9 @@ CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 // ranges in [1,16], default value is 4.
 CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
-// Used by vector query cache, 500MB in default
-CONF_Int64(vector_query_cache_capacity, "536870912");
+// Vector index cache total capacity (HNSW whole-index + IVF-PQ blocks share
+// the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
+CONF_mString(vector_query_cache_capacity, "20%");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
@@ -1716,6 +1824,18 @@ CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+// Software prefetch distance (in rows) for the agg hash-map / hash-set
+// probe loop.  Default 16 is empirical for L3-resident tables; raise on
+// DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
+// per chunk; changes take effect on the next chunk.
+CONF_mInt32(agg_hash_map_prefetch_dist, "16");
+// Software prefetch is gated on the bucket array spilling L2: it is only
+// enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
+// Below that the table is L2-resident and prefetch is a net loss (measured by
+// agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
+// contended many-driver-per-core deployments where the effective L2 share per
+// table is smaller than the nominal per-core size.
+CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
 
@@ -1776,7 +1896,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");

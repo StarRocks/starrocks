@@ -624,9 +624,35 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-        transactionState.writeLock();
+        // Keep a stable reference to the object whose writeLock we actually acquire,
+        // so the finally block always unlocks the same object. The local
+        // `transactionState` reference may be reassigned to `latest` below when a
+        // concurrent commit has replaced the map entry; unlocking that reassigned
+        // object (which this thread never locked) would throw IllegalMonitorStateException
+        // and leak the lock on the original object.
+        final TransactionState lockedState = transactionState;
+        lockedState.writeLock();
         TransactionState copiedState = null;
         try {
+            // Re-fetch the latest TransactionState under writeLock. Between releasing
+            // readLock above and acquiring writeLock here, a concurrent commit path may
+            // have COW'd a new TransactionState object and replaced the map entry via
+            // unprotectUpsertTransactionState. The local `transactionState` reference
+            // would then point at a stale snapshot whose status is still PREPARED, even
+            // though the canonical map entry has already advanced to COMMITTED. Without
+            // this re-fetch, unprotectAbortTransaction's status-guard reads from the
+            // stale copy, the abort proceeds, and the freshly committed map entry gets
+            // overwritten with an ABORTED state carrying version=-1.
+            TransactionState latest;
+            readLock();
+            try {
+                latest = unprotectedGetTransactionState(transactionId);
+            } finally {
+                readUnlock();
+            }
+            if (latest != null && latest != transactionState) {
+                transactionState = latest;
+            }
             // COW
             copiedState = new TransactionState(transactionState);
             // before state transform
@@ -652,7 +678,7 @@ public class DatabaseTransactionMgr {
                 LOG.warn("transaction after state transform failed: {}", transactionState, t);
             }
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
 
         if (copiedState.getTransactionStatus() != TransactionStatus.ABORTED) {

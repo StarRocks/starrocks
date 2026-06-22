@@ -52,7 +52,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -630,10 +630,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const Tab
 
 Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** res) {
     auto iter = _column_readers.find(id);
-    if (iter != _column_readers.end() && iter->second->has_bitmap_index()) {
-        return iter->second->new_bitmap_index_iterator(options, res);
+    if (iter == _column_readers.end()) {
+        return Status::OK();
     }
-    return Status::OK();
+    // Delegate to ColumnReader: it handles both the footer-embedded bitmap
+    // (legacy path) and the IDG-backed sidecar (.idx file, lake fast path).
+    // Do NOT gate on `has_bitmap_index()` here — that only checks the
+    // footer-loaded `_bitmap_index` pointer and would short-circuit before
+    // the IDG branch gets a chance. ColumnReader::new_bitmap_index_iterator
+    // returns OK with `*res == nullptr` when neither source has a bitmap.
+    return iter->second->new_bitmap_index_iterator(options, res);
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
@@ -646,6 +652,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     }
     ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
     FileInfo info{.path = filepath};
+    // Supplying the known size lets the segment open path skip a stat/HeadObject. A size of 0 means
+    // unknown (old data lacking column_file_sizes), in which case we fall back to discovering it.
+    if (idx < dcg.column_file_sizes().size() && dcg.column_file_sizes()[idx] > 0) {
+        info.size = dcg.column_file_sizes()[idx];
+    }
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }

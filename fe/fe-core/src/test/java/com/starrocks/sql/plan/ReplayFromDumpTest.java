@@ -534,12 +534,20 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testGroupByDistinctColumnOptimization() throws Exception {
+    public void testGroupByDistinctColumnOptimizationNotTriggeredOnHighDistinctColNDV() throws Exception {
+        // Rationale for the negative assertion: in #17643 (Mar 2023) the salt rewrite was strictly
+        // better than the only available alternative (3-stage shuffle-by groups). After
+        // #39556 (Feb 2024) introduced the 4-stage shuffle-by (groups, distinct col) alternative, that alternative now
+        // covers the same distribution case with one fewer shuffle meaning in this case the rewrite should not be applied.
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
                         TExplainLevel.NORMAL);
-        Assertions.assertTrue(
+        Assertions.assertFalse(
                 replayPair.second.contains("CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"),
+                replayPair.second);
+        // Since we shuffle by (year, case) and case has a high NDV, we get uniformly distributed partitions
+        Assertions.assertTrue(
+                replayPair.second.contains("HASH_PARTITIONED: 39: year, 42: case"),
                 replayPair.second);
     }
 
@@ -1267,5 +1275,35 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertNotContains(plan, "dict_col=s_nation");
 
         FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
+
+    @Test
+    public void testJoinReorderKeepPredicateColumn() throws Exception {
+        // Regression for join-reorder dropping a predicate-referenced column. During reorder,
+        // OutputColumnsPrune pruned the pass-through column brand_name out of an iceberg scan
+        // projection (only the upper()/cast() expression outputs were required upstream), while the
+        // scan still carried the derived predicate "upper(brand_name) IS NOT NULL". The rebuilt scan
+        // statistics then lacked brand_name, and PredicateStatisticsCalculator.visitIsNullPredicate ->
+        // Statistics.getColumnStatistic threw "missing statistic of col: ... brand_name".
+        // The fix keeps predicate-referenced columns required during pruning; this dump must now plan.
+        String dumpString = getDumpInfoFromFile("query_dump/iceberg_isnull_missing_stats");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString, null);
+        Assertions.assertNotNull(replayPair.second);
+    }
+
+    @Test
+    public void testPushDownDistinctBelowWindowNoEmptyAnalytic() throws Exception {
+        String dumpString = getDumpInfoFromFile(
+                "query_dump/push_down_distinct_below_window_empty_analytic");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragmentWithAggPushdown(
+                dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        // Without the fix, plan contains "functions: \n" — an analytic node with empty functions list.
+        // With the fix, PruneEmptyWindowRule removes the empty window before physical planning,
+        // so no analytic node with empty functions is ever generated.
+        Assertions.assertFalse(plan.contains("functions: \n"),
+                "Plan contains empty analytic functions — PruneEmptyWindowRule was not called after "
+                        + "PRUNE_COLUMNS_RULES in pushDownAggregation:\n" + plan);
     }
 }
