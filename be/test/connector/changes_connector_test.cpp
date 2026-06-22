@@ -74,7 +74,7 @@ public:
         (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
         _runtime_state = lake::create_runtime_state();
         _fragment_ctx = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
-        _runtime_state->set_fragment_ctx(_fragment_ctx);
+        _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
         _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
     }
 
