@@ -54,6 +54,13 @@ Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
+    // Subscribe this build (sink edge) to the spiller's sink list: it sleeps OUTPUT_FULL on need_input()
+    // when the writer is full or the spill-process channel still holds a task. The flush-completion defer
+    // emits into both lists, and the channel handshake wakes the source side, so the sink-list wakeup
+    // releases the writer-full sleeper. Unconditional: subscribe_sink no-ops in poller mode; observer() is
+    // valid here (assigned before prepare). Same as the agg sink.
+    _join_builder->spiller()->observable().subscribe_sink(state, observer());
     return Status::OK();
 }
 
@@ -74,8 +81,20 @@ size_t SpillableHashJoinBuildOperator::estimated_memory_reserved() {
     return _join_builder->hash_join_builder()->ht_mem_usage() * 2;
 }
 
+const std::shared_ptr<spill::Spiller>& SpillableHashJoinBuildOperator::_spiller() const {
+    return _join_builder->spiller();
+}
+
+SpillProcessChannelPtr SpillableHashJoinBuildOperator::_spill_channel() const {
+    return _join_builder->spill_channel();
+}
+
 bool SpillableHashJoinBuildOperator::need_input() const {
-    return !is_finished() && !(_join_builder->spiller()->is_full() || _join_builder->spill_channel()->has_task());
+    return spill_sink_need_input();
+}
+
+BlockReason SpillableHashJoinBuildOperator::block_reason() const {
+    return spill_sink_block_reason();
 }
 
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
@@ -113,6 +132,14 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
         return spiller->set_flush_all_call_back(
                 [this, state]() {
+                    // build->probe handoff. This flush-all callback is where the spill build changes phase,
+                    // and it runs on an IO thread (or synchronously on the pipeline thread if no flush task is
+                    // in flight when registered). The non-spill build notifies the probe on this transition
+                    // via defer_notify_probe; fire the same join-context observable here so the spill build's
+                    // phase change also wakes the probe rather than relying on the poller, after
+                    // enter_probe_phase() publishes the state (publish-then-notify, correct on both threads).
+                    // The probe is subscribed via HashJoinProbeOperator::attach_probe_observer.
+                    auto notify = _join_builder->defer_notify_probe();
                     auto defer = DeferOp([&]() { _join_builder->unref(state); });
                     _is_finished = true;
                     _join_builder->enter_probe_phase();

@@ -134,6 +134,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
 - Introduced in: -
 
+### enable_spill_join_events
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enables the pipeline event scheduler for the spilling hash-join build and probe operators instead of poll-spinning.
+- Introduced in: -
+
 ### enable_string_prefix_zonemap
 
 - Default: true
@@ -311,7 +320,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values &gt; 0 and &lt; 1000 enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
+- Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values `> 0` and `< 1000` enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
 - Introduced in: v3.2.0
 
 ### max_hdfs_file_handle

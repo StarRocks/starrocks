@@ -826,13 +826,15 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     if (config::enable_pipeline_event_scheduler &&
         runtime_state->query_options().__isset.enable_pipeline_event_scheduler &&
         runtime_state->query_options().enable_pipeline_event_scheduler) {
-        // check all pipeline in fragment support event scheduler
+        // Check that every pipeline in the fragment supports the event scheduler. Check every operator
+        // factory in the pipeline, not just the source/sink edges: an intermediate factory that opts out
+        // (e.g. a spillable probe blocked on an interior predicate) must keep the fragment off the event
+        // scheduler.
         bool all_support_event_scheduler = true;
         _fragment_ctx->iterate_pipeline([&all_support_event_scheduler](Pipeline* pipeline) {
+            all_support_event_scheduler = all_support_event_scheduler && pipeline->all_support_event_scheduler();
             auto* src = pipeline->source_operator_factory();
             auto* sink = pipeline->sink_operator_factory();
-            all_support_event_scheduler = all_support_event_scheduler && src->support_event_scheduler();
-            all_support_event_scheduler = all_support_event_scheduler && sink->support_event_scheduler();
             TRACE_SCHEDULE_LOG << src->get_name() << " " << src->support_event_scheduler();
             TRACE_SCHEDULE_LOG << sink->get_name() << " " << sink->support_event_scheduler();
         });
