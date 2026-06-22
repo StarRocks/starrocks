@@ -259,11 +259,7 @@ private:
     std::shared_ptr<lake::RemoteStarletLocationProvider> _remote_starlet_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
-<<<<<<< HEAD
     std::unique_ptr<ThreadPool> _snapshot_file_syncer_thread_pool = nullptr;
-    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
-=======
->>>>>>> b5a363d82e8... [Refactor] Move lake parallel compact manager to StorageEnv (#75076)
 
     AgentServer* _agent_server = nullptr;
     DiagnoseDaemon* _diagnose_daemon = nullptr;

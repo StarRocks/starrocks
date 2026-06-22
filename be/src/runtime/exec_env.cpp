@@ -88,21 +88,14 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/fixed_location_provider.h"
-<<<<<<< HEAD
-#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/remote_starlet_location_provider.h"
-=======
->>>>>>> b5a363d82e8... [Refactor] Move lake parallel compact manager to StorageEnv (#75076)
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
-<<<<<<< HEAD
-#include "storage/storage_metrics.h"
-=======
 #include "storage/storage_env.h"
->>>>>>> b5a363d82e8... [Refactor] Move lake parallel compact manager to StorageEnv (#75076)
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #ifdef WITH_TENANN
@@ -164,11 +157,7 @@ void ExecEnv::_refresh_service_contexts() {
     _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
     _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
     _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
-<<<<<<< HEAD
     _lake_services.snapshot_file_syncer_thread_pool = _snapshot_file_syncer_thread_pool.get();
-    _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
-=======
->>>>>>> b5a363d82e8... [Refactor] Move lake parallel compact manager to StorageEnv (#75076)
     _lake_services.pk_index_execution_thread_pool = global_env->pk_index_execution_thread_pool();
     _lake_services.pk_index_memtable_flush_thread_pool = global_env->pk_index_memtable_flush_thread_pool();
     _lake_services.lake_partial_update_thread_pool = global_env->lake_partial_update_thread_pool();
@@ -368,10 +357,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     }
     setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
 
-<<<<<<< HEAD
-    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
-    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-
     int32_t snapshot_file_syncer_thread_count = std::min(config::cluster_snapshot_threads, CpuInfo::num_cores() / 4);
     RETURN_IF_ERROR(ThreadPoolBuilder("snapshot_file_syncer")
                             .set_min_threads(1)
@@ -381,8 +366,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     StorageMetrics::instance()->register_thread_pool_metrics("snapshot_file_syncer",
                                                              _snapshot_file_syncer_thread_pool.get());
 
-=======
->>>>>>> b5a363d82e8... [Refactor] Move lake parallel compact manager to StorageEnv (#75076)
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
     _lake_update_manager = new lake::UpdateManager(_lake_location_provider, global_env->update_mem_tracker());
@@ -535,17 +518,13 @@ void ExecEnv::stop() {
         component_times.emplace_back("lake_vector_index_build_thread_pool", MonotonicMillis() - start);
     }
 
-<<<<<<< HEAD
     if (_snapshot_file_syncer_thread_pool) {
         start = MonotonicMillis();
         _snapshot_file_syncer_thread_pool->shutdown();
         component_times.emplace_back("snapshot_file_syncer_thread_pool", MonotonicMillis() - start);
     }
 
-    if (_parallel_compact_mgr) {
-=======
     if (StorageEnv::GetInstance()->parallel_compact_mgr() != nullptr) {
->>>>>>> b5a363d82e8... [Refactor] Move lake parallel compact manager to StorageEnv (#75076)
         start = MonotonicMillis();
         StorageEnv::GetInstance()->stop();
         component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
