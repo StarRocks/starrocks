@@ -1004,7 +1004,7 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     do {
-        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
+        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
         Status st = _scanner->get_next(state, chunk);
         if (!st.ok()) {
             return _scanner->reinterpret_status(st);
