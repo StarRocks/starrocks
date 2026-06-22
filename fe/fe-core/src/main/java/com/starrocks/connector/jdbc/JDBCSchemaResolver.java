@@ -205,4 +205,14 @@ public abstract class JDBCSchemaResolver {
         return supportPartitionInformation;
     }
 
+    /**
+     * Return approximate row count for a table. Implementations query cheap catalog metadata
+     * (e.g. information_schema, pg_class) and must NOT run a full COUNT(*).
+     *
+     * @return estimated row count, or -1 if unsupported by this dialect
+     */
+    public long getTableRowCount(Connection connection, String dbName, String tableName) throws SQLException {
+        return -1L;
+    }
+
 }
