@@ -24,8 +24,6 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -791,15 +789,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeKuduScanNode(Operator node, ExpressionContext context, Table table,
                                      Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
-            String catalogName = ((KuduTable) table).getCatalogName();
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), -1, TvrTableSnapshot.empty());
-            context.setStatistics(stats);
+        long rowCount = Config.default_statistics_output_row_count;
+        try {
+            Statistics connectorStats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, table.getCatalogName(), table, columnRefOperatorColumnMap,
+                    Collections.emptyList(), null);
+            if (connectorStats != null) {
+                rowCount = (long) connectorStats.getOutputRowCount();
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get Kudu table statistics for {}: {}", table.getName(), e.getMessage());
         }
-
-        return visitOperator(node, context);
+        return computeNormalExternalTableScanNode(node, context, table, columnRefOperatorColumnMap, rowCount);
     }
 
     public Void visitLogicalHudiScan(LogicalHudiScanOperator node, ExpressionContext context) {
@@ -907,14 +908,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                Config.default_statistics_output_row_count);
+        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                Config.default_statistics_output_row_count);
+        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeEsScanNode(Operator node, ExpressionContext context, Table table,
+                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        long rowCount = Config.default_statistics_output_row_count;
+        try {
+            Statistics connectorStats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, table.getCatalogName(), table, colRefToColumnMetaMap,
+                    Collections.emptyList(), null);
+            if (connectorStats != null) {
+                rowCount = (long) connectorStats.getOutputRowCount();
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get ES table statistics for {}: {}", table.getName(), e.getMessage());
+        }
+        return computeNormalExternalTableScanNode(node, context, table, colRefToColumnMetaMap, rowCount);
     }
 
     @Override

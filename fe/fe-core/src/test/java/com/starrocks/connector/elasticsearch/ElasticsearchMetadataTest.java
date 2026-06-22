@@ -42,12 +42,14 @@ public class ElasticsearchMetadataTest {
 
     @Test
     public void testGetTableStatistics(@Mocked EsRestClient client, @Mocked EsTable esTable) {
-        new Expectations() {{
-            esTable.getIndexName();
-            result = "my_index";
-            client.getRowCount("my_index");
-            result = 5_000_000L;
-        }};
+        new Expectations() {
+            {
+                esTable.getIndexName();
+                result = "my_index";
+                client.getRowCount("my_index");
+                result = 5_000_000L;
+            }
+        };
 
         ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>(), "catalog");
         Map<ColumnRefOperator, Column> columns = Collections.emptyMap();
@@ -58,12 +60,14 @@ public class ElasticsearchMetadataTest {
 
     @Test
     public void testGetTableStatisticsCacheHit(@Mocked EsRestClient client, @Mocked EsTable esTable) {
-        new Expectations() {{
-            esTable.getIndexName();
-            result = "my_index";
-            client.getRowCount("my_index");
-            result = 1_000L;
-        }};
+        new Expectations() {
+            {
+                esTable.getIndexName();
+                result = "my_index";
+                client.getRowCount("my_index");
+                result = 1_000L;
+            }
+        };
 
         ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>(), "catalog");
         Map<ColumnRefOperator, Column> columns = Collections.emptyMap();
@@ -71,20 +75,24 @@ public class ElasticsearchMetadataTest {
         metadata.getTableStatistics(null, esTable, columns, Collections.emptyList(), null, -1, TvrTableSnapshot.empty());
 
         // getRowCount should be called only once due to cache
-        new Verifications() {{
-            client.getRowCount(anyString);
-            times = 1;
-        }};
+        new Verifications() {
+            {
+                client.getRowCount(anyString);
+                times = 1;
+            }
+        };
     }
 
     @Test
     public void testGetTableStatisticsFallback(@Mocked EsRestClient client, @Mocked EsTable esTable) {
-        new Expectations() {{
-            esTable.getIndexName();
-            result = "my_index";
-            client.getRowCount("my_index");
-            result = -1L;
-        }};
+        new Expectations() {
+            {
+                esTable.getIndexName();
+                result = "my_index";
+                client.getRowCount("my_index");
+                result = -1L;
+            }
+        };
 
         ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>(), "catalog");
         Statistics stats = metadata.getTableStatistics(
