@@ -19,6 +19,12 @@
 
 namespace starrocks {
 
+using NonBuiltinAggregateFunctionProvider = const AggregateFunction* (*)(TFunctionBinaryType::type binary_type,
+                                                                         bool is_window_function,
+                                                                         bool is_input_nullable);
+
+void set_non_builtin_aggregate_function_provider(NonBuiltinAggregateFunctionProvider provider);
+
 const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                                 bool is_null,
                                                 TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,

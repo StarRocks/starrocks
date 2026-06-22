@@ -133,6 +133,7 @@ set(EXEC_FILES
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
+        ./exprs/agg/aggregate_factory_extension_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
