@@ -1,0 +1,20 @@
+-- name: test_alter_modify_after_nonexistent
+-- description: ALTER TABLE ... MODIFY COLUMN ... AFTER <nonexistent column> must surface a
+--              clean "Column does not exist" semantic error instead of an internal NPE
+--              (afterColumn was dereferenced without a null check in AlterTableClauseAnalyzer).
+
+CREATE DATABASE IF NOT EXISTS test_alter_modify_after_nonexistent_db;
+USE test_alter_modify_after_nonexistent_db;
+
+CREATE TABLE t_alt1 (
+  k INT,
+  v INT
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- AFTER a column that does not exist -> clean semantic error (was: NPE on afterColumn)
+ALTER TABLE t_alt1 MODIFY COLUMN v BIGINT AFTER nope;
+
+-- control: AFTER an existing column still works
+ALTER TABLE t_alt1 MODIFY COLUMN v BIGINT AFTER k;
