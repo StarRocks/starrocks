@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/task/engine_checksum_task.h"
+#include "data_workflows/consistency/engine_checksum_task.h"
 
 #include <memory>
 
