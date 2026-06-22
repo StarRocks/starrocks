@@ -1397,7 +1397,10 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             pos = int_to_str(_minute, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
-            if (write_size + 2 >= buffer_size) return false;
+            // Joda 'm' may repeat (e.g. repeat('m',200)) so actual_size can exceed 2; the
+            // sibling numeric specifiers guard with actual_size. The constant 2 here let a long
+            // run overflow the caller's 128-byte stack buffer. Mirror the siblings.
+            if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
         case 's':
