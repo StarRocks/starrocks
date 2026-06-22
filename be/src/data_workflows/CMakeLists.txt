@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/data_workflows")
 
 set(DATA_WORKFLOWS_FILES
+    clone/engine_clone_task.cpp
     compaction/engine_compaction_control_task.cpp
     compaction/engine_manual_compaction_task.cpp
     consistency/engine_checksum_task.cpp
@@ -40,4 +41,6 @@ target_link_libraries(DataWorkflows PUBLIC
     Base
     Gutil
     StarRocksGen
+    PRIVATE
+    HttpCore
 )

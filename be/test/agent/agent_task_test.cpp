@@ -38,7 +38,7 @@
 #include "storage/olap_define.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
-#include "storage/task/engine_clone_task.h"
+#include "data_workflows/clone/engine_clone_task.h"
 #include "testutil/local_snapshot_client.h"
 
 namespace starrocks {

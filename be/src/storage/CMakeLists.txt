@@ -177,7 +177,6 @@ set(STORAGE_FILES
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
-    task/engine_clone_task.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp

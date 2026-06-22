@@ -77,7 +77,7 @@
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
-#include "storage/task/engine_clone_task.h"
+#include "data_workflows/clone/engine_clone_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 
