@@ -116,6 +116,8 @@ set(STORAGE_FILES
     tablet.cpp
     tablet_manager.cpp
     tablet_column.cpp
+    tablet_column_type_utils.cpp
+    tablet_column_util.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
     tablet_index.cpp
