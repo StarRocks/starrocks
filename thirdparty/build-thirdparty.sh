@@ -270,7 +270,7 @@ check_prerequest "automake --version" "automake"
 check_prerequest "libtoolize --version" "libtool"
 
 BUILD_SYSTEM=${BUILD_SYSTEM:-make}
-CMAKE_POLICY_VERSION_MINIMUM_ARG="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+export CMAKE_POLICY_VERSION_MINIMUM="${CMAKE_POLICY_VERSION_MINIMUM:-3.5}"
 
 # sudo apt-get install binutils-dev
 # sudo yum install binutils-devel
@@ -539,8 +539,7 @@ build_gflags() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    ${CMAKE_POLICY_VERSION_MINIMUM_ARG} ../
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -569,8 +568,7 @@ build_gtest() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    ${CMAKE_POLICY_VERSION_MINIMUM_ARG} ../
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -650,7 +648,6 @@ build_snappy() {
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
-    ${CMAKE_POLICY_VERSION_MINIMUM_ARG} \
     -DSNAPPY_BUILD_TESTS=0 ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -874,7 +871,7 @@ build_flatbuffers() {
   rm -rf CMakeCache.txt CMakeFiles/
 
   LDFLAGS="-static-libstdc++ -static-libgcc" \
-  ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF ${CMAKE_POLICY_VERSION_MINIMUM_ARG}
+  ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
   ${BUILD_SYSTEM} -j$PARALLEL
   cp flatc  $TP_INSTALL_DIR/bin/flatc
   cp -r ../include/flatbuffers  $TP_INCLUDE_DIR/flatbuffers
@@ -886,7 +883,7 @@ build_brotli() {
     cd $TP_SOURCE_DIR/$BROTLI_SOURCE
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64 ${CMAKE_POLICY_VERSION_MINIMUM_ARG}
+    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
@@ -1087,7 +1084,6 @@ build_croaringbitmap() {
     -DROARING_DISABLE_AVX512=ON \
     -DROARING_USE_CPM=OFF \
     -DCMAKE_INSTALL_LIBDIR=lib \
-    ${CMAKE_POLICY_VERSION_MINIMUM_ARG} \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1213,7 +1209,6 @@ build_hyperscan() {
     export PATH=$TP_INSTALL_DIR/bin:$PATH
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib \
-          ${CMAKE_POLICY_VERSION_MINIMUM_ARG} \
           -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1241,8 +1236,7 @@ build_mariadb() {
                   -DBUILD_SHARED_LIBS=OFF                               \
                   -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                  \
                   -DOPENSSL_USE_STATIC_LIBS=TRUE                        \
-                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}               \
-                  ${CMAKE_POLICY_VERSION_MINIMUM_ARG}
+                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
     # we only need build libmariadbclient and headers
     ${BUILD_SYSTEM} -j$PARALLEL mariadbclient
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/libmariadb
@@ -1275,7 +1269,6 @@ build_aws_cpp_sdk() {
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
     $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts;kms" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-               ${CMAKE_POLICY_VERSION_MINIMUM_ARG} \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \
@@ -1301,7 +1294,6 @@ build_vpack() {
     $CMAKE_CMD .. \
         -DCMAKE_CXX_STANDARD="17" \
         -G "${CMAKE_GENERATOR}" \
-        ${CMAKE_POLICY_VERSION_MINIMUM_ARG} \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
         -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
 
@@ -1321,7 +1313,6 @@ build_opentelemetry() {
         -DCMAKE_CXX_STANDARD="17" \
         -G "${CMAKE_GENERATOR}" \
         -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
-        ${CMAKE_POLICY_VERSION_MINIMUM_ARG} \
         -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF \
         -DCMAKE_INSTALL_LIBDIR=lib64 \
         -DWITH_STL=OFF -DWITH_JAEGER=ON
@@ -1407,7 +1398,7 @@ build_streamvbyte() {
 
     CMAKE_GENERATOR="Unix Makefiles"
     BUILD_SYSTEM='make'
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/ ${CMAKE_POLICY_VERSION_MINIMUM_ARG}
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
 
     make -j$PARALLEL
     make install
@@ -1419,7 +1410,7 @@ build_jansson() {
     cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
     mkdir -p build
     cd build
-    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib ${CMAKE_POLICY_VERSION_MINIMUM_ARG}
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1539,8 +1530,7 @@ build_clucene() {
         -DUSE_STAT64=0 \
         -DCMAKE_BUILD_TYPE=Release \
         -DUSE_AVX2=$THIRD_PARTY_BUILD_WITH_AVX2 \
-        -DBUILD_CONTRIBS_LIB=ON \
-        ${CMAKE_POLICY_VERSION_MINIMUM_ARG} ..
+        -DBUILD_CONTRIBS_LIB=ON ..
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
 
@@ -1598,7 +1588,6 @@ build_grpc() {
         -DgRPC_CARES_PROVIDER=module                        \
         -DCARES_ROOT_DIR=$TP_SOURCE_DIR/$CARES_SOURCE/      \
         -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
-        ${CMAKE_POLICY_VERSION_MINIMUM_ARG} \
         -DCMAKE_CXX_STANDARD=17 ..
 
     ${BUILD_SYSTEM} -j "${PARALLEL}"
