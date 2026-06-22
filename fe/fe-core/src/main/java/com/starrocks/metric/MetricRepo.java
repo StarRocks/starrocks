@@ -160,6 +160,10 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_REWRITE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             "total SPM rewrite attempts by result"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_QUERY_REWRITE =
+            new MetricWithLabelGroup<>("state",
+                    () -> new LongCounterMetric("mv_global_query_rewrite_queries_total", MetricUnit.REQUESTS,
+                            "queries by materialized view rewrite outcome (HIT/NO_HIT/DISABLED)"));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL =
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
@@ -1427,6 +1431,9 @@ public final class MetricRepo {
         if (requestParams.isCollectMVMetrics()) {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, requestParams.isMinifyMVMetrics());
         }
+
+        // global MV count: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalMvCount(visitor);
 
         // histogram
         SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();

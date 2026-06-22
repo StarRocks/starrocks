@@ -16,11 +16,16 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,6 +42,10 @@ public class MaterializedViewMetricsRegistry {
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
     private static final IMaterializedViewMetricsEntity BLACK_HOLE_ENTITY = new MaterializedViewMetricsBlackHoleEntity();
+
+    // mv_global_query_mv_usage_total is keyed by (usage_type, refresh_mode); MetricWithLabelGroup only
+    // supports a single label, so the two-dimensional counters are tracked here.
+    private static final Map<String, LongCounterMetric> MV_USAGE_COUNTERS = Maps.newConcurrentMap();
 
     private MaterializedViewMetricsRegistry() {
         idToMVMetrics = Maps.newHashMap();
@@ -134,5 +143,55 @@ public class MaterializedViewMetricsRegistry {
                 visitor.visitHistogram(e.getKey(), e.getValue());
             }
         }
+    }
+
+    // Enumerate all async materialized views at scrape time, bucketed by refresh mode x active status.
+    // Lock-free like MetricRepo.collectTableMetrics (reads only immutable-ish fields); db.getMaterializedViews()
+    // covers async MVs only (not sync/rollup MVs).
+    public static void collectGlobalMvCount(MetricVisitor visitor) {
+        Map<String, Long> countByModeStatus = Maps.newHashMap();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        for (String dbName : globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext())) {
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                continue;
+            }
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                String mode = mv.getRefreshMode() == null ? "UNKNOWN" : mv.getRefreshMode().name();
+                String status = mv.isActive() ? "ACTIVE" : "INACTIVE";
+                countByModeStatus.merge(mode + "|" + status, 1L, Long::sum);
+            }
+        }
+        for (Map.Entry<String, Long> entry : countByModeStatus.entrySet()) {
+            String[] parts = entry.getKey().split("\\|", 2);
+            GaugeMetricImpl<Long> gauge = new GaugeMetricImpl<>("mv_global_count", Metric.MetricUnit.NOUNIT,
+                    "current number of materialized views by refresh mode and active status");
+            gauge.addLabel(new MetricLabel("refresh_mode", parts[0]));
+            gauge.addLabel(new MetricLabel("status", parts[1]));
+            gauge.setValue(entry.getValue());
+            visitor.visit(gauge);
+        }
+    }
+
+    public static void increaseMvUsage(String usageType, String refreshMode) {
+        String mode = refreshMode == null ? "UNKNOWN" : refreshMode;
+        MV_USAGE_COUNTERS.computeIfAbsent(usageType + "|" + mode, key -> {
+            LongCounterMetric metric = new LongCounterMetric("mv_global_query_mv_usage_total",
+                    Metric.MetricUnit.REQUESTS, "materialized view usage by access type and refresh mode");
+            metric.addLabel(new MetricLabel("usage_type", usageType));
+            metric.addLabel(new MetricLabel("refresh_mode", mode));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(1L);
+    }
+
+    @VisibleForTesting
+    public static long getMvUsageCount(String usageType, String refreshMode) {
+        LongCounterMetric metric = MV_USAGE_COUNTERS.get(usageType + "|" + refreshMode);
+        return metric == null ? 0L : metric.getValue();
+    }
+
+    public static void increaseGlobalQueryRewrite(String state) {
+        MetricRepo.COUNTER_MV_GLOBAL_QUERY_REWRITE.getMetric(state).increase(1L);
     }
 }
