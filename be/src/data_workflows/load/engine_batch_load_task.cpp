@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/task/engine_batch_load_task.h"
+#include "data_workflows/load/engine_batch_load_task.h"
 
 #include <fmt/format.h>
 
@@ -42,13 +42,13 @@
 
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
+#include "data_workflows/load/push_handler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/spark_load.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
-#include "storage/push_handler.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/storage_metrics.h"

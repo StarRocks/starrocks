@@ -355,6 +355,7 @@ add_subdirectory(storage_primitive)
 add_subdirectory(storage_base)
 add_subdirectory(runtime)
 add_subdirectory(compute_env)
+add_subdirectory(data_workflows)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
@@ -502,7 +503,6 @@ SET(DW_TEST_FILES
     ./storage/protobuf_file_test.cpp
     ./agent/publish_version_manager_test.cpp
     ./storage/publish_version_task_test.cpp
-    ./storage/push_handler_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/rowset/binary_dict_page_test.cpp
