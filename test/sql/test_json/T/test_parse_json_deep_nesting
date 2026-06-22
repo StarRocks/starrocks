@@ -1,0 +1,19 @@
+-- name: test_parse_json_deep_nesting @sequential
+-- Regression: parse_json (velocypack) recursed once per JSON nesting level with no bound, so a
+-- deeply nested document overflowed the BE stack and crashed the node (SIGSEGV, no backtrace). The
+-- fix bounds nesting depth (config json_parse_max_nesting_depth, default 1000) and rejects over-deep
+-- input as a JSON parse error (NULL) before recursing, instead of crashing.
+CREATE TABLE t_pj (id INT, j VARCHAR(1048576))
+  DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_pj VALUES
+  (1, concat(repeat('[', 1000), repeat(']', 1000))),
+  (2, concat(repeat('[', 45000), repeat(']', 45000)));
+-- deeply nested input must not crash the BE
+[UC] SELECT parse_json(j) FROM t_pj WHERE id = 2;
+-- over-deep input is rejected as a parse error -> NULL (not a crash)
+SELECT parse_json(j) IS NULL FROM t_pj WHERE id = 2;
+-- within-limit nesting (depth 1000) still parses successfully
+SELECT parse_json(j) IS NOT NULL FROM t_pj WHERE id = 1;
+-- BE must still be serving queries
+SELECT count(*) FROM t_pj;

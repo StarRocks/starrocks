@@ -976,6 +976,12 @@
         "lz4_expected_compression_ratio",
         "lz4_expected_compression_speed_mbps"
       ]
+    },
+    {
+      "path": "be/src/common/config_types_fwd.h",
+      "configs": [
+        "json_parse_max_nesting_depth"
+      ]
     }
   ]
 }
