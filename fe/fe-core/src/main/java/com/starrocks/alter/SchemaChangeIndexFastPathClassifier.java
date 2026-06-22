@@ -261,10 +261,16 @@ public final class SchemaChangeIndexFastPathClassifier {
         // silently succeed instead of erroring. On any ineligible column, fall
         // back to the legacy path, which raises the canonical error message.
         if (!added.isEmpty()) {
+            List<Column> baseSchema = table.getBaseSchema();
+            if (baseSchema == null) {
+                // Defensive: without a base schema we cannot validate column
+                // types, so fall back to the legacy path rather than risk an NPE.
+                return null;
+            }
             boolean isPrimaryKey = table.getKeysType() == KeysType.PRIMARY_KEYS;
             for (String addedCol : added) {
                 Column column = null;
-                for (Column c : table.getBaseSchema()) {
+                for (Column c : baseSchema) {
                     if (c.getName().equalsIgnoreCase(addedCol)) {
                         column = c;
                         break;
