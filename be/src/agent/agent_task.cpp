@@ -26,12 +26,9 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
-<<<<<<< HEAD
-#include "fs/fs.h"
-=======
 #include "data_workflows/migration/engine_storage_migration_task.h"
 #include "data_workflows/schema_change/engine_alter_tablet_task.h"
->>>>>>> 0b99eba097a... [Refactor] Move storage workflow tasks into DataWorkflows (#75104)
+#include "fs/fs.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
