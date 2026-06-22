@@ -57,6 +57,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
@@ -495,21 +496,23 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     .collect(Collectors.toSet());
             changeDefaultConnectContextIfNeeded(ctx, baseTables);
 
-            InsertStmt insertStmt = null;
+            // Lock skeleton from the original query: parsed (not analyzed) only to collect the target MV +
+            // base-table locks. Re-derive inside the lock since its analyze must hold the lock.
+            InsertStmt lockSkeleton;
             try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
-                // generate insert statement from defined query
-                insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition());
+                lockSkeleton = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition(mv.getViewDefineSql()));
             }
 
-            PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
+            PlannerMetaLocker locker = new PlannerMetaLocker(ctx, lockSkeleton);
             if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
                 throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
             }
+            InsertStmt insertStmt;
             try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
-                // analyze the insert statement
                 try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
+                    String derivedSelectSql = IvmRefreshDefinition.derive(ctx, mv);
+                    insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition(derivedSelectSql));
                     analyzeInsertStmt(insertStmt);
-                    // build the insert plan
                     insertStmt = buildInsertPlan(insertStmt);
                     ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
                 }

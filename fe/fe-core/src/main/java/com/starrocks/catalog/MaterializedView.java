@@ -881,8 +881,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return formatInsertSql("insert overwrite");
     }
 
-    public String getIVMTaskDefinition() {
-        return formatInsertSql("INSERT INTO");
+    public String getTaskDefinition(String selectSql) {
+        return formatInsertSql("insert overwrite", selectSql);
+    }
+
+    public String getIVMTaskDefinition(String selectSql) {
+        return formatInsertSql("INSERT INTO", selectSql);
     }
 
     /**
@@ -892,10 +896,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * which {@code InsertAnalyzer} rejects if listed explicitly.
      */
     private String formatInsertSql(String insertKeyword) {
+        return formatInsertSql(insertKeyword, getMVQueryDefinedSql());
+    }
+
+    private String formatInsertSql(String insertKeyword, String selectSql) {
         String targetSpec = hasAutoIncrementColumn()
                 ? String.format("`%s` (%s)", getName(), queryProducedColumnList())
                 : String.format("`%s`", getName());
-        return String.format("%s %s %s", insertKeyword, targetSpec, getMVQueryDefinedSql());
+        return String.format("%s %s %s", insertKeyword, targetSpec, selectSql);
     }
 
     /**
