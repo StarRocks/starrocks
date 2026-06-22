@@ -1071,6 +1071,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
             Column afterColumn = table.getColumn(colPos.getLastCol());
+            if (afterColumn == null) {
+                throw new SemanticException("Column[" + colPos.getLastCol() + "] does not exist");
+            }
             if (afterColumn.isGeneratedColumn()) {
                 throw new SemanticException("Can not modify column after Generated Column");
             }
