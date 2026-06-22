@@ -14,9 +14,15 @@
 
 #pragma once
 
+#include <atomic>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <sstream>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "base/hash/xxh3.h"
 #include "base/phmap/phmap.h"
@@ -25,9 +31,9 @@
 #include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "exec/dictionary_cache_writer.h"
 #include "fmt/format.h"
-#include "storage/chunk_helper.h"
+#include "gen_cpp/internal_service.pb.h"
+#include "runtime/mem_pool.h"
 #include "storage/primitive/primary_key_encoder.h"
 #include "types/datum.h"
 #include "types/storage_type_traits.h"

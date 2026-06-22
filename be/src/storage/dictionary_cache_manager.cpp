@@ -17,7 +17,9 @@
 #include "base/string/faststring.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "compute_env/dictionary_cache/chunk_util.h"
 #include "exec/tablet_info.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -52,9 +54,10 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     auto schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(schema->init(pschema));
     auto chunk = std::make_unique<Chunk>();
-    RETURN_IF_ERROR(DictionaryCacheWriter::ChunkUtil::uncompress_and_deserialize_chunk(
-            pchunk, *chunk.get(), &uncompressed_buffer, schema.get()));
-    RETURN_IF_ERROR(DictionaryCacheWriter::ChunkUtil::check_chunk_has_null(*chunk.get()));
+    RowDescriptor row_desc(schema->tuple_desc());
+    RETURN_IF_ERROR(DictionaryCacheChunkUtil::uncompress_and_deserialize_chunk(pchunk, *chunk.get(),
+                                                                               &uncompressed_buffer, row_desc));
+    RETURN_IF_ERROR(DictionaryCacheChunkUtil::check_chunk_has_null(*chunk.get()));
 
     // 2. split into key chunk and value chunk in ordered
     std::vector<std::string_view> col_names;

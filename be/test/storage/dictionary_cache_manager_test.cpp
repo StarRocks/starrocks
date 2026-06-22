@@ -22,6 +22,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
+#include "compute_env/dictionary_cache/chunk_util.h"
 #include "exec/tablet_info.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -106,7 +107,7 @@ public:
         }
 
         std::unique_ptr<ChunkPB> pchunk = std::make_unique<ChunkPB>();
-        DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
+        DictionaryCacheChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
 
         TOlapTableSchemaParam tschema;
         tschema.db_id = 1;
