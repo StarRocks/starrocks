@@ -178,6 +178,38 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
+
+        // Confirmed/lagged-watermark debounce, against a begin-transaction vs autovacuum race:
+        // beginTransaction() draws an id (advancing peekNextTransactionId()) BEFORE registering it in
+        // idToRunningTransactionState, so a probe landing in that gap can compute a minActiveTxnId one
+        // greater than an in-flight txn. Acting on it would let the BE delete that txn's still-needed
+        // combined log and permanently wedge publish on the partition. So we only act on a value confirmed
+        // by the PREVIOUS round (non-decreasing) and sweep txn logs with that older, confirmed value.
+        //
+        // When the current value is NOT confirmed -- first observation (also after FE restart/failover,
+        // since lastMinActiveTxnId is in-memory and resets to 0) or a regression -- we skip the ENTIRE
+        // round, not merely the txn-log delete. Skipping only the delete would still let the round advance
+        // lastSuccVacuumVersion; with lake_autovacuum_detect_vaccumed_version=true, shouldVacuum() then
+        // stops scheduling the partition once lastSuccVacuumVersion >= minRetainVersion, so for a partition
+        // that goes cold the confirming follow-up round (and its sweep) might never run, leaking txn logs.
+        // A full skip leaves lastSuccVacuumVersion untouched, so the partition stays schedulable and the
+        // next round runs with a confirmed watermark; the only cost is deferring this partition's
+        // metadata/data vacuum by one (rare) cycle. lastVacuumTime is set so naptime is still respected.
+        long lastMinActiveTxnId = partition.getLastMinActiveTxnId();
+        if (lastMinActiveTxnId <= 0 || minActiveTxnId < lastMinActiveTxnId) {
+            if (minActiveTxnId < lastMinActiveTxnId) {
+                LOG.warn("minActiveTxnId regressed {} -> {} for {}.{}.{}; skipping this vacuum round "
+                                + "(possible begin/vacuum race)",
+                        lastMinActiveTxnId, minActiveTxnId, db.getFullName(), table.getName(), partition.getId());
+            }
+            partition.setLastMinActiveTxnId(minActiveTxnId);
+            partition.setLastVacuumTime(startTime);
+            return;
+        }
+        // Confirmed non-decreasing: sweep txn logs with the previous (older, lower) value.
+        final long txnLogSweepWatermark = lastMinActiveTxnId;
+        partition.setLastMinActiveTxnId(minActiveTxnId);
+
         long preExtraFileSize = 0;
         // if enable file bundling, there will be only one node (Aggregator).
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
@@ -311,7 +343,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
             vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
                                            db.getId(), table.getId(), partition.getParentId(), partition.getId());
-            vacuumRequest.minActiveTxnId = minActiveTxnId;
+            vacuumRequest.minActiveTxnId = txnLogSweepWatermark;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
@@ -394,10 +426,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         MetricRepo.COUNTER_VACUUM_FILES_NUMBER.increase(vacuumedFiles);
         MetricRepo.COUNTER_VACUUM_FILES_BYTES.increase(vacuumedFileSize);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
+                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} txnLogSweepWatermark={} " +
+                        "vacuumVersion={} extraFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, extraFileSize, 
-                System.currentTimeMillis() - startTime);
+                visibleVersion, minRetainVersion, minActiveTxnId, txnLogSweepWatermark,
+                vacuumedVersion, extraFileSize, System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {
