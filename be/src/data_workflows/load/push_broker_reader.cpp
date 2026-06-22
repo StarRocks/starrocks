@@ -176,7 +176,6 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
         }
     });
 
-    new_offset.set(0, 0);
     for (size_t i = 1; i <= num_rows; ++i) {
         new_offset.set(i, static_cast<uint64_t>(len) * i);
     }

@@ -153,7 +153,7 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
 
     const uint64_t final_offset = static_cast<uint64_t>(len) * num_rows;
     new_offset.resize_uninitialized(num_rows + 1, final_offset);
-    new_bytes.assign(num_rows * len, 0); // padding 0
+    new_bytes.assign(final_offset, 0); // padding 0
 
     size_t from = 0;
     offset.visit_storage([&](const auto& offsets_buf) {
