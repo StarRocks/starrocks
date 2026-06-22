@@ -113,3 +113,18 @@ scrape_configs:
 
 - Type: Histogram
 - Description: Wall-clock duration of refresh jobs, in milliseconds. For multi-batch jobs, measured from the first task run start to the final task run completion.
+
+### mv_global_count
+
+- Type: Gauge
+- Description: Current number of asynchronous materialized views in the cluster, with labels `refresh_mode` (the materialized view's refresh mode) and `status` (`ACTIVE` or `INACTIVE`). This metric is always emitted, regardless of the per-materialized-view metrics privilege.
+
+### mv_global_query_rewrite_queries_total
+
+- Type: Counter
+- Description: Number of queries grouped by materialized view rewrite outcome, with label `state`: `HIT` (the query was rewritten to use a materialized view), `NO_HIT` (rewrite was enabled but no materialized view was used), or `DISABLED` (materialized view rewrite was disabled by the session variable or the FE configuration). Counted once per query.
+
+### mv_global_query_mv_usage_total
+
+- Type: Counter
+- Description: Number of times materialized views are used by queries, with labels `usage_type` (`REWRITE` if a query was rewritten to use the materialized view, or `DIRECT` if a query reads the materialized view directly) and `refresh_mode`.
