@@ -1036,6 +1036,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：JDBC カタログのメタデータキャッシュのデフォルトの有効期限。`jdbc_meta_default_cache_enable` が true に設定されている場合、新しく作成された JDBC カタログはデフォルトでメタデータキャッシュの有効期限を設定します。
 - 導入時期：-
 
+### `jdbc_row_count_cache_refresh_sec`
+
+- デフォルト：600
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：JDBC テーブルの行数キャッシュのバックグラウンド更新間隔。この間隔を過ぎると、古い値を即座に返しながらバックグラウンドで非同期に再読み込みします。カタログプロパティ `jdbc_row_count_cache_refresh_sec` でカタログごとに上書き可能です。
+- 導入時期：-
+
+### `jdbc_row_count_cache_expire_sec`
+
+- デフォルト：1200
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：JDBC テーブルの行数キャッシュエントリの強制削除 TTL。この期間内にアクセスされなかったエントリは削除されます。`jdbc_row_count_cache_refresh_sec` より大きい値を設定してください。カタログプロパティ `jdbc_row_count_cache_expire_sec` でカタログごとに上書き可能です。
+- 導入時期：-
+
+### `jdbc_row_count_cache_max_size`
+
+- デフォルト：10000
+- タイプ：Long
+- 単位：-
+- 変更可能：Yes
+- 説明：JDBC カタログごとの行数キャッシュの最大エントリ数。テーブル数が多いカタログのメモリ増大を制限します。カタログプロパティ `jdbc_row_count_cache_max_size` でカタログごとに上書き可能です。
+- 導入時期：-
+
 ### `jdbc_minimum_idle_connections`
 
 - デフォルト：1
