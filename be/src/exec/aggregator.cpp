@@ -33,6 +33,7 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/expr_executor.h"
