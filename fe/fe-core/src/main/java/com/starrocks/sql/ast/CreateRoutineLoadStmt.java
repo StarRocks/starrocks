@@ -133,6 +133,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String KAFKA_DEFAULT_OFFSETS = "kafka_default_offsets";
     // optional
     public static final String CONFLUENT_SCHEMA_REGISTRY_URL = "confluent.schema.registry.url";
+    // optional: per-job override to use the avrocpp-based reader (STRUCT/MAP support) for avro.
+    // When unset, the FE config enable_routine_load_native_avro_reader supplies the default, resolved
+    // once at job creation.
+    public static final String AVRO_USE_NATIVE_READER = "avro.use_native_reader";
 
     // pulsar type properties
     public static final String PULSAR_SERVICE_URL_PROPERTY = "pulsar_service_url";
@@ -171,6 +175,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
             .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+            .add(AVRO_USE_NATIVE_READER)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -190,6 +195,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .build();
 
     private String confluentSchemaRegistryUrl;
+    // For Avro jobs, resolved at analyze time: the job property if set, otherwise the FE config
+    // default. Stays null for non-Avro formats.
+    private Boolean useNativeAvroReader;
     private LabelName labelName;
     private final String tableName;
     private final List<ParseNode> loadPropertyList;
@@ -285,6 +293,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
         this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public Boolean getUseNativeAvroReader() {
+        return useNativeAvroReader;
     }
 
     public long getTaskConsumeSecond() {
@@ -621,6 +633,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             } else if (format.equalsIgnoreCase("avro")) {
                 format = "avro";
                 jsonPaths = jobProperties.get(JSONPATHS);
+                // Resolve the reader choice once, at creation time, so flipping the FE-wide default
+                // later only affects newly created jobs and never existing ones.
+                useNativeAvroReader = Util.getBooleanPropertyOrDefault(jobProperties.get(AVRO_USE_NATIVE_READER),
+                        Config.enable_routine_load_native_avro_reader,
+                        AVRO_USE_NATIVE_READER + " should be a boolean");
             } else {
                 throw new StarRocksException("Format type is invalid. format=`" + format + "`");
             }
