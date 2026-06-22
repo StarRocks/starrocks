@@ -40,13 +40,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.RemoteFileDesc;
-import com.starrocks.connector.benchmark.BenchmarkRowCountCalculator;
-import com.starrocks.connector.benchmark.RowCountEstimate;
 import com.starrocks.connector.hive.HiveStorageFormat;
->>>>>>> cbf573d6bd ([Enhancement] Estimate row count for Files/FileTable from file sizes instead of hardcoded 1 (#75082))
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.RowCountEstimator;
