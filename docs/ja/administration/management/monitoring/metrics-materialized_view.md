@@ -113,3 +113,18 @@ scrape_configs:
 
 - Type: Histogram
 - Description: リフレッシュジョブの実時間（ミリ秒）。マルチバッチジョブの場合、最初の Task Run 開始から最後の Task Run 完了までを計測する。
+
+### mv_global_count
+
+- Type: Gauge
+- Description: クラスター内の非同期マテリアライズドビューの現在の数。ラベル `refresh_mode`（マテリアライズドビューのリフレッシュモード）と `status`（`ACTIVE` または `INACTIVE`）を持ちます。このメトリクスは、マテリアライズドビューごとのメトリクス権限に関係なく常に出力されます。
+
+### mv_global_query_rewrite_queries_total
+
+- Type: Counter
+- Description: マテリアライズドビューの書き換え結果でグループ化されたクエリ数。ラベル `state`：`HIT`（クエリがマテリアライズドビューを使用するように書き換えられた）、`NO_HIT`（書き換えは有効だがマテリアライズドビューが使用されなかった）、`DISABLED`（セッション変数または FE 設定でマテリアライズドビューの書き換えが無効化されている）。クエリごとに 1 回カウントされます。
+
+### mv_global_query_mv_usage_total
+
+- Type: Counter
+- Description: クエリによってマテリアライズドビューが使用された回数。ラベル `usage_type`（`REWRITE` はクエリがマテリアライズドビューを使用するように書き換えられた場合、`DIRECT` はマテリアライズドビューを直接クエリする場合）と `refresh_mode` を持ちます。

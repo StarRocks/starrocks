@@ -113,3 +113,18 @@ scrape_configs:
 
 - 类型：Histogram
 - 描述：刷新作业的挂钟时长，单位为毫秒。对于多批次作业，从第一个 Task Run 开始到最后一个 Task Run 完成为止计算。
+
+### mv_global_count
+
+- 类型：Gauge
+- 描述：集群中异步物化视图的当前数量，包含标签 `refresh_mode`（物化视图的刷新模式）和 `status`（`ACTIVE` 或 `INACTIVE`）。该指标始终输出，不受单个物化视图指标权限的限制。
+
+### mv_global_query_rewrite_queries_total
+
+- 类型：Counter
+- 描述：按物化视图改写结果分组的查询数量，标签 `state` 取值：`HIT`（查询被改写为使用物化视图）、`NO_HIT`（已启用改写但未使用任何物化视图）或 `DISABLED`（会话变量或 FE 配置关闭了物化视图改写）。每个查询计一次。
+
+### mv_global_query_mv_usage_total
+
+- 类型：Counter
+- 描述：物化视图被查询使用的次数，包含标签 `usage_type`（`REWRITE` 表示查询被改写为使用物化视图，`DIRECT` 表示直接查询物化视图）和 `refresh_mode`。
