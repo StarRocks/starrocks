@@ -424,11 +424,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setEnableLoadProfile(true);
             }
 
-            if (PropertyAnalyzer.analyzeBooleanProp(properties,
-                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true)) {
-                table.setEnableStatisticCollectOnFirstLoad(true);
-            } else {
-                table.setEnableStatisticCollectOnFirstLoad(false);
+            if (properties != null &&
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                table.setEnableStatisticCollectOnFirstLoad(PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true));
             }
 
             try {
