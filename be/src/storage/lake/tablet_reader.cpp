@@ -367,8 +367,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
-        rs_opts.version = _tablet_metadata->version();
     }
+    // Read version is required by the Index Delta Group (ADD INDEX fast-path)
+    // visibility filter for ALL key types, not only PRIMARY_KEYS. Leaving it 0
+    // for DUPLICATE / UNIQUE / AGGREGATE reads hides every .idx entry
+    // (entry.version > 0 == query_version), so the index is silently skipped.
+    rs_opts.version = _tablet_metadata->version();
     rs_opts.reader_type = params.reader_type;
 
     if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {

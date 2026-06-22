@@ -277,9 +277,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
                 _tablet_mgr, nullptr, seg_options.lake_io_opts.fill_data_cache, seg_options.lake_io_opts);
         seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
-        seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
-        seg_options.version = options.version;
     }
+    // The Index Delta Group (ADD INDEX fast-path) sidecar applies to ALL lake
+    // key types, not just PRIMARY_KEYS: CREATE INDEX / SET bloom_filter_columns
+    // on DUPLICATE / UNIQUE / AGGREGATE lake tables also writes a standalone
+    // .idx file. The loader and query version must therefore be wired outside
+    // the is_primary_keys block; otherwise non-PK tables get a null idg_loader
+    // (and version 0), the .idx is invisible at query time, and the index is
+    // silently never applied. delvec/dcg above stay PK-only.
+    seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
+    seg_options.version = options.version;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
     }
