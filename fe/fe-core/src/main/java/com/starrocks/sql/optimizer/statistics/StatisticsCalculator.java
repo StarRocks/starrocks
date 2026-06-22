@@ -24,6 +24,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
