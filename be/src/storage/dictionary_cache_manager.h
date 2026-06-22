@@ -41,8 +41,6 @@ namespace starrocks {
 #define PREFETCH_ADDR(addr) __builtin_prefetch(static_cast<const void*>(addr), 0 /* rw==read */, 3 /* locality */)
 #endif // __GNUC__
 
-#define SKIP_DECODE_FLAG 2
-
 enum DictionaryCacheEncoderType {
     PK_ENCODE = 0,
 };
@@ -251,7 +249,7 @@ public:
                     down_cast<BinaryColumn*>(dest)->reserve(size, slice_size);
                     for (size_t i = 0; i < size; i++) {
                         if (slices[i].data == nullptr) {
-                            value_encode_flags[i] = SKIP_DECODE_FLAG;
+                            value_encode_flags[i] = PRIMARY_KEY_DECODE_SKIP;
                             _append_nullable(dest, null_column);
                             continue;
                         }
@@ -273,7 +271,7 @@ public:
                         null_if_not_exist ? _append_nullable(dest, null_column) : _append_value(dest, iter->second);
                         if constexpr (std::is_same_v<ValueCppType, Slice>) {
                             value_encode_flags[i] = null_if_not_exist
-                                                            ? SKIP_DECODE_FLAG
+                                                            ? PRIMARY_KEY_DECODE_SKIP
                                                             : *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
                         }
                     }
@@ -292,7 +290,7 @@ public:
                     null_if_not_exist ? _append_nullable(dest, null_column) : _append_value(dest, iter->second);
                     if constexpr (std::is_same_v<ValueCppType, Slice>) {
                         value_encode_flags[i] = null_if_not_exist
-                                                        ? SKIP_DECODE_FLAG
+                                                        ? PRIMARY_KEY_DECODE_SKIP
                                                         : *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
                     }
                 }
@@ -433,8 +431,8 @@ public:
                         break;
                     }
                 }
-                if (value_encode_flags[i] && contains_zero) {
-                    value_encode_flags[i] = 0;
+                if (value_encode_flags[i] != PRIMARY_KEY_DECODE_NORMAL && contains_zero) {
+                    value_encode_flags[i] = PRIMARY_KEY_DECODE_NORMAL;
                 }
             }
         }
@@ -616,7 +614,7 @@ public:
             return Status::InternalError("encode dictionary cache column failed when probing the dictionary cache");
         }
 
-        std::vector<uint8_t> value_encode_flags(size, 1);
+        std::vector<uint8_t> value_encode_flags(size, PRIMARY_KEY_DECODE_FAST);
         RETURN_IF_ERROR(dictionary->lookup(encoded_key_column.get(), encoded_value_column.get(), value_encode_flags,
                                            null_column));
         DCHECK(encoded_value_column->size() == size);

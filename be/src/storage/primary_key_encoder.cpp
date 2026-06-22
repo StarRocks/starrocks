@@ -43,14 +43,15 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
-#include "storage/dictionary_cache_manager.h"
 #include "storage/tablet_schema.h"
 #include "types/date_value.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
@@ -604,7 +605,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
     const int ncol = schema.num_key_fields();
     for (int i = 0; i < len; i++) {
         Slice s = bkeys.get_slice(offset + i);
-        bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
+        bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == PRIMARY_KEY_DECODE_SKIP);
         for (int j = 0; j < ncol; j++) {
             auto& column = *(dest->get_column_raw_ptr_by_index(j));
             if (skip_decode) {
@@ -620,7 +621,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
 #undef M
             case TYPE_VARCHAR: {
                 auto& tc = down_cast<BinaryColumn&>(column);
-                bool fast_decode = value_encode_flags != nullptr ? (bool)((*value_encode_flags)[i]) : false;
+                bool fast_decode = value_encode_flags != nullptr && (*value_encode_flags)[i] == PRIMARY_KEY_DECODE_FAST;
                 if (!fast_decode) {
                     std::string v;
                     RETURN_IF_ERROR(decode_slice(&s, &v, nullptr, j + 1 == ncol, false));

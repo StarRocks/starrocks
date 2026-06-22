@@ -127,7 +127,7 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
                             dict_id, txn_id));
     }
 
-    std::vector<uint8_t> value_encode_flags(chunk->num_rows(), 1);
+    std::vector<uint8_t> value_encode_flags(chunk->num_rows(), PRIMARY_KEY_DECODE_FAST);
     if (DictionaryCacheUtil::get_encoded_type(*value_schema.get()) == TYPE_VARCHAR) {
         DictionaryCacheUtil::precheck_value_encode(value_chunk.get(), value_encode_flags);
     }
