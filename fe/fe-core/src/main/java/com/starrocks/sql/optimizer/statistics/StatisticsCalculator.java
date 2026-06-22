@@ -718,7 +718,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             // row-size estimate would be too small and would wildly overestimate the row count.
             // Pass an empty column list so RowCountEstimator falls back to the config default bytes/row.
             if (table.getProperties().containsKey(TableFunctionTable.PROPERTY_SCHEMA)) {
-                return RowCountEstimator.estimate(totalBytes, Collections.emptyList(), null);
+                return RowCountEstimator.estimate(totalBytes, Collections.emptyList(), (HiveStorageFormat) null);
             }
 
             // CSV is stored as TEXTFILE in HiveStorageFormat; map it explicitly so the
