@@ -28,6 +28,7 @@ ADD_BE_LIB(Types
     map_type_info.cpp
     struct_type_info.cpp
     type_info.cpp
+    agg_state_desc.cpp
     type_descriptor.cpp
     date_value.cpp
     datetime_value.cpp

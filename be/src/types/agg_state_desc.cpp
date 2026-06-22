@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/agg_state_desc.h"
+#include "types/agg_state_desc.h"
 
-#include <memory>
+#include <sstream>
 
-#include "exprs/agg/aggregate.h"
-#include "exprs/agg/aggregate_factory.h"
+#include "common/logging.h"
+#include "thrift/protocol/TDebugProtocol.h"
 
 namespace starrocks {
 
@@ -39,7 +39,7 @@ AggStateDesc AggStateDesc::from_thrift(const TAggStateDesc& desc) {
 }
 
 // Transform this AggStateDesc to a thrift TTypeDesc.
-void AggStateDesc::to_thrift(TAggStateDesc* t) {
+void AggStateDesc::to_thrift(TAggStateDesc* t) const {
     t->agg_func_name = _func_name;
     t->result_nullable = _is_result_nullable;
     t->func_version = _func_version;
@@ -65,7 +65,7 @@ AggStateDesc AggStateDesc::from_protobuf(const AggStateDescPB& desc) {
     return AggStateDesc{agg_func_name, std::move(ret_type), std::move(arg_types), is_result_nullable, func_version};
 }
 
-void AggStateDesc::to_protobuf(AggStateDescPB* desc) {
+void AggStateDesc::to_protobuf(AggStateDescPB* desc) const {
     desc->set_agg_func_name(this->get_func_name());
     desc->set_is_result_nullable(this->is_result_nullable());
     desc->set_func_version(this->get_func_version());
@@ -109,17 +109,6 @@ std::string AggStateDesc::debug_string() const {
     ss << ", ret:" << _return_type << ", result_nullable:" << _is_result_nullable << ", func_version:" << _func_version
        << "]";
     return ss.str();
-}
-
-const AggregateFunction* AggStateDesc::get_agg_state_func(const AggStateDesc* agg_state_desc) {
-    DCHECK(agg_state_desc);
-    auto* agg_function = get_aggregate_function(agg_state_desc->get_func_name(), agg_state_desc->get_return_type(),
-                                                agg_state_desc->get_arg_types(), agg_state_desc->is_result_nullable(),
-                                                TFunctionBinaryType::BUILTIN, agg_state_desc->get_func_version());
-    if (agg_function == nullptr) {
-        LOG(WARNING) << "Failed to get aggregate function for " << agg_state_desc->debug_string();
-    }
-    return agg_function;
 }
 
 } // namespace starrocks

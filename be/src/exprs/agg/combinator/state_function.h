@@ -24,7 +24,7 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/state_combinator.h"
 #include "exprs/function_context.h"
-#include "runtime/agg_state_desc.h"
+#include "types/agg_state_desc.h"
 
 namespace starrocks {
 
