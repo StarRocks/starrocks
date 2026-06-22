@@ -16,7 +16,11 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/data_workflows")
 
 set(DATA_WORKFLOWS_FILES
     load/engine_batch_load_task.cpp
+    load/lake_spark_load_handler.cpp
+    load/push_broker_reader.cpp
     load/push_handler.cpp
+    migration/engine_storage_migration_task.cpp
+    schema_change/engine_alter_tablet_task.cpp
 )
 
 ADD_BE_LIB(DataWorkflows

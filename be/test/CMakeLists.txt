@@ -592,7 +592,10 @@ STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
 
 # =================================================
 # test cases must be compiled as a standalone binary
-ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+ADD_BE_TEST(data_workflows/migration/engine_storage_migration_task_test)
+if (APPLE)
+    target_sources(engine_storage_migration_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
+endif()
 ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`
