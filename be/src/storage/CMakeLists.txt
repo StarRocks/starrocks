@@ -69,6 +69,7 @@ target_link_libraries(StorageBase PUBLIC
     StoragePrimitive
     Serde
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types

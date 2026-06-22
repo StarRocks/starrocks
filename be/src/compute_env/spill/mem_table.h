@@ -19,10 +19,10 @@
 #include <utility>
 
 #include "column/chunk_slice.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 #include "compute_env/spill/data_stream.h"
 #include "compute_env/spill/spill_fwd.h"
 #include "compute_env/workgroup/scan_task.h"
