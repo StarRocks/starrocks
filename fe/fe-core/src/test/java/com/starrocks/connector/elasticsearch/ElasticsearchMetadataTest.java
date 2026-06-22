@@ -21,6 +21,7 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
@@ -52,10 +53,13 @@ public class ElasticsearchMetadataTest {
         };
 
         ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>(), "catalog");
-        Map<ColumnRefOperator, Column> columns = Collections.emptyMap();
+        ColumnRefOperator colRef = new ColumnRefOperator(0, IntegerType.INT, "col", true);
+        Map<ColumnRefOperator, Column> columns = new HashMap<>();
+        columns.put(colRef, new Column("col", IntegerType.INT));
         Statistics stats = metadata.getTableStatistics(
                 null, esTable, columns, Collections.emptyList(), null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals(5_000_000D, stats.getOutputRowCount(), 0.01);
+        Assertions.assertTrue(stats.getColumnStatistics().containsKey(colRef));
     }
 
     @Test

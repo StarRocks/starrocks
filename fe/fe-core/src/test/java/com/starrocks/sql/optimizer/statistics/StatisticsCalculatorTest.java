@@ -18,9 +18,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.qe.ConnectContext;
@@ -40,10 +44,13 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -57,6 +64,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -1177,5 +1185,67 @@ public class StatisticsCalculatorTest {
         if (err.get() != null) {
             throw new AssertionError(err.get());
         }
+    }
+
+    @Test
+    public void testComputeEsScanNode(@Mocked EsTable esTable) {
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        LogicalEsScanOperator scanOperator =
+                new LogicalEsScanOperator(esTable, refToColumn, columnToRef, -1, null, null);
+        GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                    Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+                    ScalarOperator predicate) {
+                return Statistics.builder().setOutputRowCount(999_000).build();
+            }
+        };
+        new MockUp<StatisticsCalcUtils>() {
+            @Mock
+            public Statistics.Builder estimateScanColumns(Table table,
+                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap, OptimizerContext ctx) {
+                return Statistics.builder();
+            }
+        };
+
+        StatisticsCalculator calculator = new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext);
+        calculator.estimatorStats();
+        Assertions.assertEquals(999_000D, expressionContext.getStatistics().getOutputRowCount(), 0.01);
+    }
+
+    @Test
+    public void testComputeKuduScanNode(@Mocked KuduTable kuduTable) {
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        LogicalKuduScanOperator scanOperator =
+                new LogicalKuduScanOperator(kuduTable, refToColumn, columnToRef, -1, null);
+        GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                    Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+                    ScalarOperator predicate) {
+                return Statistics.builder().setOutputRowCount(888_000).build();
+            }
+        };
+        new MockUp<StatisticsCalcUtils>() {
+            @Mock
+            public Statistics.Builder estimateScanColumns(Table table,
+                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap, OptimizerContext ctx) {
+                return Statistics.builder();
+            }
+        };
+
+        StatisticsCalculator calculator = new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext);
+        calculator.estimatorStats();
+        Assertions.assertEquals(888_000D, expressionContext.getStatistics().getOutputRowCount(), 0.01);
     }
 }

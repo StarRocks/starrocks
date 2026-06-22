@@ -219,7 +219,7 @@ public class EsRestClient {
      * @param path the path must not leading with '/'
      * @return response
      */
-    private String execute(String path) throws StarRocksConnectorException {
+    String execute(String path) throws StarRocksConnectorException {
         int retrySize = nodes.length;
         StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;
