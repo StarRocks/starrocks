@@ -184,4 +184,24 @@ public class ColocateRangeUtils {
                 ranges.get(idx).getRange(), sortKeyColumns, colocateColumnCount);
         return expanded.contains(tabletRange);
     }
+
+    /**
+     * Returns the PACK shard-group id that owns {@code tabletRange}, by mapping the tablet's
+     * colocate prefix to the {@link ColocateRange} that contains it. Returns
+     * {@link PhysicalPartition#INVALID_SHARD_GROUP_ID} when no range covers the prefix.
+     *
+     * <p>Shared by the post-publish split classifier ({@code SplitTabletJob}) and the placement
+     * backstop ({@code ColocateChecker}): both must agree on which PACK group a tablet range maps
+     * to. Callers apply their own out-of-range policy — the classifier treats it as an invariant
+     * violation, the backstop skips the tablet.
+     */
+    public static long lookupPackShardGroupId(Range<Tuple> tabletRange, List<ColocateRange> ranges,
+                                              int colocateColumnCount) {
+        Tuple colocatePrefix = extractColocatePrefix(tabletRange, colocateColumnCount);
+        int rangeIndex = ColocateRangeMgr.indexOf(ranges, colocatePrefix);
+        if (rangeIndex < 0) {
+            return PhysicalPartition.INVALID_SHARD_GROUP_ID;
+        }
+        return ranges.get(rangeIndex).getShardGroupId();
+    }
 }
