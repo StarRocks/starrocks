@@ -1,0 +1,38 @@
+-- name: test_rank_topn_chunk_boundary
+-- Regression for an off-by-one in ChunksSorterTopn::_rank_pruning()
+-- (be/src/exec/chunks_sorter_topn.cpp). The loop that locates which merged-run
+-- chunk holds the rank boundary row used a strict `>` where the sibling
+-- _get_run_by_row_id() uses `>=`. When the boundary row index (rank_limit - 1)
+-- exactly equals the cumulative row count of the leading merged chunk(s), the
+-- wrong branch is taken and the peer-group end is computed against an
+-- out-of-bounds / wrong row, silently dropping one row from a RANK TopN result.
+--
+-- The bug only manifests when _merged_runs spans multiple chunks. We force that
+-- deterministically by shrinking the partial-sort buffer (full_sort_max_buffered_*)
+-- and the chunk_size, so merged runs are chunked at chunk_size=128 rows. The
+-- boundary is hit when rank_limit == k*chunk_size + 1.
+CREATE TABLE rk (id INT, v VARCHAR(32))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1");
+
+INSERT INTO rk SELECT generate_series, lpad(cast(generate_series AS varchar), 10, '0')
+FROM TABLE(generate_series(1, 100000));
+
+set chunk_size = 128;
+set pipeline_dop = 1;
+set full_sort_max_buffered_bytes = 1024;
+set full_sort_max_buffered_rows = 200;
+
+-- All v are distinct, so rank() == row position and `rk <= N` must return
+-- exactly N rows. Boundary cases (N = 129, 257, 385 = k*128+1) returned N-1
+-- before the fix.
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 128;
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 129;
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 130;
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 256;
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 257;
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 384;
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 385;
+-- Verify the actual boundary row is present (id ordering follows v here).
+select max(rk) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 129;
+
