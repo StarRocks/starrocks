@@ -178,6 +178,7 @@ dependencies {
     implementation("org.apache.hadoop:hadoop-client") {
         exclude(group = "org.slf4j", module = "slf4j-reload4j")
         exclude(group = "ch.qos.reload4j", module = "reload4j")
+        exclude(group = "org.jline", module = "jline")
     }
     implementation("org.apache.hadoop:hadoop-client-api")
     implementation("org.apache.hadoop:hadoop-client-runtime") {
