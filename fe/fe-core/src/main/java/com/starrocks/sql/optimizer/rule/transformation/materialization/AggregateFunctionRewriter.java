@@ -59,6 +59,12 @@ public class AggregateFunctionRewriter {
         }
 
         CallOperator aggFunc = (CallOperator) op;
+        // Rewriting avg(DISTINCT x) as sum(x)/count(x) over the MV's non-distinct
+        // sum/count would silently drop DISTINCT and return a wrong result, so decline
+        // the rewrite for any distinct aggregate.
+        if (aggFunc.isDistinct()) {
+            return false;
+        }
         String aggFuncName = aggFunc.getFnName();
         if (aggFuncName.equals(FunctionSet.AVG)) {
             return true;
