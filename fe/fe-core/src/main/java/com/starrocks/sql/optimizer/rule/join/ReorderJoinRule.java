@@ -294,6 +294,13 @@ public class ReorderJoinRule extends Rule {
 
         public OptExpression rewrite(OptExpression optExpression, ColumnRefSet requiredColumns) {
             Operator operator = optExpression.getOp();
+            // The operator consumes the columns referenced by its own predicate (the filter is applied
+            // before the projection). Treat them as required so projection pruning below cannot drop a
+            // pass-through column that the predicate still references -- otherwise the rebuilt statistics
+            // would lack that column and statistics estimation throws "missing statistic of col".
+            if (operator.getPredicate() != null) {
+                requiredColumns.union(operator.getPredicate().getUsedColumns());
+            }
             if (operator.getProjection() != null) {
                 Projection projection = operator.getProjection();
 
