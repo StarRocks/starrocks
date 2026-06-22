@@ -62,11 +62,7 @@ TEST(StorageEnvTest, fixed_provider_init_owns_lake_resources) {
     EXPECT_EQ(env.remote_starlet_location_provider().get(), nullptr);
 #endif
     EXPECT_NE(env.lake_update_manager(), nullptr);
-<<<<<<< HEAD
-=======
-    EXPECT_NE(env.lake_tablet_manager(), nullptr);
     EXPECT_EQ(env.lake_tablet_manager()->store_path_registry(), &store_path_registry);
->>>>>>> 2ae14410214... [Refactor] Move store path registry into PlatformEnv (#75086)
     EXPECT_NE(env.lake_replication_txn_manager(), nullptr);
     EXPECT_NE(env.parallel_compact_mgr(), nullptr);
 
