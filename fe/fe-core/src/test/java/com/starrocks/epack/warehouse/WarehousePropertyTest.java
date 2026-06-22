@@ -27,6 +27,7 @@ public class WarehousePropertyTest {
         Assert.assertEquals(1L, property.getComputeReplica());
         Assert.assertEquals(WarehouseProperty.ReplicationType.NONE, property.getReplicationType());
         Assert.assertEquals(WarehouseProperty.WarmupLevelType.NONE, property.getWarmupLevel());
+        Assert.assertEquals(0, property.getWarmupTimeoutSecs());
     }
 
     @Test
@@ -122,6 +123,31 @@ public class WarehousePropertyTest {
         Assert.assertNotEquals(property1, property2);
         property2.setWarmupLevel(WarehouseProperty.WarmupLevelType.INDEX);
         Assert.assertEquals(property1, property2);
+
+        // warmup_timeout_secs property
+        property1.setWarmupTimeoutSecs(300);
+        Assert.assertNotEquals(property1, property2);
+        property2.setWarmupTimeoutSecs(300);
+        Assert.assertEquals(property1, property2);
+    }
+
+    @Test
+    public void testWarehouseWarmupTimeoutSecsProperty() {
+        WarehouseProperty property = new WarehouseProperty();
+        // 0 means no override (fall back to the global config)
+        Assert.assertEquals(0, property.getWarmupTimeoutSecs());
+
+        property.setWarmupTimeoutSecs(600);
+        Assert.assertEquals(600, property.getWarmupTimeoutSecs());
+
+        // serialized to json under the documented property key
+        JSONObject js = new JSONObject(property.toString());
+        Assert.assertEquals(600, js.getInt(WarehouseProperty.PROPERTY_WARMUP_TIMEOUT_SECS));
+
+        // deep copy keeps the override
+        WarehouseProperty copy = new WarehouseProperty(property);
+        Assert.assertEquals(600, copy.getWarmupTimeoutSecs());
+        Assert.assertEquals(property, copy);
     }
 
     @Test

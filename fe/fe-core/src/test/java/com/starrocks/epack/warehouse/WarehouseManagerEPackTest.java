@@ -60,6 +60,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class WarehouseManagerEPackTest {
@@ -128,7 +129,8 @@ public class WarehouseManagerEPackTest {
         new MockUp<StarOSAgentEpack>() {
             @Mock
             public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
-                                          WarmupLevel warmupLevel) throws DdlException {
+                                          WarmupLevel warmupLevel, int warmupTimeoutSecs,
+                                          Map<String, String> properties) throws DdlException {
                 return warehouseId;
             }
         };
@@ -172,6 +174,27 @@ public class WarehouseManagerEPackTest {
                     WarehouseProperty.WarmupLevelType.ALL, false);
             Assert.assertEquals(expected, property);
         }
+
+        { // the warehouse is created with a per-warehouse warmup timeout override
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            HashMap<String, String> props = Maps.newHashMap();
+            props.put("warmup_timeout_secs", "600");
+            CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh3", props, "");
+            ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
+
+            WarehouseProperty property = ((LocalWarehouse) mgr.getWarehouse("wh3")).getProperty();
+            Assert.assertEquals(600, property.getWarmupTimeoutSecs());
+        }
+
+        { // a negative warmup timeout is rejected
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            HashMap<String, String> props = Maps.newHashMap();
+            props.put("warmup_timeout_secs", "-1");
+            CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh4", props, "");
+            DdlException exception = Assert.assertThrows(DdlException.class, () -> mgr.createWarehouse(createStmt));
+            Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("warmup timeout"));
+        }
+
         { // Unknown/Unsupported properties
             WarehouseManagerEPack mgr = new WarehouseManagerEPack();
             HashMap<String, String> props = Maps.newHashMap();
@@ -192,7 +215,7 @@ public class WarehouseManagerEPackTest {
         new MockUp<StarOSAgentEpack>() {
             @Mock
             public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
-                                          WarmupLevel warmupLevel) throws DdlException {
+                                          WarmupLevel warmupLevel, OptionalInt warmupTimeoutSecs) throws DdlException {
             }
         };
         new MockUp<GlobalStateMgr>() {
@@ -243,6 +266,18 @@ public class WarehouseManagerEPackTest {
             Assert.assertEquals(WarehouseProperty.ReplicationType.ASYNC, property.getReplicationType());
             Assert.assertEquals(WarehouseProperty.WarmupLevelType.META, property.getWarmupLevel());
         }
+        {
+            Map<String, String> m = new HashMap<>();
+            m.put("warmup_timeout_secs", "900");
+            AlterWarehouseStmt alterStmt = new AlterWarehouseStmt("default_warehouse", m);
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            mgr.initDefaultWarehouse();
+            mgr.alterWarehouse(alterStmt);
+            Warehouse warehouse = mgr.getWarehouse("default_warehouse");
+            Assert.assertTrue(warehouse instanceof LocalWarehouse);
+            WarehouseProperty property = ((LocalWarehouse) warehouse).getProperty();
+            Assert.assertEquals(900, property.getWarmupTimeoutSecs());
+        }
 
         {
             Map<String, String> m = new HashMap<>();
@@ -279,7 +314,8 @@ public class WarehouseManagerEPackTest {
         new MockUp<StarOSAgentEpack>() {
             @Mock
             public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
-                                          WarmupLevel warmupLevel) throws DdlException {
+                                          WarmupLevel warmupLevel, int warmupTimeoutSecs,
+                                          Map<String, String> properties) throws DdlException {
                 return workerGroupId;
             }
         };
@@ -370,7 +406,8 @@ public class WarehouseManagerEPackTest {
         new MockUp<StarOSAgentEpack>() {
             @Mock
             public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
-                                          WarmupLevel warmupLevel) throws DdlException {
+                                          WarmupLevel warmupLevel, int warmupTimeoutSecs,
+                                          Map<String, String> properties) throws DdlException {
                 return workerGroupId;
             }
         };
@@ -416,7 +453,8 @@ public class WarehouseManagerEPackTest {
         new MockUp<StarOSAgentEpack>() {
             @Mock
             public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
-                                          WarmupLevel warmupLevel) throws DdlException {
+                                          WarmupLevel warmupLevel, int warmupTimeoutSecs,
+                                          Map<String, String> properties) throws DdlException {
                 return workerGroupId;
             }
         };
@@ -467,7 +505,8 @@ public class WarehouseManagerEPackTest {
         new MockUp<StarOSAgentEpack>() {
             @Mock
             public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
-                                          WarmupLevel warmupLevel) throws DdlException {
+                                          WarmupLevel warmupLevel, int warmupTimeoutSecs,
+                                          Map<String, String> properties) throws DdlException {
                 return workerGroupId;
             }
         };

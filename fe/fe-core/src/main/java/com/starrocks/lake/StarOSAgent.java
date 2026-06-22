@@ -67,6 +67,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -1054,6 +1055,13 @@ public class StarOSAgent {
 
     public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
                                   WarmupLevel warmupLevel, Map<String, String> properties) throws DdlException {
+        return createWorkerGroup(size, replicaNumber, replicationType, warmupLevel, 0 /* warmupTimeoutSecs */,
+                properties);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel, int warmupTimeoutSecs, Map<String, String> properties)
+            throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -1063,7 +1071,7 @@ public class StarOSAgent {
         WorkerGroupDetailInfo result = null;
         try {
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(), properties, replicaNumber,
-                    replicationType, warmupLevel);
+                    replicationType, warmupLevel, warmupTimeoutSecs);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
@@ -1093,9 +1101,15 @@ public class StarOSAgent {
 
     public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
                                   WarmupLevel warmupLevel) throws DdlException {
+        updateWorkerGroup(workerGroupId, replicaNumber, replicationType, warmupLevel, OptionalInt.empty());
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel, OptionalInt warmupTimeoutSecs) throws DdlException {
         prepare();
         try {
-            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType, warmupLevel);
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType,
+                    warmupLevel, warmupTimeoutSecs);
         } catch (StarClientException e) {
             LOG.warn("Failed to update worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to update worker group. error: " + e.getMessage());

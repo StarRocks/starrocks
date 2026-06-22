@@ -60,6 +60,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -261,6 +262,19 @@ public class WarehouseManagerEPack extends WarehouseManager {
                         WarehouseProperty.WarmupLevelType.NONE.toString());
                 warehouseProperty.setWarmupLevel(WarehouseProperty.warmupLevelTypeFromString(warmupLevel));
                 properties.remove(WarehouseProperty.PROPERTY_WARMUP_LEVEL);
+
+                // handle 'warmup_timeout_secs': per-warehouse override of the global shard warmup timeout,
+                // in seconds. 0 (the default when absent) means no override and falls back to
+                // Config.lake_compute_replica_warmup_timeout_secs.
+                if (properties.containsKey(WarehouseProperty.PROPERTY_WARMUP_TIMEOUT_SECS)) {
+                    int warmupTimeoutSecs =
+                            Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_WARMUP_TIMEOUT_SECS));
+                    if (warmupTimeoutSecs < 0) {
+                        throw new DdlException("warehouse warmup timeout secs can not be < 0");
+                    }
+                    warehouseProperty.setWarmupTimeoutSecs(warmupTimeoutSecs);
+                    properties.remove(WarehouseProperty.PROPERTY_WARMUP_TIMEOUT_SECS);
+                }
 
                 // enable_query_queue
                 if (properties.containsKey(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE)) {
@@ -527,6 +541,16 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 warehouseProperty.setWarmupLevel(WarehouseProperty.warmupLevelTypeFromString(warmupLevel));
                 properties.remove(WarehouseProperty.PROPERTY_WARMUP_LEVEL);
             }
+            // handle update of 'warmup_timeout_secs'
+            if (properties.get(WarehouseProperty.PROPERTY_WARMUP_TIMEOUT_SECS) != null) {
+                int warmupTimeoutSecs =
+                        Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_WARMUP_TIMEOUT_SECS));
+                if (warmupTimeoutSecs < 0) {
+                    throw new DdlException("warehouse warmup timeout secs can not be < 0");
+                }
+                warehouseProperty.setWarmupTimeoutSecs(warmupTimeoutSecs);
+                properties.remove(WarehouseProperty.PROPERTY_WARMUP_TIMEOUT_SECS);
+            }
             // handle update of 'enable_query_queue'
             if (properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE) != null) {
                 boolean enableQueryQueue =
@@ -591,7 +615,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
                                 toStarOSReplicationType(warehouseProperty.getReplicationType());
                         WarmupLevel warmupLevel = toStarOSWarmupLevel(warehouseProperty.getWarmupLevel());
                         starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
-                                replicationType, warmupLevel);
+                                replicationType, warmupLevel,
+                                OptionalInt.of(warehouseProperty.getWarmupTimeoutSecs()));
                     } catch (DdlException e) {
                         LOG.warn(e);
                         throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);

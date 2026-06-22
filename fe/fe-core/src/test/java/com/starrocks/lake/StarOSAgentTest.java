@@ -65,6 +65,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class StarOSAgentTest {
@@ -811,7 +812,7 @@ public class StarOSAgentTest {
         new Expectations(client) {
             {
                 client.createWorkerGroup("1", "Starrocks", (WorkerGroupSpec) any,
-                        null, null, anyInt, (ReplicationType) any, (WarmupLevel) any);
+                        null, null, anyInt, (ReplicationType) any, (WarmupLevel) any, anyInt);
                 result = WorkerGroupDetailInfo.newBuilder().build();
             }
         };
@@ -829,7 +830,8 @@ public class StarOSAgentTest {
     public void testUpdateWorkerGroup() throws StarClientException {
         new Expectations(client) {
             {
-                client.updateWorkerGroup("1", 123, null, null, 1, (ReplicationType) any, (WarmupLevel) any);
+                client.updateWorkerGroup("1", 123, null, null, 1, (ReplicationType) any, (WarmupLevel) any,
+                        (OptionalInt) any);
                 result = WorkerGroupDetailInfo.newBuilder().build();
             }
         };

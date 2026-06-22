@@ -424,8 +424,8 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
         ReplicationType replicationType = WarehouseProperty.toStarOSReplicationType(property.getReplicationType());
         WarmupLevel warmupLevel = WarehouseProperty.toStarOSWarmupLevel(property.getWarmupLevel());
         long clusterId = GlobalStateMgr.getCurrentState().getNextId();
-        long workerGroupId =
-                starOSAgent.createWorkerGroup("x0", property.getComputeReplica(), replicationType, warmupLevel);
+        long workerGroupId = starOSAgent.createWorkerGroup("x0", property.getComputeReplica(), replicationType,
+                warmupLevel, property.getWarmupTimeoutSecs(), ImmutableMap.of());
         cluster = new Cluster(clusterId, DEFAULT_CLUSTER_NAME, workerGroupId);
         clusters.add(cluster);
         final List<WarehouseEventListener> warehouseListeners = GlobalStateMgr.getCurrentState()
@@ -457,7 +457,8 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             }
             long clusterId = GlobalStateMgr.getCurrentState().getNextId();
             long workerGroupId = starOSAgent.createWorkerGroup(
-                    "x0", property.getComputeReplica(), replicationType, warmupLevel, groupProperties);
+                    "x0", property.getComputeReplica(), replicationType, warmupLevel,
+                    property.getWarmupTimeoutSecs(), groupProperties);
             Cluster newCluster = new Cluster(clusterId, cnGroupName, workerGroupId);
             clusters.add(newCluster);
             if (cluster == null) {

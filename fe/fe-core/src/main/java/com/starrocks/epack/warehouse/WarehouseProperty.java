@@ -31,6 +31,7 @@ public class WarehouseProperty {
     public static final String PROPERTY_COMPUTE_REPLICA = "compute_replica";
     public static final String PROPERTY_REPLICATION_TYPE = "replication_type";
     public static final String PROPERTY_WARMUP_LEVEL = "warmup_level";
+    public static final String PROPERTY_WARMUP_TIMEOUT_SECS = "warmup_timeout_secs";
     public static final int DEFAULT_REPLICA_NUMBER = 1;
 
     // query queue
@@ -63,6 +64,12 @@ public class WarehouseProperty {
     @SerializedName(value = "warmup_level")
     private WarmupLevelType warmupLevel;
 
+    // Per-warehouse override of the global shard warmup timeout
+    // (Config.lake_compute_replica_warmup_timeout_secs), in seconds.
+    // 0 means no override: fall back to the global config.
+    @SerializedName(value = "warmup_timeout_secs")
+    private int warmupTimeoutSecs;
+
     @SerializedName(value = "enable_query_queue")
     private boolean enableQueryQueue;
     @SerializedName(value = "enable_query_queue_load")
@@ -85,6 +92,7 @@ public class WarehouseProperty {
         this.computeReplica = DEFAULT_REPLICA_NUMBER;
         this.replicationType = ReplicationType.NONE;
         this.warmupLevel = WarmupLevelType.NONE;
+        this.warmupTimeoutSecs = 0;
         this.enableQueryQueue = false;
         this.enableQueryQueueLoad = false;
         this.enableQueryQueueStatistic = false;
@@ -95,6 +103,7 @@ public class WarehouseProperty {
         this.computeReplica = that.computeReplica;
         this.replicationType = that.replicationType;
         this.warmupLevel = that.warmupLevel;
+        this.warmupTimeoutSecs = that.warmupTimeoutSecs;
         this.enableQueryQueue = that.enableQueryQueue;
         this.enableQueryQueueLoad = that.enableQueryQueueLoad;
         this.enableQueryQueueStatistic = that.enableQueryQueueStatistic;
@@ -136,6 +145,14 @@ public class WarehouseProperty {
 
     public WarmupLevelType getWarmupLevel() {
         return warmupLevel;
+    }
+
+    public void setWarmupTimeoutSecs(int warmupTimeoutSecs) {
+        this.warmupTimeoutSecs = warmupTimeoutSecs;
+    }
+
+    public int getWarmupTimeoutSecs() {
+        return warmupTimeoutSecs;
     }
 
     public boolean isEnableQueryQueue() {
@@ -204,6 +221,7 @@ public class WarehouseProperty {
         }
         WarehouseProperty prop = (WarehouseProperty) obj;
         return this.computeReplica == prop.computeReplica && this.warmupLevel == prop.warmupLevel &&
+                this.warmupTimeoutSecs == prop.warmupTimeoutSecs &&
                 this.replicationType == prop.replicationType && this.enableQueryQueue == prop.enableQueryQueue
                 && this.enableQueryQueueLoad == prop.enableQueryQueueLoad
                 && this.enableQueryQueueStatistic == prop.enableQueryQueueStatistic
