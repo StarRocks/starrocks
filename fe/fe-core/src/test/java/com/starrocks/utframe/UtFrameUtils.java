@@ -776,6 +776,116 @@ public class UtFrameUtils {
         return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
+    private static void registerReplayIcebergResourceTables(ConnectContext connectContext,
+                                                           StarRocksAssert starRocksAssert,
+                                                           QueryDumpInfo replayDumpInfo) throws Exception {
+        Map<String, String> createTableStmtMap = replayDumpInfo.getCreateTableStmtMap();
+        if (createTableStmtMap.isEmpty()) {
+            return;
+        }
+        // The dump stores iceberg tables as bare db.table in table_meta but references them as
+        // catalog.db.table in the query/view bodies. That combined SQL text is the only record of
+        // which external catalog each dumped db belongs to.
+        StringBuilder sqlText = new StringBuilder(
+                replayDumpInfo.getOriginStmt() == null ? "" : replayDumpInfo.getOriginStmt());
+        for (String view : replayDumpInfo.getCreateViewStmtMap().values()) {
+            sqlText.append('\n').append(view);
+        }
+        String allSql = sqlText.toString();
+
+        Map<String, String> dbToCatalog = new java.util.HashMap<>();
+        for (String key : createTableStmtMap.keySet()) {
+            String db = key.contains(".") ? key.substring(0, key.indexOf('.')) : key;
+            if (dbToCatalog.containsKey(db)) {
+                continue;
+            }
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("(\\w+)\\." + java.util.regex.Pattern.quote(db) + "\\.")
+                    .matcher(allSql);
+            if (m.find()) {
+                dbToCatalog.put(db, m.group(1));
+            }
+        }
+        if (dbToCatalog.isEmpty()) {
+            return;
+        }
+
+        Map<String, com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata> metaByCatalog =
+                new java.util.LinkedHashMap<>();
+        java.util.List<String> consumed = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> entry : createTableStmtMap.entrySet()) {
+            String key = entry.getKey();
+            String db = key.contains(".") ? key.substring(0, key.indexOf('.')) : key;
+            String table = key.contains(".") ? key.substring(key.indexOf('.') + 1) : key;
+            String catalog = dbToCatalog.get(db);
+            if (catalog == null) {
+                continue;
+            }
+            com.starrocks.sql.ast.CreateTableStmt stmt;
+            try {
+                com.starrocks.sql.ast.StatementBase parsed =
+                        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(entry.getValue(), connectContext);
+                if (!(parsed instanceof com.starrocks.sql.ast.CreateTableStmt)) {
+                    continue;
+                }
+                stmt = (com.starrocks.sql.ast.CreateTableStmt) parsed;
+            } catch (Exception e) {
+                continue;
+            }
+            // Only handle old-style resource-mapping iceberg external tables: CREATE EXTERNAL TABLE ...
+            // ENGINE=ICEBERG ("resource"=...). Other external tables (e.g. ENGINE=HIVE) and native tables
+            // must go through the normal replay create path -- otherwise we would hijack unrelated tables,
+            // drop their CREATE statements from createTableStmtMap, and break other dumps.
+            if (!stmt.isExternal()
+                    || stmt.getEngineName() == null
+                    || !stmt.getEngineName().equalsIgnoreCase("iceberg")
+                    || stmt.getProperties() == null
+                    || !stmt.getProperties().containsKey("resource")) {
+                continue;
+            }
+            List<com.starrocks.catalog.Column> columns = new java.util.ArrayList<>();
+            for (com.starrocks.sql.ast.ColumnDef cd : stmt.getColumnDefs()) {
+                columns.add(new com.starrocks.catalog.Column(
+                        cd.getName(), cd.getType(), cd.isAllowNull(), cd.getComment()));
+            }
+            com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata meta =
+                    metaByCatalog.computeIfAbsent(catalog,
+                            c -> new com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata(c));
+            meta.registerTable(null, db, table, columns, 100L);
+            consumed.add(key);
+        }
+        // Served via the external catalogs below, so drop their internal-catalog CREATE EXTERNAL TABLE
+        // statements -- those would need a live iceberg resource that the dump does not carry.
+        for (String key : consumed) {
+            createTableStmtMap.remove(key);
+        }
+        if (metaByCatalog.isEmpty()) {
+            return;
+        }
+
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        com.starrocks.connector.MockedMetadataMgr mockedMetadataMgr;
+        if (gsm.getMetadataMgr() instanceof com.starrocks.connector.MockedMetadataMgr) {
+            mockedMetadataMgr = (com.starrocks.connector.MockedMetadataMgr) gsm.getMetadataMgr();
+        } else {
+            mockedMetadataMgr = new com.starrocks.connector.MockedMetadataMgr(
+                    gsm.getLocalMetastore(), gsm.getConnectorMgr());
+            gsm.setMetadataMgr(mockedMetadataMgr);
+        }
+        for (Map.Entry<String, com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata> e
+                : metaByCatalog.entrySet()) {
+            String catalog = e.getKey();
+            if (!gsm.getCatalogMgr().catalogExists(catalog)) {
+                Map<String, String> props = new java.util.HashMap<>();
+                props.put("type", "iceberg");
+                props.put("iceberg.catalog.type", "hive");
+                props.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+                gsm.getCatalogMgr().createCatalog("iceberg", catalog, "", props);
+            }
+            mockedMetadataMgr.registerMockedMetadata(catalog, e.getValue());
+        }
+    }
+
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -804,6 +914,12 @@ public class UtFrameUtils {
                     replayDumpInfo.getTableStatisticsMap());
             GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
+
+        // Replay old-style resource-mapping iceberg external tables that the dump only captured as
+        // CREATE EXTERNAL TABLE ... ENGINE=ICEBERG ("resource"=...) statements in table_meta. Register
+        // the referenced iceberg resource and a mock resource-mapping catalog metadata built from the
+        // declared schema so these tables can be created and planned during replay.
+        registerReplayIcebergResourceTables(connectContext, starRocksAssert, replayDumpInfo);
 
         // create table
         int backendId = 10002;
