@@ -181,13 +181,41 @@ public class SecurityPolicyMgr {
         }
     }
 
+    private boolean isTableAlive(TableUID tableUID) {
+        try {
+            return tableUID.toTableName() != null;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
     private void doDropPolicyUnlocked(PolicyType policyType, DbUID dbUID, String policyName, Long policyId,
                                       boolean force) {
         Map<String, Policy> nameToPolicy = getOrCreateNamePolicyMapByDBUIDUnlocked(dbUID, policyType);
 
-        if (policyContextMap.values().stream().anyMatch(policyContext -> policyContext.hasApplyPolicy(policyType, policyId))
-                && !force) {
-            throw new SemanticException("Can't drop policy which has be apply");
+        if (!force) {
+            boolean hasLiveReference = policyContextMap.entrySet().stream()
+                    .filter(entry -> entry.getValue().hasApplyPolicy(policyType, policyId))
+                    .anyMatch(entry -> isTableAlive(entry.getKey()));
+            if (hasLiveReference) {
+                throw new SemanticException("Can't drop policy which has be apply");
+            }
+        }
+
+        Iterator<Map.Entry<TableUID, PolicyAppliedContext>> it = policyContextMap.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<TableUID, PolicyAppliedContext> entry = it.next();
+            PolicyAppliedContext ctx = entry.getValue();
+            if (ctx.hasApplyPolicy(policyType, policyId)) {
+                if (policyType == PolicyType.MASKING) {
+                    ctx.revokeMaskingPolicy(policyId);
+                } else {
+                    ctx.revokeRowAccessPolicy(policyId);
+                }
+                if (ctx.isEmpty()) {
+                    it.remove();
+                }
+            }
         }
 
         nameToPolicy.remove(policyName);
@@ -355,6 +383,14 @@ public class SecurityPolicyMgr {
         return nameToPolicy.get(dbUID);
     }
 
+    private boolean isValid(TableUID tableUID) {
+        try {
+            return tableUID.validate();
+        } catch (Throwable ignored) {
+        }
+        return true;
+    }
+
     public void removeInvalidObject() {
         policyLock.readLock().lock();
         try {
@@ -364,7 +400,7 @@ public class SecurityPolicyMgr {
             Iterator<Map.Entry<TableUID, PolicyAppliedContext>> iterator = policyContextMap.entrySet().iterator();
             while (iterator.hasNext()) {
                 Map.Entry<TableUID, PolicyAppliedContext> entry = iterator.next();
-                if (!entry.getKey().validate()) {
+                if (!isValid(entry.getKey())) {
                     iterator.remove();
                 } else {
                     PolicyAppliedContext policyContext = entry.getValue();
@@ -475,8 +511,21 @@ public class SecurityPolicyMgr {
     }
 
     public void registerMaskingPolicyContext(ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo) {
-        doApplyMaskingPolicyContext(applyMaskingPolicyInfo.getTable(), applyMaskingPolicyInfo.getColumnId(), null,
+        doForceApplyMaskingPolicyContext(applyMaskingPolicyInfo.getTable(), applyMaskingPolicyInfo.getColumnId(),
                 applyMaskingPolicyInfo.getColumnMaskingPolicyContext());
+    }
+
+    // Replay-path upsert: overwrites any existing masking policy for the column without throwing.
+    // Used during journal replay where the live-path duplicate check must not apply.
+    private void doForceApplyMaskingPolicyContext(TableUID tableUID, ColumnId columnId,
+                                                  MaskingPolicyContext columnMaskingPolicyContext) {
+        policyLock.writeLock().lock();
+        try {
+            policyContextMap.computeIfAbsent(tableUID, k -> new PolicyAppliedContext())
+                    .applyMaskingPolicy(columnId, columnMaskingPolicyContext);
+        } finally {
+            policyLock.writeLock().unlock();
+        }
     }
 
     private void doApplyMaskingPolicyContext(TableUID tableUID, ColumnId columnId, String columnName,
@@ -556,8 +605,28 @@ public class SecurityPolicyMgr {
     }
 
     public void registerRowAccessPolicyContext(ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo) {
-        doApplyRowAccessPolicyContext(applyRowAccessPolicyInfo.getTable(),
+        doIdempotentApplyRowAccessPolicyContext(applyRowAccessPolicyInfo.getTable(),
                 applyRowAccessPolicyInfo.getRowAccessPolicyContext());
+    }
+
+    // Replay-path apply: skips silently if the exact same (policyId, onColumns) already exists.
+    // Used during journal replay where the live-path duplicate check must not apply.
+    private void doIdempotentApplyRowAccessPolicyContext(TableUID tableUID,
+                                                        RowAccessPolicyContext rowAccessPolicyContext) {
+        policyLock.writeLock().lock();
+        try {
+            PolicyAppliedContext tableAppliedPolicyInfo =
+                    policyContextMap.computeIfAbsent(tableUID, k -> new PolicyAppliedContext());
+            for (RowAccessPolicyContext rp : tableAppliedPolicyInfo.getRowAccessPolicyApply()) {
+                if (rp.policyId.equals(rowAccessPolicyContext.policyId)
+                        && rp.onColumns.equals(rowAccessPolicyContext.onColumns)) {
+                    return;
+                }
+            }
+            tableAppliedPolicyInfo.addRowAccessPolicy(rowAccessPolicyContext);
+        } finally {
+            policyLock.writeLock().unlock();
+        }
     }
 
     private void doApplyRowAccessPolicyContext(TableUID tableUID,

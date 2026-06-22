@@ -1,0 +1,110 @@
+-- name: test_dangling_policy_applying
+
+create external catalog hive_catalog_${uuid0}
+properties
+(
+    "type" = "hive",
+    "hive.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+
+
+-- create hive table
+set catalog hive_catalog_${uuid0};
+create database db_${uuid0};
+use db_${uuid0};
+
+
+CREATE TABLE partition_table (
+  int1 int,
+  str1 string,
+  dt string
+)
+PARTITION BY (dt);
+INSERT INTO partition_table VALUES (1, "a", "2025-05-16"),(1, "b","2025-05-17"),(1,null,"2025-05-19");
+
+select int1, str1, dt from partition_table order by int1, str1, dt;
+
+create masking policy mp_dangling as (v int) returns int -> v + 1;
+alter table partition_table modify column int1 set masking policy mp_dangling using (int1);
+
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}";
+
+select int1, str1, dt from partition_table order by int1, str1, dt;
+
+drop table partition_table force;
+
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}";
+
+drop masking policy mp_dangling;
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}";
+
+CREATE TABLE partition_table2 (
+  int1 int,
+  str1 string,
+  dt string
+)
+PARTITION BY (dt);
+INSERT INTO partition_table2 VALUES (1, "a", "2025-05-16"),(1, "b","2025-05-17"),(1,null,"2025-05-19");
+
+select int1, str1, dt from partition_table2 order by int1, str1, dt;
+
+create masking policy mp_dangling as (v int) returns int -> v + 1;
+alter table partition_table2 modify column int1 set masking policy mp_dangling using (int1);
+
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}";
+
+select int1, str1, dt from partition_table2 order by int1, str1, dt;
+
+drop masking policy mp_dangling force;
+
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}";
+
+select int1, str1, dt from partition_table2 order by int1, str1, dt;
+
+-- synonym external table: drop the table and recreate it under the same name.
+-- The recreated table gets a new table UID (different create time), so the policy entry
+-- left by the original table becomes a dangling synonym even though a same-name table now
+-- exists. Querying sys.policy_references must keep reporting it as dangling and must not
+-- resolve it to the recreated table.
+create masking policy mp_syn as (v int) returns int -> v + 1;
+
+CREATE TABLE partition_table3 (
+  int1 int,
+  str1 string,
+  dt string
+)
+PARTITION BY (dt);
+INSERT INTO partition_table3 VALUES (1, "a", "2025-05-16"),(1, "b","2025-05-17"),(1,null,"2025-05-19");
+alter table partition_table3 modify column int1 set masking policy mp_syn using (int1);
+
+-- live reference to the original table
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}";
+
+-- drop then recreate the same-name table; the original entry is now a stale synonym
+drop table partition_table3 force;
+[UC] select sleep(2);
+CREATE TABLE partition_table3 (
+  int1 int,
+  str1 string,
+  dt string
+)
+PARTITION BY (dt);
+INSERT INTO partition_table3 VALUES (1, "a", "2025-05-16"),(1, "b","2025-05-17"),(1,null,"2025-05-19");
+
+-- the original entry must still be reported as dangling even though partition_table3 exists again
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}";
+
+-- apply the policy to the recreated table: a dangling old entry and a live new entry coexist
+alter table partition_table3 modify column int1 set masking policy mp_syn using (int1);
+select * from default_catalog.sys.policy_references where POLICY_DATABASE = "db_${uuid0}" order by REF_OBJECT_NAME;
+
+drop table partition_table3 force;
+drop masking policy mp_syn force;
+
+drop table if exists partition_table force;
+drop table if exists partition_table2 force;
+drop table if exists partition_table3 force;
+drop database if exists db_${uuid0} force;
+set catalog default_catalog;
+drop catalog if exists hive_catalog_${uuid0};

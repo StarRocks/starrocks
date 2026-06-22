@@ -157,4 +157,9 @@ public class TableUID {
     public int hashCode() {
         return Objects.hash(catalogId, databaseUUID, tableUUID);
     }
+
+    public String toString() {
+        return String.format("TableUID(catalogId=%d,databaseUUID=%s,tableUUID=%s)",
+                catalogId, databaseUUID, tableUUID);
+    }
 }
