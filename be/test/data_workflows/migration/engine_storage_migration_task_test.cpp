@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/task/engine_storage_migration_task.h"
+#include "data_workflows/migration/engine_storage_migration_task.h"
 
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>

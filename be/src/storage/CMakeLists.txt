@@ -181,8 +181,6 @@ set(STORAGE_FILES
     task/engine_clone_task.cpp
     task/engine_manual_compaction_task.cpp
     task/engine_compaction_control_task.cpp
-    task/engine_storage_migration_task.cpp
-    task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
@@ -225,7 +223,6 @@ set(STORAGE_FILES
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
-    push_utils.cpp
     primary_key_recover.cpp
     local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
@@ -268,7 +265,6 @@ set(STORAGE_FILES
     lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
-    lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
