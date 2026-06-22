@@ -90,6 +90,15 @@ This topic introduces the following types of FE configurations:
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
 
+### `enable_concurrent_add_partition_during_alter`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When `true`, partition creation (manual `ALTER TABLE ... ADD PARTITION`, automatic creation during loading, and the dynamic partition scheduler) is allowed to proceed concurrently with metadata-only alter operations that are provably safe — currently the shared-data ADD/DROP INDEX fast-path jobs and the transient `UPDATING_META` state of fast schema evolution — instead of rejecting the DDL or cancelling the alter job. Set to `false` to restore the legacy exclusive behavior. This setting only relaxes partition creation; all other alter jobs and all non-`ADD PARTITION` DDL keep the legacy state checks.
+- Introduced in: -
+
 ### `capacity_used_percent_high_water`
 
 - Default: 0.75
