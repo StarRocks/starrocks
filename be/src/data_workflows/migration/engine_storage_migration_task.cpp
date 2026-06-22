@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/task/engine_storage_migration_task.h"
+#include "data_workflows/migration/engine_storage_migration_task.h"
 
 #include <fmt/format.h>
 

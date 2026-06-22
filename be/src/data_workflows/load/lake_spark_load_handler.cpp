@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/spark_load.h"
+#include "data_workflows/load/lake_spark_load_handler.h"
 
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "data_workflows/load/push_broker_reader.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -24,7 +25,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/push_utils.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

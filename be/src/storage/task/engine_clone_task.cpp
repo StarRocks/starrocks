@@ -50,7 +50,6 @@
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
-#include "engine_storage_migration_task.h"
 #include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"

@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/task/engine_alter_tablet_task.h"
+#include "data_workflows/schema_change/engine_alter_tablet_task.h"
 
 #include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
