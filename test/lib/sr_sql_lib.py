@@ -3172,9 +3172,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         res = self.execute_sql("show backends;", ori=True)
         tools.assert_true(res["status"], res["msg"])
+        rows = list(res["result"])
+
+        # Shared-data clusters run compute nodes (possibly alongside backends);
+        # a config update must reach every worker, so take the union of both
+        # lists. On shared-nothing clusters the compute-node list is empty and
+        # behavior is unchanged.
+        res = self.execute_sql("show compute nodes;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        rows.extend(res["result"])
+
+        tools.assert_true(len(rows) > 0, "no backends or compute nodes found")
 
         backends = []
-        for row in res["result"]:
+        for row in rows:
             backends.append(
                 {
                     "host": row[1],
