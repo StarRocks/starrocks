@@ -944,10 +944,10 @@ public class SplitTabletJob extends TabletReshardJob {
 
     private static long lookupPackGroupId(List<ColocateRange> colocateRanges, int colocateColumnCount,
                                           Range<Tuple> range, long newTabletId) {
-        Tuple prefix = ColocateRangeUtils.extractColocatePrefix(range, colocateColumnCount);
-        int colocateRangeIndex = ColocateRangeMgr.indexOf(colocateRanges, prefix);
-        Preconditions.checkState(colocateRangeIndex >= 0,
-                "Tablet %s has no covering ColocateRange for prefix %s", newTabletId, prefix);
-        return colocateRanges.get(colocateRangeIndex).getShardGroupId();
+        long packShardGroupId = ColocateRangeUtils.lookupPackShardGroupId(
+                range, colocateRanges, colocateColumnCount);
+        Preconditions.checkState(packShardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                "Tablet %s has no covering ColocateRange", newTabletId);
+        return packShardGroupId;
     }
 }

@@ -34,6 +34,7 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
+import com.staros.proto.UpdateShardInfo;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
@@ -450,6 +451,50 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test delete shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
+    }
+
+    @Test
+    public void testReassignShardGroups() throws StarClientException {
+        UpdateShardInfo expected = UpdateShardInfo.newBuilder()
+                .setShardId(100L)
+                .addAllAddGroupIds(Lists.newArrayList(2L))
+                .addAllRemoveGroupIds(Lists.newArrayList(1L))
+                .build();
+        new Expectations(client) {
+            {
+                client.updateShard("1", Lists.newArrayList(expected));
+                result = null;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(2L), Lists.newArrayList(1L)));
+    }
+
+    @Test
+    public void testReassignShardGroupsNoOpWhenDeltaEmpty() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.updateShard(anyString, (List<UpdateShardInfo>) any);
+                times = 0;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(), Lists.newArrayList()));
+    }
+
+    @Test
+    public void testReassignShardGroupsWrapsClientException() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.updateShard(anyString, (List<UpdateShardInfo>) any);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked failure");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assertions.assertThrows(DdlException.class, () ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(2L), Lists.newArrayList(1L)));
     }
 
     @Test
