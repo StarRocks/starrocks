@@ -91,6 +91,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在发送计划片段之前应用于 BRPC TalkTimeoutController 的超时（毫秒）。`BackendServiceClient.sendPlanFragmentAsync` 在调用后端 `execPlanFragmentAsync` 之前设置此值。它控制 BRPC 在从连接池借用空闲连接以及执行发送时将等待多长时间；如果超过，RPC 将失败并可能触发该方法的重试逻辑。在争用情况下，将此值设置得更低以快速失败，或提高它以容忍瞬时池耗尽或慢速网络。请谨慎：非常大的值可能会延迟故障检测并阻塞请求线程。
 - 引入版本: v3.3.11, v3.4.1, v3.5.0
 
+### `connector_row_size_estimate_bytes`
+
+- 默认值: 256
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 优化器在存储格式未知或列 Schema 不可用时，用于估算外部文件表（FILES() 和 ENGINE=file 表）行数的平均行大小（字节）。行数估算公式为 `总文件字节数 / connector_row_size_estimate_bytes`。值越小，估算行数越大，可能影响 Join 顺序决策。
+- 引入版本: v3.4
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - 默认值: 12 * 3600
