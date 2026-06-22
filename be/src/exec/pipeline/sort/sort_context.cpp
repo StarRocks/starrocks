@@ -60,6 +60,17 @@ bool SortContext::is_partition_ready() const {
     });
 }
 
+Status SortContext::spiller_task_status() const {
+    for (const auto& sorter : _chunks_sorter_partitions) {
+        if (sorter->spiller() != nullptr) {
+            if (Status st = sorter->spiller()->task_status(); !st.ok()) {
+                return st;
+            }
+        }
+    }
+    return Status::OK();
+}
+
 void SortContext::subscribe_source_to_spillers(RuntimeState* state, PipelineObserver* observer) {
     for (auto& sorter : _chunks_sorter_partitions) {
         if (sorter->spiller() != nullptr) {
@@ -76,6 +87,9 @@ void SortContext::subscribe_source_to_spillers(RuntimeState* state, PipelineObse
 void SortContext::cancel() {}
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
+    // Propagate a partition spiller task error before touching the merger, which would otherwise stall on a
+    // not-eos no-data cursor.
+    RETURN_IF_ERROR(spiller_task_status());
     RETURN_IF_ERROR(_init_merger());
 
     while (_required_rows > 0 && !_merger.is_eos()) {

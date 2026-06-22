@@ -89,6 +89,16 @@ public:
         }
     }
 
+    // Replicate SortContext::spiller_task_status(): first non-OK task_status() among the partition spillers.
+    Status spiller_task_status() const {
+        for (const auto& spiller : _partitions) {
+            if (Status st = spiller->task_status(); !st.ok()) {
+                return st;
+            }
+        }
+        return Status::OK();
+    }
+
     static constexpr int kNumPartitions = 4;
     RuntimeState _state;
     std::vector<std::shared_ptr<spill::Spiller>> _partitions;
@@ -167,6 +177,29 @@ TEST_F(SpillableSortObserverWakeupTest, subscription_gated_off_in_poller_mode) {
         spiller->notify_source_observers();
     }
     ASSERT_EQ(source_obs.source_count.load(), 0);
+}
+
+// Error-surfacing signal. A partition spiller's restore/flush IO task records its error via
+// update_spilled_task_status (it does not flip is_cancel/has_output_data) and emits only a source wakeup. The
+// recorded error survives on a bare, never-restored spiller and is exactly what the merge sources consult
+// (SortContext::spiller_task_status) to report runnable on error -- without it the source-only wakeup would
+// re-park the source WAIT_RESTORE and the query would sleep until timeout. Asserts the error is observable on
+// the partition that errored, that the SortContext-style scan surfaces it, and that the wakeup stays on the
+// source list.
+TEST_F(SpillableSortObserverWakeupTest, restore_task_error_is_observable_and_wakes_source) {
+    CountingObserver source_obs;
+    subscribe_source_to_all(&source_obs);
+    ASSERT_TRUE(spiller_task_status().ok()); // no partition has errored yet
+
+    // A restore task on one partition fails: it records the error and fires its (source-side) completion.
+    _partitions[2]->update_spilled_task_status(Status::InternalError("inject restore error"));
+    _partitions[2]->notify_source_observers();
+
+    ASSERT_FALSE(_partitions[2]->task_status().ok()); // the error is recorded on the errored partition
+    ASSERT_TRUE(_partitions[0]->task_status().ok());  // and only there
+    ASSERT_FALSE(spiller_task_status().ok());         // the merge source's scan now surfaces it
+    ASSERT_EQ(source_obs.source_count.load(), 1);     // woken on the source axis
+    ASSERT_EQ(source_obs.sink_count.load(), 0);       // never cross-woken onto the sink axis
 }
 
 // The sort fragment's event opt-in is gated on enable_spill_sort_events (default false; the fragment gate ANDs

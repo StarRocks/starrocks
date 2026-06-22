@@ -46,6 +46,11 @@ void LocalParallelMergeSortSourceOperator::close(RuntimeState* state) {
 }
 
 bool LocalParallelMergeSortSourceOperator::has_output() const {
+    // Report ready on a partition spiller task error so pull_chunk() propagates it; the merger's pending/stage
+    // gates never observe it. See LocalMergeSortSourceOperator::has_output().
+    if (!_sort_context->spiller_task_status().ok()) {
+        return true;
+    }
     if (!_sort_context->is_partition_sort_finished()) {
         return false;
     }
@@ -66,6 +71,8 @@ bool LocalParallelMergeSortSourceOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> LocalParallelMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
+    // Propagate the spiller task error that made has_output() report ready, before pulling from the merger.
+    RETURN_IF_ERROR(_sort_context->spiller_task_status());
     ChunkPtr chunk = _merger->try_get_next(_merge_parallel_id);
 
     if (_merger->is_finished()) {

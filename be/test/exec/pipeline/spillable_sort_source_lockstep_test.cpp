@@ -65,10 +65,13 @@ bool reason_named_and_covered(BlockReason reason, uint32_t covered_mask) {
 // ---------------------------------------------------------------------------------------------------------
 // Single-merge source: LocalMergeSortSourceOperator.
 //
-// has_output() = is_partition_sort_finished() && !is_output_finished() && is_partition_ready()
+// has_output() = !spiller_task_status().ok() ? true
+//              : is_partition_sort_finished() && !is_output_finished() && is_partition_ready()
 // is_finished() = is_partition_sort_finished() && is_output_finished()
 // block_reason() = (_is_finished || is_finished()) ? NONE : has_output() ? NONE : WAIT_RESTORE
-//   (one axis: both non-terminal has_output() gates are spiller-woken, so every park is WAIT_RESTORE.)
+//   (one axis: both non-terminal has_output() gates are spiller-woken, so every park is WAIT_RESTORE. The
+//    spiller_task_error short-circuit makes a restore/flush task error report runnable so pull_chunk()
+//    propagates it -- the error reaches the source as a source wakeup only and is otherwise unobserved.)
 // ---------------------------------------------------------------------------------------------------------
 namespace single_merge {
 
@@ -77,10 +80,14 @@ struct State {
     bool partition_sort_finished = false; // is_partition_sort_finished()
     bool output_finished = false;         // is_output_finished()
     bool partition_ready = false;         // is_partition_ready()
+    bool spiller_task_error = false;      // !spiller_task_status().ok() -- any partition spiller task errored
 };
 
 // Literal copy of has_output().
 bool has_output(const State& s) {
+    if (s.spiller_task_error) {
+        return true;
+    }
     return s.partition_sort_finished && !s.output_finished && s.partition_ready;
 }
 
@@ -105,9 +112,10 @@ std::vector<State> cross() {
     for (bool fl : {false, true})
         for (bool psf : {false, true})
             for (bool of : {false, true})
-                for (bool pr : {false, true}) {
-                    v.push_back(State{fl, psf, of, pr});
-                }
+                for (bool pr : {false, true})
+                    for (bool err : {false, true}) {
+                        v.push_back(State{fl, psf, of, pr, err});
+                    }
     return v;
 }
 
@@ -116,13 +124,16 @@ std::vector<State> cross() {
 // ---------------------------------------------------------------------------------------------------------
 // Parallel-merge source: LocalParallelMergeSortSourceOperator.
 //
-// has_output() = is_partition_sort_finished() && !_is_finished && !is_current_stage_finished() && !is_pending()
+// has_output() = !spiller_task_status().ok() ? true
+//              : is_partition_sort_finished() && !_is_finished && !is_current_stage_finished() && !is_pending()
 // is_finished() = _is_finished
 // block_reason() = (_is_finished || is_finished()) ? NONE
 //                : has_output() ? NONE
 //                : (!is_partition_sort_finished() || !is_partition_ready()) ? WAIT_RESTORE
 //                : NONE
-//   (mixed: restore axis -> WAIT_RESTORE; merge-CPU stage axis -> NONE.)
+//   (mixed: restore axis -> WAIT_RESTORE; merge-CPU stage axis -> NONE. The spiller_task_error short-circuit
+//    makes a restore/flush task error report runnable so pull_chunk() propagates it -- the merger's
+//    pending/stage gates never observe a task error, only has_output_data.)
 // ---------------------------------------------------------------------------------------------------------
 namespace parallel_merge {
 
@@ -132,10 +143,14 @@ struct State {
     bool current_stage_finished = false;  // _merger->is_current_stage_finished()
     bool is_pending = false;              // _merger->is_pending()
     bool partition_ready = false;         // is_partition_ready() -- the restore/merge-CPU discriminator
+    bool spiller_task_error = false;      // !spiller_task_status().ok() -- any partition spiller task errored
 };
 
 // Literal copy of has_output().
 bool has_output(const State& s) {
+    if (s.spiller_task_error) {
+        return true;
+    }
     if (!s.partition_sort_finished) {
         return false;
     }
@@ -176,9 +191,10 @@ std::vector<State> cross() {
         for (bool psf : {false, true})
             for (bool csf : {false, true})
                 for (bool pend : {false, true})
-                    for (bool pr : {false, true}) {
-                        v.push_back(State{fl, psf, csf, pend, pr});
-                    }
+                    for (bool pr : {false, true})
+                        for (bool err : {false, true}) {
+                            v.push_back(State{fl, psf, csf, pend, pr, err});
+                        }
     return v;
 }
 
@@ -278,6 +294,45 @@ TEST(SpillableSortSourceLockstepTest, oracle_rejects_draft_predicate_that_nones_
     ASSERT_FALSE(is_finished(leaf_restore_park));
     ASSERT_EQ(block_reason(leaf_restore_park), BlockReason::WAIT_RESTORE);
     ASSERT_EQ(draft_block_reason(leaf_restore_park), BlockReason::NONE);
+}
+
+// Error-surfacing safety. A partition spiller's restore/flush task error reaches the source as a source
+// wakeup only; neither is_partition_ready()/has_output_data() nor the merger's pending gates observe it. The
+// source must then report runnable (has_output() true -> block_reason() NONE) so the driver runs pull_chunk()
+// and propagates the error -- otherwise it re-parks WAIT_RESTORE with no further wakeup and sleeps until query
+// timeout. This is the agg/NLJ sources' RETURN_TRUE_IF_SPILL_TASK_ERROR branch, here for sort's N spillers.
+TEST(SpillableSortSourceLockstepTest, single_merge_spiller_task_error_surfaces_runnable) {
+    using namespace single_merge;
+    // A textbook restore park: sinks done, a spilled partition not yet restored, not finished.
+    State park;
+    park.partition_sort_finished = true;
+    park.output_finished = false;
+    park.partition_ready = false;
+    ASSERT_FALSE(has_output(park));
+    ASSERT_FALSE(is_finished(park));
+    ASSERT_EQ(block_reason(park), BlockReason::WAIT_RESTORE);
+    // Same state, but a partition spiller recorded a task error: now runnable, not parked.
+    park.spiller_task_error = true;
+    ASSERT_TRUE(has_output(park));
+    ASSERT_FALSE(is_finished(park));
+    ASSERT_EQ(block_reason(park), BlockReason::NONE);
+}
+
+TEST(SpillableSortSourceLockstepTest, parallel_merge_spiller_task_error_surfaces_runnable) {
+    using namespace parallel_merge;
+    // The steady-state leaf-restore park: sinks done, a partition still restoring, merger pending on its leaf.
+    State park;
+    park.partition_sort_finished = true;
+    park.partition_ready = false;
+    park.is_pending = true;
+    ASSERT_FALSE(has_output(park));
+    ASSERT_FALSE(is_finished(park));
+    ASSERT_EQ(block_reason(park), BlockReason::WAIT_RESTORE);
+    // Same state, but a partition spiller recorded a task error: now runnable, not parked.
+    park.spiller_task_error = true;
+    ASSERT_TRUE(has_output(park));
+    ASSERT_FALSE(is_finished(park));
+    ASSERT_EQ(block_reason(park), BlockReason::NONE);
 }
 
 } // namespace starrocks::pipeline

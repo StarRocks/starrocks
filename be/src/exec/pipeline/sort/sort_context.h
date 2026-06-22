@@ -70,6 +70,8 @@ public:
     bool is_partition_sort_finished() const;
     bool is_output_finished() const;
     bool is_partition_ready() const;
+    // First non-OK task_status() among the partition spillers, or OK if none errored (see has_output()).
+    Status spiller_task_status() const;
     void cancel();
 
     // Subscribe a source driver's observer to every non-empty partition spiller's source list, so that a

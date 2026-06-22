@@ -68,6 +68,13 @@ BlockReason LocalMergeSortSourceOperator::block_reason() const {
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {
+    // A partition spiller's task error is observed only here: it arrives as a source wakeup but neither
+    // is_partition_ready() nor is_finished() reflect it, so report ready to let pull_chunk() propagate it
+    // instead of re-parking WAIT_RESTORE forever. The agg/NLJ analogue is RETURN_TRUE_IF_SPILL_TASK_ERROR
+    // (one spiller); sort scans its N partition spillers and reuses the Status in pull_chunk().
+    if (!_sort_context->spiller_task_status().ok()) {
+        return true;
+    }
     return _sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished() &&
            _sort_context->is_partition_ready();
 }
