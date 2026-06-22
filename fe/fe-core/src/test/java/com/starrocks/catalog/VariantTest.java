@@ -45,6 +45,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 public class VariantTest {
 
@@ -425,6 +426,18 @@ public class VariantTest {
     public void testDateTimeStringValueKeepsMicros() {
         Variant v = new DateVariant(DateType.DATETIME, Instant.ofEpochSecond(0, 123456000));
         Assertions.assertEquals("1970-01-01 00:00:00.123456", v.getStringValue());
+    }
+
+    @Test
+    public void testDateTimeStringValueIsLocaleIndependent() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-SA-u-nu-arab"));
+            Variant v = new DateVariant(DateType.DATETIME, Instant.ofEpochSecond(0, 123456000));
+            Assertions.assertEquals("1970-01-01 00:00:00.123456", v.getStringValue());
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 
     @Test
