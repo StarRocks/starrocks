@@ -304,7 +304,8 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                     remote_dcgs_snapshot_file_name, config::download_low_speed_time);
             if (dcgs_snapshot_content_or.ok()) {
                 DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
-                RETURN_IF_ERROR(ProtobufFileWithHeader::load(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
+                RETURN_IF_ERROR(
+                        ProtobufFileWithHeader::load_from_buffer(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
 
                 std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
                 for (const auto& rowset_meta : rowset_metas) {
