@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/push_handler.h"
+#include "data_workflows/load/push_handler.h"
 
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
@@ -22,7 +22,7 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
-#include "storage/schema_change.h"
+#include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"

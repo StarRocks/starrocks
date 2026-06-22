@@ -38,6 +38,7 @@ target_link_libraries(AgentServer
             StarRocksGen
         PRIVATE
             Runtime
+            DataWorkflows
             Storage
             Cache
             ComputeEnv

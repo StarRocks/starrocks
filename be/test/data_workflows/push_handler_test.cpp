@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/push_handler.h"
+#include "data_workflows/load/push_handler.h"
 
 #include <gtest/gtest.h>
 

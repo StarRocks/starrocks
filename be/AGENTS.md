@@ -217,9 +217,17 @@ Shared compute-side BE environment boundary for process-scoped compute resources
 ### AgentServer (`agentserver`)
 FE-agent task orchestration, heartbeat handling, agent metrics, and agent worker helpers below Service.
 - Targets: `AgentServer`
-- Allowed internal include prefixes: `agent/`, `cache/`, `compute_env/workgroup/`, `exec/pipeline/query_context.h`, `exec/runtime/query_context_manager.h`, `fs/`, `io/`, `runtime/`, `storage/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Runtime`, `Storage`, `Cache`, `ComputeEnv`, `ExecRuntime`, `StoragePrimitive`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `agent/`, `data_workflows/`, `cache/`, `compute_env/workgroup/`, `exec/pipeline/query_context.h`, `exec/runtime/query_context_manager.h`, `fs/`, `io/`, `runtime/`, `storage/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Runtime`, `DataWorkflows`, `Storage`, `Cache`, `ComputeEnv`, `ExecRuntime`, `StoragePrimitive`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep AgentServer as FE-agent task and heartbeat orchestration below Service; move service/bootstrap integration upward.
+
+### DataWorkflows (`dataworkflows`)
+Data-plane workflow orchestration above concrete Storage and Exec for load, delete, schema-change, and tablet-write workflows without service/bootstrap ownership.
+- Targets: `DataWorkflows`
+- Allowed internal include prefixes: `data_workflows/`, `storage/`, `exec/`, `runtime/`, `compute_env/`, `serde/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Storage`, `Rowset`, `Exec`, `Runtime`, `StorageBase`, `StoragePrimitive`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `Serde`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `data_workflows_test`
+- Remediation: Keep DataWorkflows limited to data-plane orchestration over concrete Storage and Exec; move service/bootstrap, agent scheduling, connector registration, and lower reusable primitives to their owning layers.
 
 ### ExprCore (`exprcore`)
 Core expression infrastructure that depends only on RuntimeCore and lower layers.
