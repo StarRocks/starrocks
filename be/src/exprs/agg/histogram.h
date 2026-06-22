@@ -26,7 +26,7 @@
 #include "gutil/casts.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "simdjson.h"
-#include "storage/types.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
