@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/task/engine_manual_compaction_task.h"
+#include "data_workflows/compaction/engine_manual_compaction_task.h"
 
 #include <memory>
 

@@ -15,6 +15,9 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/data_workflows")
 
 set(DATA_WORKFLOWS_FILES
+    compaction/engine_compaction_control_task.cpp
+    compaction/engine_manual_compaction_task.cpp
+    consistency/engine_checksum_task.cpp
     load/engine_batch_load_task.cpp
     load/lake_spark_load_handler.cpp
     load/push_broker_reader.cpp
