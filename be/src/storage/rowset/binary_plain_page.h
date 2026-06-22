@@ -38,8 +38,10 @@
 // Strings:
 //   raw strings that were written
 // Trailer
-//  Offsets:
-//    offsets pointing to the beginning of each string
+//  Offsets (one 32-bit value per string):
+//    for PLAIN_ENCODING: absolute offset pointing to the beginning of each string
+//    for PLAIN_ENCODING_DELTA_OFFSET: the per-value delta (i.e. the string length), so the
+//      absolute offset is the prefix sum; the trailer size is identical, only the values differ
 //  num_elems (32-bit fixed)
 //
 
@@ -128,8 +130,8 @@ public:
                 prev = off;
             }
         } else {
-            for (uint32_t _offset : _offsets) {
-                put_fixed32_le(&_buffer, _offset);
+            for (uint32_t offset : _offsets) {
+                put_fixed32_le(&_buffer, offset);
             }
         }
         put_fixed32_le(&_buffer, _offsets.size());
