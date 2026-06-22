@@ -29,7 +29,7 @@
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 
 using namespace starrocks;
 

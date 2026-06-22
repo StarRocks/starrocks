@@ -22,8 +22,8 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks::lake {

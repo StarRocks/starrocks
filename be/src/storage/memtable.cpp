@@ -33,7 +33,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/non_retryable_load_errors.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/storage_metrics.h"
