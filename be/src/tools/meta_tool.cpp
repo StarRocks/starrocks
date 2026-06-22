@@ -70,6 +70,7 @@
 #include "storage/olap_type_infra.h"
 #include "storage/options.h"
 #include "storage/primary_key_dump.h"
+#include "storage/protobuf_file.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -1669,9 +1670,14 @@ int meta_tool_main(int argc, char** argv) {
         }
         dump_lake_persistent_index_sst(FLAGS_file, enc_info);
     } else if (FLAGS_operation == "print_lake_metadata") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TabletMetadataPB metadata;
-        if (!metadata.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse tablet metadata\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&metadata, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse tablet metadata: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1752,9 +1758,14 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << json << '\n';
         }
     } else if (FLAGS_operation == "print_lake_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TxnLogPB txn_log;
-        if (!txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse txn log\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse txn log: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1767,9 +1778,14 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_combined_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::CombinedTxnLogPB combined_txn_log;
-        if (!combined_txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse combined txn log\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&combined_txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse combined txn log: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;

@@ -159,7 +159,7 @@ Status TabletMeta::create_from_file(const string& file_path) {
 
 Status TabletMeta::create_from_memory(std::string_view data) {
     TabletMetaPB tablet_meta_pb;
-    Status st = ProtobufFileWithHeader::load(&tablet_meta_pb, data);
+    Status st = ProtobufFileWithHeader::load_from_buffer(&tablet_meta_pb, data);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load tablet meta from memory: " << st;
         return st;
