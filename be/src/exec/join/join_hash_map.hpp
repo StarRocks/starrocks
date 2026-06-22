@@ -1702,6 +1702,21 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other
                 MATCH_RIGHT_TABLE_ROWS()
                 RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
             }
+        } else if (!_table_items->build_key_nulls.empty()) {
+            // Multi-column NULL_AWARE_LEFT_ANTI_JOIN: build_key_nulls[j] is the OR of every key
+            // column's null flag for build row j. Pair the probe row with EVERY build row that has
+            // a NULL in ANY key column (not just key_columns[0]) so the null-aware other-conjunct
+            // can apply per-column three-valued logic. Without this, a NULL in a non-first key
+            // column was missed and a multi-column NOT IN wrongly emitted rows it must drop.
+            const auto& null_array = _table_items->build_key_nulls;
+            size_t j = _probe_state->cur_nullaware_build_index;
+            while (j < _table_items->row_count + 1) {
+                j = SIMD::find_nonzero(null_array, j);
+                if (j >= _table_items->row_count + 1) break;
+                MATCH_RIGHT_TABLE_ROWS()
+                RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
+                ++j;
+            }
         } else if (_table_items->key_columns[0]->is_nullable()) {
             // when left table col value not hits in hash table needs match all null value rows in right table
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
