@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 
 #include <gtest/gtest.h>
 

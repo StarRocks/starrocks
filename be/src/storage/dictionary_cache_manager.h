@@ -28,7 +28,7 @@
 #include "exec/dictionary_cache_writer.h"
 #include "fmt/format.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "types/datum.h"
 #include "types/storage_type_traits.h"
 

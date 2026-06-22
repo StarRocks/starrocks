@@ -33,7 +33,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 
 #include <cstring>
 #include <functional>
@@ -49,7 +49,7 @@
 #include "column/schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
-#include "storage/tablet_schema.h"
+#include "storage/primitive/type_utils.h"
 #include "types/date_value.h"
 #include "types/logical_type_infra.h"
 
@@ -258,7 +258,7 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKe
         if (t == TYPE_VARCHAR || t == TYPE_CHAR) {
             return 0;
         }
-        ret += TabletColumn::get_field_length_by_type(t, 0);
+        ret += TypeUtils::estimate_field_size(t, 0);
     }
     return ret;
 }
@@ -550,7 +550,7 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
                 varchar_containers.push_back(GetContainer<TYPE_VARCHAR>::get_data(chunk.get_column_by_index(i)));
                 varchar_indexes.push_back(i);
             } else {
-                size += TabletColumn::get_field_length_by_type(t, 0);
+                size += TypeUtils::estimate_field_size(t, 0);
             }
             if (size > limit_size) {
                 return true;

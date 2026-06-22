@@ -31,7 +31,7 @@
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"

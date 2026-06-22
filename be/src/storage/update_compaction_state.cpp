@@ -20,7 +20,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
