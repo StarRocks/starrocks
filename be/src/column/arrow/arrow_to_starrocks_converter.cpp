@@ -266,8 +266,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
         offsets.visit_storage([&](auto& offsets_buf) {
             using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
             auto* offsets_data = offsets_buf.data() + column_start_idx + 1;
-            for (auto i = 0; i < num_elements; ++i) {
-                offsets_data[i] = static_cast<OffsetValue>(base_offset + (i + 1) * width);
+            for (size_t i = 0; i < num_elements; ++i) {
+                offsets_data[i] = static_cast<OffsetValue>(base_offset + static_cast<uint64_t>(i + 1) * width);
             }
         });
     }
@@ -286,10 +286,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
         offsets.visit_storage([&](auto& offsets_buf) {
             using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
             auto* offsets_data = offsets_buf.data() + column_start_idx + 1;
-            for (auto i = 0; i < num_elements; ++i) {
+            for (size_t i = 0; i < num_elements; ++i) {
                 size_t array_idx = array_start_idx + i;
                 if (!array->IsNull(array_idx)) {
-                    strings::memcpy_inlined(bytes_start + bytes_off, array_data + i * width, width);
+                    strings::memcpy_inlined(bytes_start + bytes_off, array_data + static_cast<size_t>(i) * width,
+                                            width);
                     bytes_off += width;
                 }
                 offsets_data[i] = static_cast<OffsetValue>(bytes_off);
