@@ -15,9 +15,9 @@
 #include "compute_env/sorting/sorted_chunks_merger.h"
 
 #include "column/chunk.h"
+#include "column/sorting/sorting.h"
 #include "compute_env/sorting/chunk_cursor.h"
 #include "compute_env/sorting/sort_cursor.h"
-#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 

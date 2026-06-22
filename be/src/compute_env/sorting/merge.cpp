@@ -14,7 +14,7 @@
 
 #include "compute_env/sorting/merge.h"
 
-#include "compute_env/sorting/sort_permute.h"
+#include "column/sorting/sort_permute.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks {

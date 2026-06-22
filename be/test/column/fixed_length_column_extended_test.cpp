@@ -20,8 +20,8 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
-#include "compute_env/sorting/sorting.h"
 #include "types/date_value.h"
 
 namespace starrocks {

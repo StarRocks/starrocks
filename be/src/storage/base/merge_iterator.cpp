@@ -20,7 +20,7 @@
 
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
-#include "compute_env/sorting/sorting.h"
+#include "column/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

@@ -18,11 +18,11 @@
 
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
+#include "column/sorting/sorting.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/sorting/merge.h"
-#include "compute_env/sorting/sorting.h"
 #include "exprs/sort_exec_exprs.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"

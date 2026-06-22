@@ -20,11 +20,11 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 #include "compute_env/spill/spiller.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/expr_context.h"

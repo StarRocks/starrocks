@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_env/sorting/sort_permute.h"
+#include "column/sorting/sort_permute.h"
 
 #include <span>
 
@@ -28,10 +28,10 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
+#include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "compute_env/sorting/sorting.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 

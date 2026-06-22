@@ -21,10 +21,10 @@
 
 #include "column/chunk.h"
 #include "column/chunk_slice.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_cursor.h"
-#include "compute_env/sorting/sorting.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
