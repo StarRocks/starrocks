@@ -14,10 +14,13 @@
 
 package com.starrocks.epack.catalog.system.starrocks;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.epack.authorization.DbName;
 import com.starrocks.epack.authorization.MaskingPolicyContext;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.PolicyAppliedContext;
@@ -27,7 +30,6 @@ import com.starrocks.epack.authorization.TableUID;
 import com.starrocks.epack.catalog.system.SystemIdEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TGetPolicyReferenceItem;
 import com.starrocks.thrift.TGetPolicyReferenceResponse;
 import com.starrocks.thrift.TGetPolicyReferencesRequest;
@@ -69,14 +71,39 @@ public class PolicyReferences {
         TGetPolicyReferenceResponse response = new TGetPolicyReferenceResponse();
 
         for (Map.Entry<TableUID, PolicyAppliedContext> entry : policyContextConcurrentMap.entrySet()) {
-            TableName tableName = entry.getKey().toTableName();
-            if (tableName == null) {
-                continue;
+            TableUID tableUID = entry.getKey();
+            boolean external = tableUID.getCatalogId() != InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
+            TableName tableName = null;
+            Table table = null;
+            try {
+                tableName = tableUID.toTableName();
+                if (tableName != null) {
+                    table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(),
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                }
+            } catch (Throwable err) {
+                LOG.error("Fail to get table {}", tableUID, err);
             }
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(),
-                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", tableName);
+
+            // An external table that was dropped and recreated under the same name still resolves
+            // by name to the live table (toTableName/getTableNameFromUUID ignore the create time),
+            // but its UID embeds the create time, so the stored UID differs from the live table's UID.
+            // Such an entry references a table that no longer exists -> treat it as dangling.
+            boolean staleSynonym = external && table != null
+                    && !tableUID.getTableUUID().equals(table.getUUID());
+
+            boolean dangling = tableName == null || table == null || staleSynonym;
+            String refCatalogName = dangling ? "[NULL]:" + tableUID.getCatalogId() : tableName.getCatalog();
+            String refDatabaseName = dangling ? "[NULL]:" + tableUID.getDatabaseUUID() : tableName.getDb();
+            // For a live external table, REF_OBJECT_NAME carries the full table UID
+            // (catalog.db.table.createTime) so same-name tables stay distinguishable.
+            String refObjectName;
+            if (dangling) {
+                refObjectName = "[NULL]:" + tableUID.getTableUUID();
+            } else if (external) {
+                refObjectName = tableUID.getTableUUID();
+            } else {
+                refObjectName = tableName.getTbl();
             }
 
             PolicyAppliedContext policyContext = entry.getValue();
@@ -86,31 +113,61 @@ public class PolicyReferences {
                 MaskingPolicyContext withColumnMaskingPolicy = maskingPolicyContextEntry.getValue();
                 Policy policy = securityPolicyManager.getPolicyById(withColumnMaskingPolicy.getPolicyId());
                 TGetPolicyReferenceItem policyReferenceItem = new TGetPolicyReferenceItem();
-                policyReferenceItem.setPolicy_database(policy.getDbUID().toDbName().getDb());
-                policyReferenceItem.setPolicy_name(policy.getName());
+                fillPolicyIdentity(policyReferenceItem, policy, withColumnMaskingPolicy.getPolicyId());
                 policyReferenceItem.setPolicy_type("Column Masking");
 
-                policyReferenceItem.setRef_catalog(tableName.getCatalog());
-                policyReferenceItem.setRef_database(tableName.getDb());
-                policyReferenceItem.setRef_object_name(tableName.getTbl());
-                policyReferenceItem.setRef_column(table.getColumn(maskingPolicyContextEntry.getKey()).getName());
+                policyReferenceItem.setRef_catalog(refCatalogName);
+                policyReferenceItem.setRef_database(refDatabaseName);
+                policyReferenceItem.setRef_object_name(refObjectName);
+                ColumnId columnId = maskingPolicyContextEntry.getKey();
+                Column col = dangling ? null : table.getColumn(columnId);
+                String refColumn = (col != null) ? col.getName() : "[NULL]:" + columnId.getId();
+                policyReferenceItem.setRef_column(refColumn);
                 response.addToPolicy_reference(policyReferenceItem);
             }
 
             for (RowAccessPolicyContext withRowAccessPolicy : policyContext.getRowAccessPolicyApply()) {
                 Policy policy = securityPolicyManager.getPolicyById(withRowAccessPolicy.getPolicyId());
                 TGetPolicyReferenceItem policyReferenceItem = new TGetPolicyReferenceItem();
-                policyReferenceItem.setPolicy_database(policy.getDbUID().toDbName().getDb());
-                policyReferenceItem.setPolicy_name(policy.getName());
+                fillPolicyIdentity(policyReferenceItem, policy, withRowAccessPolicy.getPolicyId());
                 policyReferenceItem.setPolicy_type("Row Access");
 
-                policyReferenceItem.setRef_catalog(tableName.getCatalog());
-                policyReferenceItem.setRef_database(tableName.getDb());
-                policyReferenceItem.setRef_object_name(tableName.getTbl());
+                policyReferenceItem.setRef_catalog(refCatalogName);
+                policyReferenceItem.setRef_database(refDatabaseName);
+                policyReferenceItem.setRef_object_name(refObjectName);
                 response.addToPolicy_reference(policyReferenceItem);
             }
         }
 
         return response;
+    }
+
+    // Resolves POLICY_DATABASE / POLICY_NAME defensively. The policy database is derived from external
+    // catalog metadata (DbUID.toDbName()), which may return null or throw (e.g. the catalog/db was
+    // dropped, or compute-resource acquisition fails) just like the table-resolution path above. Such a
+    // failure must degrade to a "[NULL]:" dangling marker instead of escaping the thrift handler and
+    // surfacing as "Internal error processing getPolicyReference".
+    private static void fillPolicyIdentity(TGetPolicyReferenceItem item, Policy policy, long policyId) {
+        if (policy == null) {
+            item.setPolicy_database("[NULL]:" + policyId);
+            item.setPolicy_name("[NULL]:" + policyId);
+            return;
+        }
+
+        item.setPolicy_name(policy.getName());
+
+        String policyDatabase = null;
+        try {
+            DbName dbName = policy.getDbUID().toDbName();
+            if (dbName != null) {
+                policyDatabase = dbName.getDb();
+            }
+        } catch (Throwable err) {
+            LOG.error("Fail to resolve database for policy {}", policy.getName(), err);
+        }
+        if (policyDatabase == null) {
+            policyDatabase = "[NULL]:" + policy.getDbUID().getUUID();
+        }
+        item.setPolicy_database(policyDatabase);
     }
 }
