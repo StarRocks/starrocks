@@ -20,9 +20,9 @@
 #include "column/column_sorter_comparator.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 #include "types/json_value.h"
 
 namespace starrocks {

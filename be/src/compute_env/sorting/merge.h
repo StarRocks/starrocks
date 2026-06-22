@@ -20,10 +20,10 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/sort_cursor.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 #include "types/datum.h"
 
 namespace starrocks {

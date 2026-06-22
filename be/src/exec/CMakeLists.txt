@@ -127,6 +127,7 @@ target_link_libraries(ExecJoinCore PUBLIC
     ExprCore
     Serde
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types
@@ -525,6 +526,7 @@ target_link_libraries(ExecRuntime PUBLIC
     Platform
     FSCore
     IO
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types

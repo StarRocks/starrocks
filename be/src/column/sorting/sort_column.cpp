@@ -28,10 +28,10 @@
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/sorting/sort_helper.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/struct_column.h"
-#include "compute_env/sorting/sort_helper.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 
 namespace starrocks {
 

@@ -109,3 +109,29 @@ target_link_libraries(starrocks_chunk_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_chunk_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(chunk_test $<TARGET_OBJECTS:starrocks_chunk_test_objs>)
 target_link_libraries(chunk_test ${CHUNK_TEST_LINK_LIBS} gtest_main)
+
+set(COLUMN_SORT_CORE_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    sorting/sort_core_test.cpp
+)
+
+set(COLUMN_SORT_CORE_TEST_LINK_LIBS
+    ColumnSortCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(column_sort_core_test ${COLUMN_SORT_CORE_TEST_FILES})
+target_link_libraries(column_sort_core_test ${COLUMN_SORT_CORE_TEST_LINK_LIBS} gtest_main)
