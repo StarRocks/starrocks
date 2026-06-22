@@ -39,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -144,14 +145,7 @@ public class HiveStatisticsProvider {
 
         List<RemoteFileInfo> remoteFileInfos =
                 fileOps.getRemoteFileInfoForStats(table, partitions, GetRemoteFilesParams.newBuilder().build());
-        long totalBytes = 0;
-        for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
-            for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
-                totalBytes += fileDesc.getLength();
-            }
-        }
-
-        if (totalBytes <= 0) {
+        if (remoteFileInfos.isEmpty()) {
             return 1;
         }
 
@@ -159,15 +153,17 @@ public class HiveStatisticsProvider {
                 .filter(column -> table.getDataColumnNames().contains(column.getName()))
                 .collect(Collectors.toList());
 
-        RemoteFileInputFormat format = partitions.stream()
-                .map(Partition::getFileFormat)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
-
-        long totalEstimatedRows = RowCountEstimator.estimate(totalBytes, dataColumns, format);
-        long presentPartitionSize = Math.max(remoteFileInfos.size(), 1);
-        return totalEstimatedRows / presentPartitionSize * partitionKeys.size();
+        Map<RemoteFileInputFormat, Long> bytesByFormat = new LinkedHashMap<>();
+        for (RemoteFileInfo info : remoteFileInfos) {
+            long bytes = info.getFiles().stream().mapToLong(RemoteFileDesc::getLength).sum();
+            bytesByFormat.merge(info.getFormat(), bytes, Long::sum);
+        }
+        long presentRowNums = 0;
+        for (Map.Entry<RemoteFileInputFormat, Long> entry : bytesByFormat.entrySet()) {
+            presentRowNums += RowCountEstimator.estimate(entry.getValue(), dataColumns, entry.getKey());
+        }
+        long presentPartitionSize = remoteFileInfos.size();
+        return presentRowNums / presentPartitionSize * partitionKeys.size();
     }
 
     public Statistics createUnknownStatistics(
