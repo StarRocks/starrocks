@@ -52,6 +52,7 @@
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
+#include "storage/utils.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
@@ -74,6 +75,25 @@ static bvar::Adder<int64_t> g_read_bundle_tablet_meta_cnt("lake", "lake_read_bun
 static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
                                                                       "lake_read_bundle_tablet_meta_real_access_cnt");
 static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_read_bundle_tablet_meta_latency");
+
+// Save a lake metadata/txn-log protobuf, using the checksummed header format when
+// lake_enable_protobuf_file_checksum is on and the legacy headerless format otherwise.
+static Status save_lake_protobuf(const std::string& path, const ::google::protobuf::Message& message) {
+    if (config::lake_enable_protobuf_file_checksum) {
+        ProtobufFileWithHeader file(path, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
+        return file.save(message);
+    }
+    ProtobufFile file(path);
+    return file.save(message);
+}
+
+// Load a lake metadata/txn-log protobuf. Auto-detects the checksummed header format and
+// falls back to legacy headerless protobuf, regardless of lake_enable_protobuf_file_checksum.
+static Status load_lake_protobuf(const std::string& path, ::google::protobuf::Message* message, bool fill_cache,
+                                 const std::shared_ptr<FileSystem>& fs = nullptr) {
+    ProtobufFileWithHeader file(path, fs, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
+    return file.load(message, fill_cache);
+}
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet::ShardInfo& shard_info) {
@@ -459,8 +479,7 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, con
     auto serializable_metadata = std::make_shared<TabletMetadataPB>(*metadata);
     RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
 
-    ProtobufFile file(metadata_location);
-    RETURN_IF_ERROR(file.save(*serializable_metadata));
+    RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
 
     _metacache->cache_tablet_metadata(metadata_location, metadata);
     bool skip_cache_latest_metadata = false;
@@ -565,6 +584,9 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
     std::string serialized_buf;
     int64_t current_offset = 0;
+    // Snapshot the mutable config once so a single bundle file is internally consistent: every
+    // tablet page and the footer use the same decision, even if the flag is flipped concurrently.
+    const bool enable_checksum = config::lake_enable_protobuf_file_checksum;
     for (auto& [tablet_id, meta] : tablet_metas) {
         RETURN_IF_ERROR(normalize_tablet_metadata_before_save(&meta));
         meta.clear_schema();
@@ -576,6 +598,13 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
 
         (*bundle_meta.mutable_tablet_meta_pages())[tablet_id] =
                 make_page_pointer(current_offset, serialized_buf.size());
+        if (enable_checksum) {
+            // Protects each tablet's metadata page. The shared BundleTabletMetadataPB header
+            // (schemas, tablet_to_schema, page pointers, and this checksum map itself) is protected
+            // separately by the footer crc32 written below.
+            (*bundle_meta.mutable_tablet_meta_page_checksum())[tablet_id] =
+                    olap_adler32(ADLER32_INIT, serialized_buf.data(), serialized_buf.size());
+        }
         RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
         current_offset += serialized_buf.size();
     }
@@ -586,7 +615,16 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     }
     RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
     std::string fixed_buf;
-    put_fixed64_le(&fixed_buf, serialized_buf.size());
+    uint64_t size_field_value = serialized_buf.size();
+    if (enable_checksum) {
+        // Footer layout: [bundle_meta][crc32(bundle_meta)][size | flag]. The crc protects the shared
+        // bundle header (schemas, mappings, page pointers, per-page checksums); the high-bit flag in
+        // the size lets readers tell this layout apart from the legacy [bundle_meta][size] with no
+        // collision risk (a legacy size is always far below 2^63).
+        put_fixed32_le(&fixed_buf, olap_adler32(ADLER32_INIT, serialized_buf.data(), serialized_buf.size()));
+        size_field_value |= LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    }
+    put_fixed64_le(&fixed_buf, size_field_value);
     RETURN_IF_ERROR(meta_file->append(Slice(fixed_buf)));
     RETURN_IF_ERROR(meta_file->close());
     _metacache->cache_aggregation_partition(partition_location, true);
@@ -615,14 +653,13 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
-    ProtobufFile file(metadata_location, fs);
-    auto s = file.load(metadata.get(), fill_data_cache);
+    auto s = load_lake_protobuf(metadata_location, metadata.get(), fill_data_cache, fs);
     if (!s.ok()) {
         RETURN_IF_ERROR(corrupted_tablet_meta_handler(s, metadata_location));
         // reset metadata
         metadata = std::make_shared<TabletMetadataPB>();
         // read again
-        RETURN_IF_ERROR(file.load(metadata.get(), fill_data_cache));
+        RETURN_IF_ERROR(load_lake_protobuf(metadata_location, metadata.get(), fill_data_cache, fs));
     }
 
     // Back-fill segment_metas from the deprecated legacy arrays for rowsets written by a
@@ -762,18 +799,53 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 
 StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(const std::string& path,
                                                                               const std::string& serialized_string) {
+    const auto* data = serialized_string.data();
     auto file_size = serialized_string.size();
-    auto footer_size = sizeof(uint64_t);
-    auto bundle_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    RETURN_IF(file_size < footer_size + bundle_metadata_size || bundle_metadata_size == 0,
-              Status::Corruption(strings::Substitute(
-                      "deserialized shared metadata($0) failed, file_size($1), bundle_metadata_size($2)", path,
-                      file_size, bundle_metadata_size)));
+    const auto size_field = sizeof(uint64_t); // trailing 8-byte bundle metadata size, present in both layouts
+    RETURN_IF(file_size < size_field,
+              Status::Corruption(strings::Substitute("deserialized shared metadata($0) failed, file_size($1) too small",
+                                                     path, file_size)));
+    auto raw_size_field = decode_fixed64_le((uint8_t*)(data + file_size - size_field));
+
+    // The high bit of the size field marks the checksummed footer layout written when
+    // lake_enable_protobuf_file_checksum is on:
+    //   [bundle_meta][crc32(bundle_meta)][size | flag]
+    // versus the legacy footer [bundle_meta][size]. This is collision-free: a legacy size is bounded
+    // by protobuf's 2GB message limit and so never has this bit set. Mask it off to get the real size.
+    const bool checksummed = (raw_size_field & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    const uint64_t bundle_metadata_size = raw_size_field & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    uint32_t stored_checksum = 0;
+    size_t bundle_metadata_offset = 0;
+    if (checksummed) {
+        const size_t crc_field = sizeof(uint32_t);
+        RETURN_IF(file_size < size_field + crc_field + bundle_metadata_size,
+                  Status::Corruption(strings::Substitute(
+                          "deserialized shared metadata($0) failed, file_size($1), bundle_metadata_size($2)", path,
+                          file_size, bundle_metadata_size)));
+        stored_checksum = decode_fixed32_le((uint8_t*)(data + file_size - size_field - crc_field));
+        bundle_metadata_offset = file_size - size_field - crc_field - bundle_metadata_size;
+    } else {
+        RETURN_IF(file_size < size_field + bundle_metadata_size,
+                  Status::Corruption(strings::Substitute(
+                          "deserialized shared metadata($0) failed, file_size($1), bundle_metadata_size($2)", path,
+                          file_size, bundle_metadata_size)));
+        bundle_metadata_offset = file_size - size_field - bundle_metadata_size;
+    }
+    RETURN_IF(bundle_metadata_size == 0,
+              Status::Corruption(
+                      strings::Substitute("deserialized shared metadata($0) failed, bundle_metadata_size(0)", path)));
+
+    const char* bundle_metadata_str = data + bundle_metadata_offset;
+    if (checksummed) {
+        uint32_t computed = olap_adler32(ADLER32_INIT, bundle_metadata_str, bundle_metadata_size);
+        RETURN_IF(computed != stored_checksum,
+                  Status::Corruption(
+                          strings::Substitute("mismatched checksum of bundle tablet metadata($0), expect($1) real($2)",
+                                              path, stored_checksum, computed)));
+    }
 
     auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
-    std::string_view bundle_metadata_str =
-            std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
-    RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
+    RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str, bundle_metadata_size),
               Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
 #ifdef BE_TEST
     bool inject_error = false;
@@ -812,6 +884,11 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
 
         auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
         std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+        auto crc_it = bundle_metadata->tablet_meta_page_checksum().find(tablet_page.first);
+        RETURN_IF(crc_it != bundle_metadata->tablet_meta_page_checksum().end() &&
+                          olap_adler32(ADLER32_INIT, metadata_str.data(), size) != crc_it->second,
+                  Status::Corruption(fmt::format("mismatched checksum of tablet {} metadata in bundle metadata",
+                                                 tablet_page.first)));
         RETURN_IF(
                 !metadata->ParseFromArray(metadata_str.data(), size),
                 Status::InternalError(fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
@@ -901,6 +978,14 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
 
     auto metadata = std::make_shared<TabletMetadataPB>();
     std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+    auto crc_it = bundle_metadata->tablet_meta_page_checksum().find(tablet_id);
+    if (crc_it != bundle_metadata->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, metadata_str.data(), size) != crc_it->second) {
+        auto corrupted_status = Status::Corruption(
+                strings::Substitute("mismatched checksum of tablet $0 metadata in shared metadata", tablet_id));
+        (void)corrupted_tablet_meta_handler(corrupted_status, path);
+        return corrupted_status;
+    }
     if (!metadata->ParseFromArray(metadata_str.data(), size)) {
         auto corrupted_status =
                 Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
@@ -991,8 +1076,7 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     TEST_ERROR_POINT("TabletManager::load_txn_log");
     auto t0 = butil::gettimeofday_us();
     auto meta = std::make_shared<TxnLog>();
-    ProtobufFile file(txn_log_path);
-    RETURN_IF_ERROR(file.load(meta.get(), fill_cache));
+    RETURN_IF_ERROR(load_lake_protobuf(txn_log_path, meta.get(), fill_cache));
     // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
     normalize_txn_log_after_load(meta.get());
     auto t1 = butil::gettimeofday_us();
@@ -1026,8 +1110,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
 StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::string& path, bool fill_cache) {
     TEST_ERROR_POINT("TabletManager::get_combined_txn_log");
     auto log = std::make_shared<CombinedTxnLogPB>();
-    ProtobufFile file(path);
-    RETURN_IF_ERROR(file.load(log.get(), fill_cache));
+    RETURN_IF_ERROR(load_lake_protobuf(path, log.get(), fill_cache));
     // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
     for (auto& txn_log : *log->mutable_txn_logs()) {
         normalize_txn_log_after_load(&txn_log);
@@ -1078,8 +1161,7 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
     auto serializable_log = std::make_shared<TxnLog>(*log);
     RETURN_IF_ERROR(normalize_txn_log_before_save(serializable_log.get()));
 
-    ProtobufFile file(path);
-    RETURN_IF_ERROR(file.save(*serializable_log));
+    RETURN_IF_ERROR(save_lake_protobuf(path, *serializable_log));
 
     _metacache->cache_txn_log(path, log);
 
@@ -1142,13 +1224,12 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
     }
 #endif
     auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
-    ProtobufFile file(path);
     // Dual-write the deprecated legacy parallel arrays from the structured fields for rollback compat.
     CombinedTxnLogPB normalized_logs = logs;
     for (auto& log : *normalized_logs.mutable_txn_logs()) {
         RETURN_IF_ERROR(normalize_txn_log_before_save(&log));
     }
-    return file.save(normalized_logs);
+    return save_lake_protobuf(path, normalized_logs);
 }
 
 StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
