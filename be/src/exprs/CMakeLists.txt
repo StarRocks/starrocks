@@ -18,6 +18,21 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 set(EXPR_CORE_FILES
+  agg/data_sketch/ds_hll.cpp
+  agg/data_sketch/ds_theta.cpp
+  agg/factory/aggregate_factory.cpp
+  agg/factory/aggregate_resolver_approx.cpp
+  agg/factory/aggregate_resolver_avg.cpp
+  agg/factory/aggregate_resolver_boolean.cpp
+  agg/factory/aggregate_resolver_hypothesis_testing.cpp
+  agg/factory/aggregate_resolver_minmaxany.cpp
+  agg/factory/aggregate_resolver_others.cpp
+  agg/factory/aggregate_resolver_sumcount.cpp
+  agg/factory/aggregate_resolver_distinct.cpp
+  agg/factory/aggregate_resolver_stream.cpp
+  agg/factory/aggregate_resolver_utility.cpp
+  agg/factory/aggregate_resolver_variance.cpp
+  agg/factory/aggregate_resolver_window.cpp
   arithmetic_expr.cpp
   function_context.cpp
   expr_context.cpp
@@ -80,24 +95,9 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC RuntimeCore)
+target_link_libraries(ExprCore PUBLIC RuntimeCore ColumnSortCore)
 
 set(EXPR_FILES
-  agg/data_sketch/ds_hll.cpp
-  agg/data_sketch/ds_theta.cpp
-  agg/factory/aggregate_factory.cpp
-  agg/factory/aggregate_resolver_approx.cpp
-  agg/factory/aggregate_resolver_avg.cpp
-  agg/factory/aggregate_resolver_boolean.cpp
-  agg/factory/aggregate_resolver_hypothesis_testing.cpp
-  agg/factory/aggregate_resolver_minmaxany.cpp
-  agg/factory/aggregate_resolver_others.cpp
-  agg/factory/aggregate_resolver_sumcount.cpp
-  agg/factory/aggregate_resolver_distinct.cpp
-  agg/factory/aggregate_resolver_stream.cpp
-  agg/factory/aggregate_resolver_utility.cpp
-  agg/factory/aggregate_resolver_variance.cpp
-  agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
   agg/aggregate_factory_exprs_extension.cpp
   binary_functions.cpp

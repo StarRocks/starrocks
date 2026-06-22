@@ -634,14 +634,23 @@
     {
       "id": "exprcore",
       "doc_label": "ExprCore",
-      "summary": "Core expression infrastructure that depends only on RuntimeCore and lower layers.",
+      "summary": "Core expression infrastructure and builtin aggregate registry that depend only on RuntimeCore and lower layers.",
       "owned_targets": ["ExprCore"],
       "additional_owned_globs": [
         "be/src/exprs/table_function/table_function.h"
       ],
       "allowed_include_prefixes": ["exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exprs/agg/"],
+      "forbidden_include_prefixes": ["exprs/agg/combinator/", "exprs/agg/java_"],
       "forbidden_includes": [
+        "exprs/agg/aggregate_factory_exprs_extension.h",
+        "exprs/agg/combinator/agg_state_combine.h",
+        "exprs/agg/combinator/agg_state_merge.h",
+        "exprs/agg/combinator/agg_state_union.h",
+        "exprs/agg/combinator/agg_state_utils.h",
+        "exprs/agg/combinator/state_merge_function.h",
+        "exprs/agg/combinator/state_union_function.h",
+        "exprs/agg/java_udaf_function.h",
+        "exprs/agg/java_window_function.h",
         "exprs/array_functions.h",
         "exprs/arrow_function_call.h",
         "exprs/binary_functions.h",
@@ -662,10 +671,10 @@
         "exprs/substring_index.h",
         "exprs/utility_functions.h"
       ],
-      "allowed_target_deps": ["RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["RuntimeCore", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["expr_core_test"],
-      "allowed_test_link_deps": ["ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExprCore limited to core expression infrastructure; move aggregate/UDF/integration code into Exprs."
+      "allowed_test_link_deps": ["ExprCore", "RuntimeCore", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ExprCore limited to core expression infrastructure and builtin aggregate registry code; keep Java aggregate extensions and agg-state combinator integration in Exprs."
     },
     {
       "id": "execprimitive",
