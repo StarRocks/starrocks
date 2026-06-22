@@ -162,6 +162,7 @@ public class VacuumTest {
         partition.setMinRetainVersion(10L);
         partition.setMetadataSwitchVersion(5L);
         partition.setLastSuccVacuumVersion(4L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
 
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
@@ -201,6 +202,7 @@ public class VacuumTest {
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
         partition.setLastSuccVacuumVersion(4L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
 
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
@@ -233,12 +235,76 @@ public class VacuumTest {
     }
 
     @Test
+    public void testTxnLogSweepDebounce() throws Exception {
+        // Option A (complete-round skip): an unconfirmed minActiveTxnId never drives a vacuum round; only a
+        // value confirmed by the previous round (non-decreasing) is acted on, sweeping with that older value.
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+
+        // Round 1: no confirmed predecessor (lastMinActiveTxnId == 0) -> the whole round is skipped.
+        partition.setLastMinActiveTxnId(0L);
+        List<VacuumRequest> round1 = runVacuumCaptureRequests();
+        Assertions.assertTrue(round1.isEmpty(), "first round must be skipped entirely");
+        long cur = partition.getLastMinActiveTxnId();   // seeded with the observed computeMinActiveTxnId()
+        Assertions.assertTrue(cur > 0);
+
+        // Round 2: confirmed non-decreasing -> run, sweeping with the PREVIOUS (older, lower) value, not cur.
+        long former = Math.max(1L, cur - 1);
+        partition.setLastMinActiveTxnId(former);
+        List<VacuumRequest> round2 = runVacuumCaptureRequests();
+        Assertions.assertFalse(round2.isEmpty(), "confirmed round must run");
+        boolean swept = false;
+        for (VacuumRequest req : round2) {
+            Assertions.assertEquals(former, (long) req.minActiveTxnId,
+                    "must act on the confirmed previous-round watermark, not the current observation");
+            if (Boolean.TRUE.equals(req.deleteTxnLog)) {
+                swept = true;
+            }
+        }
+        Assertions.assertTrue(swept, "confirmed round must sweep txn logs on one node");
+
+        // Round 3: regression (former set far above any real txn id) -> the whole round is skipped.
+        partition.setLastMinActiveTxnId(Long.MAX_VALUE);
+        List<VacuumRequest> round3 = runVacuumCaptureRequests();
+        Assertions.assertTrue(round3.isEmpty(), "regression round must be skipped entirely");
+    }
+
+    private List<VacuumRequest> runVacuumCaptureRequests() throws Exception {
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 0L;
+        mockResponse.vacuumedFileSize = 0L;
+        mockResponse.vacuumedVersion = 0L;
+        mockResponse.extraFileSize = 0L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        LakeService svc = mock(LakeService.class);
+        ArgumentCaptor<VacuumRequest> captor = ArgumentCaptor.forClass(VacuumRequest.class);
+        when(svc.vacuum(captor.capture())).thenReturn(mockFuture);
+
+        AutovacuumDaemon daemon = new AutovacuumDaemon();
+        try (MockedStatic<BrpcProxy> mockBrpc = mockStatic(BrpcProxy.class)) {
+            mockBrpc.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(svc);
+            daemon.testVacuumPartitionImpl(db, olapTable, partition);
+        }
+        return captor.getAllValues();
+    }
+
+    @Test
     public void testAggregateVacuum() throws Exception {
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         partition = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
         partition.setLastSuccVacuumVersion(4L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
 
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
@@ -279,6 +345,7 @@ public class VacuumTest {
         partition.setMinRetainVersion(0L);
         partition.setLastSuccVacuumVersion(4L);
         partition.setMetadataSwitchVersion(6L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
 
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
@@ -575,6 +642,7 @@ public class VacuumTest {
         partition.setMinRetainVersion(10L);
         partition.setLastSuccVacuumVersion(4L);
         partition.setMetadataSwitchVersion(5L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
         VacuumResponse mockResponse = new VacuumResponse();
