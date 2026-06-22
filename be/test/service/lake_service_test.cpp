@@ -6013,4 +6013,123 @@ TEST_F(LakeServiceTest, test_build_vector_index_request_built_version_floor) {
     EXPECT_EQ(1, response.new_built_version());
 }
 
+TEST_F(LakeServiceTest, test_compute_tablet_stats) {
+    TabletMetadataPB meta;
+    meta.mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    auto* r1 = meta.add_rowsets();
+    r1->set_num_rows(100);
+    r1->set_data_size(1000);
+    r1->set_num_dels(30);
+    // Old PK rowset without num_dels: must NOT read delvec, dels treated as 0.
+    auto* r2 = meta.add_rowsets();
+    r2->set_num_rows(50);
+    r2->set_data_size(500);
+    // delvec file sizes add to data_size.
+    (*meta.mutable_delvec_meta()->mutable_version_to_file())[1].set_size(7);
+
+    int64_t num_rows = -1;
+    int64_t data_size = -1;
+    starrocks::compute_tablet_stats(meta, &num_rows, &data_size);
+    EXPECT_EQ(num_rows, (100 - 30) + 50); // 120 live rows
+    EXPECT_EQ(data_size, 1000 + 500 + 7); // 1507
+}
+
+// Verifies the has_range() gate for tablet_stats in publish_version response:
+// - A non-range tablet produces no tablet_stats entry.
+// - A range-distribution tablet (metadata has_range() == true) produces a
+//   tablet_stats entry with data_size > 0.
+TEST_F(LakeServiceTest, test_publish_returns_tablet_stats) {
+    // --- First load (base_version==1) of a non-range tablet: stats are reported via tablet_stats,
+    //     and the live-row count is also mirrored into deprecated_tablet_row_nums for old-FE compat. ---
+    {
+        TxnLog log = generate_write_txn_log(2, 101, 4096);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(log.txn_id());
+
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().error_msgs(0);
+        auto it = response.tablet_stats().find(_tablet_id);
+        ASSERT_NE(it, response.tablet_stats().end()) << "first-load tablet must report stats via tablet_stats";
+        EXPECT_EQ(101, it->second.num_rows()) << "first-load row count must flow through tablet_stats";
+        // Mirrored into the legacy field (same live-row count) so an old FE during a BE-before-FE
+        // rolling upgrade still collects first-load statistics.
+        ASSERT_EQ(1, response.deprecated_tablet_row_nums().count(_tablet_id))
+                << "first-load row count must be mirrored into deprecated_tablet_row_nums for old FEs";
+        EXPECT_EQ(101, response.deprecated_tablet_row_nums().at(_tablet_id));
+    }
+
+    // --- Non-first-load (base_version>1) of a non-range tablet: must NOT appear in tablet_stats. ---
+    {
+        TxnLog log = generate_write_txn_log(1, 50, 2048);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+        PublishVersionRequest request;
+        request.set_base_version(2);
+        request.set_new_version(3);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(log.txn_id());
+
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().error_msgs(0);
+        EXPECT_EQ(0, response.tablet_stats().count(_tablet_id))
+                << "non-range, non-first-load tablet must not appear in tablet_stats";
+    }
+
+    // --- Positive: range-distribution tablet MUST appear in tablet_stats ---
+    // Create a new tablet whose metadata has a range set.
+    int64_t range_tablet_id = next_id();
+    create_tablet_metadata_with_range(range_tablet_id, /*version=*/1, /*lower=*/0, /*upper=*/100);
+
+    // Write a segment file for this tablet so publish has data to work with.
+    auto seg_name = lake::gen_segment_filename(next_id());
+    auto seg_path = _tablet_mgr->segment_location(range_tablet_id, seg_name);
+    {
+        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(seg_path));
+        CHECK_OK(f->append("dummy"));
+        CHECK_OK(f->close());
+    }
+
+    // The metadata created by create_tablet_metadata_with_range already has a rowset
+    // with data_size=100, so we can publish directly without a txn log by using
+    // the idempotent-republish path: publish same version (already version 1, publish
+    // base=1->new=1 is not valid), so instead we inject a simple txn log on top.
+    {
+        auto txn_id = next_id();
+        TxnLog log;
+        log.set_tablet_id(range_tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(txn_id);
+        auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        segment_meta->set_filename(seg_name);
+        segment_meta->set_size(512);
+        segment_meta->set_num_rows(10);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(512);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(10);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(range_tablet_id);
+        request.add_txn_ids(txn_id);
+
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().error_msgs(0);
+        auto it = response.tablet_stats().find(range_tablet_id);
+        ASSERT_NE(it, response.tablet_stats().end()) << "range tablet must have a tablet_stats entry";
+        EXPECT_GT(it->second.data_size(), 0) << "data_size must be positive for range tablet";
+    }
+}
+
 } // namespace starrocks
