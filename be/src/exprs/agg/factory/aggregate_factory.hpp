@@ -59,7 +59,6 @@
 #include "exprs/agg/window_funnel.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
 

@@ -21,11 +21,33 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "types/logical_type.h"
-#include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
 
 DEFINE_FAIL_POINT(not_exist_agg_function);
+
+namespace {
+
+const AggregateFunction* null_non_builtin_aggregate_function_provider(TFunctionBinaryType::type, bool, bool) {
+    return nullptr;
+}
+
+NonBuiltinAggregateFunctionProvider& non_builtin_aggregate_function_provider() {
+    static NonBuiltinAggregateFunctionProvider provider = null_non_builtin_aggregate_function_provider;
+    return provider;
+}
+
+AggregateFunctionPtr resolve_non_builtin_aggregate_function(TFunctionBinaryType::type binary_type,
+                                                            bool is_window_function, bool is_input_nullable) {
+    return non_builtin_aggregate_function_provider()(binary_type, is_window_function, is_input_nullable);
+}
+
+} // namespace
+
+void set_non_builtin_aggregate_function_provider(NonBuiltinAggregateFunctionProvider provider) {
+    DCHECK_NE(nullptr, provider);
+    non_builtin_aggregate_function_provider() = provider;
+}
 
 AggregateFuncResolver::AggregateFuncResolver() {
     register_avg();
@@ -164,10 +186,8 @@ static AggregateFunctionPtr get_function(const std::string& name, LogicalType ar
             return func;
         }
         return AggregateFuncResolver::instance()->get_general_info(func_name, is_window_function, is_null);
-    } else if (binary_type == TFunctionBinaryType::SRJAR) {
-        return getJavaUDAFFunction(is_null);
     }
-    return nullptr;
+    return resolve_non_builtin_aggregate_function(binary_type, is_window_function, is_null);
 }
 
 AggregateFunctionPtr get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
@@ -178,12 +198,7 @@ AggregateFunctionPtr get_aggregate_function(const std::string& name, LogicalType
 
 AggregateFunctionPtr get_window_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                          bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
-    if (binary_type == TFunctionBinaryType::BUILTIN) {
-        return get_function(name, arg_type, return_type, true, is_null, binary_type, func_version);
-    } else if (binary_type == TFunctionBinaryType::SRJAR) {
-        return getJavaWindowFunction();
-    }
-    return nullptr;
+    return get_function(name, arg_type, return_type, true, is_null, binary_type, func_version);
 }
 
 AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, const TypeDescriptor& return_type,
