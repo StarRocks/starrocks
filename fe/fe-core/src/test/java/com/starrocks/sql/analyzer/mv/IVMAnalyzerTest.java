@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.KeysType;
@@ -721,7 +722,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_taskdef_nonagg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_nonagg` ("),
                     "must use explicit column list form, got: " + sql);
@@ -733,9 +734,9 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
-     * Aggregate incremental MV (QUERY_COMPUTED): refresh SQL uses positional form since
-     * the schema has no AUTO_INCREMENT columns; the query itself produces {@code __ROW_ID__}
-     * via encode(group_by_keys).
+     * Aggregate incremental MV (QUERY_COMPUTED): the INSERT uses positional form because the
+     * schema has no AUTO_INCREMENT columns (contrast the non-agg case, which needs an explicit
+     * column list to omit the storage-filled __ROW_ID__).
      */
     @Test
     public void testGetIVMTaskDefinitionForQueryComputedUsesPositionalForm() throws Exception {
@@ -745,14 +746,32 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_taskdef_agg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_agg` "),
                     "aggregate MV uses positional INSERT, got: " + sql);
             assertFalse(sql.startsWith("INSERT INTO `mv_taskdef_agg` ("),
                     "no explicit column list expected (no AUTO_INCREMENT columns), got: " + sql);
-            assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID),
-                    "__ROW_ID__ must appear in the SELECT alias (produced by encode), got: " + sql);
+        });
+    }
+
+    /**
+     * New IVM MVs no longer persist the rewritten ivmDefineSql (refresh re-derives it), but
+     * CREATE must still derive the column schema from the rewritten tree — including the
+     * hidden __ROW_ID__ column.
+     */
+    @Test
+    public void testIncrementalMvDoesNotPersistIvmDefineSqlButKeepsRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_no_frozen_ivmdef "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_no_frozen_ivmdef");
+            assertTrue(mv.getIvmDefineSql() == null || mv.getIvmDefineSql().isEmpty(),
+                    "new IVM MV must not persist a frozen ivmDefineSql, got: " + mv.getIvmDefineSql());
+            assertNotNull(mv.getColumn(IvmOpUtils.COLUMN_ROW_ID),
+                    "schema derivation must still add the hidden __ROW_ID__ column");
         });
     }
 
@@ -775,7 +794,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_reordered_nonagg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_reordered_nonagg` ("),
                     "must use explicit column list form, got: " + sql);
@@ -793,6 +812,28 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
             assertTrue(idPos < dataPos && dataPos < datePos,
                     "INSERT column list must be in SELECT order (id, data, date), got: " + sql);
         });
+    }
+
+    @Test
+    public void testRewriteForRefreshUsesPinnedVersionAndStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_rf "
+                + "REFRESH DEFERRED MANUAL PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, null, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> r =
+                analyzer.rewriteForRefresh(MaterializedView.RefreshMode.INCREMENTAL, 0);
+
+        assertTrue(r.isPresent(), "GROUP BY query must be retractable");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, r.get().rowIdStrategy());
+        // Re-analyze so buildSimple sees the prepended __ROW_ID__/__AGG_STATE columns,
+        // mirroring the CREATE path (MaterializedViewAnalyzer re-analyzes before serializing).
+        Analyzer.analyze(r.get().queryStatement(), connectContext);
+        String sql = AstToSQLBuilder.buildSimple(r.get().queryStatement());
+        assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID), "rewritten query must project __ROW_ID__, got: " + sql);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
