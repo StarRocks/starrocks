@@ -43,6 +43,14 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
   ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
   ```
 
+- Transfer the Leader role to another Follower FE (graceful in-place handoff).
+
+  ```SQL
+  ALTER SYSTEM TRANSFER LEADER TO "<fe_host>:<edit_log_port>" [FORCE]
+  ```
+
+  The target must be an alive Follower FE. This statement runs on the current Leader FE and hands the Leader role to the target Follower; the previous Leader then transitions to a Follower in place instead of restarting. Check the new Leader with `SHOW PROC '/frontends'\G`. With `FORCE`, the statement supersedes a Leader transfer that is already in progress; without `FORCE`, it fails if a transfer is already in progress.
+
 | **Parameter**      | **Required** | **Description**                                                     |
 | ------------------ | ------------ | ------------------------------------------------------------------- |
 | fe_host            | Yes          | The host name or IP address of the FE instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses. |
@@ -206,4 +214,10 @@ Example 8: Drop all Broker nodes in `amazon_s3`.
 
 ```SQL
 ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
+
+Example 9: Transfer the Leader role to a specific Follower FE.
+
+```SQL
+ALTER SYSTEM TRANSFER LEADER TO "x.x.x.x:9010";
 ```
