@@ -80,6 +80,14 @@ Flat JSON的核心原理是在导入时检测JSON数据，并从JSON数据中提
    ALTER TABLE t1 SET ("flat_json.column.max" = "90");
    ```
 
+   :::note
+
+   通过 `ALTER TABLE` 修改 Flat JSON 属性会更新 FE 元数据中的表配置（并会反映在 `SHOW CREATE TABLE` 中），
+   但该变更目前**不会传播到 BE**。因此，新配置不会对该表生效——无论是已有数据，还是修改后导入的数据，
+   都会继续使用 tablet 创建时生效的配置。如需对表数据应用特定的 Flat JSON 属性，请在创建表时进行设置。
+
+   :::
+
 2. 启用FE分区裁剪功能：
 
    ```SQL

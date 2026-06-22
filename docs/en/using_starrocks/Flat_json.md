@@ -81,6 +81,17 @@ Setting Flat JSON-related properties on table level is supported from v4.0 onwar
    ALTER TABLE t1 SET ("flat_json.column.max" = "90");
    ```
 
+   :::note
+
+   Modifying Flat JSON properties with `ALTER TABLE` updates the table configuration in the FE
+   metadata (and is reflected by `SHOW CREATE TABLE`), but the change is currently **not propagated
+   to the BE**. As a result, the new configuration does not take effect for that table — neither for
+   existing data nor for data loaded afterward, which continue to use the configuration that was in
+   effect when the tablets were created. To apply specific Flat JSON properties to a table's data,
+   set them when you create the table.
+
+   :::
+
 2. Enable FE pruning feature:
 
    ```SQL
