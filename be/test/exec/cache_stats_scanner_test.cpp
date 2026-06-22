@@ -38,11 +38,8 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
-<<<<<<< HEAD
 #include "storage/lake/tablet_metadata.h"
-=======
 #include "storage/storage_env.h"
->>>>>>> 0c732f6dc89... [Refactor] Move lake managers from ExecEnv to StorageEnv (#75078)
 
 namespace starrocks {
 

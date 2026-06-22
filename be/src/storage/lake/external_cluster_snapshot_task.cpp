@@ -40,7 +40,6 @@
 #include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "glog/logging.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/external_cluster_snapshot_task_helper.h"
 #include "storage/lake/external_cluster_snapshot_task_rpc.h"
 #include "storage/lake/filenames.h"
@@ -49,12 +48,13 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/protobuf_file.h"
+#include "storage/storage_env.h"
 
 namespace starrocks::lake {
 
 Status write_snapshot_log(int64_t job_id, int64_t db_id, int64_t table_id, int64_t partition_id,
                           int64_t physical_partition_id, int64_t tablet_id, const FileSet& unused_data_files,
-                          const FileSet& unused_meta_files, const FileSet& unused_schema_files, ExecEnv* exec_env) {
+                          const FileSet& unused_meta_files, const FileSet& unused_schema_files) {
     ExternalClusterSnapshotLogPB log_pb;
     // Populate basic fields
     log_pb.set_job_id(job_id);
@@ -75,7 +75,7 @@ Status write_snapshot_log(int64_t job_id, int64_t db_id, int64_t table_id, int64
     }
 
     // Get log location and save
-    auto location_provider = exec_env->lake_location_provider();
+    auto location_provider = StorageEnv::GetInstance()->lake_location_provider();
     auto log_location = location_provider->snapshot_log_location(tablet_id, job_id, physical_partition_id);
 
     ProtobufFile file(log_location);
@@ -113,7 +113,7 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
     }
 
     // Initialize core variables
-    auto* tablet_mgr = exec_env->lake_tablet_manager();
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const int64_t pre_version = request.pre_version;
     const int64_t new_version = request.new_version;
     const int64_t table_id = request.table_id;
@@ -216,7 +216,7 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
 
         log_status = write_snapshot_log(request.job_id, request.db_id, request.table_id, request.partition_id,
                                         physical_partition_id, first_tablet_id, unused_data_files, unused_meta_files,
-                                        unused_schema_files, exec_env);
+                                        unused_schema_files);
     }
 
     // Update finish task status if log write failed
@@ -244,7 +244,7 @@ void run_delete_partition_task(const TExternalClusterSnapshotRequest& request, i
     finish_task_request.__set_task_type(TTaskType::EXTERNAL_CLUSTER_SNAPSHOT);
     finish_task_request.__set_signature(signature);
 
-    auto snapshot_file_syncer = lake::SnapshotFileSyncer(exec_env);
+    auto snapshot_file_syncer = lake::SnapshotFileSyncer();
     auto st = snapshot_file_syncer.delete_partition(request.dest_tablet_id, request.db_id, request.table_id,
                                                     request.partition_id, request.physical_partition_id);
     if (!st.ok()) {
@@ -270,7 +270,7 @@ void run_delete_files_task(const TExternalClusterSnapshotRequest& request, int64
     finish_task_request.__set_task_type(TTaskType::EXTERNAL_CLUSTER_SNAPSHOT);
     finish_task_request.__set_signature(signature);
 
-    auto location_provider = exec_env->lake_location_provider();
+    auto location_provider = StorageEnv::GetInstance()->lake_location_provider();
     auto tablet_id = 0L;
     if (request.compute_node_tablets.size() == 0 || request.compute_node_tablets[0].tablets.size() == 0) {
         LOG(WARNING) << "no compute node tablets or tablets found, job_id=" << request.job_id
@@ -302,7 +302,7 @@ void run_delete_files_task(const TExternalClusterSnapshotRequest& request, int64
             task_status.__set_error_msgs(std::vector<std::string>{st.to_string()});
             finish_task_request.__set_task_status(task_status);
         } else {
-            auto snapshot_file_syncer = lake::SnapshotFileSyncer(exec_env);
+            auto snapshot_file_syncer = lake::SnapshotFileSyncer();
             st = snapshot_file_syncer.delete_files(request.dest_tablet_id, log_pb);
             if (!st.ok()) {
                 LOG(WARNING) << "delete files according to snapshot log failed, path=" << log_path

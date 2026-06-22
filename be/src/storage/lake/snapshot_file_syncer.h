@@ -17,7 +17,6 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "runtime/exec_env_fwd.h"
 #include "storage/lake/location_provider.h"
 
 namespace starrocks::lake {
@@ -33,16 +32,13 @@ struct TabletSnapshotInfo {
 
 class SnapshotFileSyncer {
 public:
-    SnapshotFileSyncer(ExecEnv* env) : _env(env) {}
+    SnapshotFileSyncer() = default;
     ~SnapshotFileSyncer() = default;
 
     Status upload(const TabletSnapshotInfo& snapshot_info, UploadSnapshotFilesResponsePB* response);
     Status delete_partition(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
                             int64_t physical_partition_id);
     Status delete_files(int64_t tablet_id, const ExternalClusterSnapshotLogPB& log_pb);
-
-private:
-    ExecEnv* _env;
 };
 
 } // namespace starrocks::lake

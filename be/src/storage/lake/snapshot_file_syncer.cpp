@@ -19,10 +19,10 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "glog/logging.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/remote_starlet_location_provider.h"
+#include "storage/storage_env.h"
 
 namespace starrocks::lake {
 
@@ -59,16 +59,16 @@ Status copy_files(const Files& files, SrcFunc&& make_src, DstFunc&& make_dst, bo
 
 Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, UploadSnapshotFilesResponsePB* response) {
     DCHECK(snapshot_info.tablet_snapshot != nullptr);
+#ifdef USE_STAROS
     auto src_tablet_id = snapshot_info.tablet_snapshot->tablet_id();
     auto dst_tablet_id = snapshot_info.dest_tablet_id;
     auto db_id = snapshot_info.db_id;
     auto table_id = snapshot_info.table_id;
     auto physical_partition_id = snapshot_info.physical_partition_id;
 
-    auto location_provider = _env->lake_location_provider();
-    auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
+    auto location_provider = StorageEnv::GetInstance()->lake_location_provider();
+    auto remote_starlet_location_provider = StorageEnv::GetInstance()->remote_starlet_location_provider();
 
-#ifdef USE_STAROS
     RETURN_IF_ERROR(copy_files(
             snapshot_info.tablet_snapshot->new_data_files(),
             [&](const auto& name) { return join_path(location_provider->segment_root_location(src_tablet_id), name); },
@@ -102,8 +102,8 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
 
 Status SnapshotFileSyncer::delete_partition(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
                                             int64_t physical_partition_id) {
-    auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
 #if defined(USE_STAROS) && !defined(BE_TEST)
+    auto remote_starlet_location_provider = StorageEnv::GetInstance()->remote_starlet_location_provider();
     auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_root));
     auto dir_path = remote_starlet_location_provider->partition_directory_location(tablet_id, db_id, table_id,
@@ -114,8 +114,8 @@ Status SnapshotFileSyncer::delete_partition(int64_t tablet_id, int64_t db_id, in
 }
 
 Status SnapshotFileSyncer::delete_files(int64_t tablet_id, const ExternalClusterSnapshotLogPB& log_pb) {
-    auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
 #ifdef USE_STAROS
+    auto remote_starlet_location_provider = StorageEnv::GetInstance()->remote_starlet_location_provider();
     auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_root));
 

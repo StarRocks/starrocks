@@ -36,7 +36,6 @@
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
@@ -46,6 +45,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "testutil/exprs_test_helper.h"
 
@@ -64,7 +64,7 @@ constexpr const char* kRowVersionColumnName = "__ROW_VERSION__";
 class ChangesConnectorTest : public ::testing::Test {
 public:
     ChangesConnectorTest()
-            : _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
+            : _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
               _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)) {}
 
     void SetUp() override {

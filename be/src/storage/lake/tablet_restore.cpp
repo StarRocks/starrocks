@@ -34,7 +34,6 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metadata_iterator.h"
@@ -43,6 +42,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/protobuf_file.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -567,7 +567,8 @@ Status rewrite_tablets_metadata(TabletManager* tablet_mgr, const std::vector<Res
 } // namespace
 
 Status restore_tablet_data(ExecEnv* env, const TRestoreTabletRequest& request) {
-    auto* tablet_mgr = env->lake_tablet_manager();
+    (void)env;
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (tablet_mgr == nullptr) {
         return Status::NotSupported("lake tablet manager is not initialized");
     }

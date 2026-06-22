@@ -21,8 +21,8 @@
 #include "fs/fs_factory.h"
 #include "gen_cpp/PlanNodes_constants.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/storage_env.h"
 #include "types/datum.h"
 
 namespace starrocks {
@@ -96,7 +96,7 @@ Status CacheStatsScanner::_get_tablet_cache_stats(int64_t* cached_bytes, int64_t
     *cached_bytes = 0;
     *total_bytes = 0;
 
-    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (tablet_mgr == nullptr) {
         return Status::InvalidArgument("lake tablet manager is nullptr.");
     }

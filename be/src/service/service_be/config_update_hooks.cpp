@@ -359,7 +359,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return Status::OK();
     });
     registry->register_callback("tablet_warmup_max_threads", [=]() -> Status {
-        auto tablet_manager = exec_env->lake_tablet_manager();
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (tablet_manager != nullptr) {
             return tablet_manager->tablet_warmup_mgr()->update_max_threads(config::tablet_warmup_max_threads);
         }

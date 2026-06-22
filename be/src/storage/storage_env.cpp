@@ -29,6 +29,7 @@
 #include <fslib/configuration.h>
 
 #include "common/config_starlet_fwd.h"
+#include "storage/lake/remote_starlet_location_provider.h"
 #include "storage/lake/starlet_location_provider.h"
 #endif
 
@@ -41,7 +42,14 @@ StorageEnv* StorageEnv::GetInstance() {
 
 StorageEnv::StorageEnv() = default;
 
-StorageEnv::~StorageEnv() = default;
+StorageEnv::~StorageEnv() {
+    _parallel_compact_mgr.reset();
+    _lake_replication_txn_manager.reset();
+    _lake_tablet_manager.reset();
+    _lake_update_manager.reset();
+    _remote_starlet_location_provider.reset();
+    _lake_location_provider.reset();
+}
 
 Status StorageEnv::init(const StorageEnvOptions& options) {
     if (_lake_tablet_manager != nullptr || options.lake_location_provider_mode == LakeLocationProviderMode::kDisabled) {
@@ -52,6 +60,10 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
     }
 
     std::shared_ptr<lake::LocationProvider> lake_location_provider;
+    std::shared_ptr<lake::RemoteStarletLocationProvider> remote_starlet_location_provider;
+#ifdef USE_STAROS
+    remote_starlet_location_provider = std::make_shared<lake::RemoteStarletLocationProvider>();
+#endif
     switch (options.lake_location_provider_mode) {
     case LakeLocationProviderMode::kStarlet:
 #ifdef USE_STAROS
@@ -90,9 +102,10 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
     RETURN_IF_ERROR(parallel_compact_mgr->init());
     lake_update_manager->set_parallel_compact_mgr(parallel_compact_mgr.get());
 
-    _lake_location_provider = std::move(lake_location_provider);
-    _lake_update_manager = std::move(lake_update_manager);
     _lake_tablet_manager = std::move(lake_tablet_manager);
+    _lake_location_provider = std::move(lake_location_provider);
+    _remote_starlet_location_provider = std::move(remote_starlet_location_provider);
+    _lake_update_manager = std::move(lake_update_manager);
     _lake_replication_txn_manager = std::move(lake_replication_txn_manager);
     _parallel_compact_mgr = std::move(parallel_compact_mgr);
     return Status::OK();
@@ -118,6 +131,7 @@ void StorageEnv::destroy() {
     _lake_replication_txn_manager.reset();
     _lake_tablet_manager.reset();
     _lake_update_manager.reset();
+    _remote_starlet_location_provider.reset();
     _lake_location_provider.reset();
 }
 

@@ -2236,7 +2236,7 @@ void LakeServiceImpl::upload_snapshot_files(::google::protobuf::RpcController* c
         auto task = std::make_shared<CancellableRunnable>(
                 [&, tablet_snapshot_info, tablet_id] {
                     DeferOp defer([&] { latch.count_down(); });
-                    auto snapshot_file_syncer = lake::SnapshotFileSyncer(_env);
+                    auto snapshot_file_syncer = lake::SnapshotFileSyncer();
                     auto st = snapshot_file_syncer.upload(*tablet_snapshot_info, response);
                     if (!st.ok()) {
                         record_failure(st, tablet_id, "Fail to upload cluster snapshot files: ");

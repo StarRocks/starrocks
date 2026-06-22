@@ -87,15 +87,6 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
-<<<<<<< HEAD
-#include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/remote_starlet_location_provider.h"
-#include "storage/lake/replication_txn_manager.h"
-#include "storage/lake/starlet_location_provider.h"
-#include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
-=======
->>>>>>> 0c732f6dc89... [Refactor] Move lake managers from ExecEnv to StorageEnv (#75078)
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
@@ -320,10 +311,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         exit(-1);
     }
 
-#ifdef USE_STAROS
-    _remote_starlet_location_provider = std::make_shared<lake::RemoteStarletLocationProvider>();
-#endif
-
     // Phase 3 of the rejected records feature. The daemon thread is
     // started unconditionally; its tick_loop() re-reads
     // `config::enable_rejected_record_sync` every interval and treats a
@@ -349,22 +336,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
     storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
-<<<<<<< HEAD
-    _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
-    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, global_env->update_mem_tracker());
-    _lake_tablet_manager =
-            new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
-    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
-    if (config::starlet_cache_dir.empty()) {
-        std::vector<std::string> starlet_cache_paths;
-        std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
-            std::string starlet_cache_path = root_path.path + "/starlet_cache";
-            starlet_cache_paths.emplace_back(starlet_cache_path);
-        });
-        config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
-    }
-    setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
-
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
     int32_t snapshot_file_syncer_thread_count = std::min(config::cluster_snapshot_threads, CpuInfo::num_cores() / 4);
     RETURN_IF_ERROR(ThreadPoolBuilder("snapshot_file_syncer")
                             .set_min_threads(1)
@@ -373,10 +345,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
                             .build(&_snapshot_file_syncer_thread_pool));
     StorageMetrics::instance()->register_thread_pool_metrics("snapshot_file_syncer",
                                                              _snapshot_file_syncer_thread_pool.get());
-
-=======
-    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
->>>>>>> 0c732f6dc89... [Refactor] Move lake managers from ExecEnv to StorageEnv (#75078)
 #elif defined(BE_TEST)
     storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
 #endif

@@ -94,16 +94,6 @@ class QueryContextManager;
 class DriverLimiter;
 } // namespace pipeline
 
-<<<<<<< HEAD
-namespace lake {
-class LocationProvider;
-class RemoteStarletLocationProvider;
-class TabletManager;
-class UpdateManager;
-class ReplicationTxnManager;
-} // namespace lake
-=======
->>>>>>> 0c732f6dc89... [Refactor] Move lake managers from ExecEnv to StorageEnv (#75078)
 namespace spill {
 class DirManager;
 class GlobalSpillManager;
@@ -200,21 +190,6 @@ public:
 
     uint32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
 
-<<<<<<< HEAD
-    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
-
-    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
-
-    std::shared_ptr<lake::RemoteStarletLocationProvider> remote_starlet_location_provider() const {
-        return _remote_starlet_location_provider;
-    }
-
-    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
-
-    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
-
-=======
->>>>>>> 0c732f6dc89... [Refactor] Move lake managers from ExecEnv to StorageEnv (#75078)
     AgentServer* agent_server() const { return _agent_server; }
     void set_agent_server(AgentServer* agent_server);
 
@@ -260,16 +235,8 @@ private:
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
-<<<<<<< HEAD
-    lake::TabletManager* _lake_tablet_manager = nullptr;
-    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
-    std::shared_ptr<lake::RemoteStarletLocationProvider> _remote_starlet_location_provider;
-    lake::UpdateManager* _lake_update_manager = nullptr;
-    lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
     std::unique_ptr<ThreadPool> _snapshot_file_syncer_thread_pool = nullptr;
 
-=======
->>>>>>> 0c732f6dc89... [Refactor] Move lake managers from ExecEnv to StorageEnv (#75078)
     AgentServer* _agent_server = nullptr;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;

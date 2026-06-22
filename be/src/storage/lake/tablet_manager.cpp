@@ -34,7 +34,6 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
@@ -59,6 +58,7 @@
 #include "storage/primitive/tablet_basic_info.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema_map.h"
 #include "util/time_guard.h"
 
@@ -86,7 +86,7 @@ void TabletManager::enable_tablet_warmup_listener() {
     if (worker == nullptr) {
         return;
     }
-    auto* mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto* mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (mgr == nullptr) {
         return;
     }
