@@ -945,14 +945,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
             ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[iter->second]->new_iterator(child_paths[i], sub_column));
             field_iters.emplace_back(std::move(iter));
         } else {
-            if (!sub_column->has_default_value() && !sub_column->is_nullable()) {
+            if (!sub_column->has_backfill_default_value() && !sub_column->is_nullable()) {
                 return Status::InternalError(
                         fmt::format("invalid nonexistent column({}) without default value.", sub_column->name()));
             } else {
+                // Prefer the frozen origin default (falls back to default_value) for struct
+                // fields that are absent from this segment.
                 const TypeInfoPtr& type_info = get_type_info(*sub_column);
                 auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
-                        sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
-                        type_info, sub_column->length(), num_rows(), child_paths[i]);
+                        sub_column->has_backfill_default_value(), sub_column->backfill_default_value(),
+                        sub_column->is_nullable(), type_info, sub_column->length(), num_rows(), child_paths[i]);
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 field_iters.emplace_back(std::move(default_value_iter));

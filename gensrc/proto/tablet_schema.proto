@@ -78,6 +78,12 @@ message ColumnPB {
     optional bool is_auto_increment = 18;
     // agg_state type
     optional AggStateDescPB agg_state_desc = 19;
+    // Default value used to backfill rows that physically lack this column (added via fast
+    // schema evolution). Frozen at column-add time; ALTER ... MODIFY ... DEFAULT does not
+    // change it. Distinct from |default_value| (field 7), which is the default for newly
+    // written rows. Absent for schemas written before this field existed; readers fall back
+    // to |default_value| in that case.
+    optional bytes origin_default_value = 20;
 }
 
 message TabletSchemaPB {
