@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.InMemoryStatisticStorage;
@@ -201,5 +202,58 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
         trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
                 DmlType.UPDATE);
         Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
+    }
+
+    @Test
+    public void testTableLevelFirstLoadConfigOverridesGlobalWhenExplicitlySet() throws Exception {
+        boolean oldEnableStatisticCollectOnFirstLoad = Config.enable_statistic_collect_on_first_load;
+        try {
+            final String dbName = "test_statistics_first_load_override";
+            starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+            createPartitionedTable("t_follow_global", "");
+            createPartitionedTable("t_disable_table",
+                    ", 'enable_statistic_collect_on_first_load' = 'false'");
+            createPartitionedTable("t_enable_table",
+                    ", 'enable_statistic_collect_on_first_load' = 'true'");
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+            Config.enable_statistic_collect_on_first_load = false;
+            StatisticsCollectionTrigger trigger = triggerFirstLoad(db, "t_follow_global");
+            Assertions.assertNull(trigger.getAnalyzeType());
+
+            Config.enable_statistic_collect_on_first_load = true;
+            trigger = triggerFirstLoad(db, "t_disable_table");
+            Assertions.assertNull(trigger.getAnalyzeType());
+
+            Config.enable_statistic_collect_on_first_load = false;
+            trigger = triggerFirstLoad(db, "t_enable_table");
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+        } finally {
+            Config.enable_statistic_collect_on_first_load = oldEnableStatisticCollectOnFirstLoad;
+        }
+    }
+
+    private void createPartitionedTable(String tableName, String extraProperties) throws Exception {
+        starRocksAssert.withTable("create table " + tableName + " (" +
+                "c1 int not null," +
+                "c2 int not null" +
+                ") " +
+                "partition by (c1)\n" +
+                "properties('replication_num'='1'" + extraProperties + ")");
+        starRocksAssert.ddl("alter table " + tableName + " add partition p1 values in ('1')");
+    }
+
+    private StatisticsCollectionTrigger triggerFirstLoad(Database db, String tableName) {
+        Table table = db.getTable(tableName);
+        Partition partition = table.getPartition("p1");
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(partition.getDefaultPhysicalPartition().getId(), 2, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(1000, 5));
+        setPartitionStatistics((OlapTable) table, "p1", 1000);
+        return StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                DmlType.INSERT_INTO);
     }
 }
