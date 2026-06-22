@@ -1,0 +1,35 @@
+-- name: test_mv_time_slice_predicate_rewrite
+-- description: A time_slice() rollup MV must only rewrite a raw-timestamp predicate when the
+--              operator is sound for the floor bucketing. time_slice(dt) floors dt to its bucket
+--              start, so dt >= c / dt < c (bucket-aligned c) map to time_slice(dt) >= c / < c, but
+--              dt = c / <= c / > c would over-select the whole bucket. The rewrite previously kept
+--              any operator; results must now equal the rewrite-off answer for all operators.
+
+CREATE DATABASE IF NOT EXISTS test_mv_time_slice_predicate_rewrite_db;
+USE test_mv_time_slice_predicate_rewrite_db;
+
+CREATE TABLE ts_base (id INT, dt DATETIME) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO ts_base VALUES
+  (1,'2023-06-01 00:00:00'),(2,'2023-06-01 00:02:00'),(3,'2023-06-01 00:04:59'),(4,'2023-06-01 00:05:00');
+
+CREATE MATERIALIZED VIEW ts_mv DISTRIBUTED BY HASH(t) BUCKETS 1 REFRESH MANUAL AS
+SELECT time_slice(dt, INTERVAL 5 MINUTE) t, count(*) c FROM ts_base GROUP BY time_slice(dt, INTERVAL 5 MINUTE);
+REFRESH MATERIALIZED VIEW ts_mv WITH SYNC MODE;
+
+-- = : was over-selecting the whole bucket (3); must be 1 with rewrite on, matching rewrite off
+SET enable_materialized_view_rewrite = false;
+SELECT count(*) FROM ts_base WHERE dt = '2023-06-01 00:00:00';
+SET enable_materialized_view_rewrite = true;
+SELECT count(*) FROM ts_base WHERE dt = '2023-06-01 00:00:00';
+
+-- <= : also unsound for time_slice; must match rewrite off
+SET enable_materialized_view_rewrite = false;
+SELECT count(*) FROM ts_base WHERE dt <= '2023-06-01 00:00:00';
+SET enable_materialized_view_rewrite = true;
+SELECT count(*) FROM ts_base WHERE dt <= '2023-06-01 00:00:00';
+
+-- >= and < remain sound (rewrite still allowed) and must stay correct
+SET enable_materialized_view_rewrite = true;
+SELECT count(*) FROM ts_base WHERE dt >= '2023-06-01 00:05:00';
+SELECT count(*) FROM ts_base WHERE dt <  '2023-06-01 00:05:00';

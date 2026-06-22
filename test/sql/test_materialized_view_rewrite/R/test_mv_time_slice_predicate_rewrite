@@ -1,0 +1,59 @@
+-- name: test_mv_time_slice_predicate_rewrite
+CREATE DATABASE IF NOT EXISTS test_mv_time_slice_predicate_rewrite_db;
+-- result:
+-- !result
+USE test_mv_time_slice_predicate_rewrite_db;
+-- result:
+-- !result
+CREATE TABLE ts_base (id INT, dt DATETIME) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO ts_base VALUES
+  (1,'2023-06-01 00:00:00'),(2,'2023-06-01 00:02:00'),(3,'2023-06-01 00:04:59'),(4,'2023-06-01 00:05:00');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ts_mv DISTRIBUTED BY HASH(t) BUCKETS 1 REFRESH MANUAL AS
+SELECT time_slice(dt, INTERVAL 5 MINUTE) t, count(*) c FROM ts_base GROUP BY time_slice(dt, INTERVAL 5 MINUTE);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW ts_mv WITH SYNC MODE;
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT count(*) FROM ts_base WHERE dt = '2023-06-01 00:00:00';
+-- result:
+1
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SELECT count(*) FROM ts_base WHERE dt = '2023-06-01 00:00:00';
+-- result:
+1
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT count(*) FROM ts_base WHERE dt <= '2023-06-01 00:00:00';
+-- result:
+1
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SELECT count(*) FROM ts_base WHERE dt <= '2023-06-01 00:00:00';
+-- result:
+1
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SELECT count(*) FROM ts_base WHERE dt >= '2023-06-01 00:05:00';
+-- result:
+1
+-- !result
+SELECT count(*) FROM ts_base WHERE dt <  '2023-06-01 00:05:00';
+-- result:
+3
+-- !result

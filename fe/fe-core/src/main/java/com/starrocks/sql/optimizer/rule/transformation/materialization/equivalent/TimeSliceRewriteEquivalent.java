@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -23,11 +25,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.type.PrimitiveType;
+
+import java.util.Set;
 // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
 // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
 // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
 public class TimeSliceRewriteEquivalent extends IPredicateRewriteEquivalent {
     public static TimeSliceRewriteEquivalent INSTANCE = new TimeSliceRewriteEquivalent();
+
+    // time_slice() floors a timestamp to the start of its bucket, so for a bucket-aligned constant
+    // `c`, only `dt >= c` and `dt < c` are equivalent to `time_slice(dt) >= c` / `< c`. `=`, `<=`
+    // and `>` would match the whole bucket (e.g. `dt = c` becomes `time_slice(dt) = c`, selecting
+    // every row in [c, c+interval)), so the rewrite must be declined for them.
+    private static final Set<BinaryType> SUPPORTED_BINARY_TYPES = ImmutableSet.of(BinaryType.GE, BinaryType.LT);
 
     public TimeSliceRewriteEquivalent() {}
 
@@ -79,6 +89,9 @@ public class TimeSliceRewriteEquivalent extends IPredicateRewriteEquivalent {
                                   ColumnRefOperator replace,
                                   ScalarOperator newInput) {
         if (!(newInput instanceof BinaryPredicateOperator)) {
+            return null;
+        }
+        if (!SUPPORTED_BINARY_TYPES.contains(((BinaryPredicateOperator) newInput).getBinaryType())) {
             return null;
         }
         ScalarOperator left = newInput.getChild(0);
