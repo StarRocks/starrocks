@@ -159,7 +159,11 @@ class TableAttributeNormalizer:
     # StarRocks wraps simple predicates in redundant parentheses: "(x > 100)" -> "x > 100".
     # Restricted to a single flat comparison (no nested parens, no commas, no AND/OR) so the
     # removed parentheses are guaranteed redundant and grouping is never altered.
-    _REDUNDANT_PREDICATE_PAREN_PATTERN = re.compile(r'\(\s*([^(),]*?(?:>=|<=|<>|!=|=|>|<)[^(),]*?)\s*\)')
+    # The string-literal alternation (same technique as _ALIAS_AS_PATTERN) ensures parens
+    # inside quoted strings are never touched; group(1) is None for those matches.
+    _REDUNDANT_PREDICATE_PAREN_PATTERN = re.compile(
+        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\(\s*[^(),]*?(?:>=|<=|<>|!=|=|>|<)[^(),]*?\s*\))"""
+    )
 
     @staticmethod
     def strip_identifier_backticks(sql: str) -> str:
@@ -300,14 +304,18 @@ class TableAttributeNormalizer:
         an identifier character.
         """
         def _replace(match: 're.Match[str]') -> str:
-            inner = match.group(1)
+            if match.group(1) is None:
+                # Matched a string literal — leave it untouched.
+                return match.group(0)
+            full = match.group(1)  # e.g. "( x > 1 )"
+            inner = full[1:-1].strip()
             lowered = inner.lower()
             if ' and ' in lowered or ' or ' in lowered:
-                return match.group(0)
+                return full
             start = match.start()
             if start > 0 and (sql[start - 1].isalnum() or sql[start - 1] == '_'):
                 # Preceded by an identifier char -> this is a function call, keep the parens.
-                return match.group(0)
+                return full
             return inner
 
         return TableAttributeNormalizer._REDUNDANT_PREDICATE_PAREN_PATTERN.sub(_replace, sql)

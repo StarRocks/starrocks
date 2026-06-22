@@ -332,6 +332,17 @@ class TestStarRocksCanonicalization:
             "select x from t where (a > 1) and (b < 2)",
         )
 
+    def test_predicate_parens_inside_string_literal_preserved(self):
+        """Parentheses inside string literals must not be stripped.
+
+        Regression: the regex previously matched (a = 1) even inside a quoted
+        string, so SELECT '(a = 1)' and SELECT 'a = 1' normalized to the same
+        text — silently missing a real view definition change.
+        """
+        a = TableAttributeNormalizer.normalize_sql("select '(a = 1)' as c from t")
+        b = TableAttributeNormalizer.normalize_sql("select 'a = 1' as c from t")
+        assert a != b
+
     def test_cte_column_list_not_stripped_in_fallback(self):
         """The regex fallback does NOT strip StarRocks-injected CTE column lists.
 
