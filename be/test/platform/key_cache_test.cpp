@@ -17,12 +17,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/fs/key_cache_test.cpp
 #include "base/url_coding.h"
-#include "script/script.h"
 
-=======
->>>>>>> 21e9817633f... [Refactor] Move KeyCache to platform (#75185):be/test/platform/key_cache_test.cpp
 namespace starrocks {
 
 // Test EncryptionKey constructor with EncryptionKeyPB and accessors
