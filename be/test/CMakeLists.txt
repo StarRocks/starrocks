@@ -289,11 +289,9 @@ set(EXEC_FILES
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
-        ./util/dynamic_cache_test.cpp
         ./runtime/exception_stack_test.cpp
         ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp
-        ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -302,7 +300,6 @@ set(EXEC_FILES
         ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
-        ./util/time_guard_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/core_dump_resource_releaser_test.cpp
@@ -316,8 +313,6 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/jvm_metrics_test.cpp
-        ./util/llm_cache_test.cpp
-        ./util/llm_query_service_test.cpp
         ./util/network_util_test.cpp
         )
 

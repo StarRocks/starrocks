@@ -39,6 +39,7 @@
 #include <string>
 
 #include "base/format.h"
+#include "base/json/json_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -55,7 +56,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "util/json_util.h"
 
 namespace starrocks {
 

@@ -14,14 +14,32 @@
 
 #pragma once
 
-#include "exprs/builtin_functions.h"
-#include "exprs/function_helper.h"
+#include <string>
+
+#include "common/statusor.h"
 
 namespace starrocks {
 
-class AiFunctions {
-public:
-    DEFINE_VECTORIZED_FN(ai_query);
+class JsonValue;
+
+constexpr double kDefaultTemperature = 0.7;
+constexpr int kDefaultMaxTokens = 1024;
+constexpr double kDefaultTopP = 1.0;
+extern const std::string kDefaultEndpoint;
+constexpr int kDefaultTimeout = 60000;
+
+struct ModelConfig {
+    std::string endpoint;
+    std::string model;
+    std::string api_key;
+    double temperature{kDefaultTemperature};
+    int max_tokens{kDefaultMaxTokens};
+    double top_p{kDefaultTopP};
+    int timeout_ms{kDefaultTimeout};
+
+    ModelConfig();
 };
+
+StatusOr<ModelConfig> parse_model_config(const JsonValue& json);
 
 } // namespace starrocks

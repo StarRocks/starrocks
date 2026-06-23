@@ -28,6 +28,7 @@ set(RUNTIME_CORE_TEST_FILES
     query_statistics_test.cpp
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
+    time_guard_test.cpp
     memory/mem_chunk_allocator_test.cpp
     memory/system_allocator_test.cpp
     memory/memory_resource_test.cpp

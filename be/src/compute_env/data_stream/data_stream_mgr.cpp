@@ -44,7 +44,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state.h"
-#include "util/time_guard.h"
+#include "runtime/time_guard.h"
 
 namespace starrocks {
 
