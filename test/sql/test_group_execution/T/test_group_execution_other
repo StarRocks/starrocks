@@ -48,15 +48,15 @@ select c0, c1 from t0 l intersect select c0, c1 from t1 r order by 1,2 limit 100
 select c0 from t0 l intersect select c0 from t1 r order by 1 limit 10000,3;
 -- union all
 select c0 from t0 l union all select c0 from t1 r order by 1 limit 10000,3;
-select distinct c0 from (select c0 from t0 l union all select c0 from t1 r) t order by 1 limit 10000,3;;
+select distinct c0 from (select c0 from t0 l union all select c0 from t1 r) t order by 1 limit 10000,3;
 -- union
-select c0 from t0 l union select c0 from t1 r order by 1 limit 10000,3;;
+select c0 from t0 l union select c0 from t1 r order by 1 limit 10000,3;
 select c0,c1 from t0 l union select c0,c1 from t1 r order by 1 limit 10000,3;
 -- except
 select distinct c0 from (select c0 from t0 l except select c0 from t1 r) t;
 select distinct c0,c1 from (select c0,c1 from t0 l except select c0,c1 from t1 r) tb;
 -- physical limit
-select count(c0) from (select distinct c0 from (select c0 from t0 l union all select c0 from t1 r limit 10) t) t;
+select count(c0) from (select distinct c0 from (select c0 from t0 l union all select c0 from t1 r order by 1 limit 10) t) t;
 select count(c0), count(cx) from (select c0,c1 in (select c0 from t1) cx from (select c0,c1 from t0 l) tb limit 10) tb;
 -- sort
 select c0 from t0 l order by c0 limit 1;
