@@ -79,7 +79,7 @@ static Schema build_prepare_pruning_schema(const RowsetPtr& rowset, const Schema
         if (prepare_schema.get_field_by_name(std::string(col.name())) != nullptr) {
             continue;
         }
-        prepare_schema.append(std::make_shared<Field>(ChunkHelper::convert_field(cid, col)));
+        prepare_schema.append(std::make_shared<Field>(StorageSchemaHelper::convert_field(cid, col)));
     }
     return prepare_schema;
 }

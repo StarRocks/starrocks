@@ -1111,7 +1111,6 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
     DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
 
     _init_column_access_paths();
-    RETURN_IF_ERROR(_prepare_vector_index());
     RETURN_IF_ERROR(_init_ann_reader());
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
