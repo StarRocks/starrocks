@@ -14,14 +14,100 @@
 
 #include "nullable_column.h"
 
+#include <cstring>
+
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
+<<<<<<< HEAD
 #include "formats/json/binary_column.h"
+=======
+#include "column/struct_column.h"
+>>>>>>> 5e41562d31 ([Enhancement] Support native MAP/STRUCT target columns for Avro routine load (#74901))
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+// Resolve an avro union to its currently selected branch. Mirrors AvroScanner::_handle_union:
+// loops to peel nested unions; the resolved value may be AVRO_NULL.
+static Status resolve_union(avro_value_t* value) {
+    while (avro_value_get_type(value) == AVRO_UNION) {
+        avro_value_t branch;
+        if (avro_value_get_current_branch(value, &branch) != 0) {
+            return Status::InvalidArgument(strings::Substitute("Cannot get union branch: $0", avro_strerror()));
+        }
+        *value = branch;
+    }
+    return Status::OK();
+}
+
+// Recursive (non-adaptive) value writer used by complex types; defined below.
+static Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
+                                  const avro_value_t& value);
+
+// Populate a MapColumn (the data column of a nullable map) from an avro map value.
+// Avro map keys are always strings, so they are written directly into the key column with a
+// length check; values recurse through add_nullable_column, which unwraps inner unions/nulls.
+static Status add_map_column(MapColumn* map_column, const TypeDescriptor& type_desc, std::string_view name,
+                             const avro_value_t& value) {
+    if (avro_value_get_type(&value) != AVRO_MAP) {
+        return Status::InvalidArgument(strings::Substitute("Failed to parse value as map, column=$0", name));
+    }
+    auto* keys_column = down_cast<NullableColumn*>(map_column->keys_column_raw_ptr());
+    auto* keys_null = keys_column->null_column_raw_ptr();
+    auto* keys_data = down_cast<BinaryColumn*>(keys_column->data_column_raw_ptr());
+    auto* values_column = map_column->values_column_raw_ptr();
+    auto* offsets = map_column->offsets_column_raw_ptr();
+
+    size_t n = 0;
+    if (avro_value_get_size(&value, &n) != 0) {
+        return Status::InvalidArgument(strings::Substitute("Failed to get map size, column=$0", name));
+    }
+
+    const auto& key_type = type_desc.children[0];
+    for (size_t i = 0; i < n; ++i) {
+        const char* key = nullptr;
+        avro_value_t element;
+        if (avro_value_get_by_index(&value, i, &element, &key) != 0) {
+            return Status::InvalidArgument(strings::Substitute("Failed to get map entry, column=$0", name));
+        }
+        size_t key_len = (key == nullptr) ? 0 : strlen(key);
+        if (key_type.len >= 0 && key_len > static_cast<size_t>(key_type.len)) {
+            return Status::DataQualityError(strings::Substitute(
+                    "Map key length is beyond the capacity. column=$0, capacity=$1", name, key_type.len));
+        }
+        keys_data->append(Slice(key, key_len));
+        keys_null->append(0);
+        RETURN_IF_ERROR(add_nullable_column(values_column, type_desc.children[1], name, element));
+    }
+    uint32_t sz = offsets->immutable_data().back() + n;
+    offsets->append_numbers(&sz, sizeof(sz));
+    return Status::OK();
+}
+
+// Populate a StructColumn (the data column of a nullable struct) from an avro record value.
+// Fields are matched by name; a field absent from the record becomes NULL. Each present field
+// recurses through add_nullable_column, which unwraps inner unions/nulls.
+static Status add_struct_column(StructColumn* struct_column, const TypeDescriptor& type_desc, std::string_view name,
+                                const avro_value_t& value) {
+    if (avro_value_get_type(&value) != AVRO_RECORD) {
+        return Status::InvalidArgument(strings::Substitute("Failed to parse value as struct, column=$0", name));
+    }
+    for (size_t i = 0; i < type_desc.children.size(); ++i) {
+        auto* field_column = struct_column->field_column_raw_ptr(i);
+        const std::string& field_name = type_desc.field_names[i];
+        avro_value_t field_value;
+        if (avro_value_get_by_name(&value, field_name.c_str(), &field_value, nullptr) == 0) {
+            RETURN_IF_ERROR(add_nullable_column(field_column, type_desc.children[i], name, field_value));
+        } else {
+            field_column->append_nulls(1);
+        }
+    }
+    return Status::OK();
+}
 
 template <typename T>
 static Status add_adaptive_nullable_numeric_column(Column* column, const TypeDescriptor& type_desc,
@@ -142,25 +228,34 @@ static Status add_nullable_native_json_column(Column* column, const TypeDescript
 
 static Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                   const avro_value_t& value) {
+    // Unwrap nullable unions so nested fields/elements/values dispatch on their real type,
+    // and route avro nulls to a column null regardless of the destination type.
+    avro_value_t resolved = value;
+    RETURN_IF_ERROR(resolve_union(&resolved));
+    if (avro_value_get_type(&resolved) == AVRO_NULL) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+
     switch (type_desc.type) {
     case TYPE_BOOLEAN:
-        return add_nullable_numeric_column<int8_t>(column, type_desc, name, value);
+        return add_nullable_numeric_column<int8_t>(column, type_desc, name, resolved);
     case TYPE_BIGINT:
-        return add_nullable_numeric_column<int64_t>(column, type_desc, name, value);
+        return add_nullable_numeric_column<int64_t>(column, type_desc, name, resolved);
     case TYPE_INT:
-        return add_nullable_numeric_column<int32_t>(column, type_desc, name, value);
+        return add_nullable_numeric_column<int32_t>(column, type_desc, name, resolved);
     case TYPE_SMALLINT:
-        return add_nullable_numeric_column<int16_t>(column, type_desc, name, value);
+        return add_nullable_numeric_column<int16_t>(column, type_desc, name, resolved);
     case TYPE_TINYINT:
-        return add_nullable_numeric_column<int8_t>(column, type_desc, name, value);
+        return add_nullable_numeric_column<int8_t>(column, type_desc, name, resolved);
     case TYPE_DOUBLE:
-        return add_nullable_numeric_column<double>(column, type_desc, name, value);
+        return add_nullable_numeric_column<double>(column, type_desc, name, resolved);
     case TYPE_FLOAT:
-        return add_nullable_numeric_column<float>(column, type_desc, name, value);
+        return add_nullable_numeric_column<float>(column, type_desc, name, resolved);
     case TYPE_JSON:
-        return add_nullable_native_json_column(column, type_desc, name, value);
+        return add_nullable_native_json_column(column, type_desc, name, resolved);
     case TYPE_ARRAY: {
-        if (avro_value_get_type(&value) == AVRO_ARRAY) {
+        if (avro_value_get_type(&resolved) == AVRO_ARRAY) {
             auto nullable_column = down_cast<NullableColumn*>(column);
 
             auto array_column = down_cast<ArrayColumn*>(nullable_column->data_column_raw_ptr());
@@ -168,13 +263,13 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
 
             auto* elems_column = array_column->elements_column_raw_ptr();
             size_t n = 0;
-            if (avro_value_get_size(&value, &n) != 0) {
+            if (avro_value_get_size(&resolved, &n) != 0) {
                 auto err_msg = strings::Substitute("Failed to get array size, column=$0", name);
                 return Status::InvalidArgument(err_msg);
             }
             for (int i = 0; i < n; i++) {
                 avro_value_t element;
-                if (avro_value_get_by_index(&value, i, &element, nullptr) != 0) {
+                if (avro_value_get_by_index(&resolved, i, &element, nullptr) != 0) {
                     auto err_msg = strings::Substitute("Failed to get array element, column=$0", name);
                     return Status::InvalidArgument(err_msg);
                 }
@@ -192,9 +287,23 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
             return Status::InvalidArgument(err_msg);
         }
     }
+    case TYPE_MAP: {
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto* map_column = down_cast<MapColumn*>(nullable_column->data_column_raw_ptr());
+        RETURN_IF_ERROR(add_map_column(map_column, type_desc, name, resolved));
+        nullable_column->null_column_raw_ptr()->append(0);
+        return Status::OK();
+    }
+    case TYPE_STRUCT: {
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto* struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+        RETURN_IF_ERROR(add_struct_column(struct_column, type_desc, name, resolved));
+        nullable_column->null_column_raw_ptr()->append(0);
+        return Status::OK();
+    }
 
     default:
-        return add_nullable_binary_column(column, type_desc, name, value);
+        return add_nullable_binary_column(column, type_desc, name, resolved);
     }
 }
 
@@ -250,6 +359,20 @@ static Status add_adpative_nullable_column(Column* column, const TypeDescriptor&
             return Status::InvalidArgument(err_msg);
         }
     }
+    case TYPE_MAP: {
+        auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
+        auto* map_column = down_cast<MapColumn*>(nullable_column->begin_append_not_default_value());
+        RETURN_IF_ERROR(add_map_column(map_column, type_desc, name, value));
+        nullable_column->finish_append_one_not_default_value();
+        return Status::OK();
+    }
+    case TYPE_STRUCT: {
+        auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
+        auto* struct_column = down_cast<StructColumn*>(nullable_column->begin_append_not_default_value());
+        RETURN_IF_ERROR(add_struct_column(struct_column, type_desc, name, value));
+        nullable_column->finish_append_one_not_default_value();
+        return Status::OK();
+    }
     default:
         return add_adpative_nullable_binary_column(column, type_desc, name, value);
     }
@@ -257,30 +380,42 @@ static Status add_adpative_nullable_column(Column* column, const TypeDescriptor&
 
 Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                     const avro_value_t& value, bool invalid_as_null) {
+    // Snapshot so a partial nested append (Map/Struct/Array child column) can be rewound on error.
+    // Column::resize cascades to leaf storage, dropping orphan keys/values/elements.
+    const size_t snapshot = column->size();
     if (avro_value_get_type(&value) == AVRO_NULL) {
         column->append_nulls(1);
         return Status::OK();
     }
 
     auto st = add_adpative_nullable_column(column, type_desc, name, value);
-    if (UNLIKELY(!st.ok() && invalid_as_null)) {
-        column->append_nulls(1);
-        return Status::OK();
+    if (!st.ok()) {
+        column->resize(snapshot);
+        if (invalid_as_null) {
+            column->append_nulls(1);
+            return Status::OK();
+        }
     }
     return st;
 }
 
 Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                            const avro_value_t& value, bool invalid_as_null) {
+    // Snapshot so a partial nested append (Map/Struct/Array child column) can be rewound on error.
+    // Column::resize cascades to leaf storage, dropping orphan keys/values/elements.
+    const size_t snapshot = column->size();
     if (avro_value_get_type(&value) == AVRO_NULL) {
         column->append_nulls(1);
         return Status::OK();
     }
 
     auto st = add_nullable_column(column, type_desc, name, value);
-    if (!st.ok() && invalid_as_null) {
-        column->append_nulls(1);
-        return Status::OK();
+    if (!st.ok()) {
+        column->resize(snapshot);
+        if (invalid_as_null) {
+            column->append_nulls(1);
+            return Status::OK();
+        }
     }
     return st;
 }
