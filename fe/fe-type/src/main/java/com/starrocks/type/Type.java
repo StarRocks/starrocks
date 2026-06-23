@@ -305,6 +305,26 @@ public abstract class Type implements Cloneable {
                 && !isBinaryType() && !isVariantType();
     }
 
+    // Returns true if this type is VARIANT or transitively contains a VARIANT inside an
+    // ARRAY/MAP/STRUCT. VARIANT has no native storage write path: an OLAP column (or generated MV
+    // column) containing it aborts the BE on write (the storage LogicalType dispatch hits its
+    // default LOG(FATAL) for TYPE_VARIANT), so native schemas must reject any contained VARIANT.
+    public boolean containsVariant() {
+        if (isVariantType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsVariant();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsVariant() || ((MapType) this).getValueType().containsVariant();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsVariant());
+        }
+        return false;
+    }
+
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
         // Allow VARBINARY as distribution key
