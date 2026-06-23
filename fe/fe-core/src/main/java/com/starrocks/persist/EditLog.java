@@ -1012,16 +1012,9 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
-<<<<<<< HEAD
-                    // The follower replays the stats meta log, indicating that the master has
-                    // re-completed
-                    // statistic, and the follower's should refresh cache here.
-                    // We don't need to refresh statistics when checkpointing
-=======
                     // The follower replays the stats meta log, indicating that the leader has re-completed
                     // statistics, so the follower should drop its connector stats cache here and reload it
                     // lazily on the next query. We don't need to touch the cache when checkpointing.
->>>>>>> f8e8a78087f... [Enhancement] Add opt-in lazy refresh of external stats cache on journal replay (#74371)
                     if (!GlobalStateMgr.isCheckpointThread()) {
                         globalStateMgr.getAnalyzeMgr().replayRefreshExternalBasicStatsCache(basicStatsMeta);
                     }
@@ -1038,16 +1031,9 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-<<<<<<< HEAD
-                    // The follower replays the stats meta log, indicating that the master has
-                    // re-completed
-                    // statistic, and the follower's should expire cache here.
-                    // We don't need to refresh statistics when checkpointing
-=======
                     // The follower replays the stats meta log, indicating that the leader has re-completed
                     // statistics, so the follower should drop its connector histogram cache here and reload it
                     // lazily on the next query. We don't need to touch the cache when checkpointing.
->>>>>>> f8e8a78087f... [Enhancement] Add opt-in lazy refresh of external stats cache on journal replay (#74371)
                     if (!GlobalStateMgr.isCheckpointThread()) {
                         globalStateMgr.getAnalyzeMgr().replayRefreshExternalHistogramStatsCache(histogramStatsMeta);
                     }
