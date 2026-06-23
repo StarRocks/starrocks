@@ -537,9 +537,10 @@ Note:
 
 1. If you modify the value column in aggregation models, you need to specify agg_type.
 2. If you modify the key column in non-aggregation models, you need to specify the KEY keyword.
-3. Only the type of column can be modified. The other properties of the column remain as they are currently. (i.e. other properties need to be explicitly written in the statement according to the original property, see example 8 in the [column](#column) part).
-4. The partition column cannot be modified.
-5. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
+3. While modifying the type, default value, nullability, and position, you must specify the full definition of the column in the statement.
+4. While modifying the comment of the column, you must only specify `MODIFY COLUMN <column_name> COMMENT "<new_column_comment>"` instead of the full definition. This operation will only change the metadata, and will not initiate Schema Change tasks. It can be applied to Primary Key columns, key columns, and regular columns. Specifying the full definition in the statement will be parsed as modifications to the column definition, and thereby initiate Schema Change tasks.
+5. The partition column cannot be modified.
+6. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
    - Convert TINYINT/SMALLINT/INT/BIGINT to TINYINT/SMALLINT/INT/BIGINT/DOUBLE.
    - Convert TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
@@ -550,8 +551,8 @@ Note:
    - Convert FLOAT to DOUBLE
    - Convert INT to DATE (If the INT data fails to convert, the original data remains the same)
 
-6. Conversion from NULL to NOT NULL is not supported.
-7. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
+7. Conversion from NULL to NOT NULL is not supported.
+8. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
 
 #### Reorder the columns of specified index
 
