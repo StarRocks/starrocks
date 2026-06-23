@@ -53,19 +53,6 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         super(jobType);
     }
 
-<<<<<<< HEAD
-    @Nullable
-    protected ReadLockedDatabase getReadLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        return db != null ? new ReadLockedDatabase(db) : null;
-    }
-=======
-    protected LakeTableSchemaChangeJobBase(LakeTableSchemaChangeJobBase job) {
-        super(job);
-        this.watershedTxnId = job.watershedTxnId;
-        this.watershedGtid = job.watershedGtid;
-    }
-
     // NOTE: Metadata access in these jobs locks only the job's own table
     // (`tableId`) with an intensive db lock (IS/IX on the database + S/X on the
     // table) via AutoCloseableLock, NOT the whole database:
@@ -82,7 +69,6 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     // old full-db lock guaranteed, while leaving unrelated tables in the same
     // database free of contention. This mirrors LakeTableAlterMetaJobBase and
     // the non-lake SchemaChangeJobV2.
->>>>>>> 1659b62939 ([Enhancement] Scope lake schema-change job locks to the table (#75087))
 
     // Returns the job's table, or null if the database or the table has been
     // dropped. The caller must already hold the table lock.

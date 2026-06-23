@@ -464,8 +464,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
             if (table != null) {
                 removeRollupIndex(table);
             }
@@ -474,18 +474,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         this.jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
-<<<<<<< HEAD
-=======
-        persistStateChange(this, JobState.CANCELLED, () -> {
-            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
-                OlapTable table = getTable();
-                if (table != null) {
-                    removeRollupIndex(table);
-                }
-            }
-        });
-
->>>>>>> 1659b62939 ([Enhancement] Scope lake schema-change job locks to the table (#75087))
         if (span != null) {
             span.setStatus(StatusCode.ERROR, errMsg);
             span.end();
