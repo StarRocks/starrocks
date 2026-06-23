@@ -399,6 +399,9 @@ struct TQueryOptions {
   // hardcoded "stream-load-pipe" filename. Optional and unused for
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
+
+  // Master switch for the experimental Lake prepared physical split scan path.
+  219: optional bool enable_lake_prepared_physical_split_scan = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

@@ -373,13 +373,29 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             }
         }
 
-        // now skip vector includes already started chunk source
-        // we are going to pick up `total_cnt` new chunk source to start.
+        int empty_slots[_io_tasks_per_scan_operator];
+        int normal_slots[_io_tasks_per_scan_operator];
+        int empty_count = 0;
+        int normal_count = 0;
+
+        // Prefer truly empty slots before slots holding reusable state, while
+        // preserving the existing round-robin order inside each group.
         for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
             _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
             int idx = _chunk_source_idx;
             if (skip[idx]) continue;
-            to_sched[size++] = idx;
+            if (_is_empty_slot_for_new_morsel(idx)) {
+                empty_slots[empty_count++] = idx;
+            } else {
+                normal_slots[normal_count++] = idx;
+            }
+        }
+
+        for (int i = 0; i < empty_count && size < total_cnt; ++i) {
+            to_sched[size++] = empty_slots[i];
+        }
+        for (int i = 0; i < normal_count && size < total_cnt; ++i) {
+            to_sched[size++] = normal_slots[i];
         }
     }
 
@@ -425,7 +441,14 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
             _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
-            _close_chunk_source_unlocked(state, chunk_source_index);
+            if (!_is_finished && _chunk_sources[chunk_source_index]->has_reusable_state()) {
+                auto reusable_chunk_source = std::move(_chunk_sources[chunk_source_index]);
+                reusable_chunk_source->release_for_reuse(state);
+                detach_chunk_source(chunk_source_index);
+                _stash_reusable_chunk_source(state, chunk_source_index, std::move(reusable_chunk_source));
+            } else {
+                _close_chunk_source_unlocked(state, chunk_source_index);
+            }
         }
         _is_io_task_running[chunk_source_index] = false;
     }
@@ -602,12 +625,39 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
         {
             SCOPED_TIMER(_prepare_chunk_source_timer);
-            _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
-            auto status = _chunk_sources[chunk_source_index]->prepare(state);
-            if (!status.ok()) {
-                _chunk_sources[chunk_source_index] = nullptr;
-                static_cast<void>(set_finishing(state));
-                return status;
+            if (_can_reuse_chunk_source_for(*morsel)) {
+                _record_reusable_chunk_source_event(ReusableChunkSourceEvent::CANDIDATE);
+                ReusableChunkSourceLookup reusable_lookup;
+                {
+                    std::lock_guard guard(_task_mutex);
+                    reusable_lookup = _take_reusable_chunk_source(state, chunk_source_index, *morsel);
+                }
+                if (reusable_lookup.stale_chunk_source != nullptr) {
+                    _record_reusable_chunk_source_event(ReusableChunkSourceEvent::STALE_CLOSE);
+                    reusable_lookup.stale_chunk_source->close(state);
+                }
+                if (reusable_lookup.reusable_chunk_source != nullptr) {
+                    auto status = reusable_lookup.reusable_chunk_source->reuse(state, std::move(morsel));
+                    if (!status.ok()) {
+                        _record_reusable_chunk_source_event(ReusableChunkSourceEvent::FAILURE);
+                        reusable_lookup.reusable_chunk_source->close(state);
+                        static_cast<void>(set_finishing(state));
+                        return status;
+                    }
+                    _record_reusable_chunk_source_event(ReusableChunkSourceEvent::HIT);
+                    _chunk_sources[chunk_source_index] = std::move(reusable_lookup.reusable_chunk_source);
+                } else {
+                    _record_reusable_chunk_source_event(ReusableChunkSourceEvent::MISS);
+                }
+            }
+            if (_chunk_sources[chunk_source_index] == nullptr) {
+                _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
+                auto status = _chunk_sources[chunk_source_index]->prepare(state);
+                if (!status.ok()) {
+                    _chunk_sources[chunk_source_index] = nullptr;
+                    static_cast<void>(set_finishing(state));
+                    return status;
+                }
             }
         }
 

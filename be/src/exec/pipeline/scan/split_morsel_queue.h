@@ -14,12 +14,16 @@
 
 #pragma once
 
+#include <atomic>
+#include <deque>
 #include <mutex>
+#include <queue>
 
 #include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/primitive/range.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_group.h"
@@ -79,8 +83,6 @@ public:
     Type type() const override { return PHYSICAL_SPLIT; }
 
 private:
-    rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
-    rowid_t _upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) const;
     bool _is_last_split_of_current_morsel();
 
     BaseRowset* _cur_rowset();
@@ -177,6 +179,60 @@ private:
     std::vector<size_t> _num_rest_blocks_per_seek_range;
     size_t _range_idx = 0;
     ShortKeyIndexGroupIterator _next_lower_block_iter;
+};
+
+// Lake prepared physical split keeps root/refined morsels in its own dynamic
+// queue. When that queue is temporarily empty, it may issue extra coarse ranges
+// for seed segments whose final pruned ranges are not ready yet.
+class LakePreparedPhysicalSplitMorselQueue final : public OlapMorselQueue, public TicketedMorselQueue {
+public:
+    LakePreparedPhysicalSplitMorselQueue(Morsels&& morsels, bool has_more_scan_ranges, int64_t splitted_scan_rows,
+                                         size_t degree_of_parallelism);
+    ~LakePreparedPhysicalSplitMorselQueue() override = default;
+
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
+    bool empty() const override;
+    StatusOr<MorselPtr> try_get() override;
+    void unget(MorselPtr&& morsel) override;
+    Status append_morsels(Morsels&& morsels) override;
+    std::string name() const override { return "lake_prepared_physical_split_morsel_queue"; }
+    StatusOr<bool> ready_for_next() const override;
+    Type type() const override { return LAKE_PREPARED_PHYSICAL_SPLIT; }
+
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
+    bool could_attch_ticket_checker() const override { return true; }
+    std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const override;
+
+private:
+    struct PreRefinementCandidate {
+        int32_t plan_node_id = 0;
+        TScanRange scan_range;
+        lake::PreparedTabletReadStatePtr prepared_tablet_read_state;
+        lake::PreparedSegmentReadStatePtr prepared_segment_read_state;
+        size_t rowset_index = 0;
+        size_t segment_index = 0;
+    };
+
+    enum class PreRefinementCandidateState {
+        LIVE,
+        DEAD,
+    };
+
+    void enter_ticket(ScanMorsel* morsel);
+    PreRefinementCandidateState pre_refinement_candidate_state(const PreRefinementCandidate& candidate) const;
+    bool has_pre_refinement_candidate_locked() const;
+    void enqueue_pre_refinement_candidate_from_initial_coarse_locked(ScanMorsel* morsel);
+    StatusOr<MorselPtr> allocate_pre_refinement_coarse_split_locked();
+
+    int64_t _splitted_scan_rows;
+    size_t _degree_of_parallelism = 1;
+    std::atomic<int64_t> _size = 0;
+    std::deque<MorselPtr> _queue;
+    mutable std::mutex _mutex;
+    mutable std::queue<PreRefinementCandidate> _pre_refinement_candidates;
+    SplitMorselTicketCheckerPtr _ticket_checker;
 };
 
 } // namespace starrocks::pipeline

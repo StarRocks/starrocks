@@ -468,7 +468,7 @@ inline size_t SparseRangeIterator<T>::remaining_rows() const {
         return 0;
     }
     size_t res = 0;
-    auto range = Range<T>(_next_rowid, _range->_ranges[0].end());
+    auto range = Range<T>(_next_rowid, _range->_ranges[_index].end());
     res += range.span_size();
     for (size_t i = _index + 1; i < _range->_ranges.size(); i++) {
         res += _range->_ranges[i].span_size();
