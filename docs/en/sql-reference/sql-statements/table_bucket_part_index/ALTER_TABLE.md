@@ -224,9 +224,9 @@ multi_range_partitions ::=
 
   Notes for `multi_range_partitions`:
 
-  - It only applies to Range Partitioning.
-  - The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
-  - It only supports partitions with a single Partition Key.
+  1. It only applies to Range Partitioning.
+  2. The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+  3. It only supports partitions with a single Partition Key.
 
 - Drop partitions with Common Partition Expression (Supported from v3.5.0):
 
