@@ -289,8 +289,17 @@ public class MergeIntoPlanner {
                 // indistinguishable.
                 PlanNode targetSubtree = joinNode.getChild(1);
                 IcebergScanNode targetScan = findTargetScan(targetSubtree, targetTable);
-                if (targetScan != null || producesRowLocatorSlots(targetSubtree, rowLocatorSlotIds, descTbl)) {
+                if (targetScan != null) {
                     return new MergeTargetContext(joinNode, targetScan, rowLocatorSlotIds);
+                }
+                if (producesRowLocatorSlots(targetSubtree, rowLocatorSlotIds, descTbl)) {
+                    // Defensive invariant, not a user error: child 1 emits the target
+                    // row-locator slots, so a target scan must exist below the join
+                    // (findTargetScan walks through exchanges to reach a shuffled-away scan).
+                    // Not finding it means an inconsistent physical plan; fail loud rather
+                    // than commit a row delta without a frozen base snapshot.
+                    throw new IllegalStateException("MERGE INTO physical plan emits target "
+                            + "row-locator slots but the target scan could not be located");
                 }
             }
             queue.addAll(node.getChildren());

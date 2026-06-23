@@ -14,9 +14,14 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EnforceUniqueRowLocatorNode;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.IcebergRowDeltaSink;
@@ -24,17 +29,30 @@ import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.sql.MergeIntoPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Queue;
 
@@ -385,6 +403,49 @@ public class MergeIntoPlanTest extends PlanTestBase {
             connectContext.getSessionVariable().setPipelineDop(previousPipelineDop);
             connectContext.getSessionVariable().setPipelineSinkDop(previousPipelineSinkDop);
         }
+    }
+
+    @Test
+    public void testMergeTargetLocatorRejectsRowLocatorSlotsWithoutTargetScan() throws Exception {
+        ExecPlan execPlan = new ExecPlan();
+        DescriptorTable descTbl = execPlan.getDescTbl();
+
+        TupleDescriptor sourceTuple = descTbl.createTupleDescriptor("synthetic-source");
+        SlotDescriptor sourceSlot = descTbl.addSlotDescriptor(sourceTuple);
+        sourceSlot.setColumn(new Column("id", IntegerType.INT));
+        sourceSlot.setIsMaterialized(true);
+        sourceTuple.computeMemLayout();
+
+        TupleDescriptor targetTuple = descTbl.createTupleDescriptor("synthetic-target-row-locator");
+        SlotDescriptor fileSlot = descTbl.addSlotDescriptor(targetTuple);
+        fileSlot.setColumn(new Column("_file", VarcharType.VARCHAR));
+        fileSlot.setIsMaterialized(true);
+        SlotDescriptor posSlot = descTbl.addSlotDescriptor(targetTuple);
+        posSlot.setColumn(new Column("_pos", IntegerType.BIGINT));
+        posSlot.setIsMaterialized(true);
+        targetTuple.computeMemLayout();
+
+        PlanNode source = new EmptySetNode(new PlanNodeId(0), new ArrayList<>(List.of(sourceTuple.getId())));
+        PlanNode rowLocatorOnlyTarget =
+                new EmptySetNode(new PlanNodeId(1), new ArrayList<>(List.of(targetTuple.getId())));
+        HashJoinNode joinNode = new HashJoinNode(new PlanNodeId(2), source, rowLocatorOnlyTarget,
+                JoinOperator.LEFT_OUTER_JOIN, Collections.emptyList(), Collections.emptyList());
+        execPlan.getFragments().add(new PlanFragment(new PlanFragmentId(0), joinNode, DataPartition.UNPARTITIONED));
+        execPlan.getOutputExprs().add(new SlotRef(fileSlot));
+        execPlan.getOutputExprs().add(new SlotRef(posSlot));
+
+        Method method = MergeIntoPlanner.class.getDeclaredMethod(
+                "findMergeTargetContext", ExecPlan.class, IcebergTable.class);
+        method.setAccessible(true);
+        IcebergTable targetTable = new IcebergTable(1, "srTableName", "iceberg0", "resource_name",
+                "unpartitioned_db", "t0_v2", "", Collections.emptyList(), null, new HashMap<>());
+
+        InvocationTargetException exception = assertThrows(InvocationTargetException.class,
+                () -> method.invoke(null, execPlan, targetTable));
+        assertTrue(exception.getCause() instanceof IllegalStateException,
+                "Row-locator slots without target scan must fail loud: " + exception.getCause());
+        assertTrue(exception.getCause().getMessage().contains("target scan"),
+                "Error should mention missing target scan: " + exception.getCause().getMessage());
     }
 
     @Test

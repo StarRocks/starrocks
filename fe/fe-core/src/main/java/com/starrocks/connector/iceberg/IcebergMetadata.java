@@ -201,6 +201,8 @@ import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFA
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
+import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL;
+import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL_DEFAULT;
 
@@ -2118,9 +2120,13 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        // Use the base snapshot id frozen at plan time so conflict detection covers
-        // every commit landed between scan and commit. Falling back to currentSnapshot
-        // here would silently skip that window and defeat SERIALIZABLE isolation.
+        boolean isMerge = extra instanceof IcebergSinkExtra
+                && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
+
+        // Use the base snapshot id frozen at plan time so conflict detection covers every
+        // commit landed between scan and commit. The MERGE/UPDATE planners freeze it from the
+        // target scan whenever existing rows are modified; the currentSnapshot fallback below
+        // covers paths that do not (plain appends, target-less MERGE).
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
@@ -2146,8 +2152,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().
-                getOrDefault(UPDATE_ISOLATION_LEVEL, UPDATE_ISOLATION_LEVEL_DEFAULT));
+        // MERGE and UPDATE have separate Iceberg isolation-level properties; pick by op type
+        // so a table that relaxes one but not the other validates at the right level.
+        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().getOrDefault(
+                isMerge ? MERGE_ISOLATION_LEVEL : UPDATE_ISOLATION_LEVEL,
+                isMerge ? MERGE_ISOLATION_LEVEL_DEFAULT : UPDATE_ISOLATION_LEVEL_DEFAULT));
         if (isolationLevel == IsolationLevel.SERIALIZABLE) {
             rowDelta.validateNoConflictingDataFiles();
         }
@@ -2164,9 +2173,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (context != null) {
             updateCommitInfo(rowDelta, context);
         }
-
-        boolean isMerge = extra instanceof IcebergSinkExtra
-                && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
 
         try {
             commitWithCleanup(() -> {
