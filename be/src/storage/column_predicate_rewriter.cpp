@@ -214,11 +214,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     if (PredicateType::kInList == pred->type()) {
         std::vector<Datum> values = pred->values();
         std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
+        _column_iterators[cid]->dict_lookup_batch(values, &codewords);
         if (codewords.empty()) {
             return RewriteStatus::ALWAYS_FALSE;
         }
@@ -234,11 +230,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     if (PredicateType::kNotInList == pred->type()) {
         std::vector<Datum> values = pred->values();
         std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
+        _column_iterators[cid]->dict_lookup_batch(values, &codewords);
         if (codewords.empty()) {
             if (!field->is_nullable()) {
                 return RewriteStatus::ALWAYS_TRUE;

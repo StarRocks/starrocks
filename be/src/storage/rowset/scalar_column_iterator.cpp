@@ -34,8 +34,13 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include <algorithm>
+
 #include "base/bit/bitmap.h"
+#include "base/hash/hash.h"
+#include "base/phmap/phmap.h"
 #include "cache/mem_cache/page_handle_fwd.h"
+#include "column/column_hash.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -49,9 +54,16 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+namespace {
+
+constexpr size_t kDictLookupHashThreshold = 100;
+
+} // namespace
 
 ScalarColumnIterator::ScalarColumnIterator(ColumnReader* reader) : _reader(reader) {}
 
@@ -566,6 +578,42 @@ int ScalarColumnIterator::dict_lookup(const Slice& word) {
     return (this->*_dict_lookup_func)(word);
 }
 
+void ScalarColumnIterator::dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) {
+    DCHECK(all_page_dict_encoded());
+    if (words.empty()) {
+        return;
+    }
+
+    const size_t dict_sz = static_cast<size_t>(dict_size());
+    if (std::max(dict_sz, words.size()) < kDictLookupHashThreshold) {
+        for (const auto& word : words) {
+            if (int code = dict_lookup(word.get_slice()); code >= 0) {
+                codes->emplace_back(code);
+            }
+        }
+        return;
+    }
+
+    switch (delegate_type(_reader->column_type())) {
+    case TYPE_CHAR:
+        _do_dict_lookup_batch<TYPE_CHAR>(words, codes);
+        break;
+    case TYPE_VARCHAR:
+        _do_dict_lookup_batch<TYPE_VARCHAR>(words, codes);
+        break;
+    case TYPE_JSON:
+        _do_dict_lookup_batch<TYPE_JSON>(words, codes);
+        break;
+    default:
+        for (const auto& word : words) {
+            if (int code = dict_lookup(word.get_slice()); code >= 0) {
+                codes->emplace_back(code);
+            }
+        }
+        break;
+    }
+}
+
 Status ScalarColumnIterator::next_dict_codes(size_t* n, Column* dst) {
     DCHECK(all_page_dict_encoded());
     return (this->*_next_dict_codes_func)(n, dst);
@@ -607,6 +655,43 @@ template <LogicalType Type>
 int ScalarColumnIterator::_do_dict_lookup(const Slice& word) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     return dict->find(word);
+}
+
+template <LogicalType Type>
+void ScalarColumnIterator::_do_dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) {
+    auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
+    const size_t dict_sz = static_cast<size_t>(dict->dict_size());
+
+    if (words.size() <= dict_sz) {
+        phmap::flat_hash_set<Slice, SliceHash, SliceEqual> values;
+        values.reserve(words.size());
+        for (const auto& word : words) {
+            values.emplace(word.get_slice());
+        }
+
+        codes->reserve(codes->size() + std::min(values.size(), dict_sz));
+        for (uint32_t i = 0; i < dict_sz; i++) {
+            if (values.find(dict->string_at_index(i)) != values.end()) {
+                codes->emplace_back(i);
+            }
+        }
+    } else {
+        phmap::flat_hash_map<Slice, int, SliceHash, SliceEqual> dict_map;
+        dict_map.reserve(dict_sz);
+        for (uint32_t i = 0; i < dict_sz; i++) {
+            dict_map.emplace(dict->string_at_index(i), i);
+        }
+
+        phmap::flat_hash_set<int> code_set;
+        code_set.reserve(dict_sz);
+        codes->reserve(codes->size() + dict_sz);
+        for (const auto& word : words) {
+            auto iter = dict_map.find(word.get_slice());
+            if (iter != dict_map.end() && code_set.emplace(iter->second).second) {
+                codes->emplace_back(iter->second);
+            }
+        }
+    }
 }
 
 template <LogicalType Type>
@@ -768,18 +853,23 @@ Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, si
 }
 
 int ScalarColumnIterator::dict_size() {
-    if (_reader->column_type() == TYPE_CHAR) {
+    switch (delegate_type(_reader->column_type())) {
+    case TYPE_CHAR: {
         auto dict = down_cast<BinaryPlainPageDecoder<TYPE_CHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
-    } else if (_reader->column_type() == TYPE_JSON) {
-        auto dict = down_cast<BinaryPlainPageDecoder<TYPE_JSON>*>(_dict_decoder.get());
-        return static_cast<int>(dict->dict_size());
-    } else if (_reader->column_type() == TYPE_VARCHAR) {
+    }
+    case TYPE_VARCHAR: {
         auto dict = down_cast<BinaryPlainPageDecoder<TYPE_VARCHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
     }
-    __builtin_unreachable();
-    return 0;
+    case TYPE_JSON: {
+        auto dict = down_cast<BinaryPlainPageDecoder<TYPE_JSON>*>(_dict_decoder.get());
+        return static_cast<int>(dict->dict_size());
+    }
+    default:
+        __builtin_unreachable();
+        return 0;
+    }
 }
 
 bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {

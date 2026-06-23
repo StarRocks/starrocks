@@ -56,6 +56,7 @@ class IndexDeltaGroupLoader;
 class Column;
 class ColumnAccessPath;
 class ColumnPredicate;
+class Datum;
 
 class ColumnReader;
 class RandomAccessFile;
@@ -206,6 +207,11 @@ public:
     // otherwise -1 is returned.
     // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
     virtual int dict_lookup(const Slice& word) { return -1; }
+
+    // Batch variant of dict_lookup: for each word in |words|, append its dictionary code to
+    // |codes| if found. Codes for missing words are silently omitted.
+    // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
+    virtual void dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) {}
 
     // like `next_batch` but instead of return a batch of column values, this method returns a
     // batch of dictionary codes for dictionary encoded values.
