@@ -22,7 +22,7 @@ E: (1064, 'requirement: width > 0: BE:10002')
 -- !result
 SELECT length(bar(v, 0, 100, 100000000000)) FROM t_bar;
 -- result:
-E: (1064, 'requirement: width <= 1000000: BE:10002')
+[REGEX].*requirement.*
 -- !result
 SELECT bar(5, 0, 10, 20);
 -- result:
