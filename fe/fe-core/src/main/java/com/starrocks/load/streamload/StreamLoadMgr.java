@@ -591,6 +591,19 @@ public class StreamLoadMgr implements MemoryTrackable {
             }
         }
 
+        // Unregister the txn-state callback that was registered in addLoadTask(), otherwise the task
+        // leaks in TxnStateCallbackFactory forever.
+        // - For an ordinary StreamLoadTask the callback is already removed in afterVisible/afterAborted,
+        //   so this is an idempotent no-op.
+        // - For a StreamLoadMultiStmtTask the explicit transaction carries no callback id, so the parent
+        //   task's afterCommitted/afterVisible/afterAborted are never dispatched and its callback is never
+        //   removed. Without this call every multi-statement stream load would leave one dangling entry
+        //   (and the StreamLoadTask sub-task shells it references) in the callback map permanently.
+        // This is only reached after the task has reached a final state (see checkNeedRemove /
+        // isFinalState in the callers), so the callback is guaranteed to be unneeded here.
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory()
+                .removeCallback(streamLoadTask.getId());
+
         if (streamLoadTask instanceof StreamLoadTask) {
             warehouseLoadStatusInfoBuilder.withRemovedJob((StreamLoadTask) streamLoadTask);
         }
