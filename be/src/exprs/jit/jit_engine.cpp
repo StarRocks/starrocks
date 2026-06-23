@@ -77,11 +77,9 @@ static inline Status generate_scalar_function_ir(ExprContext* context, llvm::Mod
     /// Create function type.
     auto* size_type = b.getInt64Ty();
     // Same with JITColumn.
-    auto* ptr_type = b.getPtrTy();
-    auto* data_type = llvm::StructType::get(ptr_type, ptr_type);
+    auto* data_type = llvm::StructType::get(b.getPtrTy(), b.getPtrTy());
     // Same with JITScalarFunction.
-    std::vector<llvm::Type*> func_arg_types{size_type, ptr_type};
-    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), func_arg_types, false);
+    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, b.getPtrTy()}, false);
 
     /// Create function in module.
     // Pseudo code: void "expr->jit_expr_name"(int64_t rows_count, JITColumn* columns);
@@ -163,10 +161,8 @@ StatusOr<llvm::orc::JITTargetMachineBuilder> make_target_machine_builder() {
 
 void add_absolute_symbol(llvm::orc::LLJIT& lljit, const std::string& name, void* function_ptr) {
     llvm::orc::MangleAndInterner mangle(lljit.getExecutionSession(), lljit.getDataLayout());
-    llvm::orc::SymbolMap symbols;
-    symbols[mangle(name)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(function_ptr),
-                                                         llvm::JITSymbolFlags::Exported);
-    auto error = lljit.getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(symbols)));
+    llvm::orc::ExecutorSymbolDef symbol(llvm::orc::ExecutorAddr::fromPtr(function_ptr), llvm::JITSymbolFlags::Exported);
+    auto error = lljit.getMainJITDylib().define(llvm::orc::absoluteSymbols({{mangle(name), symbol}}));
     llvm::cantFail(std::move(error));
 }
 
