@@ -90,12 +90,12 @@
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/time_guard.h"
 #include "service/service_metrics.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/type_descriptor.h"
 #include "util/arrow/row_batch.h"
-#include "util/time_guard.h"
 
 namespace starrocks {
 

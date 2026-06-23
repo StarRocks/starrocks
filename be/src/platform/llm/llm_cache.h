@@ -18,7 +18,7 @@
 #include <mutex>
 
 #include "base/container/lru_cache.h"
-#include "exprs/ai_functions.h"
+#include "platform/llm/model_config.h"
 
 namespace starrocks {
 

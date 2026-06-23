@@ -61,6 +61,7 @@ set(BASE_TEST_FILES
     hash/crc32c_test.cpp
     hash/hash_util_test.cpp
     json/easy_json-test.cpp
+    json/json_util_test.cpp
     path/filesystem_util_test.cpp
     path/file_util_test.cpp
     path/path_builder_test.cpp
@@ -87,6 +88,7 @@ set(BASE_TEST_FILES
     string/slice_test.cpp
     string/url_parser_test.cpp
     string/utf8_check_test.cpp
+    string/utf8_encoding_test.cpp
     string/volnitsky_test.cpp
     testutil/sync_point_test.cpp
     time/ratelimit_test.cpp

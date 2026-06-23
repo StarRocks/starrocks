@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/llm_cache.h"
+#include "platform/llm/llm_cache.h"
 
 #include <gtest/gtest.h>
 
@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "base/container/lru_cache.h"
-#include "exprs/ai_functions.h"
+#include "platform/llm/model_config.h"
 
 using namespace starrocks;
 using namespace std;
@@ -188,7 +188,7 @@ TEST_F(LLMCacheTest, ThreadSafety) {
 
     // Multiple threads performing cache operations
     for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back([this, i, operations_per_thread, &success_count]() {
+        threads.emplace_back([this, i, &success_count]() {
             for (int j = 0; j < operations_per_thread; ++j) {
                 std::string key = "thread_" + std::to_string(i) + "_key_" + std::to_string(j);
                 std::string response = "Thread " + std::to_string(i) + " response " + std::to_string(j);

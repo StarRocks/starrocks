@@ -26,6 +26,7 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include "base/json/json_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -56,7 +57,6 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
-#include "util/json_util.h"
 
 namespace starrocks {
 

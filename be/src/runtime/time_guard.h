@@ -72,6 +72,11 @@ public:
     using TaskId = bthread::TimerThread::TaskId;
     SignalTimerGuard(int64_t timeout_ms) {
         if (timeout_ms > 0) {
+            auto timer_thread = bthread::get_or_create_global_timer_thread();
+            if (timer_thread == nullptr) {
+                LOG(WARNING) << "failed to get global bthread timer thread";
+                return;
+            }
             auto& current_thread = CurrentThread::current();
             // init trace context
             auto* trace = butil::get_resource(&_trace_context_id);
@@ -81,7 +86,6 @@ public:
             trace->fragment_instance_id = current_thread.fragment_instance_id();
             trace->lwp_id = current_thread.get_lwp_id();
 
-            auto timer_thread = bthread::get_global_timer_thread();
             timespec tm = butil::milliseconds_from_now(timeout_ms);
             // assign the trace context id to arg
             void* arg = nullptr;

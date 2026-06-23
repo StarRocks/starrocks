@@ -17,15 +17,18 @@
 #include <glog/logging.h>
 
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <list>
 #include <mutex>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "base/time/time.h"
 #include "runtime/mem_tracker.h"
-#include "storage/rowset_update_state.h"
 
 namespace starrocks {
 
@@ -61,7 +64,7 @@ public:
         Handle _handle;
         Key _key;
         size_t _size = 0;
-        int64_t _expire_ms = INT64_MAX;
+        int64_t _expire_ms = std::numeric_limits<int64_t>::max();
         std::atomic<uint32_t> _ref;
         T _value;
     };

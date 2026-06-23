@@ -33,6 +33,7 @@ set(RUNTIME_CORE_FILES
     query_statistics.cpp
     runtime_metrics.cpp
     stream_load/stream_load_metrics.cpp
+    time_guard.cpp
     type_pack.cpp
     load_fail_point.cpp
     memory/roaring_hook.cpp
@@ -123,6 +124,6 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive Platform)
+target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive Platform Cache)
 target_link_libraries(Runtime PRIVATE ExecRuntime)
 target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

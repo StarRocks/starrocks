@@ -64,6 +64,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"

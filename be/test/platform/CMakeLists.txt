@@ -16,6 +16,9 @@ set(PLATFORM_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     download_util_test.cpp
     key_cache_test.cpp
+    llm/llm_cache_test.cpp
+    llm/llm_query_service_test.cpp
+    llm/model_config_test.cpp
     path_rw_test.cpp
     platform_env_test.cpp
     platform_metrics_test.cpp

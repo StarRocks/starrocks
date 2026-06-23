@@ -21,8 +21,8 @@
 
 #include "common/statusor.h"
 #include "common/thread/threadpool.h"
-#include "exprs/ai_functions.h"
-#include "util/llm_cache.h"
+#include "platform/llm/llm_cache.h"
+#include "platform/llm/model_config.h"
 
 namespace starrocks {
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "llm_cache.h"
+#include "platform/llm/llm_cache.h"
 
 #include "base/container/lru_cache.h"
 #include "base/crypto/md5.h"

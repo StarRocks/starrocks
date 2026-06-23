@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/llm_query_service.h"
+#include "platform/llm/llm_query_service.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
@@ -22,10 +22,9 @@
 
 #include "common/config_llm_fwd.h"
 #include "common/thread/threadpool.h"
-#include "exprs/ai_functions.h"
+#include "gutil/strings/substitute.h"
 #include "http/http_client.h"
-#include "types/json_value.h"
-#include "util/llm_cache.h"
+#include "platform/llm/llm_cache.h"
 
 namespace starrocks {
 

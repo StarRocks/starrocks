@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "cache/dynamic_cache.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
@@ -24,7 +25,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/lake/update_compaction_state.h"
-#include "util/dynamic_cache.h"
 
 namespace starrocks {
 

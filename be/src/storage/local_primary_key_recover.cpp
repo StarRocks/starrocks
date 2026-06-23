@@ -18,6 +18,7 @@
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {

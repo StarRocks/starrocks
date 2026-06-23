@@ -28,8 +28,8 @@ class MemTracker;
 #include <ostream>
 #include <string>
 
+#include "cache/dynamic_cache.h"
 #include "tenann/index/index_cache.h"
-#include "util/dynamic_cache.h"
 
 namespace starrocks {
 

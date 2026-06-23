@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/llm_query_service.h"
+#include "platform/llm/llm_query_service.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -25,12 +25,15 @@
 #include <thread>
 
 #include "boost/algorithm/string.hpp"
+#include "common/config_ingest_fwd.h"
+#include "common/system/cpu_info.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
+#include "platform/llm/llm_cache.h"
+#include "platform/llm/model_config.h"
 #include "types/json_value.h"
-#include "util/llm_cache.h"
 
 namespace starrocks {
 
@@ -307,6 +310,9 @@ public:
     ~LLMQueryServiceTest() override = default;
 
     static void SetUpTestCase() {
+        CpuInfo::init();
+        config::streaming_load_max_mb = 102400;
+
         // Start mock LLM API server
         s_mock_llm_server = new EvHttpServer(0);
 
@@ -339,6 +345,9 @@ public:
 
     static void TearDownTestCase() {
         if (s_mock_llm_server) {
+            // TODO: On macOS, the HTTP-backed LLMQueryServiceTest cases can pass and then hang here in
+            // EvHttpServer::join() when run from platform_test. Keep this test under platform ownership; fix
+            // the underlying platform HTTP server teardown issue separately.
             s_mock_llm_server->stop();
             s_mock_llm_server->join();
             delete s_mock_llm_server;
@@ -575,18 +584,12 @@ TEST_F(LLMQueryServiceTest, CacheHitBehavior) {
     const std::string prompt = "Cache test query";
 
     // First query - should go to server
-    auto start_time1 = std::chrono::steady_clock::now();
     auto result1 = service->query(prompt, config);
-    auto end_time1 = std::chrono::steady_clock::now();
-    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end_time1 - start_time1);
 
     ASSERT_TRUE(result1.ok()) << "First query failed: " << result1.status().message();
 
     // Second query with same prompt and config - should hit cache (if implemented)
-    auto start_time2 = std::chrono::steady_clock::now();
     auto result2 = service->query(prompt, config);
-    auto end_time2 = std::chrono::steady_clock::now();
-    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end_time2 - start_time2);
 
     ASSERT_TRUE(result2.ok()) << "Second query failed: " << result2.status().message();
     ASSERT_EQ(result1.value(), result2.value()) << "Cached result should be identical";

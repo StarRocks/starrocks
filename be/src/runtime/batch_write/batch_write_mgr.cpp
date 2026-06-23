@@ -15,6 +15,7 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 
 #include "base/metrics.h"
+#include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
