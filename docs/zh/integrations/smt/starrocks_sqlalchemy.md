@@ -577,7 +577,7 @@ sqlacodegen --options include_dialect_options,keep_dialect_types \
 - 物化视图
 - 分区、分布和排序子句及属性
 
-当将现有的 __MTX_NEVER_3fa8c201__ 模式迁移到 Alembic 时，这非常有用。
+当将现有的 StarRocks 模式迁移到 Alembic 时，这非常有用。
 
 您可以直接使用上述命令为以下内容中定义的表/视图/物化视图生成 Python 脚本：**端到端示例** 部分。
 
