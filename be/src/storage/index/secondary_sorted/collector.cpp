@@ -20,7 +20,7 @@
 #include "column/schema.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "compute_env/sorting/sorting.h"
+#include "column/sorting/sorting.h"
 #include "fs/fs_factory.h"
 #include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"

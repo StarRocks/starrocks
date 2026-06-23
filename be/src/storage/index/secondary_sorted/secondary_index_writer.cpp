@@ -23,7 +23,7 @@
 #include "column/schema.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "compute_env/sorting/sorting.h"
+#include "column/sorting/sorting.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/chunk_helper.h"
