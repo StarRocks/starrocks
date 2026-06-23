@@ -23,6 +23,7 @@ set(PLATFORM_FILES
   aws/poco_http_client.cpp
   aws/poco_http_client_factory.cpp
   download_util.cpp
+  key_cache.cpp
   platform_env.cpp
   platform_metrics.cpp
   path_rw.cpp

@@ -45,7 +45,7 @@
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "fs/fs.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/service_contexts.h"

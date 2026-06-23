@@ -46,7 +46,6 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"

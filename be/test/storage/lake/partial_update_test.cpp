@@ -32,7 +32,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
