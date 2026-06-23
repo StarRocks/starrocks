@@ -736,7 +736,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
     auto c2 = BinaryColumn::create();
     c1->append_strings(strings.data(), strings.size());
 
-    ASSERT_EQ(c1->byte_size() + sizeof(uint32_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint32_t) + sizeof(uint32_t) * 2,
+              ColumnArraySerde::max_serialized_size(*c1));
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
@@ -767,7 +768,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
     auto c2 = LargeBinaryColumn::create();
     c1->append_strings(strings.data(), strings.size());
 
-    ASSERT_EQ(c1->byte_size() + sizeof(uint64_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) + sizeof(uint64_t) * 2,
+              ColumnArraySerde::max_serialized_size(*c1));
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
