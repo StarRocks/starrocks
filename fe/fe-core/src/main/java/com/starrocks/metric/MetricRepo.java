@@ -1403,6 +1403,18 @@ public final class MetricRepo {
             };
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
             visitor.visit(txnNum);
+
+            LeaderAwareGaugeMetric<Long> maxCommittedPendingPublish = new LeaderAwareGaugeMetricLong(
+                    "txn_max_committed_pending_publish_ms", MetricUnit.MILLISECONDS,
+                    "max time in milliseconds that a transaction has been sitting in committed status "
+                            + "pending publish to visible") {
+                @Override
+                public Long getValueLeader() {
+                    return mgr.getMaxCommittedTxnPendingPublishMs(System.currentTimeMillis());
+                }
+            };
+            maxCommittedPendingPublish.addLabel(new MetricLabel("db", db.getFullName()));
+            visitor.visit(maxCommittedPendingPublish);
         }
     }
 
