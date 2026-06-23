@@ -108,6 +108,7 @@ public:
     // for this rowset. Keyed by the segment's ordinal in the rowset.
     // Segments not present in the map fall back to the normal full scan.
     const std::unordered_map<uint32_t, roaring::Roaring>* presupplied_rowid_filter_per_segment = nullptr;
+    bool has_predicate_above_iterator = false;
 };
 
 } // namespace starrocks

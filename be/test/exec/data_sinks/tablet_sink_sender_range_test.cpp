@@ -22,11 +22,11 @@
 #include "column/runtime_type_traits.h"
 #include "column/schema.h"
 #include "exec/data_sinks/range_tablet_sink_sender.h"
-#include "exec/tablet_info.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/tablet_info.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 

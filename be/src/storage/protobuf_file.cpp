@@ -21,7 +21,7 @@
 #include "base/testutil/sync_point.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/utils.h"
 
 namespace starrocks {
@@ -54,7 +54,7 @@ Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, 
     header.protobuf_length = serialized_message.size();
     header.file_length = sizeof(header) + sizeof(unused_flag) + serialized_message.size();
     header.version = OLAP_DATA_VERSION_APPLIED;
-    header.magic_number = OLAP_FIX_HEADER_MAGIC_NUMBER;
+    header.magic_number = _magic;
 
     std::shared_ptr<FileSystem> fs;
     if (_fs) {
@@ -72,13 +72,28 @@ Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, 
 }
 
 Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool fill_cache) {
-    SequentialFileOptions opts{.skip_fill_local_cache = !fill_cache};
     std::shared_ptr<FileSystem> fs;
     if (_fs) {
         fs = _fs;
     } else {
         ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_path));
     }
+
+    // When legacy fallback is enabled we cannot stream the file: a legacy headerless file may be
+    // shorter than the header or simply lack the magic, in which case the whole content has to be
+    // parsed as a plain protobuf. Read it all and dispatch through the buffer-based loader.
+    if (_allow_plain_protobuf_fallback) {
+        RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+        ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, _path));
+        ASSIGN_OR_RETURN(auto content, input_file->read_all());
+        Status st = load_from_buffer(message, content, _magic, /*allow_plain_protobuf_fallback=*/true);
+#ifdef BE_TEST
+        TEST_SYNC_POINT_CALLBACK("ProtobufFileWithHeader::load::corruption", &st);
+#endif
+        return st;
+    }
+
+    SequentialFileOptions opts{.skip_fill_local_cache = !fill_cache};
     ASSIGN_OR_RETURN(auto input_file, fs->new_sequential_file(opts, _path));
 
     FixedFileHeader header;
@@ -86,7 +101,7 @@ Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool f
     if (nread != sizeof(header)) {
         return Status::Corruption(fmt::format("failed to read header of protobuf file {}", _path));
     }
-    if (header.magic_number != OLAP_FIX_HEADER_MAGIC_NUMBER) {
+    if (header.magic_number != _magic) {
         return Status::Corruption(fmt::format("invalid magic number of protobuf file {}", _path));
     }
 
@@ -110,19 +125,43 @@ Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool f
     if (!message->ParseFromString(str)) {
         return Status::Corruption(fmt::format("failed to parse protobuf file {}", _path));
     }
-    return Status::OK();
+    Status st = Status::OK();
+#ifdef BE_TEST
+    TEST_SYNC_POINT_CALLBACK("ProtobufFileWithHeader::load::corruption", &st);
+#endif
+    return st;
 }
 
-Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, std::string_view data) {
+Status ProtobufFileWithHeader::load_from_buffer(::google::protobuf::Message* message, std::string_view data,
+                                                uint64_t magic, bool allow_plain_protobuf_fallback) {
+    auto parse_plain = [&]() -> Status {
+        // An empty buffer parses as an all-default protobuf message, which would mask a file
+        // truncated to 0 bytes as a valid (empty) metadata/txn-log. A legacy headerless file is
+        // never legitimately empty, so reject it instead of falling through to ParseFromArray.
+        if (data.empty()) {
+            return Status::Corruption("failed to parse protobuf data: empty (possibly truncated) file");
+        }
+        if (!message->ParseFromArray(data.data(), data.size())) {
+            return Status::Corruption(fmt::format("failed to parse protobuf data, data size {}", data.size()));
+        }
+        return Status::OK();
+    };
+
     FixedFileHeader header;
-    if (data.size() < sizeof(header)) {
-        return Status::Corruption(fmt::format("failed to read header of protobuf data, data size {}", data.size()));
+    // A legacy headerless file may be shorter than the header, or its first bytes simply won't
+    // match |magic|. In either case, fall back to plain protobuf when allowed. The magic is chosen
+    // so a serialized TabletMetadataPB/TxnLogPB can never be misread as the checksummed format.
+    bool has_header = data.size() >= sizeof(header);
+    if (has_header) {
+        ::memcpy(&header, data.data(), sizeof(header));
     }
-    ::memcpy(&header, data.data(), sizeof(header));
-    data.remove_prefix(sizeof(header));
-    if (header.magic_number != OLAP_FIX_HEADER_MAGIC_NUMBER) {
+    if (!has_header || header.magic_number != magic) {
+        if (allow_plain_protobuf_fallback) {
+            return parse_plain();
+        }
         return Status::Corruption(fmt::format("invalid magic number of protobuf data, data size {}", data.size()));
     }
+    data.remove_prefix(sizeof(header));
 
     uint32_t unused_flag; // unused, read for compatibility
     if (UNLIKELY(data.size() < sizeof(unused_flag))) {

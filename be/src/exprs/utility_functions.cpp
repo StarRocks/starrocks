@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <limits>
 #include <random>
+#include <type_traits>
 
 #include "base/network/cidr.h"
 #include "base/network/network_util.h"
@@ -49,8 +50,8 @@
 #include "gutil/casts.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/primitive/key_coder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -125,14 +126,19 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
     auto& bytes = res->get_bytes();
     auto& offsets = res->get_offset();
 
-    offsets.resize(num_rows + 1);
-    bytes.resize(36 * num_rows);
+    const uint64_t total_bytes = static_cast<uint64_t>(36) * num_rows;
+
+    offsets.resize_uninitialized(num_rows + 1, total_bytes);
+    bytes.resize(total_bytes);
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
 
-    for (int i = 0; i < num_rows; ++i) {
-        offsets[i + 1] = offsets[i] + 36;
-    }
+    offsets.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        for (int i = 0; i <= num_rows; ++i) {
+            offsets_buf[i] = static_cast<OffsetValue>(static_cast<uint64_t>(36) * i);
+        }
+    });
 
 #ifdef __SSE4_2__
     alignas(16) static constexpr const char hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
@@ -251,13 +257,21 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Column
     auto& bytes = res->get_bytes();
     auto& offsets = res->get_offset();
 
-    offsets.resize(num_rows + 1);
-    bytes.resize(36 * num_rows);
+    const uint64_t total_bytes = static_cast<uint64_t>(36) * num_rows;
+
+    offsets.resize_uninitialized(num_rows + 1, total_bytes);
+    bytes.resize(total_bytes);
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
 
+    offsets.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        for (int i = 0; i <= num_rows; ++i) {
+            offsets_buf[i] = static_cast<OffsetValue>(static_cast<uint64_t>(36) * i);
+        }
+    });
+
     for (int i = 0; i < num_rows; ++i) {
-        offsets[i + 1] = offsets[i] + 36;
         auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
         std::string uuid_str = boost::uuids::to_string(uuid);
         memcpy(ptr, uuid_str.c_str(), 36);
@@ -365,6 +379,9 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
 
 StatusOr<ColumnPtr> UtilityFunctions::bar(FunctionContext* context, const Columns& columns) {
     static std::u8string kBar = u8"\u2593";
+    // Upper bound on the rendered bar length. The per-row result is a plain std::string that is
+    // NOT tracked by the MemTracker, so an unbounded width can exhaust BE memory (DoS).
+    constexpr int64_t kMaxBarWidth = 1000000;
     RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));
     RETURN_IF(!columns[1]->is_constant(), Status::InvalidArgument("argument[min] must be constant"));
     RETURN_IF(!columns[2]->is_constant(), Status::InvalidArgument("argument[max] must be constant"));
@@ -377,14 +394,18 @@ StatusOr<ColumnPtr> UtilityFunctions::bar(FunctionContext* context, const Column
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> builder(rows);
 
-    size_t min = viewer_min.value(0);
-    size_t max = viewer_max.value(0);
-    size_t width = viewer_width.value(0);
+    // Read as signed: width/min/max come from BIGINT and may legitimately be negative. Reading
+    // width into an unsigned size_t made a negative value (e.g. -1) wrap to SIZE_MAX and slip past
+    // the `width <= 0` guard, then drive an unbounded append loop below.
+    int64_t min = viewer_min.value(0);
+    int64_t max = viewer_max.value(0);
+    int64_t width = viewer_width.value(0);
     RETURN_IF(min >= max, Status::InvalidArgument("requirement: min < max"));
     RETURN_IF(width <= 0, Status::InvalidArgument("requirement: width > 0"));
+    RETURN_IF(width > kMaxBarWidth, Status::InvalidArgument("requirement: width <= 1000000"));
 
     for (size_t i = 0; i < rows; i++) {
-        size_t size = viewer_size.value(i);
+        int64_t size = viewer_size.value(i);
         RETURN_IF(size < min, Status::InvalidArgument("requirement: size >= min"));
         RETURN_IF(size > max, Status::InvalidArgument("requirement: size <= max"));
 

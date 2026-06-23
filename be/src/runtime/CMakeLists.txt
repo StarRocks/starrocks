@@ -89,7 +89,6 @@ set(RUNTIME_FILES
     runtime_state_helper.cpp
     rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
-    agg_state_desc.cpp
     load_channel_mgr.cpp
     load_channel.cpp
     local_tablets_channel.cpp
@@ -118,7 +117,6 @@ set(RUNTIME_FILES
     lake_snapshot_loader.cpp
     command_executor.cpp
     diagnose_daemon.cpp
-    logconfig.cpp
 )
 
 ADD_BE_LIB(Runtime

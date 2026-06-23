@@ -94,13 +94,6 @@ class QueryContextManager;
 class DriverLimiter;
 } // namespace pipeline
 
-namespace lake {
-class LocationProvider;
-class TabletManager;
-class UpdateManager;
-class ReplicationTxnManager;
-class LakePersistentIndexParallelCompactMgr;
-} // namespace lake
 namespace spill {
 class DirManager;
 class GlobalSpillManager;
@@ -165,12 +158,11 @@ public:
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
     BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
-    const std::vector<StorePath>& store_paths() const { return _store_paths; }
-
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
+    const PlatformServices& platform_services() const { return _platform_services; }
     const RpcServices& rpc_services() const { return _rpc_services; }
     const LakeServices& lake_services() const { return _lake_services; }
     const RuntimeServices& runtime_services() const { return _runtime_services; }
@@ -197,23 +189,10 @@ public:
 
     uint32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
 
-    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
-
-    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
-
-    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
-
-    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
-
     AgentServer* agent_server() const { return _agent_server; }
+    void set_agent_server(AgentServer* agent_server);
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
-
-    ThreadPool* delete_file_thread_pool();
-
-    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
-
-    void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
@@ -225,7 +204,6 @@ private:
     size_t _get_running_fragments_count() const;
 
     GlobalEnv* _global_env = nullptr;
-    std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
@@ -255,16 +233,11 @@ private:
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
-    lake::TabletManager* _lake_tablet_manager = nullptr;
-    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
-    lake::UpdateManager* _lake_update_manager = nullptr;
-    lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
-    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
-
     AgentServer* _agent_server = nullptr;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;
+    PlatformServices _platform_services;
     RpcServices _rpc_services;
     LakeServices _lake_services;
     RuntimeServices _runtime_services;

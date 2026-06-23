@@ -27,7 +27,6 @@
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
-#include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/index_delta_group_loader.h"
@@ -39,6 +38,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -253,6 +253,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     seg_options.runtime_filter_preds = options.runtime_filter_preds;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    seg_options.has_predicate_above_iterator = options.has_predicate_above_iterator;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
@@ -308,9 +309,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             segment_schema = new Schema(schema);
             segment_schema_guard.reset(segment_schema);
         }
-        auto f = ChunkHelper::convert_field(cid, col);
+        auto f = StorageSchemaHelper::convert_field(cid, col);
         segment_schema->append(std::make_shared<Field>(std::move(f)));
     }
+
+    // Expose the fully-populated SegmentReadOptions so unit tests can verify the read-options
+    // propagation chain (TabletReaderParams -> RowsetReadOptions -> SegmentReadOptions). No-op
+    // outside BE_TEST.
+    TEST_SYNC_POINT_CALLBACK("Rowset::read::seg_options", &seg_options);
 
     std::vector<ChunkIteratorPtr> segment_iterators;
 

@@ -28,7 +28,6 @@
 #include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
-#include "primary_key_encoder.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"
@@ -40,6 +39,8 @@
 #include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/conjunctive_predicates.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/primary_key_encoder.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/union_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -376,6 +377,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
     rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
+    rs_opts.has_predicate_above_iterator = params.has_predicate_above_iterator;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -660,7 +662,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
     }
     for (size_t i = 0; i < input.size(); i++) {
         int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
+        auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(idx, tablet_schema->column(idx)));
         schema.append(f);
         values.emplace_back();
         if (input.is_null(i)) {

@@ -14,30 +14,51 @@
 
 package com.starrocks.alter.reshard;
 
+import com.staros.client.StarClientException;
 import com.staros.proto.PlacementPolicy;
+import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
+import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -107,6 +128,281 @@ public class ColocateCheckerTest {
 
         Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupId),
                 "aligned + unstable group must be marked stable after one cycle");
+    }
+
+    private long firstVisibleTabletId() {
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    return tablet.getId();
+                }
+            }
+        }
+        return -1;
+    }
+
+    private long firstVisibleIndexSpreadGroup() {
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                return index.getShardGroupId();
+            }
+        }
+        return -1;
+    }
+
+    @Test
+    public void testReconcileAddsMissingPackGroupAndStaysUnstable() throws Exception {
+        // The fresh single-range group is range-aligned. Stub getShardInfo so the lone tablet is
+        // missing its expected PACK group: the checker must issue an add-only reassign AND keep the
+        // group unstable (placement not yet confirmed) so a later cycle re-reads before stabilizing.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long expectedPackGroup = colocateTableIndex.getColocateRangeMgr()
+                .getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        long tabletId = firstVisibleTabletId();
+        final long stubSpreadGroup = firstVisibleIndexSpreadGroup();
+
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        Map<Long, List<Long>> reassignedRemove = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> result = new ArrayList<>();
+                for (long id : shardIds) {
+                    // group_ids deliberately omits the expected PACK group -> tablet looks misplaced.
+                    result.add(ShardInfo.newBuilder().setShardId(id).addGroupIds(stubSpreadGroup).build());
+                }
+                return result;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+                reassignedRemove.put(shardId, new ArrayList<>(removeGroupIds));
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertEquals(List.of(expectedPackGroup), reassignedAdd.get(tabletId),
+                "missing-PACK tablet must be reassigned to add its expected PACK group");
+        Assertions.assertEquals(List.of(), reassignedRemove.get(tabletId),
+                "no stale PACK group to remove in the add-only case");
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "group must stay unstable until a re-read confirms the repaired placement");
+    }
+
+    @Test
+    public void testReconcileBecomesStableAfterRepair() throws Exception {
+        // Simulate the real flow: the reassign applies the membership synchronously on StarMgr, so
+        // the next cycle's getShardInfo reflects it. The group must flip stable on that second cycle.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long expectedPackGroup = colocateTableIndex.getColocateRangeMgr()
+                .getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        final long stubSpreadGroup = firstVisibleIndexSpreadGroup();
+        boolean[] repaired = {false};
+        int[] reassignCount = {0};
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> result = new ArrayList<>();
+                for (long id : shardIds) {
+                    ShardInfo.Builder b = ShardInfo.newBuilder().setShardId(id).addGroupIds(stubSpreadGroup);
+                    if (repaired[0]) {
+                        b.addGroupIds(expectedPackGroup);
+                    }
+                    result.add(b.build());
+                }
+                return result;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignCount[0]++;
+                repaired[0] = true;
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        // The first cycle issues the reassign (which flips the stub to "repaired"); a later cycle
+        // re-reads the now-correct membership and flips the group stable. Run two cycles to drive
+        // convergence and assert the end state — the shared background scheduler may also tick, so
+        // the transient unstable state and exact reassign count are not asserted here (the
+        // stays-unstable-until-repaired behavior is covered by
+        // testReconcileAddsMissingPackGroupAndStaysUnstable).
+        new ColocateChecker().runOneCycle();
+        new ColocateChecker().runOneCycle();
+        Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupId),
+                "group must become stable once the re-read shows the repaired placement");
+        Assertions.assertTrue(reassignCount[0] >= 1, "a reassign must have been issued to repair placement");
+    }
+
+    @Test
+    public void testReconcileStaysUnstableOnGetShardInfoFailure() throws Exception {
+        // A membership-read failure must NOT mark the group stable (else a mis-placement could leak);
+        // it stays unstable and is retried on the next tick.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) throws StarClientException {
+                throw new StarClientException(com.staros.proto.StatusCode.INVALID_ARGUMENT, "mocked read failure");
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "a getShardInfo failure must leave the group unstable for retry");
+    }
+
+    @Test
+    public void testReconcileStaysUnstableOnReassignFailure() throws Exception {
+        // A reassign RPC failure must keep the group unstable so the repair is retried.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        final long stubSpreadGroup = firstVisibleIndexSpreadGroup();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> result = new ArrayList<>();
+                for (long id : shardIds) {
+                    result.add(ShardInfo.newBuilder().setShardId(id).addGroupIds(stubSpreadGroup).build());
+                }
+                return result;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds)
+                    throws DdlException {
+                throw new DdlException("mocked reassign failure");
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "a reassign failure must leave the group unstable for retry");
+    }
+
+    @Test
+    public void testReconcileRemovesStalePackGroup() throws Exception {
+        // Build a 2-range aligned layout ([MIN,100)->P0, [100,MAX)->P1) with one tablet per range,
+        // then stub the first tablet as sitting in P1 (a sibling PACK group) instead of its expected
+        // P0. The reassign must both add P0 and remove the stale P1.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = colocateTableIndex.getColocateRangeMgr();
+        long packForLow = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        long packForHigh = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                .createShardGroup(db.getId(), table.getId(), 0L, 0L, PlacementPolicy.PACK);
+        Tuple boundary = intPrefix(100);
+        rangeMgr.setColocateRanges(groupId.grpId, Arrays.asList(
+                new ColocateRange(Range.lt(boundary), packForLow),
+                new ColocateRange(Range.ge(boundary), packForHigh)));
+
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        MaterializedIndex index = table.getPhysicalPartitions().iterator().next()
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
+        Tablet lowTablet = index.getTablets().iterator().next();
+        lowTablet.setRange(new TabletRange(
+                ColocateRangeUtils.expandToFullSortKey(Range.lt(boundary), sortKeyColumns, 1)));
+        long highTabletId = 900000001L;
+        LakeTablet highTablet = new LakeTablet(highTabletId, new TabletRange(
+                ColocateRangeUtils.expandToFullSortKey(Range.ge(boundary), sortKeyColumns, 1)));
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        index.addTablet(highTablet, new TabletMeta(db.getId(), table.getId(), physicalPartitionId,
+                index.getId(), TStorageMedium.HDD, true));
+        long lowTabletId = lowTablet.getId();
+
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        Map<Long, List<Long>> reassignedRemove = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> result = new ArrayList<>();
+                for (long id : shardIds) {
+                    // Both tablets report membership in P1; only the low tablet (expected P0) is stale.
+                    result.add(ShardInfo.newBuilder().setShardId(id).addGroupIds(packForHigh).build());
+                }
+                return result;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+                reassignedRemove.put(shardId, new ArrayList<>(removeGroupIds));
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertEquals(List.of(packForLow), reassignedAdd.get(lowTabletId),
+                "stale tablet must be added to its expected PACK group P0");
+        Assertions.assertEquals(List.of(packForHigh), reassignedRemove.get(lowTabletId),
+                "stale tablet must be removed from the sibling PACK group P1");
+    }
+
+    @Test
+    public void testReconcileSendsRemoveOnlyWhenAlreadyInExpectedGroup() throws Exception {
+        // Double-membership (e.g. after a partial prior repair): the low tablet is already in its
+        // expected PACK group P0 but also still in the sibling P1. The reassign must be remove-only
+        // (empty add) so it does not redundantly re-add P0.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = colocateTableIndex.getColocateRangeMgr();
+        long packForLow = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        long packForHigh = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                .createShardGroup(db.getId(), table.getId(), 0L, 0L, PlacementPolicy.PACK);
+        Tuple boundary = intPrefix(100);
+        rangeMgr.setColocateRanges(groupId.grpId, Arrays.asList(
+                new ColocateRange(Range.lt(boundary), packForLow),
+                new ColocateRange(Range.ge(boundary), packForHigh)));
+
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        MaterializedIndex index = table.getPhysicalPartitions().iterator().next()
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
+        Tablet lowTablet = index.getTablets().iterator().next();
+        lowTablet.setRange(new TabletRange(
+                ColocateRangeUtils.expandToFullSortKey(Range.lt(boundary), sortKeyColumns, 1)));
+        long highTabletId = 900000002L;
+        LakeTablet highTablet = new LakeTablet(highTabletId, new TabletRange(
+                ColocateRangeUtils.expandToFullSortKey(Range.ge(boundary), sortKeyColumns, 1)));
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        index.addTablet(highTablet, new TabletMeta(db.getId(), table.getId(), physicalPartitionId,
+                index.getId(), TStorageMedium.HDD, true));
+        long lowTabletId = lowTablet.getId();
+
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        Map<Long, List<Long>> reassignedRemove = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> result = new ArrayList<>();
+                for (long id : shardIds) {
+                    ShardInfo.Builder builder = ShardInfo.newBuilder().setShardId(id).addGroupIds(packForHigh);
+                    if (id == lowTabletId) {
+                        // already in its expected P0 AND still in the stale sibling P1
+                        builder.addGroupIds(packForLow);
+                    }
+                    result.add(builder.build());
+                }
+                return result;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+                reassignedRemove.put(shardId, new ArrayList<>(removeGroupIds));
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertEquals(List.of(), reassignedAdd.get(lowTabletId),
+                "must not re-add the already-present expected PACK group");
+        Assertions.assertEquals(List.of(packForHigh), reassignedRemove.get(lowTabletId),
+                "must remove the stale sibling PACK group");
     }
 
     @Test
@@ -189,6 +485,79 @@ public class ColocateCheckerTest {
                 new ColocateRange(Range.lt(boundaryPrefix), firstShardGroupId),
                 new ColocateRange(Range.ge(boundaryPrefix), secondShardGroupId)));
         colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+    }
+
+    // ---- Misplaced-PACK-group detection (pure, no cluster) ----
+    //
+    // These exercise the read-only detection logic that reassignShardGroups consumes. They build
+    // ColocateRange lists and per-tablet group-id lists directly, so they do not depend on the
+    // cluster spun up in beforeClass.
+
+    private static final long SPREAD = 900L;
+    private static final long PACK_G1 = 1001L;
+    private static final long PACK_G2 = 1002L;
+
+    private static Tuple intPrefix(int v) {
+        return new Tuple(Arrays.asList(Variant.of(IntegerType.INT, String.valueOf(v))));
+    }
+
+    /** Two colocate ranges split at prefix 100: [MIN, 100) -> G1, [100, MAX) -> G2. */
+    private static List<ColocateRange> twoRangesAt100() {
+        Tuple boundary = intPrefix(100);
+        return Arrays.asList(
+                new ColocateRange(Range.lt(boundary), PACK_G1),
+                new ColocateRange(Range.ge(boundary), PACK_G2));
+    }
+
+    @Test
+    public void testClassifyCorrectPlacementReturnsNull() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Tablet sits in its SPREAD group and the expected PACK group G2, nothing stale.
+        Assertions.assertNull(ColocateChecker.classifyTabletPlacement(
+                77L, List.of(SPREAD, PACK_G2), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testClassifyStalePackGroupIsMisplaced() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Originating-partition case: tablet stayed in old PACK group G1 but belongs in G2.
+        Assertions.assertEquals(new ColocateChecker.MisplacedTablet(77L, PACK_G1, PACK_G2),
+                ColocateChecker.classifyTabletPlacement(77L, List.of(SPREAD, PACK_G1), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testClassifyMissingPackGroupHasNoCurrent() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Tablet is in no PACK group at all -> needs an add, no remove.
+        Assertions.assertEquals(
+                new ColocateChecker.MisplacedTablet(77L, PhysicalPartition.INVALID_SHARD_GROUP_ID, PACK_G2),
+                ColocateChecker.classifyTabletPlacement(77L, List.of(SPREAD), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testClassifyDoubleMembershipIsMisplaced() {
+        Set<Long> packGroupIds = Set.of(PACK_G1, PACK_G2);
+        // Transient double membership: in expected G2 but also still in stale G1 -> must shed G1.
+        Assertions.assertEquals(new ColocateChecker.MisplacedTablet(77L, PACK_G1, PACK_G2),
+                ColocateChecker.classifyTabletPlacement(
+                        77L, List.of(SPREAD, PACK_G1, PACK_G2), PACK_G2, packGroupIds));
+    }
+
+    @Test
+    public void testFindMisplacedTabletsComposesRangeAndMembership() {
+        List<ColocateRange> ranges = twoRangesAt100();
+        Map<Long, Range<Tuple>> tabletIdToRange = new HashMap<>();
+        tabletIdToRange.put(10L, Range.ge(intPrefix(50)));    // expected G1
+        tabletIdToRange.put(20L, Range.ge(intPrefix(150)));   // expected G2
+        Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();
+        tabletIdToGroupIds.put(10L, List.of(SPREAD, PACK_G1)); // correctly placed
+        tabletIdToGroupIds.put(20L, List.of(SPREAD, PACK_G1)); // stuck in G1, belongs in G2
+
+        List<ColocateChecker.MisplacedTablet> result = ColocateChecker.findMisplacedTablets(
+                tabletIdToRange, tabletIdToGroupIds, ranges, 1);
+
+        Assertions.assertEquals(
+                List.of(new ColocateChecker.MisplacedTablet(20L, PACK_G1, PACK_G2)), result);
     }
 
     @Test

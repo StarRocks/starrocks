@@ -20,7 +20,7 @@
 #include "common/runtime_profile.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"

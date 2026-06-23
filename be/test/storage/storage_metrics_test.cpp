@@ -95,6 +95,21 @@ TEST(StorageMetricsTest, InstallRegistersLoadMetrics) {
     metrics.delete_requests_failed.increment(9);
     assert_metric_value(&registry, "engine_requests_total",
                         MetricLabels().add("type", "delete").add("status", "failed"), "9");
+
+    metrics.lake_add_index_requests_total.increment(44);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "lake_add_index").add("status", "total"), "44");
+
+    metrics.lake_add_index_requests_failed.increment(45);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "lake_add_index").add("status", "failed"), "45");
+
+    metrics.lake_drop_index_requests_total.increment(46);
+    assert_metric_value(&registry, "engine_requests_total",
+                        MetricLabels().add("type", "lake_drop_index").add("status", "total"), "46");
+
+    metrics.lake_idg_files_written_total.increment(47);
+    assert_metric_value(&registry, "lake_idg_files_written_total", "47");
 }
 
 TEST(StorageMetricsTest, InstallRegistersCompactionMetrics) {
@@ -225,6 +240,26 @@ TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
 
     assert_metric_value(&registry, "pindex_load_threadpool_size", "3");
     assert_metric_value(&registry, "pindex_load_queue_count", "0");
+}
+
+TEST(StorageMetricsTest, RegisterStorageCleanupThreadPoolMetricsBeforeInstall) {
+    std::unique_ptr<ThreadPool> threadpool;
+    auto status = ThreadPoolBuilder("stor_cleanup_metric_tst")
+                          .set_min_threads(0)
+                          .set_max_threads(3)
+                          .set_max_queue_size(5)
+                          .build(&threadpool);
+    ASSERT_TRUE(status.ok()) << status;
+
+    StorageMetrics metrics;
+    metrics.register_thread_pool_metrics("storage_cleanup", threadpool.get());
+
+    MetricRegistry registry("test_registry");
+    metrics.install(&registry);
+    registry.trigger_hook();
+
+    assert_metric_value(&registry, "storage_cleanup_threadpool_size", "3");
+    assert_metric_value(&registry, "storage_cleanup_queue_count", "0");
 }
 
 } // namespace starrocks

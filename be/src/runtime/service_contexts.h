@@ -41,6 +41,7 @@ class RuntimeFilterCache;
 class RuntimeFilterQueryLifecycle;
 class RuntimeFilterWorker;
 class SmallFileMgr;
+class StorePathRegistry;
 class StreamContextMgr;
 class StreamLoadExecutor;
 class TFileBrokerServiceClient;
@@ -56,7 +57,6 @@ class ConnectorSinkSpillExecutor;
 }
 
 namespace lake {
-class LakePersistentIndexParallelCompactMgr;
 class ReplicationTxnManager;
 class TabletManager;
 class UpdateManager;
@@ -80,6 +80,10 @@ class GlobalSpillManager;
 namespace workgroup {
 class WorkGroupManager;
 } // namespace workgroup
+
+struct PlatformServices {
+    const StorePathRegistry* store_path_registry = nullptr;
+};
 
 struct ExecutionEnv {
     PriorityThreadPool* thread_pool = nullptr;
@@ -116,7 +120,6 @@ struct LakeServices {
     ThreadPool* put_aggregate_metadata_thread_pool = nullptr;
     ThreadPool* lake_metadata_fetch_thread_pool = nullptr;
     ThreadPool* lake_vector_index_build_thread_pool = nullptr;
-    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr = nullptr;
     ThreadPool* pk_index_execution_thread_pool = nullptr;
     ThreadPool* pk_index_memtable_flush_thread_pool = nullptr;
     ThreadPool* lake_partial_update_thread_pool = nullptr;

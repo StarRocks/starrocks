@@ -32,6 +32,7 @@
       "path": "be/src/common/config_storage_fwd.h",
       "configs": [
         "cluster_id",
+        "storage_cleanup_worker_count",
         "check_consistency_worker_count",
         "compact_threads",
         "replication_max_speed_limit_kbps",
@@ -173,6 +174,7 @@
         "spill_max_dir_bytes_ratio",
         "spill_read_buffer_min_bytes",
         "mem_limited_chunk_queue_block_size",
+        "enable_spill_sort_events",
         "exec_state_report_max_threads",
         "priority_exec_state_report_max_threads",
         "report_exec_rpc_request_retry_num",
@@ -355,6 +357,7 @@
         "vector_adaptive_ef_alpha",
         "vector_adaptive_ef_cap",
         "vector_adaptive_ef_baseline_rows",
+        "vector_index_brute_selectivity_threshold",
         "vector_index_build_flush_threshold_rows"
       ]
     },
@@ -816,6 +819,7 @@
         "string_prefix_zonemap_prefix_len",
         "max_row_source_mask_memory_bytes",
         "dictionary_encoding_ratio",
+        "enable_binary_plain_delta_offset",
         "dictionary_page_size",
         "small_dictionary_page_size",
         "dictionary_encoding_ratio_for_non_string_column",
@@ -854,6 +858,7 @@
         "lake_max_garbage_version_distance",
         "enable_strict_delvec_crc_check",
         "lake_clear_corrupted_cache_meta",
+        "lake_enable_protobuf_file_checksum",
         "experimental_enable_lake_capture_tablet_and_rowsets",
         "lake_vacuum_min_batch_delete_size",
         "lake_local_pk_index_unused_threshold_seconds",

@@ -23,6 +23,10 @@ namespace starrocks::config {
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 
+// The count of thread to clean up storage files.
+// 0 means storage cleanup worker count is equal to half of cpu core count.
+CONF_mInt32(storage_cleanup_worker_count, "0");
+
 // The count of thread to check consistency.
 CONF_mInt32(check_consistency_worker_count, "1");
 

@@ -56,6 +56,8 @@ set(EXEC_FILES
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
+        ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -92,7 +94,6 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_partitions_meta_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
-        ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
@@ -133,6 +134,7 @@ set(EXEC_FILES
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
+        ./exprs/agg/aggregate_factory_extension_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
@@ -246,7 +248,6 @@ set(EXEC_FILES
         ./io/compressed_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
-        ./runtime/agg_state_desc_test.cpp
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/descriptors_test.cpp
         ./runtime/diagnose_daemon_test.cpp
@@ -304,6 +305,7 @@ set(EXEC_FILES
         ./util/time_guard_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
+        ./service/core_dump_resource_releaser_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
@@ -354,6 +356,7 @@ add_subdirectory(storage_primitive)
 add_subdirectory(storage_base)
 add_subdirectory(runtime)
 add_subdirectory(compute_env)
+add_subdirectory(data_workflows)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
@@ -499,9 +502,8 @@ SET(DW_TEST_FILES
     ./storage/primary_index_test.cpp
     ./storage/primary_key_encoder_test.cpp
     ./storage/protobuf_file_test.cpp
-    ./storage/publish_version_manager_test.cpp
+    ./agent/publish_version_manager_test.cpp
     ./storage/publish_version_task_test.cpp
-    ./storage/push_handler_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/rowset/binary_dict_page_test.cpp
@@ -550,6 +552,8 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
+    ./storage/storage_cleanup_executor_test.cpp
+    ./storage/storage_env_test.cpp
     ./storage/storage_metrics_test.cpp
     ./storage/storage_engine_compaction_test.cpp
     ./storage/storage_engine_test.cpp
@@ -589,7 +593,10 @@ STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
 
 # =================================================
 # test cases must be compiled as a standalone binary
-ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+ADD_BE_TEST(data_workflows/migration/engine_storage_migration_task_test)
+if (APPLE)
+    target_sources(engine_storage_migration_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
+endif()
 ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`

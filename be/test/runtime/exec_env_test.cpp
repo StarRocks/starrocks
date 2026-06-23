@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <utility>
 
 #include "base/metrics.h"
@@ -27,6 +28,7 @@
 #include "exec/pipeline/driver_queue_factory.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -37,7 +39,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     platform_env->destroy();
 
     static auto* metrics = new MetricRegistry("exec_env_test");
-    ASSERT_OK(platform_env->init(metrics));
+    ASSERT_OK(platform_env->init(PlatformEnvOptions{.metrics = metrics}));
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().load_path_mgr, nullptr);
@@ -54,6 +56,9 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
     workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
     ASSERT_OK(env.compute_env()->init_workgroup(workgroup_options));
+    std::error_code ec;
+    std::filesystem::create_directories(config::spill_local_storage_dir, ec);
+    ASSERT_FALSE(ec) << ec.message();
     ASSERT_OK(env.compute_env()->init_spill({config::storage_root_path}, metrics));
     ASSERT_OK(env.compute_env()->init_load_path({}, true));
     ProfileReportWorkerOptions profile_report_worker_options;
@@ -66,13 +71,12 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     };
     ASSERT_OK(env.compute_env()->init_profile_report_worker(std::move(profile_report_worker_options)));
     env._broker_mgr = reinterpret_cast<BrokerMgr*>(0x5);
-    env._lake_tablet_manager = reinterpret_cast<lake::TabletManager*>(0x7);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
-    env._agent_server = reinterpret_cast<AgentServer*>(0xa);
     env._heartbeat_flags = reinterpret_cast<HeartbeatFlags*>(0xb);
+    auto* agent_server = reinterpret_cast<AgentServer*>(0xa);
 
-    env._refresh_service_contexts();
+    env.set_agent_server(agent_server);
 
     EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
     EXPECT_EQ(env.execution_services().workgroup_manager, env.compute_env()->workgroup_manager());
@@ -89,8 +93,12 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().broker_client_cache, platform_env->broker_client_cache());
     EXPECT_EQ(env.rpc_services().broker_mgr, env._broker_mgr);
     EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
+    EXPECT_EQ(env.platform_services().store_path_registry, platform_env->store_path_registry());
 
-    EXPECT_EQ(env.lake_services().lake_tablet_manager, env._lake_tablet_manager);
+    EXPECT_EQ(env.lake_services().lake_tablet_manager, StorageEnv::GetInstance()->lake_tablet_manager());
+    EXPECT_EQ(env.lake_services().lake_update_manager, StorageEnv::GetInstance()->lake_update_manager());
+    EXPECT_EQ(env.lake_services().lake_replication_txn_manager,
+              StorageEnv::GetInstance()->lake_replication_txn_manager());
     EXPECT_EQ(env.lake_services().lake_vector_index_build_thread_pool,
               global_env->lake_vector_index_build_thread_pool());
 
@@ -105,7 +113,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
 
-    EXPECT_EQ(env.agent_services().agent_server, env._agent_server);
+    EXPECT_EQ(env.agent_services().agent_server, agent_server);
     EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);
 
     EXPECT_EQ(env.query_execution_services().execution, &env.execution_services());

@@ -77,3 +77,22 @@ ADD_BE_LIB(ChunkCore
 )
 
 target_link_libraries(ChunkCore PUBLIC ColumnCore)
+
+ADD_BE_LIB(ColumnSortCore
+        sorting/compare_column.cpp
+        sorting/sort_column.cpp
+        sorting/sort_permute.cpp
+        sorting/sort_helper.h
+        sorting/sort_permute.h
+        sorting/sorting.h
+)
+
+target_link_libraries(ColumnSortCore PUBLIC
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)

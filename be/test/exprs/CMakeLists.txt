@@ -19,6 +19,7 @@ endif()
 
 set(EXPR_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    agg/aggregate_factory_core_test.cpp
     arithmetic_expr_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
@@ -51,6 +52,7 @@ set(EXPR_CORE_TEST_FILES
 set(EXPR_CORE_TEST_LINK_LIBS
     ExprCore
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types

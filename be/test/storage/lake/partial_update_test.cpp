@@ -116,7 +116,7 @@ public:
     void TearDown() override {
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // check trash files already removed
         for (const auto& file : _trash_files) {
             EXPECT_FALSE(fs::path_exist(file));
@@ -1273,10 +1273,15 @@ TEST_P(LakePartialUpdateTest, test_partial_update_publish_retry) {
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
 
+        // The tablet metadata may be saved with the legacy headerless format or the checksummed
+        // header format depending on lake_enable_protobuf_file_checksum, so inject on both.
         SyncPoint::GetInstance()->SetCallBack("ProtobufFile::save:serialize", [](void* arg) { *(bool*)arg = false; });
+        SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::save:serialize",
+                                              [](void* arg) { *(bool*)arg = false; });
         SyncPoint::GetInstance()->EnableProcessing();
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id).status());
         SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::save:serialize");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::save:serialize");
         SyncPoint::GetInstance()->DisableProcessing();
     }
     // retry publish again
@@ -1533,7 +1538,7 @@ public:
     void TearDown() override {
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
 
@@ -4247,7 +4252,7 @@ public:
     }
 
     void TearDown() override {
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
 

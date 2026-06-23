@@ -18,6 +18,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/platform")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/platform")
 
 set(PLATFORM_FILES
+  aws/aws_sdk_guard.cpp
+  aws/poco_common.cpp
+  aws/poco_http_client.cpp
+  aws/poco_http_client_factory.cpp
   download_util.cpp
   platform_env.cpp
   platform_metrics.cpp

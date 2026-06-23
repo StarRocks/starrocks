@@ -4205,6 +4205,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
 
+    @ConfField(mutable = true)
+    public static long jdbc_row_count_cache_refresh_sec = 600L;
+
+    @ConfField(mutable = true)
+    public static long jdbc_row_count_cache_expire_sec = 1200L;
+
+    @ConfField(mutable = true)
+    public static long jdbc_row_count_cache_max_size = 10000L;
+
     // the retention time for host disconnection events
     @ConfField(mutable = true)
     public static long black_host_history_sec = 2 * 60; // 2min
@@ -4521,6 +4530,15 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long default_statistics_output_row_count = 1L;
+
+    /**
+     * Default estimated bytes per row used by {@code RowCountEstimator} when the file format
+     * is unknown or does not support schema-based size estimation (e.g. SEQUENCE files).
+     * This value is divided into the total file size to produce an approximate row count for
+     * external file tables that have no statistics collected yet.
+     */
+    @ConfField(mutable = true)
+    public static long connector_row_size_estimate_bytes = 256L;
 
     /**
      * Whether enable range distribution.

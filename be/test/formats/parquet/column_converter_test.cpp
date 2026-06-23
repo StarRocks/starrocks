@@ -19,11 +19,15 @@
 #include <filesystem>
 
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/file_reader.h"
+#include "formats/parquet/metadata.h"
+#include "formats/parquet/statistics_helper.h"
 #include "fs/fs.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
@@ -586,6 +590,161 @@ TEST_F(ColumnConverterTest, BooleanTest) {
             check(file_path, col_type, col_name, "[1]", expected_rows, true);
         }
     }
+}
+
+// Regression test for unsigned 32-bit integers physically stored as parquet INT32.
+// A UINT_32 column (logical INTEGER bitWidth=32 isSigned=false, or the legacy
+// UINT_32 converted type) must be loaded into a wider StarRocks column by
+// ZERO-extending the raw 32 bits, not sign-extending. Before the fix the high-bit
+// value 3000000000 (0xB2D05E00) was sign-extended to -1294967296 -> silent
+// data corruption.
+TEST_F(ColumnConverterTest, UnsignedInt32ZeroExtend) {
+    // 3000000000 has bit 31 set; its int32 reinterpretation is negative.
+    const int32_t kHighBits = static_cast<int32_t>(3000000000u); // == -1294967296
+    const int64_t kExpectedUnsigned = 3000000000LL;
+
+    auto make_src = [](int32_t bits) {
+        auto data = FixedLengthColumn<int32_t>::create();
+        data->get_data().push_back(bits);
+        auto nulls = NullColumn::create();
+        nulls->get_data().push_back(0);
+        return NullableColumn::create(std::move(data), std::move(nulls));
+    };
+
+    // use_logical_type selects logicalType.INTEGER vs the legacy converted_type encoding.
+    auto make_field = [](bool use_logical_type, bool is_signed) {
+        ParquetField field;
+        field.scale = 0;
+        field.precision = 0;
+        field.physical_type = tparquet::Type::INT32;
+        if (use_logical_type) {
+            field.schema_element.__isset.logicalType = true;
+            field.schema_element.logicalType.__isset.INTEGER = true;
+            field.schema_element.logicalType.INTEGER.bitWidth = 32;
+            field.schema_element.logicalType.INTEGER.isSigned = is_signed;
+        } else {
+            field.schema_element.__isset.converted_type = true;
+            field.schema_element.converted_type =
+                    is_signed ? tparquet::ConvertedType::INT_32 : tparquet::ConvertedType::UINT_32;
+        }
+        return field;
+    };
+
+    auto run_bigint = [&](const ParquetField& field) -> int64_t {
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        std::unique_ptr<ColumnConverter> converter;
+        Status st = ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter);
+        EXPECT_TRUE(st.ok()) << st.message();
+        auto src = make_src(kHighBits);
+        auto dst = ColumnHelper::create_column(col_type, true);
+        st = converter->convert(src.get(), dst.get());
+        EXPECT_TRUE(st.ok()) << st.message();
+        auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+        auto* dst_data = down_cast<FixedLengthColumn<int64_t>*>(dst_nullable->data_column_raw_ptr());
+        return dst_data->get_data()[0];
+    };
+
+    // UINT_32 via modern logical type -> BIGINT must zero-extend.
+    EXPECT_EQ(kExpectedUnsigned, run_bigint(make_field(/*use_logical_type=*/true, /*is_signed=*/false)));
+    // UINT_32 via legacy converted type -> BIGINT must zero-extend.
+    EXPECT_EQ(kExpectedUnsigned, run_bigint(make_field(/*use_logical_type=*/false, /*is_signed=*/false)));
+    // Signed INT_32 with the same bits must still sign-extend (no regression).
+    EXPECT_EQ(static_cast<int64_t>(kHighBits), run_bigint(make_field(/*use_logical_type=*/true, /*is_signed=*/true)));
+
+    // A present-but-non-INTEGER logical type takes precedence over a contradictory
+    // legacy UINT_32 converted type: the column must NOT be treated as unsigned.
+    {
+        ParquetField field;
+        field.scale = 0;
+        field.precision = 0;
+        field.physical_type = tparquet::Type::INT32;
+        field.schema_element.__isset.logicalType = true; // present, but INTEGER not set
+        field.schema_element.__isset.converted_type = true;
+        field.schema_element.converted_type = tparquet::ConvertedType::UINT_32;
+        EXPECT_EQ(static_cast<int64_t>(kHighBits), run_bigint(field));
+    }
+
+    // UINT_32 -> DOUBLE must also widen via the unsigned value.
+    {
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+        ParquetField field = make_field(/*use_logical_type=*/false, /*is_signed=*/false);
+        std::unique_ptr<ColumnConverter> converter;
+        Status st = ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter);
+        EXPECT_TRUE(st.ok()) << st.message();
+        auto src = make_src(kHighBits);
+        auto dst = ColumnHelper::create_column(col_type, true);
+        st = converter->convert(src.get(), dst.get());
+        EXPECT_TRUE(st.ok()) << st.message();
+        auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+        auto* dst_data = down_cast<FixedLengthColumn<double>*>(dst_nullable->data_column_raw_ptr());
+        EXPECT_DOUBLE_EQ(static_cast<double>(kExpectedUnsigned), dst_data->get_data()[0]);
+    }
+
+    // UINT_32 -> DECIMAL128(38,0) must zero-extend the unscaled value.
+    {
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 38, 0);
+        ParquetField field = make_field(/*use_logical_type=*/false, /*is_signed=*/false);
+        field.precision = 38;
+        std::unique_ptr<ColumnConverter> converter;
+        Status st = ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter);
+        EXPECT_TRUE(st.ok()) << st.message();
+        auto src = make_src(kHighBits);
+        auto dst = ColumnHelper::create_column(col_type, true);
+        st = converter->convert(src.get(), dst.get());
+        EXPECT_TRUE(st.ok()) << st.message();
+        auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+        auto* dst_data = down_cast<Decimal128Column*>(dst_nullable->data_column_raw_ptr());
+        EXPECT_EQ(kExpectedUnsigned, static_cast<int64_t>(dst_data->get_data()[0]));
+    }
+}
+
+// Footer-statistics counterpart of the zero-extension fix. The converter is shared
+// with statistics decoding, so an unsigned INT32 column's min/max must be validated
+// with UNSIGNED Parquet sort order. Pre-1.10 parquet-mr writers stored the deprecated
+// min/max with SIGNED ordering, which would invert once decoded as unsigned, so those
+// legacy stats must be rejected for an unsigned column instead of trusted.
+TEST_F(ColumnConverterTest, UnsignedInt32StatsRejectsLegacySignedOrder) {
+    // Old parquet-mr writer (< 1.10.0): deprecated min/max are signed-ordered.
+    tparquet::FileMetaData t_meta;
+    t_meta.__set_version(1);
+    t_meta.__set_num_rows(2);
+    t_meta.__set_created_by("parquet-mr version 1.0.0 (build test)");
+    tparquet::SchemaElement root_sch;
+    root_sch.__set_name("schema");
+    root_sch.__set_num_children(1);
+    tparquet::SchemaElement leaf_sch;
+    leaf_sch.__set_name("u");
+    leaf_sch.__set_type(tparquet::Type::INT32);
+    t_meta.__set_schema({root_sch, leaf_sch});
+    FileMetaData file_meta;
+    ASSERT_TRUE(file_meta.init(t_meta, false).ok());
+
+    // Deprecated min/max present and differing (raw little-endian int32 bytes 1 and 2).
+    tparquet::ColumnMetaData column_meta;
+    column_meta.__set_type(tparquet::Type::INT32);
+    tparquet::Statistics stats;
+    stats.__set_min(std::string("\x01\x00\x00\x00", 4));
+    stats.__set_max(std::string("\x02\x00\x00\x00", 4));
+    column_meta.__set_statistics(stats);
+
+    const TypeDescriptor bigint = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+
+    auto eval = [&](bool is_signed) {
+        ParquetField field;
+        field.physical_type = tparquet::Type::INT32;
+        field.schema_element.__isset.logicalType = true;
+        field.schema_element.logicalType.__isset.INTEGER = true;
+        field.schema_element.logicalType.INTEGER.bitWidth = 32;
+        field.schema_element.logicalType.INTEGER.isSigned = is_signed;
+        std::vector<std::string> mins;
+        std::vector<std::string> maxs;
+        return StatisticsHelper::get_min_max_value(&file_meta, bigint, &column_meta, &field, mins, maxs);
+    };
+
+    // Unsigned column -> UNSIGNED sort order -> legacy signed-ordered stats are rejected.
+    EXPECT_FALSE(eval(/*is_signed=*/false).ok());
+    // Signed column -> SIGNED sort order -> legacy stats are accepted (no regression).
+    EXPECT_TRUE(eval(/*is_signed=*/true).ok());
 }
 
 TEST_F(ColumnConverterTest, Int64_2_Timestamp) {

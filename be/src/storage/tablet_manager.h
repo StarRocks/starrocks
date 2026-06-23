@@ -54,7 +54,7 @@
 #include "gutil/macros.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/tablet.h"
 
 namespace starrocks {

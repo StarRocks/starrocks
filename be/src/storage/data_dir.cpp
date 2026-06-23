@@ -51,7 +51,7 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "platform/path_rw.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"

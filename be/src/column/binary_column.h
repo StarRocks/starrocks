@@ -20,6 +20,7 @@
 #include <type_traits>
 
 #include "base/string/slice.h"
+#include "column/adaptive_offsets.h"
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/container_resource.h"
@@ -57,6 +58,21 @@ private:
     bool _is_large = false;
 };
 
+// Serialize the |idx|-th binary value as [uint32_t length][bytes] into |pos| and return the
+// number of bytes written. This is the single definition of the binary serialize wire format:
+// the per-element serialize() and the batch serializers all encode through it, each dispatching
+// the offsets width once at its own boundary.
+template <typename Offset>
+ALWAYS_INLINE uint32_t serialize_binary_element(const Offset* __restrict offsets, size_t idx,
+                                                const uint8_t* __restrict base, uint8_t* pos) {
+    // max size of one string is 2^32, so use uint32_t not Offset
+    const auto offset = offsets[idx];
+    const auto binary_size = static_cast<uint32_t>(offsets[idx + 1] - offset);
+    strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
+    strings::memcpy_inlined(pos + sizeof(uint32_t), base + offset, binary_size);
+    return sizeof(uint32_t) + binary_size;
+}
+
 template <typename T>
 class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
     friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
@@ -64,8 +80,15 @@ class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryCol
 public:
     using ValueType = Slice;
 
-    using Offset = T;
-    using Offsets = Buffer<T>;
+    /*
+     * Use AdaptiveOffsets instead of Buffer<T> to store offsets, which can automatically promote to uint64_t
+     * when the offset value exceeds UINT32_MAX.
+     * For the compatibility reason, we still reserve the binaryColumn/LargeBinaryColumn interface for the callers,
+     * But we will re-implement them using the newly added AdaptiveOffsets.
+     *
+     * Important NOTE: Even upgrade offset from Buffer<T> -> AdaptiveOffsets, max size of single element is still 2^32 !!!!
+    */
+    using Offsets = AdaptiveOffsets;
     using Byte = uint8_t;
     using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
@@ -77,7 +100,7 @@ public:
     // and then we don't need explicitly emplace_back zero value
     BinaryColumnBase() { _offsets.emplace_back(0); }
     // Default value is empty string
-    explicit BinaryColumnBase(size_t size) : _offsets(size + 1, 0) {}
+    explicit BinaryColumnBase(size_t size) { _offsets.resize(size + 1, 0); }
     BinaryColumnBase(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
@@ -134,20 +157,34 @@ public:
     size_t type_size() const override { return sizeof(Slice); }
 
     size_t byte_size() const override {
-        size_t data_size = _resource.empty() ? _bytes.size() : _offsets.back();
-        return data_size * sizeof(uint8_t) + _offsets.size() * sizeof(Offset);
+        if (LIKELY(_resource.empty())) {
+            if (LIKELY(!_offsets.is_large())) {
+                const auto& offsets = _offsets.small_storage();
+                return _bytes.size() + offsets.size() * sizeof(uint32_t);
+            }
+            const auto& offsets = _offsets.large_storage();
+            return _bytes.size() + offsets.size() * sizeof(uint64_t);
+        }
+
+        return _offsets.visit_storage([&](const auto& offsets) -> size_t {
+            using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
+            return offsets.back() + offsets.size() * sizeof(OffsetValue);
+        });
     }
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return (_offsets[from + size] - _offsets[from]) + size * sizeof(Offset);
+        return (_offsets[from + size] - _offsets[from]) + size * _offsets.element_size();
     }
 
     size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t); }
 
     Slice get_slice(size_t idx) const {
         const uint8_t* base = _data_base();
-        return Slice(base + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
+        return _offsets.visit_storage([&](const auto& offsets) -> Slice {
+            const auto offset = offsets[idx];
+            return Slice(base + offset, offsets[idx + 1] - offset);
+        });
     }
 
     const char* get_string_begin() const { return reinterpret_cast<const char*>(_data_base()); }
@@ -218,9 +255,7 @@ public:
 
     void append_default() override { _offsets.emplace_back(_bytes.size()); }
 
-    void append_default(size_t count) override {
-        _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
-    }
+    void append_default(size_t count) override { _offsets.append_empty_values(count); }
 
     StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
@@ -231,15 +266,10 @@ public:
     uint32_t max_one_element_serialize_size() const override;
 
     ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) const override {
-        // max size of one string is 2^32, so use uint32_t not T
-        auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
-        T offset = _offsets[idx];
         const uint8_t* base = _data_base();
-
-        strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
-        strings::memcpy_inlined(pos + sizeof(uint32_t), base + offset, binary_size);
-
-        return sizeof(uint32_t) + binary_size;
+        return _offsets.visit_storage([&](const auto& offsets) -> uint32_t {
+            return serialize_binary_element(offsets.data(), idx, base, pos);
+        });
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
@@ -277,7 +307,6 @@ public:
         return p;
     }
 
-    MutableColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
@@ -338,7 +367,7 @@ public:
 
     size_t container_memory_usage() const override {
         size_t bytes_memory = _resource.empty() ? _bytes.capacity() : 0;
-        return bytes_memory + _offsets.capacity() * sizeof(_offsets[0]);
+        return bytes_memory + _offsets.memory_usage();
     }
 
     size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
@@ -385,8 +414,9 @@ public:
     void build_slices(Container& slices) const;
 
 private:
-    template <typename SrcOffset>
-    void _append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count);
+    void _append_binary_impl(const Offsets& src_offsets, const uint8_t* src_base, size_t offset, size_t count);
+    void _append_selective_general(const BinaryColumnBase<T>& src_column, const uint32_t* indexes, uint32_t size,
+                                   size_t prev_num_offsets, uint64_t dst_begin);
 
     void _build_german_strings() const;
     void _ensure_materialized();

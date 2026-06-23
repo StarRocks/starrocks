@@ -22,19 +22,24 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
+#include "platform/store_path.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/persistent_index_load_executor.h"
+#include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 
@@ -133,7 +138,9 @@ TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path) {
     auto st = ConfigUpdateRegistry::instance()->update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
 
-    int expected_max_threads = static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * 4;
+    const auto* store_path_registry = ExecEnv::GetInstance()->platform_services().store_path_registry;
+    ASSERT_NE(nullptr, store_path_registry);
+    int expected_max_threads = static_cast<int>(store_path_registry->store_path_count()) * 4;
     expected_max_threads = std::max(expected_max_threads, 2);
     ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
 }
@@ -149,6 +156,57 @@ TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path_with_miss
 
     auto st = ConfigUpdateRegistry::instance()->update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_schema_change_pool_size) {
+    auto* thread_pool = StorageEngine::instance()->lake_schema_change_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_alter_tablet_worker_count = config::alter_tablet_worker_count;
+    const int original_lake_schema_change_parallelism = config::lake_schema_change_per_tablet_parallelism;
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count",
+                                                                 std::to_string(original_alter_tablet_worker_count)));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config(
+                "lake_schema_change_per_tablet_parallelism", std::to_string(original_lake_schema_change_parallelism)));
+    });
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("lake_schema_change_per_tablet_parallelism", "3");
+    CHECK_OK(st);
+    ASSERT_EQ(std::max(1, config::alter_tablet_worker_count * 3), thread_pool->max_threads());
+
+    st = ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count", "2");
+    CHECK_OK(st);
+    ASSERT_EQ(6, thread_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_storage_cleanup_worker_count) {
+    auto* storage_cleanup_executor = StorageEngine::instance()->storage_cleanup_executor();
+    ASSERT_NE(nullptr, storage_cleanup_executor);
+    auto* storage_cleanup_pool = storage_cleanup_executor->thread_pool();
+    ASSERT_NE(nullptr, storage_cleanup_pool);
+
+    auto* drop_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+    ASSERT_NE(nullptr, drop_pool);
+    const auto original_drop_pool_max_threads = drop_pool->max_threads();
+    const auto original_drop_tablet_worker_count = config::drop_tablet_worker_count;
+    const auto original_storage_cleanup_worker_count = config::storage_cleanup_worker_count;
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("drop_tablet_worker_count",
+                                                                 std::to_string(original_drop_tablet_worker_count)));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config(
+                "storage_cleanup_worker_count", std::to_string(original_storage_cleanup_worker_count)));
+    });
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("storage_cleanup_worker_count", "4");
+    CHECK_OK(st);
+    ASSERT_EQ(4, storage_cleanup_pool->max_threads());
+    ASSERT_EQ(original_drop_pool_max_threads, drop_pool->max_threads());
+
+    st = ConfigUpdateRegistry::instance()->update_config("drop_tablet_worker_count", "2");
+    CHECK_OK(st);
+    ASSERT_EQ(2, drop_pool->max_threads());
+    ASSERT_EQ(4, storage_cleanup_pool->max_threads());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {

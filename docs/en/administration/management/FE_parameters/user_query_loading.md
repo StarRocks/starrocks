@@ -91,6 +91,15 @@ This topic introduces the following types of FE configurations:
 - Description: Timeout in milliseconds applied to the BRPC TalkTimeoutController before sending a plan fragment. `BackendServiceClient.sendPlanFragmentAsync` sets this value prior to calling the backend `execPlanFragmentAsync`. It governs how long BRPC will wait when borrowing an idle connection from the connection pool and while performing the send; if exceeded, the RPC will fail and may trigger the method's retry logic. Set this lower to fail fast under contention, or raise it to tolerate transient pool exhaustion or slow networks. Be cautious: very large values can delay failure detection and block request threads.
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
+### `connector_row_size_estimate_bytes`
+
+- Default: 256
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The estimated average row size in bytes used by the optimizer to estimate row counts for external file tables (FILES() and ENGINE=file tables) when the storage format is unknown or the column schema is not available. The row count is estimated as `total_file_bytes / connector_row_size_estimate_bytes`. A smaller value produces a higher row count estimate and may affect join ordering decisions.
+- Introduced in: v3.4
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - Default: 12 * 3600

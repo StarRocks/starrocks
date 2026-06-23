@@ -59,6 +59,7 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_env.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -80,8 +81,8 @@ public:
             : _tablet_id(next_id()),
               _partition_id(next_id()),
               _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
-              _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
-              _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
+              _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
+              _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
@@ -96,7 +97,7 @@ public:
     void create_tablet() {
         auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
         _tablet_id = metadata->id();
-        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         ASSERT_TRUE(tablet_mgr != nullptr);
         ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
     }
@@ -548,7 +549,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
                   metadata->rowsets(0).segment_metas(1).filename());
         EXPECT_EQ(987654321, metadata->commit_time());
     }
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // TxnLog`s should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
     ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().is_not_found());
@@ -815,7 +816,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
     ASSERT_EQ("1.dat", metadata->rowsets(0).segment_metas(0).filename());
     ASSERT_EQ("2.dat", metadata->rowsets(0).segment_metas(1).filename());
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // TxnLog should't have been deleted
     ASSERT_TRUE(tablet.get_txn_log(1002).status().ok());
     ASSERT_TRUE(tablet.get_txn_log(1003).status().ok());
@@ -905,7 +906,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_single_to_batch) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
     }
@@ -925,7 +926,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_single_to_batch) {
         _lake_service.publish_version(nullptr, &publish_request_1001, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog of logs[0] should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
         // the other txn_logs should't have been deleted
@@ -974,7 +975,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog should't have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().ok());
         ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().ok());
@@ -999,7 +1000,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         _lake_service.publish_version(nullptr, &publish_request_1001, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog of logs[0] should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
         // TxnLog of logs[1] should't have been deleted
@@ -1026,7 +1027,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         _lake_service.publish_version(nullptr, &publish_request_1002, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // TxnLog of logs[1] should have been deleted
         ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().is_not_found());
 
@@ -1681,7 +1682,7 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
             ASSERT_EQ(1, inspected_txn_size.load(std::memory_order_relaxed));
             EXPECT_TRUE(saw_rebuild_pindex.load(std::memory_order_relaxed));
 
-            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            StorageEngine::instance()->wait_storage_cleanup_tasks();
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_1, txn_id)));
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_2, txn_id)));
         }
@@ -1879,7 +1880,7 @@ TEST_F(LakeServiceTest, test_publish_identical_tablet) {
             ASSERT_EQ(0, response.tablet_metas_size());
             ASSERT_EQ(0, response.tablet_ranges_size());
 
-            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            StorageEngine::instance()->wait_storage_cleanup_tasks();
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_log.txn_id())));
         }
 
@@ -2031,7 +2032,7 @@ TEST_F(LakeServiceTest, test_abort) {
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // TxnLog`s and segments should have been deleted
     for (auto&& log : logs) {
@@ -2166,7 +2167,7 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         request.add_txn_ids(logs.back().txn_id());
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
         ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
     }
@@ -2186,7 +2187,7 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         info->set_combined_txn_log(false);
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
         ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
     }
@@ -2206,7 +2207,7 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         info->set_combined_txn_log(true);
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         auto log_path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
         ASSERT_TRUE(FileSystem::Default()->path_exists(log_path).is_not_found());
     }
@@ -2583,7 +2584,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 10)));
     }
@@ -2598,7 +2599,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 10)));
     }
@@ -2614,7 +2615,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 10)));
     }
     // Publish combined txn log
@@ -2651,7 +2652,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         for (auto tablet_id : tablet_ids) {
             EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(tablet_id, txn_id)));
             EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(tablet_id, version)));
@@ -2726,7 +2727,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // The materialized .vlog must exist and contain the merged segments and
     // accumulated counters across both statements.
@@ -2846,7 +2847,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
         // The single source .log must remain so the operator can recover.
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
@@ -2883,7 +2884,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // The pre-existing .vlog stays intact and the stale .log is cleaned.
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
@@ -2983,7 +2984,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_merge_repeated_fields) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     _tablet_mgr->prune_metacache();
 
     ASSIGN_OR_ABORT(auto vlog, _tablet_mgr->get_txn_vlog(_tablet_id, version));
@@ -3081,7 +3082,7 @@ TEST_F(LakeServiceTest, test_abort_with_load_ids) {
     AbortTxnResponse response;
     _lake_service.abort_txn(nullptr, &request, &response, nullptr);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // Every per-load_id .log file and every segment they referenced must be
     // gone -- nothing should be left in shared storage from this txn.
@@ -3153,7 +3154,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         _tablet_mgr->prune_metacache();
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
@@ -3182,7 +3183,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         _tablet_mgr->prune_metacache();
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
@@ -3251,7 +3252,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         for (auto txn_id : txn_ids) {
             for (auto tablet_id : tablet_ids) {
                 EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(tablet_id, txn_id)));
@@ -3344,7 +3345,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch_with_load_ids) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // Both .vlogs land; every source .log -- 4-segment for the multi-statement
     // txn, 2-segment for the single one -- is cleaned up by its own branch.
@@ -3553,7 +3554,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     ASSERT_EQ(14, rowset2.data_size());
     ASSERT_EQ(3, rowset2.segment_metas_size());
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, 1000)));
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, 1001)));
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 4)));
@@ -3641,7 +3642,7 @@ TEST_F(LakeServiceTest, test_publish_version_issue28244) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 102301).status().is_not_found());
 }
 
@@ -4335,7 +4336,7 @@ TEST_F(LakeServiceTest, test_abort3) {
 
     _lake_service.abort_txn(nullptr, &request, &response, nullptr);
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
 }
@@ -4503,7 +4504,7 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_log));
 
         do_test(txn_id, TStatusCode::OK);
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         // CombinedTxnLogPB should still exist
         auto path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
@@ -4561,7 +4562,7 @@ TEST_F(LakeServiceTest, test_publish_version_with_txn_info) {
                   metadata->rowsets(0).segment_metas(1).filename());
         EXPECT_EQ(987654321, metadata->commit_time());
     }
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     // TxnLog`s should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
 }
@@ -4601,7 +4602,7 @@ TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
 
         AbortTxnResponse response;
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         for (auto&& log : combined_log->txn_logs()) {
             for (auto&& s : log.op_write().rowset().segment_metas()) {
@@ -4614,7 +4615,7 @@ TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
         AbortTxnResponse response;
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
 
         // TxnLog`s and segments should have been deleted
         for (auto&& log : combined_log->txn_logs()) {

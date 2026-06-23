@@ -150,6 +150,27 @@ public class MVRewriteValidator {
             taskContext.getOptimizerContext().getQueryTables().addAll(diffMVs);
         }
 
+        // Record global MV usage and rewrite outcome once per non-explain query, regardless of whether
+        // rewrite is enabled — a direct MV read still counts as usage in a rewrite-disabled session.
+        if (connectContext.getExplainLevel() == null) {
+            for (MaterializedView mv : mvs) {
+                String refreshMode = mv.getRefreshMode() == null ? "UNKNOWN" : mv.getRefreshMode().name();
+                String usageType = beforeTableIds.contains(mv.getId()) ? "DIRECT" : "REWRITE";
+                MaterializedViewMetricsRegistry.increaseMvUsage(usageType, refreshMode);
+            }
+            String rewriteState;
+            if (!connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
+                    || connectContext.getSessionVariable().isDisableMaterializedViewRewrite()
+                    || !Config.enable_materialized_view) {
+                rewriteState = "DISABLED";
+            } else if (!diffMVs.isEmpty()) {
+                rewriteState = "HIT";
+            } else {
+                rewriteState = "NO_HIT";
+            }
+            MaterializedViewMetricsRegistry.increaseGlobalQueryRewrite(rewriteState);
+        }
+
         if (diffMVs.isEmpty()) {
             boolean hasRewriteSuccess = Tracers.getAllVars().stream()
                     .anyMatch(var -> StringUtils.contains(var.getValue().toString(),

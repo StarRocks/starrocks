@@ -229,7 +229,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 Status ReplicationTxnManager::clear_snapshots(const TxnLogPtr& txn_slog) {
     const auto& txn_meta = txn_slog->op_replication().txn_meta();
     return ReplicationUtils::release_remote_snapshot(txn_meta.src_backend_host(), txn_meta.src_backend_port(),
-                                                     txn_meta.src_snapshot_path());
+                                                     txn_meta.src_snapshot_path(), _snapshot_client);
 }
 
 Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest& request,
@@ -246,7 +246,8 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
         // Make snapshot in remote olap engine
         status = ReplicationUtils::make_remote_snapshot(src_be.host, src_be.be_port, request.src_tablet_id,
                                                         request.src_schema_hash, request.src_visible_version, timeout_s,
-                                                        missed_versions, missing_version_ranges, src_snapshot_path);
+                                                        missed_versions, missing_version_ranges, src_snapshot_path,
+                                                        _snapshot_client);
         if (!status.ok()) {
             continue;
         }
@@ -303,7 +304,8 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                     remote_dcgs_snapshot_file_name, config::download_low_speed_time);
             if (dcgs_snapshot_content_or.ok()) {
                 DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
-                RETURN_IF_ERROR(ProtobufFileWithHeader::load(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
+                RETURN_IF_ERROR(
+                        ProtobufFileWithHeader::load_from_buffer(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
 
                 std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
                 for (const auto& rowset_meta : rowset_metas) {

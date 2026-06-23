@@ -19,7 +19,7 @@
 #include <iostream>
 #include <vector>
 
-#include "util/logging.h"
+#include "base/logging.h"
 
 namespace starrocks {
 

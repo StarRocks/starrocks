@@ -54,7 +54,7 @@ public:
     void attach_peer_cache_stub_cache(BrpcStubCache* brpc_stub_cache);
     void destroy();
 
-    void try_release_resource_before_core_dump();
+    void release_memory_before_core_dump();
 
     void set_local_disk_cache(std::shared_ptr<LocalDiskCacheEngine> local_disk_cache) {
         _local_disk_cache = std::move(local_disk_cache);

@@ -14,7 +14,9 @@
 
 #include "storage/chunk_helper.h"
 
+#include <memory>
 #include <numeric>
+#include <type_traits>
 #include <utility>
 
 #include "base/coding.h"
@@ -35,54 +37,10 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "storage/tablet_schema.h"
-#include "storage/types.h"
 #include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {
-
-Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
-    LogicalType type = c.type();
-
-    TypeInfoPtr type_info = nullptr;
-    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_DECIMAL32 ||
-        type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
-        // ARRAY and DECIMAL should be handled specially
-        // Array is nested type, the message is stored in TabletColumn
-        // Decimal has precision and scale, the message is stored in TabletColumn
-        type_info = get_type_info(c);
-    } else {
-        type_info = get_type_info(type);
-    }
-    starrocks::Field f(id, std::string(c.name()), type_info, c.is_nullable());
-    f.set_is_key(c.is_key());
-    f.set_length(c.length());
-    f.set_uid(c.unique_id());
-    f.set_is_virtual(c.is_virtual_column());
-
-    if (type == TYPE_ARRAY) {
-        const TabletColumn& sub_column = c.subcolumn(0);
-        auto sub_field = convert_field(id, sub_column);
-        f.add_sub_field(sub_field);
-    } else if (type == TYPE_MAP) {
-        for (int i = 0; i < 2; ++i) {
-            const TabletColumn& sub_column = c.subcolumn(i);
-            auto sub_field = convert_field(id, sub_column);
-            f.add_sub_field(sub_field);
-        }
-    } else if (type == TYPE_STRUCT) {
-        for (int i = 0; i < c.subcolumn_count(); ++i) {
-            const TabletColumn& sub_column = c.subcolumn(i);
-            auto sub_field = convert_field(id, sub_column);
-            f.add_sub_field(sub_field);
-        }
-    }
-
-    f.set_short_key_length(c.index_length());
-    f.set_aggregate_method(c.aggregation());
-    f.set_agg_state_desc(c.get_agg_state_desc());
-    return f;
-}
 
 starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr& schema) {
     return starrocks::Schema(schema->schema());
@@ -91,22 +49,6 @@ starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr
 starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr& schema,
                                               const std::vector<ColumnId>& cids) {
     return starrocks::Schema(schema->schema(), cids);
-}
-
-starrocks::SchemaPtr ChunkHelper::convert_schema(const std::vector<TabletColumn*>& columns,
-                                                 const std::vector<std::string_view>& col_names) {
-    SchemaPtr schema = std::make_shared<Schema>();
-    // ordered by col_names
-    int new_column_idx = 0;
-    for (auto s : col_names) {
-        for (int32_t idx = 0; idx < columns.size(); ++idx) {
-            if (!s.compare(columns[idx]->name())) {
-                auto f = std::make_shared<Field>(ChunkHelper::convert_field(new_column_idx++, *columns[idx]));
-                schema->append(f);
-            }
-        }
-    }
-    return schema->fields().size() != 0 ? schema : nullptr;
 }
 
 starrocks::Schema ChunkHelper::get_short_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
@@ -149,54 +91,59 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     // |schema| maybe partial columns in vertical compaction, so get char column length by name.
     uint32_t len = tschema->column(tschema->field_index(field.name())).length();
 
-    new_offset.resize(num_rows + 1);
-    new_bytes.assign(num_rows * len, 0); // padding 0
+    const uint64_t final_offset = static_cast<uint64_t>(len) * num_rows;
+    new_offset.resize_uninitialized(num_rows + 1, final_offset);
+    new_bytes.assign(final_offset, 0); // padding 0
 
-    uint32_t from = 0;
-    // Optimization: skip memcpy for null rows when there are many nulls
-    // The buffer is pre-zeroed, so null rows already have valid padding
-    if (field.is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(column);
-        if (!nullable_column->has_null()) {
-            // No nulls: avoid the extra count_nonzero pass and keep the tight loop
-            for (size_t j = 0; j < num_rows; ++j) {
-                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                from += len;
-            }
-        } else {
-            const uint8_t* null_data = nullable_column->null_column()->get_data().data();
-            size_t null_count = SIMD::count_nonzero(null_data, num_rows);
-            // Only use sparse iteration if more than 12.5% of rows are null
-            if (null_count > num_rows / 8) {
+    size_t from = 0;
+    offset.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offset_data = offsets_buf.data();
+        // Optimization: skip memcpy for null rows when there are many nulls.
+        // The buffer is pre-zeroed, so null rows already have valid padding.
+        if (field.is_nullable()) {
+            auto* nullable_column = down_cast<NullableColumn*>(column);
+            if (!nullable_column->has_null()) {
                 for (size_t j = 0; j < num_rows; ++j) {
-                    if (!null_data[j]) {
-                        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                    }
+                    size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
                     from += len;
                 }
             } else {
-                // Low null ratio: original loop without branch
-                for (size_t j = 0; j < num_rows; ++j) {
-                    uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                    from += len;
+                const uint8_t* null_data = nullable_column->null_column()->get_data().data();
+                size_t null_count = SIMD::count_nonzero(null_data, num_rows);
+                if (null_count > num_rows / 8) {
+                    for (size_t j = 0; j < num_rows; ++j) {
+                        if (!null_data[j]) {
+                            size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j],
+                                                    copy_data_len);
+                        }
+                        from += len;
+                    }
+                } else {
+                    for (size_t j = 0; j < num_rows; ++j) {
+                        size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+                        from += len;
+                    }
                 }
             }
+        } else {
+            for (size_t j = 0; j < num_rows; ++j) {
+                size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+                from += len;
+            }
         }
-    } else {
-        // Non-nullable: original loop
-        for (size_t j = 0; j < num_rows; ++j) {
-            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-            from += len;
-        }
-    }
+    });
 
-    for (size_t j = 1; j <= num_rows; ++j) {
-        new_offset[j] = static_cast<uint32_t>(len * j);
-    }
+    new_offset.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        auto* __restrict offset_data = offsets_buf.data();
+        for (size_t j = 0; j <= num_rows; ++j) {
+            offset_data[j] = static_cast<OffsetValue>(static_cast<uint64_t>(len) * j);
+        }
+    });
 
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);

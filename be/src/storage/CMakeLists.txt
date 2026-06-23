@@ -41,8 +41,15 @@ ADD_BE_LIB(StoragePrimitive
     primitive/projection_iterator.cpp
     primitive/range.cpp
     primitive/predicate_parser.cpp
+    primitive/primary_key_encoder.cpp
+    primitive/schema_helper.cpp
     primitive/predicate_tree/predicate_tree.cpp
+    primitive/storage_define.cpp
     primitive/storage_ids.cpp
+    primitive/tablet_column.cpp
+    primitive/tablet_info.cpp
+    primitive/tablet_column_util.cpp
+    primitive/tablet_column_type_utils.cpp
     primitive/union_iterator.cpp
 )
 
@@ -69,6 +76,7 @@ target_link_libraries(StorageBase PUBLIC
     StoragePrimitive
     Serde
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types
@@ -90,19 +98,19 @@ set(STORAGE_FILES
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
-    publish_version_manager.cpp
-    olap_define.cpp
     olap_server.cpp
     persistent_index.cpp
     primary_index.cpp
-    primary_key_encoder.cpp
     protobuf_file.cpp
     replication_txn_manager.cpp
+    remote_snapshot_client.cpp
     replication_utils.cpp
     segment_stream_converter.cpp
     del_file_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
+    storage_cleanup_executor.cpp
+    storage_env.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
@@ -175,13 +183,6 @@ set(STORAGE_FILES
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
-    task/engine_batch_load_task.cpp
-    task/engine_checksum_task.cpp
-    task/engine_clone_task.cpp
-    task/engine_manual_compaction_task.cpp
-    task/engine_compaction_control_task.cpp
-    task/engine_storage_migration_task.cpp
-    task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
@@ -190,7 +191,6 @@ set(STORAGE_FILES
     convert_helper.cpp
     delete_predicates.cpp
     predicate_parser.cpp
-    push_handler.cpp
     row_store_encoder.cpp
     row_store_encoder_simple.cpp
     row_store_encoder_factory.cpp
@@ -225,7 +225,6 @@ set(STORAGE_FILES
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
-    push_utils.cpp
     primary_key_recover.cpp
     local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
@@ -268,7 +267,6 @@ set(STORAGE_FILES
     lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
-    lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
@@ -326,7 +324,6 @@ set(STORAGE_FILES
     lake/column_mode_partial_update_handler.cpp
     lake/tablet_write_log_manager.cpp
     primary_key_dump.cpp
-    dictionary_cache_manager.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp

@@ -1,0 +1,113 @@
+-- name: test_spill_sort_events @sequential @slow
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set query_mem_limit=2147483648;
+-- result:
+-- !result
+create table t_sort (
+    c0 INT,
+    c1 INT,
+    c2 INT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 4 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_sort
+SELECT generate_series, generate_series % 100000, generate_series % 5000
+FROM TABLE(generate_series(1, 500000));
+-- result:
+-- !result
+set pipeline_dop=4;
+-- result:
+-- !result
+set enable_parallel_merge=false;
+-- result:
+-- !result
+function: assert_explain_contains('select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000', 'order by')
+-- result:
+None
+-- !result
+function: update_be_config("enable_spill_sort_events", "true")
+-- result:
+None
+-- !result
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+-- result:
+50000	50000
+50000	150000
+50000	250000
+50000	350000
+50000	450000
+50001	50001
+50001	150001
+50001	250001
+50001	350001
+50001	450001
+-- !result
+function: update_be_config("enable_spill_sort_events", "false")
+-- result:
+None
+-- !result
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+-- result:
+50000	50000
+50000	150000
+50000	250000
+50000	350000
+50000	450000
+50001	50001
+50001	150001
+50001	250001
+50001	350001
+50001	450001
+-- !result
+set pipeline_dop=4;
+-- result:
+-- !result
+set enable_parallel_merge=true;
+-- result:
+-- !result
+function: assert_explain_contains('select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000', 'order by')
+-- result:
+None
+-- !result
+function: update_be_config("enable_spill_sort_events", "true")
+-- result:
+None
+-- !result
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+-- result:
+50000	50000
+50000	150000
+50000	250000
+50000	350000
+50000	450000
+50001	50001
+50001	150001
+50001	250001
+50001	350001
+50001	450001
+-- !result
+function: update_be_config("enable_spill_sort_events", "false")
+-- result:
+None
+-- !result
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+-- result:
+50000	50000
+50000	150000
+50000	250000
+50000	350000
+50000	450000
+50001	50001
+50001	150001
+50001	250001
+50001	350001
+50001	450001
+-- !result
+CLEANUP {
+  function: update_be_config("enable_spill_sort_events", "false")
+} END CLEANUP

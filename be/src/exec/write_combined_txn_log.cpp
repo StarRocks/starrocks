@@ -20,11 +20,12 @@
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
 Status write_combined_txn_log(const CombinedTxnLogPB& logs) {
-    auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     return tablet_mgr->put_combined_txn_log(logs);
 }
 
@@ -62,7 +63,7 @@ Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>
     {
         std::vector<std::shared_ptr<CancellableRunnable>> tasks;
         for (const auto& [partition_id, logs] : txn_log_map) {
-            auto task_logic = create_txn_log_task(&logs, ExecEnv::GetInstance()->lake_tablet_manager(), &has_error,
+            auto task_logic = create_txn_log_task(&logs, StorageEnv::GetInstance()->lake_tablet_manager(), &has_error,
                                                   &final_status, &latch);
             auto task =
                     std::make_shared<CancellableRunnable>(std::move(task_logic), [&latch, &has_error, &final_status]() {

@@ -39,6 +39,7 @@
 #include "base/testutil/assert.h"
 #include "base/types/decimal12.h"
 #include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
@@ -589,6 +590,56 @@ TEST_F(ColumnReaderWriterTest, test_binary) {
     test_nullable_data<TYPE_CHAR, DICT_ENCODING, 1>(*c, "0");
     test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "0");
     test_nullable_data<TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
+}
+
+// Verifies that with enable_binary_plain_delta_offset on, a high-cardinality string column
+// (which speculates plain rather than dictionary encoding) is written with the
+// PLAIN_ENCODING_DELTA_OFFSET column encoding and reads back identically. With the config off
+// it uses the regular PLAIN_ENCODING. Exercises StringColumnWriter::speculate_string_encoding,
+// the EncodingInfo traits for the new encoding, and the read-side dispatch.
+// NOLINTNEXTLINE
+TEST_F(ColumnReaderWriterTest, test_string_delta_offset_encoding) {
+    const bool saved = config::enable_binary_plain_delta_offset;
+    DeferOp restore([&]() { config::enable_binary_plain_delta_offset = saved; });
+
+    auto src = high_cardinality_strings(100);
+    auto type_info = get_type_info(TYPE_VARCHAR);
+
+    auto run = [&](bool delta, EncodingTypePB expect_encoding) {
+        config::enable_binary_plain_delta_offset = delta;
+
+        const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+        auto segment = create_dummy_segment(fname);
+        ColumnMetaPB meta;
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+            ColumnWriterOptions writer_opts = make_writer_opts<TYPE_VARCHAR, PLAIN_ENCODING, 2>(&meta);
+            TabletColumn column = make_tablet_column<TYPE_VARCHAR>();
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+            ASSERT_OK(writer->append(*src));
+            flush_column_writer(writer.get());
+            ASSERT_OK(wfile->close());
+        }
+
+        // The speculated plain encoding (delta or not) is recorded in the column meta.
+        EXPECT_EQ(expect_encoding, meta.encoding());
+
+        // Read back and verify the values round-trip through the recorded encoding.
+        auto iter = create_and_init_iterator(meta, segment.get(), fname);
+        ASSERT_OK(iter->seek_to_first());
+        MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+        size_t rows_read = src->size();
+        dst->reserve(rows_read);
+        ASSERT_OK(iter->next_batch(&rows_read, dst.get()));
+        ASSERT_EQ(src->size(), rows_read);
+        for (size_t i = 0; i < rows_read; i++) {
+            ASSERT_EQ(0, type_info->cmp(src->get(i), dst->get(i))) << " mismatch at row " << i;
+        }
+    };
+
+    run(false, PLAIN_ENCODING);
+    run(true, PLAIN_ENCODING_DELTA_OFFSET);
 }
 
 // NOLINTNEXTLINE

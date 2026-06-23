@@ -16,15 +16,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/compute_env")
 
 set(COMPUTE_ENV_SORTING_FILES
     sorting/chunk_cursor.cpp
-    sorting/compare_column.cpp
     sorting/data_segment.cpp
     sorting/merge.cpp
     sorting/merge_cascade.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
-    sorting/sort_column.cpp
     sorting/sort_cursor.cpp
-    sorting/sort_permute.cpp
     sorting/sorted_chunks_merger.cpp
 )
 
@@ -80,6 +77,11 @@ set(COMPUTE_ENV_GLOBAL_DICT_FILES
     global_dict/parser.cpp
 )
 
+set(COMPUTE_ENV_DICTIONARY_CACHE_FILES
+    dictionary_cache/chunk_util.cpp
+    dictionary_cache/dictionary_cache_manager.cpp
+)
+
 set(COMPUTE_ENV_LOAD_PATH_FILES
     load_path/load_path_state_helper.cpp
     load_path/load_path_mgr.cpp
@@ -106,6 +108,7 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_QUERY_CACHE_FILES}
     ${COMPUTE_ENV_QUERY_FILES}
     ${COMPUTE_ENV_GLOBAL_DICT_FILES}
+    ${COMPUTE_ENV_DICTIONARY_CACHE_FILES}
     ${COMPUTE_ENV_LOAD_PATH_FILES}
 )
 
@@ -119,6 +122,7 @@ target_link_libraries(ComputeEnv PUBLIC
     Platform
     FSCore
     IO
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types

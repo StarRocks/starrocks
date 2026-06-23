@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 
 #include <gtest/gtest.h>
 
@@ -135,6 +135,62 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
         ASSERT_EQ(pchunk->get_column_by_index(3)->get(i).get<uint8>(),
                   dchunk->get_column_by_index(3)->get(i).get<uint8>());
     }
+}
+
+TEST(PrimaryKeyEncoderTest, testDecodeCompositeWithFastFlag) {
+    auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT});
+    MutableColumnPtr dest;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+
+    auto pchunk = ChunkFactory::new_chunk(*sc, 1);
+    Datum tmp;
+    tmp.set_int32(42);
+    pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_slice("plain-string");
+    pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_int16(7);
+    pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
+
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, 1, dest.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+
+    std::vector<uint8_t> value_encode_flags(1, PRIMARY_KEY_DECODE_FAST);
+    auto dchunk = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, 1, dchunk.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                                          &value_encode_flags)
+                        .ok());
+
+    ASSERT_EQ(1, dchunk->num_rows());
+    ASSERT_EQ(42, dchunk->get_column_by_index(0)->get(0).get_int32());
+    ASSERT_EQ(Slice("plain-string"), dchunk->get_column_by_index(1)->get(0).get_slice());
+    ASSERT_EQ(7, dchunk->get_column_by_index(2)->get(0).get_int16());
+}
+
+TEST(PrimaryKeyEncoderTest, testDecodeCompositeWithSkipFlag) {
+    auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT});
+    MutableColumnPtr dest;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+
+    auto pchunk = ChunkFactory::new_chunk(*sc, 1);
+    Datum tmp;
+    tmp.set_int32(42);
+    pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_slice("plain-string");
+    pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_int16(7);
+    pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
+
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, 1, dest.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+
+    std::vector<uint8_t> value_encode_flags(1, PRIMARY_KEY_DECODE_SKIP);
+    auto dchunk = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, 1, dchunk.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                                          &value_encode_flags)
+                        .ok());
+
+    ASSERT_EQ(1, dchunk->num_rows());
+    ASSERT_EQ(0, dchunk->get_column_by_index(0)->get(0).get_int32());
+    ASSERT_EQ(0, dchunk->get_column_by_index(1)->get(0).get_slice().size);
+    ASSERT_EQ(0, dchunk->get_column_by_index(2)->get(0).get_int16());
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {

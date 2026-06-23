@@ -28,12 +28,12 @@
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/tablet_info.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
 

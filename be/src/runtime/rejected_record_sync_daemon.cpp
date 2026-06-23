@@ -406,10 +406,13 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
 
 std::vector<std::string> RejectedRecordSyncDaemon::store_path_roots() const {
     std::vector<std::string> roots;
-    if (_env != nullptr) {
-        for (const auto& sp : _env->store_paths()) {
-            roots.push_back(sp.path);
-        }
+    if (_env == nullptr) {
+        return roots;
+    }
+    const auto* store_path_registry = _env->platform_services().store_path_registry;
+    if (store_path_registry != nullptr) {
+        const auto& store_path_roots = store_path_registry->store_path_roots();
+        roots.assign(store_path_roots.begin(), store_path_roots.end());
     }
     return roots;
 }

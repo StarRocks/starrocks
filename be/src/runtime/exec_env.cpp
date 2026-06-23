@@ -34,7 +34,6 @@
 
 #include "runtime/exec_env.h"
 
-#include <cctype>
 #include <memory>
 #include <thread>
 
@@ -63,10 +62,7 @@
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
-#include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
-#include "gutil/strings/split.h"
-#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -90,13 +86,8 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
-#include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
-#include "storage/lake/replication_txn_manager.h"
-#include "storage/lake/starlet_location_provider.h"
-#include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #ifdef WITH_TENANN
@@ -104,32 +95,11 @@
 #endif
 #include "udf/python/env.h"
 
-#ifdef USE_STAROS
-#include <fslib/configuration.h>
-#endif
-
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
 #endif
 
 namespace starrocks {
-
-bool parse_resource_str(const string& str, string* value) {
-    if (!str.empty()) {
-        std::string tmp_str = str;
-        StripLeadingWhiteSpace(&tmp_str);
-        StripTrailingWhitespace(&tmp_str);
-        if (tmp_str.empty()) {
-            return false;
-        } else {
-            *value = tmp_str;
-            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
-            return true;
-        }
-    } else {
-        return false;
-    }
-}
 
 ExecEnv* ExecEnv::GetInstance() {
     static ExecEnv s_exec_env;
@@ -163,19 +133,21 @@ void ExecEnv::_refresh_service_contexts() {
     _execution_services.max_executor_threads = global_env->max_executor_threads();
 
     auto* platform_env = PlatformEnv::GetInstance();
+    _platform_services.store_path_registry = platform_env->store_path_registry();
+
     _rpc_services.backend_client_cache = platform_env->backend_client_cache();
     _rpc_services.frontend_client_cache = platform_env->frontend_client_cache();
     _rpc_services.broker_client_cache = platform_env->broker_client_cache();
     _rpc_services.broker_mgr = _broker_mgr;
     _rpc_services.brpc_stub_cache = platform_env->brpc_stub_cache();
 
-    _lake_services.lake_tablet_manager = _lake_tablet_manager;
-    _lake_services.lake_update_manager = _lake_update_manager;
-    _lake_services.lake_replication_txn_manager = _lake_replication_txn_manager;
+    auto* storage_env = StorageEnv::GetInstance();
+    _lake_services.lake_tablet_manager = storage_env->lake_tablet_manager();
+    _lake_services.lake_update_manager = storage_env->lake_update_manager();
+    _lake_services.lake_replication_txn_manager = storage_env->lake_replication_txn_manager();
     _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
     _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
     _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
-    _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
     _lake_services.pk_index_execution_thread_pool = global_env->pk_index_execution_thread_pool();
     _lake_services.pk_index_memtable_flush_thread_pool = global_env->pk_index_memtable_flush_thread_pool();
     _lake_services.lake_partial_update_thread_pool = global_env->lake_partial_update_thread_pool();
@@ -223,6 +195,11 @@ void ExecEnv::_refresh_service_contexts() {
     _admin_services.agent = &_agent_services;
 }
 
+void ExecEnv::set_agent_server(AgentServer* agent_server) {
+    _agent_server = agent_server;
+    _refresh_service_contexts();
+}
+
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
                      GlobalEnv* global_env, bool as_cn) {
     DCHECK(process_metrics_registry != nullptr);
@@ -237,7 +214,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _process_metrics_registry = process_metrics_registry;
     auto* process_metrics = process_metrics_registry->root_registry();
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
-    _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this, process_metrics);
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
@@ -350,41 +326,21 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         // rejected records to the system table this run.
     }
 
+    StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
-    _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
-    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, global_env->update_mem_tracker());
-    _lake_tablet_manager =
-            new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
-    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
-    if (config::starlet_cache_dir.empty()) {
-        std::vector<std::string> starlet_cache_paths;
-        std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
-            std::string starlet_cache_path = root_path.path + "/starlet_cache";
-            starlet_cache_paths.emplace_back(starlet_cache_path);
-        });
-        config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
-    }
-    setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
-
-    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
-    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
 #elif defined(BE_TEST)
-    _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
-    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, global_env->update_mem_tracker());
-    _lake_tablet_manager =
-            new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
-    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
-    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
-    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
 #endif
+    RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(storage_env_options), "init StorageEnv failed");
 
     RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
 
-    _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager, process_metrics, _table_metrics_mgr);
-
-    _agent_server = new AgentServer(this, false);
-    RETURN_IF_ERROR(_agent_server->init());
+    _load_channel_mgr =
+            new LoadChannelMgr(StorageEnv::GetInstance()->lake_tablet_manager(), process_metrics, _table_metrics_mgr);
 
     _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
@@ -396,6 +352,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_compute_env->init_query_cache(capacity));
 
     RETURN_IF_ERROR(_compute_env->init_spill(StorageEngine::instance()->get_store_paths(), process_metrics));
+    StorageEnv::GetInstance()->set_spill_dir_mgr(_compute_env->spill_dir_mgr());
 
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());
@@ -518,9 +475,9 @@ void ExecEnv::stop() {
         component_times.emplace_back("lake_vector_index_build_thread_pool", MonotonicMillis() - start);
     }
 
-    if (_parallel_compact_mgr) {
+    if (StorageEnv::GetInstance()->parallel_compact_mgr() != nullptr) {
         start = MonotonicMillis();
-        _parallel_compact_mgr->shutdown();
+        StorageEnv::GetInstance()->stop();
         component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
     }
 
@@ -540,12 +497,6 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         global_env->lake_partial_update_thread_pool()->shutdown();
         component_times.emplace_back("lake_partial_update_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (_agent_server) {
-        start = MonotonicMillis();
-        _agent_server->stop();
-        component_times.emplace_back("agent_server", MonotonicMillis() - start);
     }
 
     if (_runtime_filter_worker) {
@@ -634,12 +585,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("diagnose_daemon", MonotonicMillis() - start);
     }
 
-#if !defined(__APPLE__) && !defined(BE_TEST)
-    start = MonotonicMillis();
-    close_s3_clients();
-    component_times.emplace_back("close_s3_clients", MonotonicMillis() - start);
-#endif
-
     start = MonotonicMillis();
     PythonEnvManager::getInstance().close();
     component_times.emplace_back("PythonEnvManager", MonotonicMillis() - start);
@@ -661,7 +606,6 @@ void ExecEnv::stop() {
 }
 
 void ExecEnv::destroy() {
-    SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     if (_compute_env != nullptr) {
         _compute_env->destroy_profile_report_worker();
@@ -690,11 +634,8 @@ void ExecEnv::destroy() {
     // Query/workgroup teardown can release FragmentContext state that still uses
     // ComputeEnv-owned timers, pass-through stream buffers, and workgroup resources.
     if (_compute_env) {
+        StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
         _compute_env->destroy();
-    }
-
-    if (_lake_tablet_manager != nullptr) {
-        _lake_tablet_manager->prune_metacache();
     }
 
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
@@ -703,11 +644,8 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
-    SAFE_DELETE(_lake_tablet_manager);
-    SAFE_DELETE(_lake_update_manager);
-    SAFE_DELETE(_lake_replication_txn_manager);
+    StorageEnv::GetInstance()->destroy();
     SAFE_DELETE(_diagnose_daemon);
-    _parallel_compact_mgr.reset();
     DCHECK(_global_env != nullptr);
     _global_env->destroy_thread_pools();
     _query_execution_services.process_metrics = nullptr;
@@ -777,56 +715,6 @@ uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
     // Default sink dop is the number of hardware threads with a cap of 64.
     auto dop = std::max<uint32_t>(1, max_executor_threads());
     return std::min<uint32_t>(dop, 64);
-}
-
-ThreadPool* ExecEnv::delete_file_thread_pool() {
-    return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
-}
-
-void ExecEnv::try_release_resource_before_core_dump() {
-    std::set<std::string> modules;
-    bool release_all = false;
-    auto* global_env = _global_env;
-    DCHECK(global_env != nullptr);
-    if (config::try_release_resource_before_core_dump.value() == "*") {
-        release_all = true;
-    } else {
-        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
-                                       &parse_resource_str, &modules);
-    }
-
-    auto need_release = [&release_all, &modules](const std::string& name) {
-        return release_all || modules.contains(name);
-    };
-
-    if (workgroup_manager() != nullptr && need_release("connector_scan_executor")) {
-        workgroup_manager()->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
-    }
-    if (workgroup_manager() != nullptr && need_release("olap_scan_executor")) {
-        workgroup_manager()->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
-    }
-    if (global_env->thread_pool() != nullptr && need_release("non_pipeline_scan_thread_pool")) {
-        global_env->thread_pool()->shutdown();
-    }
-    if (global_env->pipeline_prepare_pool() != nullptr && need_release("pipeline_prepare_thread_pool")) {
-        global_env->pipeline_prepare_pool()->shutdown();
-    }
-    if (global_env->pipeline_sink_io_pool() != nullptr && need_release("pipeline_sink_io_thread_pool")) {
-        global_env->pipeline_sink_io_pool()->shutdown();
-    }
-    if (global_env->query_rpc_pool() != nullptr && need_release("query_rpc_thread_pool")) {
-        global_env->query_rpc_pool()->shutdown();
-    }
-    if (global_env->datacache_rpc_pool() != nullptr && need_release("datacache_rpc_thread_pool")) {
-        global_env->datacache_rpc_pool()->shutdown();
-        LOG(INFO) << "shutdown datacache rpc thread pool";
-    }
-    if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
-        _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
-    }
-    if (workgroup_manager() != nullptr && need_release("wg_driver_executor")) {
-        workgroup_manager()->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
-    }
 }
 
 workgroup::WorkGroupManager* ExecEnv::workgroup_manager() {

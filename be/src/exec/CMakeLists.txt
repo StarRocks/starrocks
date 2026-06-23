@@ -127,6 +127,7 @@ target_link_libraries(ExecJoinCore PUBLIC
     ExprCore
     Serde
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types
@@ -307,7 +308,6 @@ set(EXEC_NON_PIPELINE_FILES
     short_circuit.cpp
     short_circuit_hybrid.cpp
     olap_common.cpp
-    tablet_info.cpp
     write_combined_txn_log.cpp
     cache_stats_scanner.cpp
     local_file_writer.cpp
@@ -525,6 +525,7 @@ target_link_libraries(ExecRuntime PUBLIC
     Platform
     FSCore
     IO
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types

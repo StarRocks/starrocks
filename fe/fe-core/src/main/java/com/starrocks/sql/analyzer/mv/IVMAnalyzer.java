@@ -159,6 +159,8 @@ public class IVMAnalyzer {
     private final ConnectContext connectContext;
     private final CreateMaterializedViewStatement statement;
     private final QueryStatement queryStatement;
+    // null at CREATE -> deduce per keys; non-null at refresh -> use the MV's pinned version.
+    private Integer pinnedEncodeRowIdVersion;
 
     public IVMAnalyzer(ConnectContext connectContext,
                        CreateMaterializedViewStatement statement,
@@ -181,9 +183,20 @@ public class IVMAnalyzer {
      * - If incremental refresh is supported, the result must not be none.
      */
     public Optional<IVMAnalyzeResult> rewrite(MaterializedView.RefreshMode refreshMode) {
+        return rewriteInternal(refreshMode, null, refreshMode.isIncremental());
+    }
+
+    public Optional<IVMAnalyzeResult> rewriteForRefresh(MaterializedView.RefreshMode refreshMode,
+                                                        int pinnedEncodeRowIdVersion) {
+        return rewriteInternal(refreshMode, pinnedEncodeRowIdVersion, false);
+    }
+
+    private Optional<IVMAnalyzeResult> rewriteInternal(MaterializedView.RefreshMode refreshMode,
+                                                       Integer pinnedVersion, boolean runTrial) {
         if (!refreshMode.isIncremental() && !refreshMode.isAuto()) {
             return Optional.empty();
         }
+        this.pinnedEncodeRowIdVersion = pinnedVersion;
 
         try {
             QueryRelation queryRelation = queryStatement.getQueryRelation();
@@ -195,8 +208,8 @@ public class IVMAnalyzer {
                     : RowIdStrategy.AUTO_INCREMENT;
             // Trial-rewrite catches drift the analyzer-level checks can't: e.g. a new logical
             // operator without a matching IvmDelta*Rule, or a combinator's metadata that no
-            // longer matches the BE state-union path. INCREMENTAL only.
-            if (refreshMode.isIncremental()) {
+            // longer matches the BE state-union path. CREATE only; refresh builds the real plan next.
+            if (runTrial) {
                 IvmTrialRewriter.runTrial(connectContext, statement, queryStatement);
             }
             IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, strategy, refreshMode);
@@ -413,7 +426,9 @@ public class IVMAnalyzer {
 
         // Build the row ID from the group keys, normalized like the refresh aggregate (see normalizeGroupKeys).
         List<Expr> rowIdKeys = normalizeGroupKeys(groupByExprs);
-        int encodeRowIdVersion = IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
+        int encodeRowIdVersion = (pinnedEncodeRowIdVersion != null)
+                ? IvmOpUtils.getEncodeRowIdVersionChecked(pinnedEncodeRowIdVersion)
+                : IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
         if (statement != null) {
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
         }
