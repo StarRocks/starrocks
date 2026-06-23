@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json_path_deriver.h"
+#include "storage/json_path_deriver.h"
 
 #include <algorithm>
 #include <cstddef>

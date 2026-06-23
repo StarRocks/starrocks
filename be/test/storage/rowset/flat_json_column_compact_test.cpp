@@ -33,6 +33,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
+#include "storage/json_path_deriver.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
@@ -42,7 +43,6 @@
 #include "storage/types.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks {
 

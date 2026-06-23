@@ -37,9 +37,9 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
+#include "storage/json_path_deriver.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks {
 

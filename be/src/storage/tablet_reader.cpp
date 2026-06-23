@@ -35,6 +35,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/delete_predicates.h"
+#include "storage/json_path_deriver.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
 #include "storage/primitive/column_predicate_factory.h"
@@ -50,7 +51,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks {
 

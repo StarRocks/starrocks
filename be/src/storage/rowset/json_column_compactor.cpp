@@ -30,9 +30,9 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "storage/flat_json_metrics.h"
+#include "storage/json_path_deriver.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {

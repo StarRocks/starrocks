@@ -92,6 +92,7 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_metrics.cpp
+    json_path_deriver.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
     segment_replicate_executor.cpp

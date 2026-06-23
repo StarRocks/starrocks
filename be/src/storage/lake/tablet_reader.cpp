@@ -36,6 +36,7 @@
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/json_path_deriver.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
@@ -52,7 +53,6 @@
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks::lake {
 

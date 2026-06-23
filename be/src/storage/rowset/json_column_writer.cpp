@@ -43,13 +43,13 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "storage/flat_json_metrics.h"
+#include "storage/json_path_deriver.h"
 #include "storage/primitive/rowid_types.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/json_column_compactor.h"
 #include "types/constexpr.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks {
 
