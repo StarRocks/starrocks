@@ -477,6 +477,12 @@ description: "Alphabetical s"
 - タイプ: 瞬間的
 - 説明: 各BEノード上のタブレット数を示します。
 
+## `starrocks_fe_txn_max_committed_pending_publish_ms`
+
+- 単位: ms
+- タイプ: 瞬間的
+- 説明: 現在 `COMMITTED` 状態にあり `VISIBLE` への発行を待っているトランザクションのうち、最も長く滞留しているものの待機時間（ミリ秒）。つまり、コミット済みでまだ発行されていない最も古いトランザクションの経過時間です。トランザクション完了後に記録される概要（summary）メトリックである `starrocks_fe_txn_publish_*` とは異なり、これは現在の最悪ケースの待機時間をリアルタイムに示すゲージ（gauge）です。この値は `db` ラベルによってデータベースごとに、かつ Leader FE ノード（`is_leader="true"`）のみが報告します。発行待ちのコミット済みトランザクションがない場合は `0` を返します。値が高い、または継続的に増加している場合、バージョンの発行が停止しているか、コミットに遅れていることを示します。
+
 ## `starrocks_fe_txn_publish_ack_latency_ms`
 
 - 単位: ms
