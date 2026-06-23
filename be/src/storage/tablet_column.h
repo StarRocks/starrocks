@@ -175,7 +175,6 @@ public:
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
     size_t estimate_field_size(size_t variable_length) const;
-    static uint32_t get_field_length_by_type(LogicalType type, uint32_t string_length);
 
     std::string debug_string() const;
 
