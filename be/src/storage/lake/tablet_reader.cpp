@@ -51,7 +51,8 @@
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
-#include "util/json_flattener.h"
+#include "util/json_flat_path.h"
+#include "util/json_path_deriver.h"
 
 namespace starrocks::lake {
 
