@@ -14,10 +14,20 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spiller_factory.h"
 #include "util/runtime_profile.h"
+=======
+#include <atomic>
+
+#include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
+#include "compute_env/spill/block_manager.h"
+#include "compute_env/spill/data_stream.h"
+#include "compute_env/spill/spiller_factory.h"
+>>>>>>> 5ea37b8832 ([BugFix] Fix load spill metrics without query context (#75236))
 
 namespace starrocks {
 
@@ -79,6 +89,13 @@ private:
     LoadSpillBlockManager* _block_manager = nullptr;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+<<<<<<< HEAD
+=======
+    // Load spilling uses a dummy RuntimeState without QueryContext.
+    std::atomic_int64_t _total_spill_bytes = 0;
+    // pipeline merge context for managing merge tasks
+    LoadSpillPipelineMergeContext* _pipeline_merge_context = nullptr;
+>>>>>>> 5ea37b8832 ([BugFix] Fix load spill metrics without query context (#75236))
     // used when input profile is nullptr
     std::unique_ptr<RuntimeProfile> _dummy_profile;
     RuntimeProfile* _profile = nullptr;
