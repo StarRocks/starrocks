@@ -24,7 +24,6 @@ set(UTIL_FILES
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
   static_asserts.cpp
-  time_guard.cpp
   system_metrics.cpp
 # coding_util.cpp
   memory_lock.cpp

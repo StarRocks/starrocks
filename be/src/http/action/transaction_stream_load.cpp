@@ -28,6 +28,7 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "base/auth/auth_info.h"
+#include "base/json/json_util.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -58,7 +59,6 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
-#include "base/json/json_util.h"
 
 namespace starrocks {
 

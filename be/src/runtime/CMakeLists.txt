@@ -33,6 +33,7 @@ set(RUNTIME_CORE_FILES
     query_statistics.cpp
     runtime_metrics.cpp
     stream_load/stream_load_metrics.cpp
+    time_guard.cpp
     type_pack.cpp
     load_fail_point.cpp
     memory/roaring_hook.cpp

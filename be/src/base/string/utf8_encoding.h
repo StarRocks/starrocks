@@ -14,9 +14,14 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <vector>
+
 #include "base/string/slice.h"
 #include "base/string/utf8.h"
-#include "column/column_hash.h"
+#include "gutil/strings/fastmem.h"
 
 namespace starrocks {
 

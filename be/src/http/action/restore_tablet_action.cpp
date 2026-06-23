@@ -40,6 +40,7 @@
 #include <sstream>
 #include <string>
 
+#include "base/json/json_util.h"
 #include "boost/lexical_cast.hpp"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -55,7 +56,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
-#include "base/json/json_util.h"
 
 namespace starrocks {
 

@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/tablet_schema.h"
 #include "base/json/json_util.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 TEST(TabletIndexTest, test_init_from_thrift) {

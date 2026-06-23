@@ -300,7 +300,6 @@ set(EXEC_FILES
         ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
-        ./util/time_guard_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/core_dump_resource_releaser_test.cpp
