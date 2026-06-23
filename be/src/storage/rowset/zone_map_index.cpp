@@ -44,7 +44,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
