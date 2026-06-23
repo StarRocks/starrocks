@@ -183,6 +183,14 @@ public class SplitJoinORToUnionRule extends TransformationRule {
             return false;
         }
 
+        // The per-branch dedup predicate built in transform() is the negation of plain '=', which
+        // is NOT a correct negation of the null-safe '<=>' (EQ_FOR_NULL): for NULL operands both
+        // the join condition and the dedup predicate are true, so the row is emitted by both
+        // UNION ALL branches (duplicate rows). Refuse to rewrite null-safe-equal disjuncts.
+        if (equalPredicates.stream().anyMatch(p -> p.getBinaryType() == BinaryType.EQ_FOR_NULL)) {
+            return false;
+        }
+
         return true;
     }
 
