@@ -49,6 +49,7 @@
 #include "storage/lake/utils.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
@@ -1123,7 +1124,7 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
         }
         const auto& source_info = source_info_iter->second;
 
-        auto field = ChunkHelper::convert_field(column_index, tablet_column);
+        auto field = StorageSchemaHelper::convert_field(column_index, tablet_column);
         MutableColumnPtr output_column = ChunkFactory::column_from_field(field);
         output_column->reserve(num_rows_in_target);
 

@@ -49,7 +49,6 @@
 #include "gutil/stl_util.h"
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
-#include "storage/chunk_helper.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
@@ -68,6 +67,7 @@
 #include "storage/primitive/range.h"
 #include "storage/primitive/roaring2range.h"
 #include "storage/primitive/rowid_types.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -1073,7 +1073,7 @@ Status SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
 
     const auto& col = _segment->tablet_schema().column(col_idx);
     ColumnId cid = static_cast<ColumnId>(col_idx);
-    auto field = std::make_shared<Field>(ChunkHelper::convert_field(cid, col));
+    auto field = std::make_shared<Field>(StorageSchemaHelper::convert_field(cid, col));
     _vector_index_ctx->vector_data_column_id = cid;
     _schema.append(field);
     _vector_index_ctx->added_vector_data_column = true;
@@ -2994,7 +2994,7 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     }
 
     const auto& tcol = _segment->tablet_schema().column(vec_cid);
-    auto field = std::make_shared<Field>(ChunkHelper::convert_field(vec_cid, tcol));
+    auto field = std::make_shared<Field>(StorageSchemaHelper::convert_field(vec_cid, tcol));
 
     _vector_index_ctx->id2distance_map.clear();
     // Enforce the range-query radius here: the FE folded the distance conjunct out of the scan

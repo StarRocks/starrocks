@@ -33,6 +33,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/delta_writer.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -202,8 +203,8 @@ void SchemaChangeTest::test_convert_to_varchar(LogicalType type, int type_size, 
     auto src_tablet_schema = gen_tablet_schema("c1", logical_type_to_string(type), "REPLACE", type_size);
     auto dst_tablet_schema = gen_tablet_schema("c2", "VARCHAR", "REPLACE", 255);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum(val);
     Datum dst_datum;
@@ -219,8 +220,8 @@ void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size
     auto src_tablet_schema = gen_tablet_schema("c1", "VARCHAR", "REPLACE", 255);
     auto dst_tablet_schema = gen_tablet_schema("c2", logical_type_to_string(type), "REPLACE", type_size);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum(Slice((char*)val.data(), val.size()));
     Datum dst_datum;
@@ -321,8 +322,8 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
     auto src_tablet_schema = gen_tablet_schema("c1", "FLOAT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DOUBLE", "REPLACE", 8);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum((float)(1.2345));
     Datum dst_datum;
@@ -339,8 +340,8 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     auto src_tablet_schema = gen_tablet_schema("c1", "DATETIME", "REPLACE", 8);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATE", "REPLACE", 3);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string origin_val = "2021-09-28 16:07:00";
@@ -365,8 +366,8 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     auto src_tablet_schema = gen_tablet_schema("c1", "DATE", "REPLACE", 3);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATETIME", "REPLACE", 8);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
     Datum src_datum;
     std::string origin_val = "2021-09-28";
     tm time_tm;
@@ -389,8 +390,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATE V2", "REPLACE", 3);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string origin_val = "2021-09-28";
@@ -411,8 +412,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATE", "REPLACE", 3);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string origin_val = "2021-09-28";
@@ -438,8 +439,8 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
@@ -462,8 +463,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string str = "test string";
@@ -488,8 +489,8 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);

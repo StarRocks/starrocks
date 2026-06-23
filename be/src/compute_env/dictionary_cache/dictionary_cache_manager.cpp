@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/dictionary_cache_manager.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 
 #include "base/string/faststring.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "compute_env/dictionary_cache/chunk_util.h"
 #include "runtime/descriptors.h"
-#include "storage/chunk_helper.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
@@ -79,7 +79,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     // OlapTableSchemaParam->indexes()[0]->column_param->columns: col1, col2, col3, col4 (with nullable attribute)
     // chunk schema: col1, col2, col3, col4 (with nullable attribute)
     // dictionary_schema: col2, col3, col1, col4 (without nullable attribute)
-    SchemaPtr dictionary_schema = ChunkHelper::convert_schema((schema->indexes()[0])->column_param->columns, col_names);
+    SchemaPtr dictionary_schema =
+            StorageSchemaHelper::convert_schema((schema->indexes()[0])->column_param->columns, col_names);
     DCHECK(dictionary_schema != nullptr);
     std::vector<int> keys(dictionary_schema->fields().size(), 1);
     // remove the nullable attribute if necessary

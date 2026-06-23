@@ -48,7 +48,6 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
-#include "storage/dictionary_cache_manager.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 
