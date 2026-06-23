@@ -19,8 +19,8 @@
 
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
+#include "storage/primitive/tablet_column_util.h"
 #include "storage/primitive/type_utils.h"
-#include "storage/tablet_column_util.h"
 
 namespace starrocks {
 

@@ -45,6 +45,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/predicate_tree/predicate_tree.cpp
     primitive/storage_define.cpp
     primitive/storage_ids.cpp
+    primitive/tablet_column_util.cpp
     primitive/tablet_column_type_utils.cpp
     primitive/union_iterator.cpp
 )
@@ -117,7 +118,6 @@ set(STORAGE_FILES
     tablet.cpp
     tablet_manager.cpp
     tablet_column.cpp
-    tablet_column_util.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
     tablet_index.cpp

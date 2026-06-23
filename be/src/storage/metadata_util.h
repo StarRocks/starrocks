@@ -22,7 +22,7 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "olap_common.h"
-#include "storage/tablet_column_util.h"
+#include "storage/primitive/tablet_column_util.h"
 
 namespace starrocks {
 
