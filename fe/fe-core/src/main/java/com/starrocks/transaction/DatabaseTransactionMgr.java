@@ -913,6 +913,24 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Return the time in milliseconds that the oldest committed-but-not-yet-visible transaction has been
+    // pending publish, i.e. (currentTimeMs - oldest commit time). Returns 0 when there is no committed
+    // transaction. A continuously growing value indicates that version publishing is stuck or lagging
+    // behind commits.
+    public long getMaxCommittedTxnPendingPublishMs(long currentTimeMs) {
+        readLock();
+        try {
+            long oldestCommitTime = idToRunningTransactionState.values().stream()
+                    .filter(transactionState -> transactionState.getTransactionStatus() == TransactionStatus.COMMITTED)
+                    .mapToLong(TransactionState::getCommitTime)
+                    .min()
+                    .orElse(0L);
+            return oldestCommitTime <= 0 ? 0L : Math.max(0L, currentTimeMs - oldestCommitTime);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
         readLock();
         try {
