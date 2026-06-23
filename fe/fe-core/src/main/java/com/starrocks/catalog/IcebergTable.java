@@ -38,6 +38,7 @@ import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RewriteEqualityDeleteFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
@@ -105,6 +106,9 @@ public class IcebergTable extends Table {
     private static final String PARQUET_FORMAT = "parquet";
     public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
     public static final String SPEC_ID = "$spec_id";
+    // Synthetic key injected by IcebergEqualityDeleteRewriteRule to scope partitioned equality
+    // deletes to their own (specId, partition); a typed serialization of that pair. Read-path only.
+    public static final String PARTITION_ID = "$partition_id";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
     public static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
@@ -112,7 +116,7 @@ public class IcebergTable extends Table {
     public static final String ROW_POSITION = MetadataColumns.ROW_POSITION.name();
 
     public static final Set<String> ICEBERG_META_COLUMNS = Set.of(
-            DATA_SEQUENCE_NUMBER, SPEC_ID, ROW_ID, LAST_UPDATED_SEQUENCE_NUMBER, FILE_PATH, ROW_POSITION
+            DATA_SEQUENCE_NUMBER, SPEC_ID, PARTITION_ID, ROW_ID, LAST_UPDATED_SEQUENCE_NUMBER, FILE_PATH, ROW_POSITION
     );
 
     private String catalogName;
@@ -643,6 +647,7 @@ public class IcebergTable extends Table {
             case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
             case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
+            case REWRITE_EQUALITY_DELETE_FILES -> RewriteEqualityDeleteFilesProcedure.getInstance();
             case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);

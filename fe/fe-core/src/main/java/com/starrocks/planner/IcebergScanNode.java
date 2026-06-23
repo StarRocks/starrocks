@@ -77,6 +77,10 @@ public class IcebergScanNode extends ScanNode {
     private boolean usedForDelete = false;
     private boolean enableGlobalLateMaterialization = false;
     private boolean enableIncrementalScanRanges = false;
+    // When set, the scan range source records the equality-delete files it applies, exposed via
+    // getAppliedEqualDeleteFiles(). The equality-delete -> position-delete conversion reads it back to
+    // remove exactly the equality deletes that were scanned (paired with a live data file), not orphans.
+    private boolean recordScanFiles = false;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -157,7 +161,7 @@ public class IcebergScanNode extends ScanNode {
         if (morParams != IcebergMORParams.EMPTY) {
             boolean needToCheckEqualityIds = tableFullMORParams.size() != 3;
             IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(
-                    remoteFileInfoSource, morParams, needToCheckEqualityIds);
+                    remoteFileInfoSource, morParams, needToCheckEqualityIds, icebergTable.getNativeTable().specs());
             Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
             remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
         }
@@ -209,14 +213,14 @@ public class IcebergScanNode extends ScanNode {
             if (morParams != IcebergMORParams.EMPTY) {
                 boolean needToCheckEqualityIds = tableFullMORParams.size() != 3;
                 IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(
-                        remoteFileInfoSource, morParams, needToCheckEqualityIds);
+                        remoteFileInfoSource, morParams, needToCheckEqualityIds, icebergTable.getNativeTable().specs());
                 Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
                 remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
             }
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, recordScanFiles,
                 scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete);
     }
 
@@ -235,6 +239,10 @@ public class IcebergScanNode extends ScanNode {
 
     public void setUsedForDelete(boolean usedForDelete) {
         this.usedForDelete = usedForDelete;
+    }
+
+    public void setRecordScanFiles(boolean recordScanFiles) {
+        this.recordScanFiles = recordScanFiles;
     }
 
     public boolean isUsedForDelete() {
@@ -467,8 +475,8 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getPosAppliedDeleteFiles();
     }
 
-    public Set<DeleteFile> getEqualAppliedDeleteFiles() {
-        return scanRangeSource.getEqualAppliedDeleteFiles();
+    public Set<DeleteFile> getAppliedEqualDeleteFiles() {
+        return scanRangeSource.getAppliedEqualDeleteFiles();
     }
 
     public Optional<Long> getBaseSnapshotId() {
