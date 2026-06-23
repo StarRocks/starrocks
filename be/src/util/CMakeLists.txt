@@ -20,7 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 set(UTIL_FILES
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
-  hyper_json_transformer.cpp
   json_path_deriver.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp

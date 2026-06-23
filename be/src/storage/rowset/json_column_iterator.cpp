@@ -31,6 +31,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/json_functions.h"
 #include "exprs/jsonpath.h"
 #include "gutil/casts.h"
@@ -42,7 +43,6 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/hyper_json_transformer.h"
 
 namespace starrocks {
 
