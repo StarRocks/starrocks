@@ -52,7 +52,6 @@
 #include "common/thread/thread.h"
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
