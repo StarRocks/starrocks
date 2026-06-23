@@ -398,13 +398,27 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                     ->get_total_elements_num(result_null_column);
 
     if (total_elements_num == 0) {
-        // if all input rows are empty arrays, return a const empty array column as result
+        // All non-null input arrays are empty. When some rows are null we cannot use a const
+        // column (null rows and empty-`[]` rows differ): build `num_rows` empty arrays and apply
+        // the per-row null mask so null inputs stay null instead of being rendered as `[]` (and
+        // so the row count is correct). With no null rows every row is identical, so a const
+        // empty array column is fine.
         column = ColumnHelper::create_column(type().children[0], true);
         auto aligned_offsets = UInt32Column::create(0);
+        if (result_null_column) {
+            // all-zero offsets (num_rows + 1 of them) -> every row is an empty array
+            aligned_offsets->append_default(chunk->num_rows() + 1);
+            auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
+            array_col->check_or_die();
+            auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
+            auto result = NullableColumn::create(std::move(array_col), std::move(result_null_mut));
+            result->check_or_die();
+            return result;
+        }
         aligned_offsets->append_default(2);
         auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
-        auto result = ConstColumn::create(std::move(array_col), chunk->num_rows() - null_rows);
+        auto result = ConstColumn::create(std::move(array_col), chunk->num_rows());
         result->check_or_die();
         return result;
     }
