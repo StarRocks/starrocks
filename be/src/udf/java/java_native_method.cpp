@@ -52,9 +52,8 @@ public:
             column_offsets.size() > java_max_buffer_size / sizeof(uint32_t)) {
             return Status::NotSupported("Java UDF does not support BinaryColumn with large offsets or bytes");
         }
-        column_offsets.visit_storage([&](const auto& offsets) {
-            _jarr[_idx++] = reinterpret_cast<int64_t>(offsets.data());
-        });
+        column_offsets.visit_storage(
+                [&](const auto& offsets) { _jarr[_idx++] = reinterpret_cast<int64_t>(offsets.data()); });
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_immutable_bytes().data());
         return Status::OK();
     }

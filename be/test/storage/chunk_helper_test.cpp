@@ -242,9 +242,8 @@ TEST_F(ChunkHelperTest, PaddingNullableCharColumnSkipsNullRowsWhenNullsAreDense)
 
     auto* data_column = down_cast<BinaryColumn*>(result->data_column_raw_ptr());
     expect_padded_char_column(*data_column,
-                              {padded_char("ab", 4), padded_char("", 4), padded_char("wxyzq", 4),
-                               padded_char("", 4), padded_char("defg", 4), padded_char("hi", 4),
-                               padded_char("", 4), padded_char("", 4)});
+                              {padded_char("ab", 4), padded_char("", 4), padded_char("wxyzq", 4), padded_char("", 4),
+                               padded_char("defg", 4), padded_char("hi", 4), padded_char("", 4), padded_char("", 4)});
 }
 
 TEST_F(ChunkHelperTest, PaddingNullableCharColumnCopiesAllRowsWhenNullsAreSparse) {
@@ -267,10 +266,9 @@ TEST_F(ChunkHelperTest, PaddingNullableCharColumnCopiesAllRowsWhenNullsAreSparse
     EXPECT_FALSE(result->is_null(7));
 
     auto* data_column = down_cast<BinaryColumn*>(result->data_column_raw_ptr());
-    expect_padded_char_column(*data_column,
-                              {padded_char("a", 4), padded_char("bc", 4), padded_char("def", 4),
-                               padded_char("nullv", 4), padded_char("wxyzq", 4), padded_char("m", 4),
-                               padded_char("no", 4), padded_char("pqrs", 4)});
+    expect_padded_char_column(
+            *data_column, {padded_char("a", 4), padded_char("bc", 4), padded_char("def", 4), padded_char("nullv", 4),
+                           padded_char("wxyzq", 4), padded_char("m", 4), padded_char("no", 4), padded_char("pqrs", 4)});
 }
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {
