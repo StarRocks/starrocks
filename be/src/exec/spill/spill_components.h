@@ -94,8 +94,6 @@ public:
 
     virtual Status acquire_stream(const SpillPartitionInfo* partition, std::shared_ptr<SpillInputStream>* stream) = 0;
 
-    virtual void cancel() = 0;
-
     virtual void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) = 0;
 
     template <class T>
@@ -167,8 +165,6 @@ public:
     Status acquire_stream(std::shared_ptr<SpillInputStream>* stream) override;
 
     Status acquire_stream(const SpillPartitionInfo* partition, std::shared_ptr<SpillInputStream>* stream) override;
-
-    void cancel() override {}
 
     void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override {}
 
@@ -261,8 +257,6 @@ public:
     void reset_partition(const std::vector<const SpillPartitionInfo*>& partitions);
 
     void reset_partition(RuntimeState* state, size_t num_partitions);
-
-    void cancel() override {}
 
     void shuffle(std::vector<uint32_t>& dst, const SpillHashColumn* hash_column);
 
