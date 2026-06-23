@@ -49,7 +49,6 @@
 #include "storage/types.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 

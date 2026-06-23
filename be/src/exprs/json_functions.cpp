@@ -48,7 +48,7 @@
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flattener.h"
+#include "util/hyper_json_transformer.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 

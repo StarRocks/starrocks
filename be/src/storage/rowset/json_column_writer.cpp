@@ -15,6 +15,7 @@
 #include "storage/rowset/json_column_writer.h"
 
 #include <sys/types.h>
+#include <velocypack/vpack.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -32,6 +33,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
@@ -45,8 +47,9 @@
 #include "types/constexpr.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
+#include "util/json_flat_path.h"
 #include "util/json_flattener.h"
-#include "velocypack/vpack.h"
+#include "util/json_path_deriver.h"
 
 namespace starrocks {
 

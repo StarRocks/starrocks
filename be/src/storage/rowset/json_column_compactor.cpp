@@ -28,7 +28,11 @@
 #include "storage/flat_json_metrics.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
+#include "util/hyper_json_transformer.h"
+#include "util/json_flat_path.h"
 #include "util/json_flattener.h"
+#include "util/json_merger.h"
+#include "util/json_path_deriver.h"
 
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {
