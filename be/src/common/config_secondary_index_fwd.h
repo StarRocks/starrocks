@@ -30,6 +30,10 @@ CONF_mBool(enable_secondary_index_write, "false");
 CONF_mBool(enable_secondary_index_read, "false");
 // Memory limit (in MB) for sorting (idx_cols, seg_id, rowid) entries.
 CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
+// Per-(tablet,index) in-memory write buffer size (MB). When a buffer reaches
+// this size during load/compaction it is flushed into one sorted run file,
+// bounding build memory and producing multiple runs per (rowset, index).
+CONF_mInt64(secondary_index_buffer_mb, "100");
 // Per-BE index registry while the FE-side DDL is not yet wired. Format:
 //   "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
 CONF_mString(secondary_index_defs, "");

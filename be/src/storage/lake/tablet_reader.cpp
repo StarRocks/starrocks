@@ -519,8 +519,17 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             // the candidate-bitmap / base-scan path below.
             if (covering_allowed) {
                 int covering_idx = -1;
+                // Group runs by index_name; covering currently requires a
+                // SINGLE run per index (e.g. post-compaction-merge). Multi-run
+                // indexes fall through to the lookup path below.
+                std::map<std::string, std::vector<int>> cov_runs;
                 for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
-                    const auto& fpb = meta.secondary_indexes(i);
+                    if (meta.secondary_indexes(i).file_name().empty()) continue;
+                    cov_runs[meta.secondary_indexes(i).index_name()].push_back(i);
+                }
+                for (auto& [cov_name, cov_run_list] : cov_runs) {
+                    if (cov_run_list.size() != 1) continue;
+                    const auto& fpb = meta.secondary_indexes(cov_run_list[0]);
                     std::unordered_set<ColumnId> idx_cids;
                     bool ok = true;
                     for (const auto& nm : fpb.index_col_names()) {
@@ -548,7 +557,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                         }
                     }
                     if (covered) {
-                        covering_idx = i;
+                        covering_idx = cov_run_list[0];
                         break;
                     }
                 }
@@ -565,66 +574,72 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 }
             }
 
-            // Look up every secondary index attached to this rowset; intersect
-            // their per-segment candidate bitmaps. A segment that produces an
-            // empty bitmap for any index is fully skipped by the downstream
-            // scan because it cannot satisfy that index's predicates.
+            // Look up every secondary index attached to this rowset. Each index
+            // may have MULTIPLE run files: UNION the per-segment candidate
+            // bitmaps across an index's runs, then INTERSECT across distinct
+            // indexes (multi-index AND). A segment empty for any index is
+            // skipped downstream because it cannot satisfy that index.
+            std::map<std::string, std::vector<int>> runs_by_index;
+            for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
+                if (meta.secondary_indexes(i).file_name().empty()) continue;
+                runs_by_index[meta.secondary_indexes(i).index_name()].push_back(i);
+            }
             std::unordered_map<uint32_t, roaring::Roaring> merged;
             bool first_index = true;
-            for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
-                const auto& file_pb = meta.secondary_indexes(i);
+            for (auto& [idx_name, run_list] : runs_by_index) {
+                const auto& first_pb = meta.secondary_indexes(run_list[0]);
                 // Predicate-applicability gate: a sorted secondary index can
                 // only narrow the scan when the query's predicate covers the
-                // LEADING (prefix) column. Predicates on non-leading columns
-                // still match per-page bloom/zone-map inside the .idx but
-                // would force a whole-file scan to build the candidate set --
-                // not what we want here, so skip the index entirely.
-                if (file_pb.index_col_names_size() == 0) continue;
-                const std::string& prefix_col = file_pb.index_col_names(0);
+                // LEADING (prefix) column; otherwise skip the index entirely.
+                if (first_pb.index_col_names_size() == 0) continue;
+                const std::string& prefix_col = first_pb.index_col_names(0);
                 const size_t prefix_src_idx = _tablet_schema->field_index(prefix_col);
                 if (prefix_src_idx == static_cast<size_t>(-1) ||
                     !queried_col_ids.count(static_cast<ColumnId>(prefix_src_idx))) {
                     continue;
                 }
 
-                // This index will be applied to the candidate bitmap. The .idx
-                // lookup pushes the (remapped) predicate on every column this
-                // index covers and filters row-precisely, so the resulting
-                // bitmap already enforces those columns' predicates exactly --
-                // record the ones the query actually predicates so the base
-                // scan can drop them.
-                for (const auto& nm : file_pb.index_col_names()) {
+                // Record the predicated columns this index enforces exactly, so
+                // the base scan can drop them from the residual predicate.
+                for (const auto& nm : first_pb.index_col_names()) {
                     const size_t ci = _tablet_schema->field_index(nm);
                     if (ci != static_cast<size_t>(-1) && queried_col_ids.count(static_cast<ColumnId>(ci))) {
                         enforced.insert(static_cast<ColumnId>(ci));
                     }
                 }
 
-                secondary_sorted::SecondaryIndexReader::OpenInput open_in;
-                open_in.fs = sidx_fs;
-                open_in.tablet_mgr = _tablet_mgr;
-                open_in.tablet_id = rowset->tablet_id();
-                open_in.file_pb = file_pb;
-                open_in.source_schema = _tablet_schema;
-                ASSIGN_OR_RETURN(auto reader, secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
-                // Cache the lookup result across morsels: key by .idx file
-                // (unique per rowset+index) + the query's predicate signature.
-                const std::string lookup_key = file_pb.file_name() + "|" + pred_signature;
-                ASSIGN_OR_RETURN(auto per_seg_ptr,
-                                 reader->lookup_cached(lookup_key, params.pred_tree, &_obj_pool, &_stats));
-                const auto& per_seg = *per_seg_ptr;
+                // Union the per-segment candidate bitmaps across this index's runs.
+                std::unordered_map<uint32_t, roaring::Roaring> per_index;
+                for (int ri : run_list) {
+                    const auto& file_pb = meta.secondary_indexes(ri);
+                    secondary_sorted::SecondaryIndexReader::OpenInput open_in;
+                    open_in.fs = sidx_fs;
+                    open_in.tablet_mgr = _tablet_mgr;
+                    open_in.tablet_id = rowset->tablet_id();
+                    open_in.file_pb = file_pb;
+                    open_in.source_schema = _tablet_schema;
+                    ASSIGN_OR_RETURN(auto reader,
+                                     secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
+                    // Cache the lookup result across morsels: key by run file
+                    // name (unique) + the query's predicate signature.
+                    const std::string lookup_key = file_pb.file_name() + "|" + pred_signature;
+                    ASSIGN_OR_RETURN(auto per_seg_ptr,
+                                     reader->lookup_cached(lookup_key, params.pred_tree, &_obj_pool, &_stats));
+                    for (const auto& [seg_id, bm] : *per_seg_ptr) {
+                        per_index[seg_id] |= bm; // union runs of the same index
+                    }
+                }
 
                 if (first_index) {
-                    merged = per_seg; // copy: the cached bitmap is shared+immutable
+                    merged = std::move(per_index);
                     first_index = false;
                     continue;
                 }
-                // Intersect into a fresh map so we drop seg_ids missing from
-                // the new lookup (those segments have zero candidates).
+                // Intersect across indexes: drop seg_ids missing from this index.
                 std::unordered_map<uint32_t, roaring::Roaring> next;
                 for (auto& [seg_id, bitmap] : merged) {
-                    auto it = per_seg.find(seg_id);
-                    if (it == per_seg.end()) continue;
+                    auto it = per_index.find(seg_id);
+                    if (it == per_index.end()) continue;
                     roaring::Roaring r = bitmap;
                     r &= it->second;
                     if (!r.isEmpty()) {

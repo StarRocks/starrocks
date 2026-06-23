@@ -68,9 +68,20 @@ public:
 
     Status add_chunk(const Chunk& chunk, uint32_t seg_id, uint32_t base_rowid);
 
-    // Writes index files to OSS and returns one PB entry per index that
-    // produced output. Caller is responsible for attaching the entries to
-    // the rowset metadata.
+    // True if any index's in-memory buffer reached the per-buffer limit. The
+    // tablet writer polls this after each add_chunk and calls flush_ready() to
+    // bound memory.
+    bool should_flush() const;
+
+    // Flush every index whose buffer is over the limit into one sorted run
+    // file each. Index data may therefore span multiple run files per
+    // (rowset, index) -- runs are internally sorted but unordered across each
+    // other. Accumulated run PBs are returned by finalize().
+    Status flush_ready(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr);
+
+    // Flush remaining buffered data and return ALL run PB entries produced by
+    // this collector (across all flushes). Multiple entries per index_name =
+    // that index's runs. Caller attaches them to the new rowset metadata.
     StatusOr<std::vector<SecondaryIndexFilePB>> finalize(std::shared_ptr<FileSystem> fs,
                                                          lake::TabletManager* tablet_mgr);
 
@@ -81,19 +92,27 @@ private:
         std::vector<uint32_t> source_col_ids; // positions in source_schema
         MutableColumns idx_cols;              // lazily initialised from first chunk
         Int64Column::MutablePtr pos_col;
+        size_t buffered_bytes = 0;            // approx in-memory size of current buffer
+        int run_seq = 0;                      // next run ordinal for this index
     };
 
     SecondaryIndexCollector(int64_t tablet_id, int64_t txn_id, TabletSchemaCSPtr source_schema);
 
     Status _add_chunk_to_index(PerIndexState& st, const Chunk& chunk, uint32_t seg_id, uint32_t base_rowid);
 
+    // Write the index's current buffer as one sorted run (ordinal st.run_seq),
+    // append its PB to _runs, then reset the buffer for reuse.
+    Status _flush_index(PerIndexState& st, std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr);
+
     StatusOr<SecondaryIndexFilePB> _write_one_index(PerIndexState& st, std::shared_ptr<FileSystem> fs,
-                                                    lake::TabletManager* tablet_mgr);
+                                                    lake::TabletManager* tablet_mgr, int run_seq);
 
     int64_t _tablet_id = 0;
     int64_t _txn_id = 0;
     TabletSchemaCSPtr _source_schema;
     std::vector<PerIndexState> _indexes;
+    std::vector<SecondaryIndexFilePB> _runs; // accumulated across flushes
+    int64_t _buffer_bytes_limit = 0;         // per-index buffer flush threshold (bytes)
 };
 
 } // namespace starrocks::secondary_sorted

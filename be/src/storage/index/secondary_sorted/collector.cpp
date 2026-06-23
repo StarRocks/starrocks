@@ -34,11 +34,12 @@ namespace {
 
 constexpr size_t kAppendChunkSize = 4096;
 
-std::string make_index_filename(int64_t tablet_id, int64_t txn_id, const std::string& index_name) {
+std::string make_index_filename(int64_t tablet_id, int64_t txn_id, const std::string& index_name, int run_seq) {
     // Include tablet_id: different tablets in the same partition share an
     // OSS directory (db<id>/<table>/<partition>/data/) and would otherwise
-    // race to write the same basename when they share a load txn_id.
-    return fmt::format("sidx_{}_{}_{}.idx", tablet_id, txn_id, index_name);
+    // race to write the same basename when they share a load txn_id. run_seq
+    // disambiguates the multiple runs flushed for one (rowset, index).
+    return fmt::format("sidx_{}_{}_{}_{}.idx", tablet_id, txn_id, index_name, run_seq);
 }
 
 } // namespace
@@ -51,6 +52,7 @@ StatusOr<std::unique_ptr<SecondaryIndexCollector>> SecondaryIndexCollector::crea
     }
     auto collector =
             std::unique_ptr<SecondaryIndexCollector>(new SecondaryIndexCollector(tablet_id, txn_id, source_schema));
+    collector->_buffer_bytes_limit = std::max<int64_t>(1, config::secondary_index_buffer_mb) * 1024 * 1024;
 
     for (const auto& def : defs) {
         PerIndexState st;
@@ -109,34 +111,76 @@ Status SecondaryIndexCollector::_add_chunk_to_index(PerIndexState& st, const Chu
     for (size_t r = 0; r < n; ++r) {
         pos_data.push_back(encode_position(seg_id, base_rowid + static_cast<uint32_t>(r)));
     }
+    // Track approximate in-memory size of the current buffer so the tablet
+    // writer can flush it into a run once it reaches the configured limit.
+    st.buffered_bytes = st.pos_col->size() * sizeof(int64_t);
+    for (auto& col : st.idx_cols) {
+        st.buffered_bytes += col->byte_size();
+    }
+    return Status::OK();
+}
+
+static StatusOr<std::shared_ptr<FileSystem>> resolve_fs(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr,
+                                                        int64_t tablet_id) {
+    if (fs != nullptr) return fs;
+    // The tablet writer may not have been handed a FileSystem; resolve one
+    // from the tablet's storage root, same fallback the writer uses for segments.
+    const std::string root = tablet_mgr->tablet_root_location(tablet_id);
+    return FileSystemFactory::CreateSharedFromString(root);
+}
+
+bool SecondaryIndexCollector::should_flush() const {
+    for (const auto& st : _indexes) {
+        if (st.buffered_bytes >= static_cast<size_t>(_buffer_bytes_limit)) return true;
+    }
+    return false;
+}
+
+Status SecondaryIndexCollector::_flush_index(PerIndexState& st, std::shared_ptr<FileSystem> fs,
+                                             lake::TabletManager* tablet_mgr) {
+    ASSIGN_OR_RETURN(auto pb, _write_one_index(st, fs, tablet_mgr, st.run_seq));
+    if (!pb.file_name().empty()) {
+        _runs.push_back(std::move(pb));
+    }
+    // _write_one_index moved idx_cols + pos_col out; reset for the next run.
+    st.idx_cols.clear();
+    st.pos_col = Int64Column::create();
+    st.buffered_bytes = 0;
+    st.run_seq++;
+    return Status::OK();
+}
+
+Status SecondaryIndexCollector::flush_ready(std::shared_ptr<FileSystem> fs, lake::TabletManager* tablet_mgr) {
+    if (tablet_mgr == nullptr) {
+        return Status::InvalidArgument("SecondaryIndexCollector::flush_ready: missing tablet_mgr");
+    }
+    ASSIGN_OR_RETURN(fs, resolve_fs(std::move(fs), tablet_mgr, _tablet_id));
+    for (auto& st : _indexes) {
+        if (!st.idx_cols.empty() && st.buffered_bytes >= static_cast<size_t>(_buffer_bytes_limit)) {
+            RETURN_IF_ERROR(_flush_index(st, fs, tablet_mgr));
+        }
+    }
     return Status::OK();
 }
 
 StatusOr<std::vector<SecondaryIndexFilePB>> SecondaryIndexCollector::finalize(std::shared_ptr<FileSystem> fs,
                                                                               lake::TabletManager* tablet_mgr) {
-    std::vector<SecondaryIndexFilePB> out;
     if (tablet_mgr == nullptr) {
         return Status::InvalidArgument("SecondaryIndexCollector::finalize: missing tablet_mgr");
     }
-    if (fs == nullptr) {
-        // The tablet writer may not have been handed a FileSystem; resolve one
-        // from the tablet's storage root, same fallback the writer uses for
-        // segment files.
-        const std::string root = tablet_mgr->tablet_root_location(_tablet_id);
-        ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(root));
-    }
+    ASSIGN_OR_RETURN(fs, resolve_fs(std::move(fs), tablet_mgr, _tablet_id));
+    // Flush whatever each index still has buffered since its last run.
     for (auto& st : _indexes) {
-        ASSIGN_OR_RETURN(auto pb, _write_one_index(st, fs, tablet_mgr));
-        if (!pb.file_name().empty()) {
-            out.push_back(std::move(pb));
+        if (!st.idx_cols.empty()) {
+            RETURN_IF_ERROR(_flush_index(st, fs, tablet_mgr));
         }
     }
-    return out;
+    return std::move(_runs);
 }
 
 StatusOr<SecondaryIndexFilePB> SecondaryIndexCollector::_write_one_index(PerIndexState& st,
                                                                          std::shared_ptr<FileSystem> fs,
-                                                                         lake::TabletManager* tablet_mgr) {
+                                                                         lake::TabletManager* tablet_mgr, int run_seq) {
     if (st.idx_cols.empty()) {
         // Nothing was ever written through this collector (empty rowset).
         SecondaryIndexFilePB pb;
@@ -173,7 +217,7 @@ StatusOr<SecondaryIndexFilePB> SecondaryIndexCollector::_write_one_index(PerInde
         indexes[i] = perm[i].index_in_chunk;
     }
 
-    const std::string basename = make_index_filename(_tablet_id, _txn_id, st.name);
+    const std::string basename = make_index_filename(_tablet_id, _txn_id, st.name, run_seq);
     const std::string full_path = tablet_mgr->segment_location(_tablet_id, basename);
     WritableFileOptions wopts;
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, full_path));

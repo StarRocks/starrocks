@@ -193,6 +193,12 @@ Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, Segmen
     _num_rows += data.num_rows();
     if (_sidx_collector && !_sidx_collector->empty()) {
         RETURN_IF_ERROR(_sidx_collector->add_chunk(data, collector_seg_id, collector_base_rowid));
+        // Bound build memory: when any index buffer reaches the configured
+        // size, flush it into a sorted run file. Index data for one
+        // (rowset, index) therefore spans multiple run files.
+        if (_sidx_collector->should_flush()) {
+            RETURN_IF_ERROR(_sidx_collector->flush_ready(_fs, _tablet_mgr));
+        }
     }
     return Status::OK();
 }
