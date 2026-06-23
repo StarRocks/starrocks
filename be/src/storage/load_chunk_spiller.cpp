@@ -139,7 +139,7 @@ Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
         DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
-        spill::SpillProcessMetrics metrics(_profile, _runtime_state->mutable_total_spill_bytes());
+        spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
         _spiller->set_metrics(metrics);
         // 2. prepare serde
         if (const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->empty()) {

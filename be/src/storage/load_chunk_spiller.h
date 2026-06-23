@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spiller_factory.h"
@@ -79,6 +81,8 @@ private:
     LoadSpillBlockManager* _block_manager = nullptr;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+    // Load spilling uses a dummy RuntimeState without QueryContext.
+    std::atomic_int64_t _total_spill_bytes = 0;
     // used when input profile is nullptr
     std::unique_ptr<RuntimeProfile> _dummy_profile;
     RuntimeProfile* _profile = nullptr;
