@@ -17,6 +17,7 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -25,6 +26,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunScheduler;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -38,6 +46,9 @@ public class MaterializedViewMetricsRegistry {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsRegistry.class);
 
     private final MetricRegistry metricRegistry = new MetricRegistry();
+    // Global refresh-duration histograms live in their own registry so they scrape unconditionally, instead of
+    // sharing metricRegistry whose only scrape path (collectMaterializedViewMetrics) sits behind the per-MV gate.
+    private final MetricRegistry globalHistogramRegistry = new MetricRegistry();
     private final Map<MvId, IMaterializedViewMetricsEntity> idToMVMetrics;
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
@@ -168,6 +179,91 @@ public class MaterializedViewMetricsRegistry {
                     "current number of materialized views by refresh mode and active status");
             gauge.addLabel(new MetricLabel("refresh_mode", parts[0]));
             gauge.addLabel(new MetricLabel("status", parts[1]));
+            gauge.setValue(entry.getValue());
+            visitor.visit(gauge);
+        }
+    }
+
+    // Fleet-level aggregate of the per-MV refresh counters, bumped at the same job-terminal hook so it equals
+    // the per-MV sum. MERGED is a scheduling artifact (no real job), so it is excluded — matching
+    // information_schema.materialized_view_refresh_jobs.
+    public static void increaseGlobalRefreshJobStatus(Constants.TaskRunState status, String warehouse) {
+        if (status == null || !status.isFinishState() || status == Constants.TaskRunState.MERGED) {
+            return;
+        }
+        String wh = Strings.isNullOrEmpty(warehouse) ? "" : warehouse;
+        MetricRepo.COUNTER_MV_GLOBAL_REFRESH_JOBS.getMetric(wh).increase(1L);
+        if (status == Constants.TaskRunState.SUCCESS) {
+            MetricRepo.COUNTER_MV_GLOBAL_REFRESH_SUCCESS_JOBS.getMetric(wh).increase(1L);
+        } else if (status == Constants.TaskRunState.FAILED) {
+            MetricRepo.COUNTER_MV_GLOBAL_REFRESH_FAILED_JOBS.getMetric(wh).increase(1L);
+        }
+    }
+
+    public static Histogram getGlobalDurationHistogram(String warehouse) {
+        String wh = Strings.isNullOrEmpty(warehouse) ? "" : warehouse;
+        HistogramMetric h = new HistogramMetric("mv_global_refresh_duration");
+        h.addLabel(new MetricLabel("warehouse_name", wh));
+        return getInstance().globalHistogramRegistry.histogram(h.getHistogramName(), () -> h);
+    }
+
+    public static void updateGlobalRefreshDuration(long wallMs, String warehouse) {
+        getGlobalDurationHistogram(warehouse).update(wallMs);
+    }
+
+    public static void collectGlobalDurationHistograms(MetricVisitor visitor) {
+        for (Map.Entry<String, Histogram> e : getInstance().globalHistogramRegistry.getHistograms().entrySet()) {
+            visitor.visitHistogram(e.getKey(), e.getValue());
+        }
+    }
+
+    // pending/running are scrape-time gauges aggregated by warehouse. Enumerate all async MVs (authoritative,
+    // like collectGlobalMvCount) rather than the idToMVMetrics cache that MetricsCleaner wipes daily.
+    public static void collectGlobalGauges(MetricVisitor visitor) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        if (taskManager == null) {
+            return;
+        }
+        TaskRunScheduler scheduler = taskManager.getTaskRunScheduler();
+        Map<String, Long> pendingByWarehouse = Maps.newHashMap();
+        Map<String, Long> runningByWarehouse = Maps.newHashMap();
+        for (String dbName : globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext())) {
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                continue;
+            }
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+                if (task == null) {
+                    continue;
+                }
+                // Key the running gauge by the run's status warehouse (where it actually executes, immune to a
+                // mid-refresh ALTER) and the pending gauge by the MV's current warehouse (a queued run re-resolves
+                // it at start). Seed both maps per warehouse so a quiet one reports 0 instead of a missing series.
+                String mvWarehouse = mv.getWarehouseName() == null ? "" : mv.getWarehouseName();
+                runningByWarehouse.putIfAbsent(mvWarehouse, 0L);
+                pendingByWarehouse.merge(mvWarehouse, scheduler.getTaskIdPendingTaskRunCount(task.getId()), Long::sum);
+                TaskRun running = scheduler.getRunningTaskRun(task.getId());
+                if (running != null) {
+                    TaskRunStatus status = running.getStatus();
+                    String runWarehouse = status == null ? mvWarehouse : status.getWarehouseName();
+                    pendingByWarehouse.putIfAbsent(runWarehouse, 0L);
+                    runningByWarehouse.merge(runWarehouse, 1L, Long::sum);
+                }
+            }
+        }
+        emitGauge(visitor, "mv_global_refresh_pending_jobs",
+                "current pending materialized view refresh jobs by warehouse", pendingByWarehouse);
+        emitGauge(visitor, "mv_global_refresh_running_jobs",
+                "current running materialized view refresh jobs by warehouse", runningByWarehouse);
+    }
+
+    private static void emitGauge(MetricVisitor visitor, String name, String description,
+                                  Map<String, Long> byWarehouse) {
+        for (Map.Entry<String, Long> entry : byWarehouse.entrySet()) {
+            GaugeMetricImpl<Long> gauge = new GaugeMetricImpl<>(name, Metric.MetricUnit.NOUNIT, description);
+            gauge.addLabel(new MetricLabel("warehouse_name", entry.getKey()));
             gauge.setValue(entry.getValue());
             visitor.visit(gauge);
         }

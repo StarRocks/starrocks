@@ -128,3 +128,32 @@ scrape_configs:
 
 - 类型：Counter
 - 描述：物化视图被查询使用的次数，包含标签 `usage_type`（`REWRITE` 表示查询被改写为使用物化视图，`DIRECT` 表示直接查询物化视图）和 `refresh_mode`。
+### mv_global_refresh_jobs_total
+
+- 类型：Counter
+- 描述：全集群所有物化视图的刷新作业总数，带标签 `warehouse_name`。它是 `mv_refresh_jobs` 的 fleet 级聚合：每个作业在其终止 Task Run 上计一次，排除 `MERGED` run。始终输出，不受单个物化视图指标权限的限制。
+
+### mv_global_refresh_success_jobs_total
+
+- 类型：Counter
+- 描述：全集群所有物化视图执行成功的刷新作业总数，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_failed_jobs_total
+
+- 类型：Counter
+- 描述：全集群所有物化视图执行失败的刷新作业总数，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_duration
+
+- 类型：Histogram
+- 描述：物化视图刷新作业的每作业挂钟时长，单位为毫秒，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_pending_jobs
+
+- 类型：Gauge
+- 描述：全集群所有物化视图当前处于等待中的刷新作业数，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_running_jobs
+
+- 类型：Gauge
+- 描述：全集群所有物化视图当前正在运行的刷新作业数，按 `warehouse_name` 聚合。
