@@ -146,6 +146,18 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("state",
                     () -> new LongCounterMetric("mv_global_query_rewrite_queries_total", MetricUnit.REQUESTS,
                             "queries by materialized view rewrite outcome (HIT/NO_HIT/DISABLED)"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_jobs_total", MetricUnit.REQUESTS,
+                            "total materialized view refresh jobs across all materialized views by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_SUCCESS_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_success_jobs_total", MetricUnit.REQUESTS,
+                            "total successful materialized view refresh jobs by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_FAILED_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_failed_jobs_total", MetricUnit.REQUESTS,
+                            "total failed materialized view refresh jobs by warehouse"));
 
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE =
             new MetricWithLabelGroup<>("time_travel_type",
@@ -1387,6 +1399,10 @@ public final class MetricRepo {
 
         // global MV count: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
         MaterializedViewMetricsRegistry.collectGlobalMvCount(visitor);
+        // global MV refresh gauges: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalGauges(visitor);
+        // global MV refresh duration histogram: low-cardinality, always emitted (not gated like per-MV histograms)
+        MaterializedViewMetricsRegistry.collectGlobalDurationHistograms(visitor);
 
         // histogram
         SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
