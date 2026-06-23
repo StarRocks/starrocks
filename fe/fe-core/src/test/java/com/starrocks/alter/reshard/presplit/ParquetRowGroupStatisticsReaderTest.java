@@ -658,6 +658,112 @@ class ParquetRowGroupStatisticsReaderTest {
                 ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(List.of(typeOrder), 5));
     }
 
+    private static MessageType unsignedIntSchema(int bitWidth) {
+        return Types.buildMessage()
+                .required(bitWidth <= 32 ? PrimitiveTypeName.INT32 : PrimitiveTypeName.INT64)
+                .as(LogicalTypeAnnotation.intType(bitWidth, /*signed=*/ false))
+                .named("u")
+                .named("schema");
+    }
+
+    @Test
+    void readsUint8Statistics() throws Exception {
+        // UINT_8 (INT32-backed), values 250..254 — all < 2^31, decode identical to signed.
+        Path parquetPath = writeParquet(unsignedIntSchema(8), /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("u", 250 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.SMALLINT));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("250", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("254", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsUint16Statistics() throws Exception {
+        // UINT_16 (INT32-backed), values 65530..65534 — all < 2^31.
+        Path parquetPath = writeParquet(unsignedIntSchema(16), /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("u", 65530 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT));
+
+        Assertions.assertEquals("65530", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("65534", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsUint32StatisticsWithHighBitSet() throws Exception {
+        // UINT_32 values ~3e9 are stored as NEGATIVE int32 bit patterns. Integer.toString would
+        // sign-extend them; the unsigned decode must surface the true magnitude (~3e9), monotone.
+        // (Integer) 3_000_000_000 overflows int literal range, so write via (int) of a long.
+        Path parquetPath = writeParquet(unsignedIntSchema(32), /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("u", (int) (3_000_000_000L + rowIndex)));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.BIGINT));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("3000000000", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("3000000002", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void uint64FallsBackToDataTier() throws Exception {
+        // UINT_64 (INT64-backed): no signed-64 StarRocks fit (BIGINT max < 2^64), so it is rejected.
+        Path parquetPath = writeParquet(unsignedIntSchema(64), /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("u", (long) rowIndex));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("u", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void uint32IntoTooNarrowTargetFallsBackToDataTier() throws Exception {
+        // UINT_32 ~3e9 into a StarRocks INT (max 2^31-1): IntVariant range-check fails → data tier.
+        Path parquetPath = writeParquet(unsignedIntSchema(32), /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("u", (int) (3_000_000_000L + rowIndex)));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("u", IntegerType.INT)));
+    }
+
+    @Test
+    void readsUint32IntoIntWithinRange() throws Exception {
+        // UINT_32 values <= Integer.MAX_VALUE map into a StarRocks INT at the meta tier (the BE
+        // INT32->INT pass-through equals the unsigned magnitude below 2^31). Admitted, not rejected.
+        Path parquetPath = writeParquet(unsignedIntSchema(32), /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("u", 2_000_000_000 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertEquals("2000000000", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("2000000002", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsUint8IntoTinyint() throws Exception {
+        // UINT_8 values 0..127 map into a StarRocks TINYINT at the meta tier (narrowed admitted path:
+        // int8(magnitude) == magnitude within range). Admitted, not rejected.
+        Path parquetPath = writeParquet(unsignedIntSchema(8), /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("u", 100 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.TINYINT));
+
+        Assertions.assertEquals("100", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("104", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
     private Path writeParquet(
             String schemaText, int rowCount,
             java.util.function.BiConsumer<org.apache.parquet.example.data.Group, Integer> rowFiller)
