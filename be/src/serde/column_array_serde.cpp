@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 
 #include "base/coding.h"
 #include "base/compression/compression_headers.h"
@@ -257,7 +258,7 @@ public:
         auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
         int64_t res = sizeof(T) * 2;
-        int64_t offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
+        int64_t offsets_size = offsets.size() * sizeof(T);
         if (is_integer_encoding_enabled(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) +
                    std::max((int64_t)offsets_size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(offsets_size)));
@@ -291,7 +292,7 @@ public:
         }
 
         //TODO: if T is uint32_t, `offsets_size` may be overflow
-        T offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
+        T offsets_size = offsets.size() * sizeof(T);
         if constexpr (std::is_same_v<T, uint32_t>) {
             buff = write_little_endian_32(offsets_size, buff);
         } else {
@@ -299,12 +300,21 @@ public:
         }
         if (is_integer_encoding_enabled(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4) { // only support sorted 32-bit integers
-                buff = encode_integers<true>(offsets.data(), offsets_size, buff, encode_level);
+                buff = offsets.visit_storage([&](const auto& offsets_buf) {
+                    auto offset_data = _get_offsets_data<T>(offsets_buf);
+                    return encode_integers<true>(offset_data.data(), offsets_size, buff, encode_level);
+                });
             } else {
-                buff = encode_integers<false>(offsets.data(), offsets_size, buff, encode_level);
+                buff = offsets.visit_storage([&](const auto& offsets_buf) {
+                    auto offset_data = _get_offsets_data<T>(offsets_buf);
+                    return encode_integers<false>(offset_data.data(), offsets_size, buff, encode_level);
+                });
             }
         } else {
-            buff = write_raw(offsets.data(), offsets_size, buff);
+            buff = offsets.visit_storage([&](const auto& offsets_buf) {
+                auto offset_data = _get_offsets_data<T>(offsets_buf);
+                return write_raw(offset_data.data(), offsets_size, buff);
+            });
         }
         return buff;
     }
@@ -335,15 +345,32 @@ public:
         } else {
             ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &offset_bytes_size));
         }
-        raw::make_room(&column->get_offset(), offset_bytes_size / sizeof(typename BinaryColumnBase<T>::Offset));
+        Buffer<T> offsets;
+        raw::make_room(&offsets, offset_bytes_size / sizeof(T));
 
         if (is_integer_encoding_enabled(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
             constexpr bool is_i32 = sizeof(T) == 4;
-            ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, column->get_offset().data(), offset_bytes_size));
+            ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, offsets.data(), offset_bytes_size));
         } else {
-            ASSIGN_OR_RETURN(buff, read_raw(buff, end, column->get_offset().data(), offset_bytes_size));
+            ASSIGN_OR_RETURN(buff, read_raw(buff, end, offsets.data(), offset_bytes_size));
+        }
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            column->get_offset().set_small_buffer(std::move(offsets));
+        } else {
+            column->get_offset().set_large_buffer(std::move(offsets));
         }
         return buff;
+    }
+
+private:
+    template <typename DstOffset, typename SrcOffsets>
+    static Buffer<DstOffset> _get_offsets_data(const SrcOffsets& src_offsets) {
+        Buffer<DstOffset> dst_offsets;
+        raw::stl_vector_resize_uninitialized(&dst_offsets, src_offsets.size());
+        for (size_t i = 0; i < src_offsets.size(); ++i) {
+            dst_offsets[i] = static_cast<DstOffset>(src_offsets[i]);
+        }
+        return dst_offsets;
     }
 };
 

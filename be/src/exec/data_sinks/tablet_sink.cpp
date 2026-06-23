@@ -1172,22 +1172,25 @@ namespace {
 // the memcpy entirely: their padding is already correct because the buffer is zeroed.
 void pad_char_values(const Offsets& offset, const Bytes& bytes, uint32_t len, size_t num_rows, const uint8_t* null_data,
                      Bytes& new_bytes) {
-    uint32_t from = 0;
-    if (null_data != nullptr && SIMD::count_nonzero(null_data, num_rows) > num_rows / 8) {
-        for (size_t j = 0; j < num_rows; ++j) {
-            if (!null_data[j]) {
-                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+    size_t from = 0;
+    offset.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offset_data = offsets_buf.data();
+        if (null_data != nullptr && SIMD::count_nonzero(null_data, num_rows) > num_rows / 8) {
+            for (size_t j = 0; j < num_rows; ++j) {
+                if (!null_data[j]) {
+                    size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+                }
+                from += len;
             }
-            from += len;
+        } else {
+            for (size_t j = 0; j < num_rows; ++j) {
+                size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+                from += len;
+            }
         }
-    } else {
-        for (size_t j = 0; j < num_rows; ++j) {
-            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-            from += len;
-        }
-    }
+    });
 }
 } // namespace
 
@@ -1217,7 +1220,7 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
             pad_char_values(offset, bytes, len, num_rows, null_data, new_bytes);
 
             for (size_t j = 1; j <= num_rows; ++j) {
-                new_offset[j] = len * j;
+                new_offset.set(j, static_cast<uint64_t>(len) * j);
             }
 
             if (desc->is_nullable()) {

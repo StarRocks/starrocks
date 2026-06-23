@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner/jni_scanner.h"
 
+#include <type_traits>
 #include <utility>
 
 #include "base/utility/defer_op.h"
@@ -177,9 +178,17 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
     int total_length = offset_ptr[args.num_rows];
     bytes.resize(total_length);
-    offsets.resize(args.num_rows + 1);
-
-    memcpy(offsets.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
+    offsets.resize_uninitialized(args.num_rows + 1, total_length);
+    offsets.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        if constexpr (std::is_same_v<OffsetValue, uint32_t>) {
+            memcpy(offsets_buf.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
+        } else {
+            for (size_t i = 0; i <= args.num_rows; ++i) {
+                offsets_buf[i] = static_cast<uint64_t>(offset_ptr[i]);
+            }
+        }
+    });
     memcpy(bytes.data(), column_ptr, total_length);
     return Status::OK();
 }

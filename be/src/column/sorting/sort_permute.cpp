@@ -178,25 +178,40 @@ public:
         slices.reserve(_perm.size());
         size_t added_bytes = 0;
 
-        for (auto& p : _perm) {
-            Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[PermTraits::chunk(p)])
-                                  ->get_slice(PermTraits::index(p));
-            added_bytes += slice.get_size();
-            slices.push_back(slice);
+        if constexpr (std::is_same_v<typename PermRange::value_type, SmallPermuteItem>) {
+            const auto* src_column = down_cast<const ColumnType*>(_columns[0]);
+            for (auto& p : _perm) {
+                Slice slice = src_column->get_slice(p.index_in_chunk);
+                added_bytes += slice.get_size();
+                slices.push_back(slice);
+            }
+        } else {
+            for (auto& p : _perm) {
+                Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[PermTraits::chunk(p)])
+                                      ->get_slice(PermTraits::index(p));
+                added_bytes += slice.get_size();
+                slices.push_back(slice);
+            }
         }
-
-        bytes.resize(bytes.size() + added_bytes);
-        offsets.reserve(offsets.size() + _perm.size());
 
         DCHECK(!offsets.empty());
-        auto curr_offset = offsets.back();
+        const size_t old_offsets_size = offsets.size();
+        uint64_t curr_offset = offsets.back();
+        bytes.resize(bytes.size() + added_bytes);
+        offsets.resize_uninitialized(old_offsets_size + _perm.size(), curr_offset + added_bytes);
         auto* const byte_ptr = bytes.data();
 
-        for (Slice slice : slices) {
-            strings::memcpy_inlined(byte_ptr + curr_offset, slice.get_data(), slice.get_size());
-            curr_offset += slice.get_size();
-            offsets.push_back(curr_offset);
-        }
+        offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            auto* __restrict dst_offsets = offsets_buf.data() + old_offsets_size;
+
+            for (size_t i = 0; i < slices.size(); ++i) {
+                Slice slice = slices[i];
+                strings::memcpy_inlined(byte_ptr + curr_offset, slice.get_data(), slice.get_size());
+                curr_offset += slice.get_size();
+                dst_offsets[i] = static_cast<OffsetValue>(curr_offset);
+            }
+        });
 
         dst->invalidate_slice_cache();
 

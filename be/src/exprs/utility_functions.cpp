@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <limits>
 #include <random>
+#include <type_traits>
 
 #include "base/network/cidr.h"
 #include "base/network/network_util.h"
@@ -125,14 +126,19 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
     auto& bytes = res->get_bytes();
     auto& offsets = res->get_offset();
 
-    offsets.resize(num_rows + 1);
-    bytes.resize(36 * num_rows);
+    const uint64_t total_bytes = static_cast<uint64_t>(36) * num_rows;
+
+    offsets.resize_uninitialized(num_rows + 1, total_bytes);
+    bytes.resize(total_bytes);
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
 
-    for (int i = 0; i < num_rows; ++i) {
-        offsets[i + 1] = offsets[i] + 36;
-    }
+    offsets.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        for (int i = 0; i <= num_rows; ++i) {
+            offsets_buf[i] = static_cast<OffsetValue>(static_cast<uint64_t>(36) * i);
+        }
+    });
 
 #ifdef __SSE4_2__
     alignas(16) static constexpr const char hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
@@ -251,13 +257,21 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Column
     auto& bytes = res->get_bytes();
     auto& offsets = res->get_offset();
 
-    offsets.resize(num_rows + 1);
-    bytes.resize(36 * num_rows);
+    const uint64_t total_bytes = static_cast<uint64_t>(36) * num_rows;
+
+    offsets.resize_uninitialized(num_rows + 1, total_bytes);
+    bytes.resize(total_bytes);
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
 
+    offsets.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        for (int i = 0; i <= num_rows; ++i) {
+            offsets_buf[i] = static_cast<OffsetValue>(static_cast<uint64_t>(36) * i);
+        }
+    });
+
     for (int i = 0; i < num_rows; ++i) {
-        offsets[i + 1] = offsets[i] + 36;
         auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
         std::string uuid_str = boost::uuids::to_string(uuid);
         memcpy(ptr, uuid_str.c_str(), 36);

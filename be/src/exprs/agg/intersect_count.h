@@ -142,7 +142,7 @@ public:
         const auto* key_column = down_cast<const InputColumnType*>(src[1].get());
 
         // compute bytes for serialization for this chunk.
-        int new_size = 0;
+        size_t new_size = 0;
         std::vector<BitmapIntersect<BitmapRuntimeCppType<LT>>> intersect_chunks;
         intersect_chunks.reserve(chunk_size);
         for (int i = 0; i < chunk_size; ++i) {
@@ -168,16 +168,17 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         size_t old_size = bytes.size();
-        bytes.resize(new_size);
-
-        dst_column->get_offset().resize(chunk_size + 1);
+        const size_t final_size = old_size + new_size;
+        bytes.resize(final_size);
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
 
         // serialize for every row of this chunk.
         for (int i = 0; i < chunk_size; ++i) {
             auto& intersect = intersect_chunks[i];
             intersect.serialize(reinterpret_cast<char*>(bytes.data() + old_size));
             old_size += intersect.size();
-            dst_column->get_offset()[i + 1] = old_size;
+            offsets.set(i + 1, old_size);
         }
     }
 

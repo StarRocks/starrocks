@@ -172,6 +172,53 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
               "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
 }
 
+TEST_F(BinaryPlainPageTest, TestGetOffsetsForZeroCopy) {
+    {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options);
+
+        OwnedSlice page = builder.finish()->build();
+        BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page.slice());
+        ASSERT_OK(decoder.init());
+
+        BinaryColumn::Offsets offsets;
+        decoder.get_offsets_for_zero_copy(offsets);
+
+        ASSERT_EQ(1, offsets.size());
+        EXPECT_EQ(0, offsets[0]);
+        EXPECT_FALSE(offsets.is_large());
+    }
+
+    {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options);
+        Slice slices[] = {
+                "alpha",
+                "",
+                "bb",
+                "ccc",
+        };
+
+        ASSERT_EQ(4, builder.add((const uint8_t*)slices, 4));
+        OwnedSlice page = builder.finish()->build();
+        BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page.slice());
+        ASSERT_OK(decoder.init());
+
+        BinaryColumn::Offsets offsets;
+        decoder.get_offsets_for_zero_copy(offsets);
+
+        ASSERT_EQ(5, offsets.size());
+        EXPECT_FALSE(offsets.is_large());
+        EXPECT_EQ(0, offsets[0]);
+        EXPECT_EQ(5, offsets[1]);
+        EXPECT_EQ(5, offsets[2]);
+        EXPECT_EQ(7, offsets[3]);
+        EXPECT_EQ(10, offsets[4]);
+    }
+}
+
 TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
     PageBuilderOptions options;
     options.data_page_size = 256 * 1024;

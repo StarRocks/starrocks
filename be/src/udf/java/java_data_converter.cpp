@@ -14,6 +14,7 @@
 
 #include "udf/java/java_data_converter.h"
 
+#include <limits>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -146,8 +147,16 @@ private:
 
 Status JavaArrayConverter::do_visit(const BinaryColumn& column) {
     size_t num_rows = column.size();
+    const auto& column_offsets = column.get_offset();
+    const size_t java_max_buffer_size = std::numeric_limits<int>::max();
+    if (column_offsets.is_large() || column_offsets.back() > java_max_buffer_size ||
+        column.get_immutable_bytes().size() > java_max_buffer_size ||
+        column_offsets.size() > java_max_buffer_size / sizeof(uint32_t)) {
+        return Status::NotSupported("Java UDF does not support BinaryColumn with large offsets or bytes");
+    }
+
     auto bytes = byte_buffer(column.get_immutable_bytes());
-    auto offsets = byte_buffer(column.get_offset());
+    auto offsets = column_offsets.visit_storage([&](const auto& offsets_buf) { return byte_buffer(offsets_buf); });
     const auto& method_map = _helper.method_map();
     if (auto iter = method_map.find(JNIPrimTypeId<Slice>::id); iter != method_map.end()) {
         ASSIGN_OR_RETURN(_result, _helper.invoke_static_method(iter->second, num_rows, handle(_nulls_buffer),

@@ -650,7 +650,7 @@ TEST(FixedLengthColumnTest, test_replicate) {
     column->append(7);
     column->append(3);
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(3);
     offsets.emplace_back(5);
