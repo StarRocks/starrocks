@@ -29,6 +29,9 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -64,6 +67,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -145,6 +149,59 @@ public class LakeTableSchemaChangeJobTest {
         db.dropTable(table.getName());
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
+    // Regression test for pushing the lake schema-change job's metadata lock down
+    // from the whole database to just the altered table. Asserts both directions:
+    //   1) an unrelated table in the same database is NOT blocked by the alter;
+    //   2) a conflicting WRITE on the altered table still blocks.
+    @Test
+    public void testSchemaChangeLocksOnlyItsTable() throws Exception {
+        LakeTable other = createTable(connectContext,
+                "CREATE TABLE t_other(c0 INT) duplicate key(c0) distributed by hash(c0) buckets " + NUM_BUCKETS);
+        // Kick off a schema change so t0 is a real altered table (mirrors production).
+        alterTableAddColumn();
+        long dbId = db.getId();
+        long alteredTableId = table.getId();
+        long otherTableId = other.getId();
+
+        // The lake schema-change / rollup jobs guard their critical sections with
+        // exactly this table-scoped lock (see LakeTableSchemaChangeJobBase); hold
+        // it and verify the scope.
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(alteredTableId), LockType.WRITE)) {
+            // 1) The contention win: an unrelated table in the same DB can still be
+            // WRITE-locked from another thread (it is not blocked by the alter).
+            Assertions.assertTrue(tryLockTableFromOtherThread(dbId, otherTableId, LockType.WRITE, 30000),
+                    "altering t0 must not block locking an unrelated table in the same database");
+
+            // 2) The safety: a conflicting WRITE on the altered table still blocks.
+            Assertions.assertFalse(tryLockTableFromOtherThread(dbId, alteredTableId, LockType.WRITE, 500),
+                    "a conflicting WRITE on the altered table must still block");
+        }
+
+        // Once the lock is released, the altered table can be WRITE-locked again.
+        Assertions.assertTrue(tryLockTableFromOtherThread(dbId, alteredTableId, LockType.WRITE, 30000),
+                "the altered table must be lockable again once the lock is released");
+    }
+
+    // Locker ownership is thread-based, so the contending acquire must run on a
+    // separate thread: a same-thread re-acquire would be reentrant and would
+    // never reflect cross-thread contention. NOTE: tryLockTableWithIntensiveDbLock
+    // ignores the TimeUnit argument and treats the timeout value as milliseconds.
+    private boolean tryLockTableFromOtherThread(long dbId, long tableId, LockType lockType, long timeoutMs)
+            throws InterruptedException {
+        AtomicBoolean acquired = new AtomicBoolean(false);
+        Thread thread = new Thread(() -> {
+            Locker locker = new Locker();
+            boolean ok = locker.tryLockTableWithIntensiveDbLock(dbId, tableId, lockType, timeoutMs, TimeUnit.MILLISECONDS);
+            acquired.set(ok);
+            if (ok) {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, lockType);
+            }
+        });
+        thread.start();
+        thread.join();
+        return acquired.get();
     }
 
     @Test
