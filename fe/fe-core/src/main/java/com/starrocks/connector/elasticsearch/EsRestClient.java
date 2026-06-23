@@ -168,6 +168,41 @@ public class EsRestClient {
     }
 
     /**
+     * Estimate the number of documents in an index using _cat/indices metadata.
+     * Reads from Lucene segment metadata — near-zero overhead, slightly stale, good enough for CBO.
+     *
+     * @param indexName
+     * @return document count, or -1 on failure
+     */
+    public long getRowCount(String indexName) {
+        String path = "_cat/indices/" + indexName + "?h=docs.count&format=json";
+        try {
+            String response = execute(path);
+            if (response == null) {
+                return -1L;
+            }
+            List list = mapper.readValue(response, List.class);
+            long total = 0;
+            boolean found = false;
+            for (Object row : list) {
+                if (row instanceof Map) {
+                    Object val = ((Map) row).get("docs.count");
+                    if (val != null) {
+                        total += Long.parseLong(val.toString());
+                        found = true;
+                    }
+                }
+            }
+            if (found) {
+                return total;
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get docs.count for ES index {}: {}", indexName, e.getMessage());
+        }
+        return -1L;
+    }
+
+    /**
      * Get Shard location
      *
      * @param indexName
@@ -189,7 +224,7 @@ public class EsRestClient {
      * @param path the path must not leading with '/'
      * @return response
      */
-    private String execute(String path) throws StarRocksConnectorException {
+    String execute(String path) throws StarRocksConnectorException {
         int retrySize = nodes.length;
         StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;

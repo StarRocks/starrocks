@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -326,8 +327,9 @@ public class KuduMetadata implements ConnectorMetadata {
                 rowCount = kuduClient.openTable(kuduTableName).getTableStatistics().getLiveRowCount();
             } catch (RpcRemoteException e) {
                 if (isGetTableStatisticsUnsupported(e)) {
-                    LOG.warn("GetTableStatistics method not supported. Fallback to return default row count 1.");
-                    rowCount = 1;
+                    LOG.warn("GetTableStatistics method not supported. Fallback to default row count {}.",
+                            Config.default_statistics_output_row_count);
+                    rowCount = Config.default_statistics_output_row_count;
                 } else {
                     throw new RuntimeException("RPC error while getting table statistics", e);
                 }
