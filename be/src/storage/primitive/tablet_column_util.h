@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "base/status.h"
 #include "base/statusor.h"
@@ -31,5 +32,7 @@ void convert_to_new_version(TColumn* tcolumn);
 Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb);
 
 StatusOr<std::string> convert_default_expr_to_json_string(const TExpr& t_expr);
+
+Status preprocess_default_expr_for_tcolumns(std::vector<TColumn>& columns);
 
 } // namespace starrocks

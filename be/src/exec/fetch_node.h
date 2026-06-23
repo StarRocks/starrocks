@@ -17,8 +17,8 @@
 #include "common/global_types.h"
 #include "common/statusor.h"
 #include "exec/exec_node.h"
-#include "exec/tablet_info.h"
 #include "runtime/descriptors.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
 class LookUpDispatcher;

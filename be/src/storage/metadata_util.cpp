@@ -262,21 +262,4 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TabletSchema
     return convert_t_schema_to_pb_schema(t_schema, compression_type, out_schema);
 }
 
-Status preprocess_default_expr_for_tcolumns(std::vector<TColumn>& columns) {
-    for (auto& column : columns) {
-        if (column.__isset.default_expr) {
-            auto result = convert_default_expr_to_json_string(column.default_expr);
-            if (result.ok()) {
-                column.default_value = result.value();
-                column.__isset.default_value = true;
-            } else {
-                LOG(ERROR) << "Failed to convert default_expr to JSON String for column '" << column.column_name
-                           << "': " << result.status().to_string();
-            }
-        }
-    }
-
-    return Status::OK();
-}
-
 } // namespace starrocks

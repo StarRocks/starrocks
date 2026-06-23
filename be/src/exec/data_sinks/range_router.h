@@ -23,8 +23,8 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
+#include "storage/primitive/tablet_info.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

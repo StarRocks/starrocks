@@ -46,6 +46,7 @@ ADD_BE_LIB(StoragePrimitive
     primitive/storage_define.cpp
     primitive/storage_ids.cpp
     primitive/tablet_column.cpp
+    primitive/tablet_info.cpp
     primitive/tablet_column_util.cpp
     primitive/tablet_column_type_utils.cpp
     primitive/union_iterator.cpp

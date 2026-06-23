@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/tablet_info.h"
+#include "storage/primitive/tablet_info.h"
 
 #include "base/string/string_parser.hpp"
 #include "column/binary_column.h"
@@ -23,8 +23,7 @@
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
-#include "storage/metadata_util.h"
-#include "storage/tablet_schema.h"
+#include "storage/primitive/tablet_column_util.h"
 #include "types/constexpr.h"
 
 namespace starrocks {

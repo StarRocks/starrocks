@@ -21,11 +21,11 @@
 #include "column/column_viewer.h"
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
-#include "exec/tablet_info.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
 #include "platform/thrift_rpc_helper.h"
 #include "storage/chunk_helper.h"
+#include "storage/primitive/tablet_info.h"
 #include "storage/table_reader.h"
 
 namespace starrocks {
