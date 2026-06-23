@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/block_split_bloom_filter.h"
@@ -38,7 +39,6 @@
 #include "storage/rowset/column_reader.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/flat_json_internal.h"
 
 namespace starrocks {
 

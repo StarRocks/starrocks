@@ -22,6 +22,7 @@
 #include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
+#include "column/flat_json/json_flat_path.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
@@ -49,7 +50,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
-#include "util/json_flat_path.h"
 #include "util/json_path_deriver.h"
 
 namespace starrocks {

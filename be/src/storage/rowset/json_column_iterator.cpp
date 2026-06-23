@@ -20,6 +20,9 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/flat_json/json_flat_path.h"
+#include "column/flat_json/json_flattener.h"
+#include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -40,9 +43,6 @@
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "util/hyper_json_transformer.h"
-#include "util/json_flat_path.h"
-#include "util/json_flattener.h"
-#include "util/json_merger.h"
 
 namespace starrocks {
 

@@ -22,19 +22,16 @@
 #include <vector>
 
 #include "column/column.h"
+#include "column/flat_json/json_flat_path.h"
 #include "types/logical_type.h"
-#include "util/json_flat_path.h"
 
 namespace starrocks {
 
 class JsonColumn;
-class JsonPathDeriver;
 
 // flattern JsonColumn to flat json A,B,C
 class JsonFlattener {
 public:
-    JsonFlattener(JsonPathDeriver& deriver);
-
     JsonFlattener(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain);
 
     ~JsonFlattener() = default;

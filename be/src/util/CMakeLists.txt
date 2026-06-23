@@ -20,11 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 set(UTIL_FILES
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
-  flat_json_internal.cpp
   hyper_json_transformer.cpp
-  json_flat_path.cpp
-  json_flattener.cpp
-  json_merger.cpp
   json_path_deriver.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
@@ -41,4 +37,4 @@ ADD_BE_LIB(Util
     ${UTIL_FILES}
 )
 
-target_link_libraries(Util PUBLIC RuntimeEnv)
+target_link_libraries(Util PUBLIC RuntimeEnv ColumnCore)

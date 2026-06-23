@@ -30,6 +30,8 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/flat_json/json_flat_path.h"
+#include "column/flat_json/json_flattener.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -47,8 +49,6 @@
 #include "types/constexpr.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flat_path.h"
-#include "util/json_flattener.h"
 #include "util/json_path_deriver.h"
 
 namespace starrocks {
@@ -118,7 +118,7 @@ Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
         return Status::InternalError("doesn't have flat column.");
     }
 
-    JsonFlattener flattener(deriver);
+    JsonFlattener flattener(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json());
 
     RETURN_IF_ERROR(_init_flat_writers());
     for (auto& col : json_datas) {

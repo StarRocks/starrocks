@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json_flattener.h"
+#include "column/flat_json/json_flattener.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest-param-test.h>

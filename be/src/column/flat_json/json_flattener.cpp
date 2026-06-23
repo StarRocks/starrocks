@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json_flattener.h"
+#include "column/flat_json/json_flattener.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -23,37 +23,15 @@
 #include <vector>
 
 #include "column/column_helper.h"
+#include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "gutil/casts.h"
 #include "types/json_value.h"
 #include "types/type_descriptor.h"
-#include "util/flat_json_internal.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks {
-
-JsonFlattener::JsonFlattener(JsonPathDeriver& deriver) {
-    DCHECK(deriver.flat_path_root() != nullptr);
-    _dst_paths = deriver.flat_paths();
-    _has_remain = deriver.has_remain_json();
-    auto types = deriver.flat_types();
-
-    _dst_root = std::make_shared<JsonFlatPath>();
-    for (size_t i = 0; i < _dst_paths.size(); i++) {
-        auto* leaf = JsonFlatPath::normalize_from_path(_dst_paths[i], _dst_root.get());
-        leaf->type = types[i];
-        leaf->index = i;
-
-        _flat_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(types[i]), true));
-    }
-
-    if (_has_remain) {
-        _flat_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_JSON), false));
-        _remain = down_cast<JsonColumn*>(_flat_columns.back().get());
-    }
-}
 
 JsonFlattener::JsonFlattener(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                              bool has_remain)
