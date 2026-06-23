@@ -37,6 +37,12 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
+    // Subscribe this sink driver to the spiller's sink list so flush/channel completions wake the OUTPUT_FULL
+    // sleeper directly. Unconditional: the gate for the poller mode lives inside subscribe_sink (no-op when
+    // the event scheduler is disabled). observer() is valid here (assigned before prepare).
+    _chunks_sorter->spiller()->observable().subscribe_sink(state, observer());
+
     return Status::OK();
 }
 
