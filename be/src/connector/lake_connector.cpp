@@ -35,9 +35,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
-#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
@@ -57,6 +55,8 @@
 #include "storage/predicate_parser.h"
 #include "storage/primitive/projection_iterator.h"
 #include "storage/primitive/vector_search_option.h"
+#include "storage/query/olap_dynamic_morsel_queue_builder.h"
+#include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/virtual_column_utils.h"
 
