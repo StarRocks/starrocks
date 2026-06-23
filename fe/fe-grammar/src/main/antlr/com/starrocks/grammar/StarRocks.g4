@@ -2807,7 +2807,6 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
-    | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
     | PARAMETER                                                                           #Parameter
     ;
@@ -3184,10 +3183,6 @@ taskUnitIdentifier
 
 unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
-    ;
-
-unitBoundary
-    : FLOOR | CEIL
     ;
 
 filesSchema
