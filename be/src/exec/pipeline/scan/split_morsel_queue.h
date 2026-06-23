@@ -199,7 +199,7 @@ public:
     StatusOr<bool> ready_for_next() const override;
     Type type() const override { return LAKE_PREPARED_PHYSICAL_SPLIT; }
 
-    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+    void set_ticket_checker(const SplitMorselTicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
     bool could_attch_ticket_checker() const override { return true; }
@@ -232,7 +232,7 @@ private:
     std::deque<MorselPtr> _queue;
     mutable std::mutex _mutex;
     mutable std::queue<PreRefinementCandidate> _pre_refinement_candidates;
-    query_cache::TicketCheckerPtr _ticket_checker;
+    SplitMorselTicketCheckerPtr _ticket_checker;
 };
 
 } // namespace starrocks::pipeline

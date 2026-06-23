@@ -19,7 +19,7 @@ readonly BE_DIR="/home/disk1/sr/be"
 readonly LOCAL_BE_BINARY="${LOCAL_BE_BINARY:-/home/disk3/liang/starrocks/output/be/lib/starrocks_be}"
 readonly SSH_USER="sr"
 readonly SSH_PASSWORD="${SSH_PASSWORD:-sr@test}"
-readonly FE_HOST="${FE_HOST:-172.26.95.250}"
+readonly FE_HOST="${FE_HOST:-172.26.80.35}"
 readonly FE_QUERY_PORT="${FE_QUERY_PORT:-9030}"
 readonly FE_MYSQL_USER="${FE_MYSQL_USER:-root}"
 readonly SSH_OPTS=(
@@ -29,9 +29,9 @@ readonly SSH_OPTS=(
     -o NumberOfPasswordPrompts=1
 )
 readonly BE_HOSTS=(
-    "172.26.95.251"
-    "172.26.95.252"
-    "172.26.80.1"
+    "172.26.80.36"
+    "172.26.80.37"
+    "172.26.80.38"
 )
 
 usage() {
