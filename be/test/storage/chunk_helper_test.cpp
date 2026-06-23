@@ -32,6 +32,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/schema_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -223,7 +224,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
 
 TEST_F(ChunkHelperTest, PaddingNullableCharColumnSkipsNullRowsWhenNullsAreDense) {
     auto tablet_schema = create_char_tablet_schema(4);
-    Field field = ChunkHelper::convert_field(0, tablet_schema->column(0));
+    Field field = StorageSchemaHelper::convert_field(0, tablet_schema->column(0));
     auto column = make_nullable_binary_column({"ab", "null", "wxyzq", "skip", "defg", "hi", "null", ""},
                                               {0, 1, 0, 1, 0, 0, 1, 0});
 
@@ -248,7 +249,7 @@ TEST_F(ChunkHelperTest, PaddingNullableCharColumnSkipsNullRowsWhenNullsAreDense)
 
 TEST_F(ChunkHelperTest, PaddingNullableCharColumnCopiesAllRowsWhenNullsAreSparse) {
     auto tablet_schema = create_char_tablet_schema(4);
-    Field field = ChunkHelper::convert_field(0, tablet_schema->column(0));
+    Field field = StorageSchemaHelper::convert_field(0, tablet_schema->column(0));
     auto column = make_nullable_binary_column({"a", "bc", "def", "nullv", "wxyzq", "m", "no", "pqrs"},
                                               {0, 0, 0, 1, 0, 0, 0, 0});
 
