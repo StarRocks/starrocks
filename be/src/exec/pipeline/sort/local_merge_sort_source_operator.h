@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/primitives/block_reason.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exprs/sort_exec_exprs.h"
@@ -47,6 +48,14 @@ public:
 
     bool is_finished() const override;
 
+    // The source sleeps INPUT_EMPTY on has_output(): both its non-terminal gates
+    // (is_partition_sort_finished / is_partition_ready) are spiller axes, woken by the partition spillers'
+    // source list that prepare()'s subscribe_source_to_spillers covers -> WAIT_RESTORE. covered_wakeups()
+    // declares the one reason that subscription covers, so a park on an uncovered reason is caught at park time.
+    BlockReason block_reason() const override;
+    static constexpr uint32_t kCoveredWakeups = block_reason_bit(BlockReason::WAIT_RESTORE);
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void add_morsel(Morsel* morsel) {}
@@ -58,6 +67,8 @@ private:
     bool _is_finished = false;
     SortContext* _sort_context;
 };
+
+static_assert(LocalMergeSortSourceOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_RESTORE));
 
 class LocalMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
