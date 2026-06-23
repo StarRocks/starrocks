@@ -27,7 +27,6 @@
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
-#include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/index_delta_group_loader.h"
@@ -39,6 +38,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -309,7 +309,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             segment_schema = new Schema(schema);
             segment_schema_guard.reset(segment_schema);
         }
-        auto f = ChunkHelper::convert_field(cid, col);
+        auto f = StorageSchemaHelper::convert_field(cid, col);
         segment_schema->append(std::make_shared<Field>(std::move(f)));
     }
 

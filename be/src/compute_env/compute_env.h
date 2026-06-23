@@ -27,6 +27,7 @@ namespace starrocks {
 
 class BaseLoadPathMgr;
 class DataStreamMgr;
+class DictionaryCacheManager;
 class MetricRegistry;
 class ProfileReportWorker;
 class ResultBufferMgr;
@@ -94,8 +95,10 @@ public:
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr.get(); }
     ProfileReportWorker* profile_report_worker() const { return _profile_report_worker.get(); }
     BaseLoadPathMgr* load_path_mgr() const { return _load_path_mgr.get(); }
+    DictionaryCacheManager* dictionary_cache_manager() const { return _dictionary_cache_manager.get(); }
 
 private:
+    std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
     std::unique_ptr<pipeline::DriverLimiter> _driver_limiter;
     std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
     std::unique_ptr<DataStreamMgr> _stream_mgr;

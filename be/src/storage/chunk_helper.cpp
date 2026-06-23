@@ -35,54 +35,10 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "storage/tablet_schema.h"
-#include "storage/types.h"
 #include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {
-
-Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
-    LogicalType type = c.type();
-
-    TypeInfoPtr type_info = nullptr;
-    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_DECIMAL32 ||
-        type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
-        // ARRAY and DECIMAL should be handled specially
-        // Array is nested type, the message is stored in TabletColumn
-        // Decimal has precision and scale, the message is stored in TabletColumn
-        type_info = get_type_info(c);
-    } else {
-        type_info = get_type_info(type);
-    }
-    starrocks::Field f(id, std::string(c.name()), type_info, c.is_nullable());
-    f.set_is_key(c.is_key());
-    f.set_length(c.length());
-    f.set_uid(c.unique_id());
-    f.set_is_virtual(c.is_virtual_column());
-
-    if (type == TYPE_ARRAY) {
-        const TabletColumn& sub_column = c.subcolumn(0);
-        auto sub_field = convert_field(id, sub_column);
-        f.add_sub_field(sub_field);
-    } else if (type == TYPE_MAP) {
-        for (int i = 0; i < 2; ++i) {
-            const TabletColumn& sub_column = c.subcolumn(i);
-            auto sub_field = convert_field(id, sub_column);
-            f.add_sub_field(sub_field);
-        }
-    } else if (type == TYPE_STRUCT) {
-        for (int i = 0; i < c.subcolumn_count(); ++i) {
-            const TabletColumn& sub_column = c.subcolumn(i);
-            auto sub_field = convert_field(id, sub_column);
-            f.add_sub_field(sub_field);
-        }
-    }
-
-    f.set_short_key_length(c.index_length());
-    f.set_aggregate_method(c.aggregation());
-    f.set_agg_state_desc(c.get_agg_state_desc());
-    return f;
-}
 
 starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr& schema) {
     return starrocks::Schema(schema->schema());
@@ -91,22 +47,6 @@ starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr
 starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr& schema,
                                               const std::vector<ColumnId>& cids) {
     return starrocks::Schema(schema->schema(), cids);
-}
-
-starrocks::SchemaPtr ChunkHelper::convert_schema(const std::vector<TabletColumn*>& columns,
-                                                 const std::vector<std::string_view>& col_names) {
-    SchemaPtr schema = std::make_shared<Schema>();
-    // ordered by col_names
-    int new_column_idx = 0;
-    for (auto s : col_names) {
-        for (int32_t idx = 0; idx < columns.size(); ++idx) {
-            if (!s.compare(columns[idx]->name())) {
-                auto f = std::make_shared<Field>(ChunkHelper::convert_field(new_column_idx++, *columns[idx]));
-                schema->append(f);
-            }
-        }
-    }
-    return schema->fields().size() != 0 ? schema : nullptr;
 }
 
 starrocks::Schema ChunkHelper::get_short_key_schema(const starrocks::TabletSchemaCSPtr& schema) {

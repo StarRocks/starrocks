@@ -42,10 +42,12 @@ ADD_BE_LIB(StoragePrimitive
     primitive/range.cpp
     primitive/predicate_parser.cpp
     primitive/primary_key_encoder.cpp
+    primitive/schema_helper.cpp
     primitive/predicate_tree/predicate_tree.cpp
     primitive/storage_define.cpp
     primitive/storage_ids.cpp
     primitive/tablet_column.cpp
+    primitive/tablet_info.cpp
     primitive/tablet_column_util.cpp
     primitive/tablet_column_type_utils.cpp
     primitive/union_iterator.cpp
@@ -322,7 +324,6 @@ set(STORAGE_FILES
     lake/column_mode_partial_update_handler.cpp
     lake/tablet_write_log_manager.cpp
     primary_key_dump.cpp
-    dictionary_cache_manager.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp

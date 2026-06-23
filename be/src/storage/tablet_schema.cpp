@@ -42,8 +42,10 @@
 #include <sstream>
 #include <vector>
 
-#include "storage/chunk_helper.h"
+#include "column/schema.h"
+#include "gutil/strings/substitute.h"
 #include "storage/primitive/primary_key_encoder.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/tablet_schema_map.h"
 
 namespace starrocks {
@@ -192,7 +194,7 @@ void TabletSchema::_fill_index_map(const TabletIndex& index) {
 void TabletSchema::_init_schema() const {
     starrocks::Fields fields;
     for (ColumnId cid = 0; cid < num_columns(); ++cid) {
-        auto f = ChunkHelper::convert_field(cid, column(cid));
+        auto f = StorageSchemaHelper::convert_field(cid, column(cid));
         fields.emplace_back(std::make_shared<starrocks::Field>(std::move(f)));
     }
     _schema = std::make_unique<Schema>(std::move(fields), keys_type(), _sort_key_idxes);

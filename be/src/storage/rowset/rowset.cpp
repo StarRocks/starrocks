@@ -57,6 +57,7 @@
 #include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/empty_iterator.h"
 #include "storage/primitive/projection_iterator.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/union_iterator.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -833,7 +834,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     for (ColumnId cid : delete_columns) {
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
-            auto f = ChunkHelper::convert_field(cid, col);
+            auto f = StorageSchemaHelper::convert_field(cid, col);
             segment_schema.append(std::make_shared<Field>(std::move(f)));
         }
     }

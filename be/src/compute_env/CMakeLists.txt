@@ -79,6 +79,7 @@ set(COMPUTE_ENV_GLOBAL_DICT_FILES
 
 set(COMPUTE_ENV_DICTIONARY_CACHE_FILES
     dictionary_cache/chunk_util.cpp
+    dictionary_cache/dictionary_cache_manager.cpp
 )
 
 set(COMPUTE_ENV_LOAD_PATH_FILES

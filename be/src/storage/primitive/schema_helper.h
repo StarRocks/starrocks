@@ -14,25 +14,22 @@
 
 #pragma once
 
-#include <cstdint>
-#include <string>
+#include <string_view>
 #include <vector>
 
-#include "base/status.h"
-#include "base/statusor.h"
+#include "column/field.h"
+#include "column/vectorized_fwd.h"
+#include "common/column_id.h"
 
 namespace starrocks {
 
-class ColumnPB;
-class TColumn;
-class TExpr;
+class TabletColumn;
 
-void convert_to_new_version(TColumn* tcolumn);
-
-Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb);
-
-StatusOr<std::string> convert_default_expr_to_json_string(const TExpr& t_expr);
-
-Status preprocess_default_expr_for_tcolumns(std::vector<TColumn>& columns);
+class StorageSchemaHelper {
+public:
+    static Field convert_field(ColumnId id, const TabletColumn& c);
+    static SchemaPtr convert_schema(const std::vector<TabletColumn*>& columns,
+                                    const std::vector<std::string_view>& col_names);
+};
 
 } // namespace starrocks
