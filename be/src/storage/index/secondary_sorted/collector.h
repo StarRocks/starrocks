@@ -92,8 +92,8 @@ private:
         std::vector<uint32_t> source_col_ids; // positions in source_schema
         MutableColumns idx_cols;              // lazily initialised from first chunk
         Int64Column::MutablePtr pos_col;
-        size_t buffered_bytes = 0;            // approx in-memory size of current buffer
-        int run_seq = 0;                      // next run ordinal for this index
+        size_t buffered_bytes = 0; // approx in-memory size of current buffer
+        int run_seq = 0;           // next run ordinal for this index
     };
 
     SecondaryIndexCollector(int64_t tablet_id, int64_t txn_id, TabletSchemaCSPtr source_schema);
