@@ -20,7 +20,6 @@
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
-#include "exec/olap_utils.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -28,6 +27,7 @@
 #include "runtime/runtime_state_fwd.h"
 #include "storage/primitive/conjunctive_predicates.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage/query/olap_scan_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 

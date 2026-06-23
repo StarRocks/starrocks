@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/split_scan_morsel.h"
+#include "storage/query/split_scan_morsel.h"
 
 #include "storage/tablet_reader_params.h"
 

@@ -18,9 +18,9 @@
 
 #include "common/status.h"
 #include "exec/meta_scanner.h"
-#include "exec/olap_utils.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/olap_meta_reader.h"
+#include "storage/query/olap_scan_range.h"
 
 namespace starrocks {
 

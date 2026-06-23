@@ -14,9 +14,9 @@
 
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 
-#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
 #include "gutil/casts.h"
+#include "storage/query/bucket_sequence_morsel_queue.h"
+#include "storage/query/olap_dynamic_morsel_queue.h"
 
 namespace starrocks::pipeline {
 

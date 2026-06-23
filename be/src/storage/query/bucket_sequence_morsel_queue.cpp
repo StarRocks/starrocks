@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
+#include "storage/query/bucket_sequence_morsel_queue.h"
 
 #include <fmt/compile.h>
 

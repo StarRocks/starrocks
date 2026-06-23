@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
+#include "storage/query/olap_dynamic_morsel_queue.h"
 
 #include <iterator>
 
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
+#include "storage/query/olap_dynamic_morsel_queue_builder.h"
 
 namespace starrocks::pipeline {
 

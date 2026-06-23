@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/split_morsel_queue.h"
+#include "storage/query/split_morsel_queue.h"
 
 #include <algorithm>
 #include <memory>
 
-#include "exec/olap_utils.h"
-#include "exec/pipeline/scan/split_morsel_queue_builder.h"
-#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/primitive/range.h"
+#include "storage/query/olap_scan_range.h"
+#include "storage/query/split_morsel_queue_builder.h"
+#include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"

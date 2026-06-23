@@ -101,6 +101,12 @@ set(STORAGE_FILES
     olap_server.cpp
     persistent_index.cpp
     primary_index.cpp
+    query/bucket_sequence_morsel_queue.cpp
+    query/olap_dynamic_morsel_queue.cpp
+    query/olap_fixed_morsel_queue.cpp
+    query/olap_morsel_queue.cpp
+    query/split_morsel_queue.cpp
+    query/split_scan_morsel.cpp
     protobuf_file.cpp
     replication_txn_manager.cpp
     remote_snapshot_client.cpp

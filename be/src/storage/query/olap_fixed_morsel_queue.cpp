@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
+#include "storage/query/olap_fixed_morsel_queue.h"
 
-#include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
+#include "storage/query/olap_fixed_morsel_queue_builder.h"
 
 namespace starrocks::pipeline {
 

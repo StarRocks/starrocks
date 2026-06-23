@@ -16,7 +16,7 @@
 
 #include <atomic>
 
-#include "exec/pipeline/scan/olap_morsel_queue.h"
+#include "storage/query/olap_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
