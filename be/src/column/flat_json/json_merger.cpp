@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json_merger.h"
+#include "column/flat_json/json_merger.h"
 
 #include <velocypack/StringRef.h>
 
@@ -22,11 +22,11 @@
 #include <string_view>
 #include <vector>
 
+#include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "types/json_value.h"
-#include "util/flat_json_internal.h"
 
 namespace starrocks {
 

@@ -69,6 +69,8 @@ set(EXPR_CORE_FILES
   in_const_predicate.cpp
   in_predicate.cpp
   is_null_predicate.cpp
+  hyper_json_transformer.cpp
+  json_functions.cpp
   jsonpath.cpp
   lambda_function.cpp
   like_predicate.cpp
@@ -111,7 +113,6 @@ set(EXPR_FILES
   function_call_expr.cpp
   geo_functions.cpp
   inet_aton.cpp
-  json_functions.cpp
   locate.cpp
   percentile_functions.cpp
   split.cpp

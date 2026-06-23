@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/flat_json_internal.h"
+#include "column/flat_json/flat_json_internal.h"
 
 #include <cmath>
 #include <cstdint>

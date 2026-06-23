@@ -40,6 +40,10 @@ ADD_BE_LIB(ColumnCore
         nullable_column.cpp
         decimalv3_column.cpp
         json_column.cpp
+        flat_json/flat_json_internal.cpp
+        flat_json/json_flat_path.cpp
+        flat_json/json_flattener.cpp
+        flat_json/json_merger.cpp
         adaptive_nullable_column.cpp
         append_with_mask.cpp
         column_helper.cpp

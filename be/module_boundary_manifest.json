@@ -662,7 +662,6 @@
         "exprs/function_call_expr.h",
         "exprs/geo_functions.h",
         "exprs/java_function_call_expr.h",
-        "exprs/json_functions.h",
         "exprs/locate.h",
         "exprs/percentile_functions.h",
         "exprs/split.h",

@@ -23,9 +23,9 @@
 #include <vector>
 
 #include "column/column.h"
+#include "column/flat_json/json_flat_path.h"
 #include "column/nullable_column.h"
 #include "types/logical_type.h"
-#include "util/json_flat_path.h"
 
 namespace starrocks {
 

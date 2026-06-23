@@ -20,6 +20,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
+#include "column/flat_json/json_flat_path.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
@@ -35,6 +36,7 @@
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/json_path_deriver.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
@@ -51,8 +53,6 @@
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
-#include "util/json_flat_path.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks::lake {
 

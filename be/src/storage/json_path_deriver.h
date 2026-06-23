@@ -25,10 +25,10 @@
 #include <utility>
 #include <vector>
 
+#include "column/flat_json/json_flat_path.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "types/logical_type.h"
-#include "util/json_flat_path.h"
 
 namespace starrocks {
 

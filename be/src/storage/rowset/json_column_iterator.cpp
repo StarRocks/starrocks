@@ -20,6 +20,9 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/flat_json/json_flat_path.h"
+#include "column/flat_json/json_flattener.h"
+#include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -28,6 +31,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/json_functions.h"
 #include "exprs/jsonpath.h"
 #include "gutil/casts.h"
@@ -39,10 +43,6 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/hyper_json_transformer.h"
-#include "util/json_flat_path.h"
-#include "util/json_flattener.h"
-#include "util/json_merger.h"
 
 namespace starrocks {
 

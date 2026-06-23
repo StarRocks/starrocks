@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json_flat_path.h"
+#include "column/flat_json/json_flat_path.h"
 
 #include <memory>
 #include <string>
