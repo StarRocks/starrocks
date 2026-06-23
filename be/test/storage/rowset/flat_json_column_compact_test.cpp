@@ -22,6 +22,8 @@
 #include "base/testutil/assert.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
+#include "column/flat_json/json_flat_path.h"
+#include "column/flat_json/json_flattener.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -31,6 +33,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
+#include "storage/json_path_deriver.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
@@ -40,9 +43,6 @@
 #include "storage/types.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json_flat_path.h"
-#include "util/json_flattener.h"
-#include "util/json_path_deriver.h"
 
 namespace starrocks {
 
@@ -96,7 +96,7 @@ protected:
 
             JsonPathDeriver deriver;
             deriver.derived({flat_column});
-            JsonFlattener flattener(deriver);
+            JsonFlattener flattener(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json());
             flattener.flatten(flat_column);
             json_col->set_flat_columns(deriver.flat_paths(), deriver.flat_types(), flattener.mutable_result());
         } else {
@@ -130,7 +130,7 @@ protected:
 
         JsonPathDeriver deriver;
         deriver.derived({flat_column});
-        JsonFlattener flattener(deriver);
+        JsonFlattener flattener(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json());
         flattener.flatten(flat_column);
         json_col->set_flat_columns(deriver.flat_paths(), deriver.flat_types(), flattener.mutable_result());
 
