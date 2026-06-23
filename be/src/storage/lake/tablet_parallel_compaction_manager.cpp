@@ -1583,13 +1583,7 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
         // Observability: count the PK persistent-index SST files this parallel-compaction run
         // wrote to object storage. The per-subtask CompactionTask::execute_index_major_compaction
         // returns early when subtask_id >= 0, so those SSTs are accounted for here instead.
-        int64_t index_sst_puts = temp_op.output_sstables_size();
-        if (temp_op.has_output_sstable()) {
-            ++index_sst_puts;
-        }
-        if (index_sst_puts > 0) {
-            StorageMetrics::instance()->lake_compaction_remote_write_count.increment(index_sst_puts);
-        }
+        CompactionTask::record_index_sst_remote_writes(temp_op);
 
         // Log SST compaction results
         if (!temp_op.input_sstables().empty()) {

@@ -74,6 +74,13 @@ public:
     // This is a static method for testability.
     static SstStats compute_sst_stats(const std::vector<FileInfo>& writer_ssts, const TxnLogPB* txn_log);
 
+    // Count the PK persistent-index SST output files in `op_compaction` (the repeated
+    // output_sstables, plus the optional singular output_sstable) and record each as one
+    // object-storage PUT in lake_compaction_remote_write_count. Returns the number recorded.
+    // Static so the per-task path and the parallel-manager merge path share one definition
+    // of the counting rule, and so it can be unit-tested directly without a PK/parallel harness.
+    static int64_t record_index_sst_remote_writes(const TxnLogPB_OpCompaction& op_compaction);
+
     // Collect SST stats from eager build (writer) and major compaction (txn_log),
     // to be used when recording tablet write log.
     void collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log);

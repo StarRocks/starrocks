@@ -26,6 +26,7 @@
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/logging.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
@@ -299,6 +300,42 @@ INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompact
                                                            .vertical_compaction_max_columns_per_group = 1,
                                                            .enable_size_tiered_compaction_strategy = false}),
                          to_string_param_name);
+
+// Unit-covers CompactionTask::record_index_sst_remote_writes, the shared PK persistent-index
+// SST PUT-counting rule used by both CompactionTask::execute_index_major_compaction and the
+// parallel-compaction merge path. Exercises the static helper directly (no PK/parallel harness
+// needed) and asserts on the process-global counter via a before/after delta.
+TEST(LakeCompactionIndexSstPutCountTest, record_index_sst_remote_writes) {
+    auto* metrics = StorageMetrics::instance();
+
+    // Multiple output_sstables, no singular output_sstable: one PUT per repeated entry.
+    {
+        TxnLogPB_OpCompaction op;
+        op.add_output_sstables();
+        op.add_output_sstables();
+        const int64_t before = metrics->lake_compaction_remote_write_count.value();
+        EXPECT_EQ(2, CompactionTask::record_index_sst_remote_writes(op));
+        EXPECT_EQ(2, metrics->lake_compaction_remote_write_count.value() - before);
+    }
+
+    // Repeated output_sstables plus the singular output_sstable: the singular adds one more PUT.
+    {
+        TxnLogPB_OpCompaction op;
+        op.add_output_sstables();
+        op.mutable_output_sstable();
+        const int64_t before = metrics->lake_compaction_remote_write_count.value();
+        EXPECT_EQ(2, CompactionTask::record_index_sst_remote_writes(op));
+        EXPECT_EQ(2, metrics->lake_compaction_remote_write_count.value() - before);
+    }
+
+    // No index SST output: nothing recorded.
+    {
+        TxnLogPB_OpCompaction op;
+        const int64_t before = metrics->lake_compaction_remote_write_count.value();
+        EXPECT_EQ(0, CompactionTask::record_index_sst_remote_writes(op));
+        EXPECT_EQ(0, metrics->lake_compaction_remote_write_count.value() - before);
+    }
+}
 
 TEST_P(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     auto version = 1;

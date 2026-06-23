@@ -79,13 +79,7 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
             // not covered by the writer->ssts() counting there. Counting here also captures
             // CloudNativeIndexCompactionTask, which never calls fill_compaction_segment_info().
             if (txn_log->has_op_compaction()) {
-                int64_t index_sst_puts = txn_log->op_compaction().output_sstables_size();
-                if (txn_log->op_compaction().has_output_sstable()) {
-                    ++index_sst_puts;
-                }
-                if (index_sst_puts > 0) {
-                    StorageMetrics::instance()->lake_compaction_remote_write_count.increment(index_sst_puts);
-                }
+                record_index_sst_remote_writes(txn_log->op_compaction());
             }
             return Status::OK();
         }
@@ -190,6 +184,17 @@ CompactionTask::SstStats CompactionTask::compute_sst_stats(const std::vector<Fil
         }
     }
     return stats;
+}
+
+int64_t CompactionTask::record_index_sst_remote_writes(const TxnLogPB_OpCompaction& op_compaction) {
+    int64_t index_sst_puts = op_compaction.output_sstables_size();
+    if (op_compaction.has_output_sstable()) {
+        ++index_sst_puts;
+    }
+    if (index_sst_puts > 0) {
+        StorageMetrics::instance()->lake_compaction_remote_write_count.increment(index_sst_puts);
+    }
+    return index_sst_puts;
 }
 
 void CompactionTask::collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log) {
