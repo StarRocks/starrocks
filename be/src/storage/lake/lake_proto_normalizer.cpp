@@ -16,27 +16,31 @@
 
 #include <algorithm>
 
+#include "common/logging.h"
 #include "common/status.h"
 #include "fmt/format.h"
 
 namespace starrocks::lake {
 
-// ---- AFTER LOAD ---------------------------------------------------------------------------------
-// Back-fill the structured fields from the deprecated legacy parallel arrays for data written by a
-// pre-feature BE. `segment_metas` may ALREADY exist on an old rowset (it predates this refactor and
-// carried sort_key/num_rows/segment_idx/vector_index_ids), but WITHOUT the new file-attr fields
-// (filename/size/encryption_meta/shared/bundle_file_offset). So we merge per-index: only set a file
-// attribute on segment_metas[i] when it is absent there and present in the legacy array.
-//
-// Once the back-fill is done, segment_metas is the sole canonical source in memory and nothing reads
-// the legacy arrays again, so we CLEAR them: it avoids caching two copies of every segment's file
-// attributes (filenames especially) for the lifetime of the cached metadata, and it keeps the legacy
-// arrays from going stale relative to segment_metas (before-save rebuilds them from segment_metas on
-// a throwaway copy, so disk dual-write for rollback is unaffected).
+namespace {
 
-void normalize_rowset_after_load(RowsetMetadataPB* rowset_metadata) {
+// Back-fill the canonical structured per-segment file attrs from the deprecated legacy parallel arrays.
+// Shared by after-load (back-fill old on-disk data into segment_metas) and before-save (complete
+// segment_metas before rebuilding the legacy arrays from it, so un-normalized legacy-shaped input does
+// not lose its filenames). Merge per-index: only set a file attribute when it is absent on
+// segment_metas[i] and present in the legacy array (structured wins; never overwrites).
+//
+// allow_extend: after-load passes true so segment_metas grows to cover every legacy entry (the legacy
+// arrays are the source of truth for pre-feature data). before-save passes false: there segment_metas
+// is authoritative and may have intentionally dropped a segment (e.g. partial-compaction trim) while
+// the legacy arrays are momentarily stale-longer; extending would resurrect the dropped segment. The
+// before-save no-extend is only safe because its input is always already extended -- in-memory metadata
+// is after-loaded on read, and RPC/disk-shaped legacy input is after-loaded on entry at the aggregate
+// receive points; a never-after-loaded sparse rowset reaching before-save is reported loudly there.
+void backfill_segment_metas_from_legacy(RowsetMetadataPB* rowset_metadata, bool allow_extend) {
     const int segment_count =
-            std::max(rowset_metadata->deprecated_segments_size(), rowset_metadata->segment_metas_size());
+            allow_extend ? std::max(rowset_metadata->deprecated_segments_size(), rowset_metadata->segment_metas_size())
+                         : rowset_metadata->segment_metas_size();
     while (rowset_metadata->segment_metas_size() < segment_count) {
         rowset_metadata->add_segment_metas();
     }
@@ -63,20 +67,14 @@ void normalize_rowset_after_load(RowsetMetadataPB* rowset_metadata) {
             segment_metadata->set_bundle_file_offset(rowset_metadata->deprecated_bundle_file_offsets(i));
         }
     }
-    // segment_metas is now canonical; drop the legacy arrays so they aren't cached unread (or left stale).
-    rowset_metadata->clear_deprecated_segments();
-    rowset_metadata->clear_deprecated_segment_size();
-    rowset_metadata->clear_deprecated_segment_encryption_metas();
-    rowset_metadata->clear_deprecated_shared_segments();
-    rowset_metadata->clear_deprecated_bundle_file_offsets();
 }
 
-void normalize_op_write_after_load(TxnLogPB::OpWrite* op_write) {
-    if (op_write->has_rowset()) {
-        normalize_rowset_after_load(op_write->mutable_rowset());
-    }
+// dels_meta / rewrite_segments_meta analog of backfill_segment_metas_from_legacy (same allow_extend
+// contract). Does not touch the rowset.
+void backfill_op_write_metas_from_legacy(TxnLogPB::OpWrite* op_write, bool allow_extend) {
     // dels_meta <- deprecated_dels / deprecated_del_encryption_metas / deprecated_shared_dels
-    const int del_file_count = std::max(op_write->deprecated_dels_size(), op_write->dels_meta_size());
+    const int del_file_count = allow_extend ? std::max(op_write->deprecated_dels_size(), op_write->dels_meta_size())
+                                            : op_write->dels_meta_size();
     while (op_write->dels_meta_size() < del_file_count) {
         op_write->add_dels_meta();
     }
@@ -93,8 +91,9 @@ void normalize_op_write_after_load(TxnLogPB::OpWrite* op_write) {
         }
     }
     // rewrite_segments_meta <- deprecated_rewrite_segments
-    const int rewrite_segment_count =
-            std::max(op_write->deprecated_rewrite_segments_size(), op_write->rewrite_segments_meta_size());
+    const int rewrite_segment_count = allow_extend ? std::max(op_write->deprecated_rewrite_segments_size(),
+                                                              op_write->rewrite_segments_meta_size())
+                                                   : op_write->rewrite_segments_meta_size();
     while (op_write->rewrite_segments_meta_size() < rewrite_segment_count) {
         op_write->add_rewrite_segments_meta();
     }
@@ -104,6 +103,33 @@ void normalize_op_write_after_load(TxnLogPB::OpWrite* op_write) {
             rewrite_segment_metadata->set_name(op_write->deprecated_rewrite_segments(i));
         }
     }
+}
+
+} // namespace
+
+// ---- AFTER LOAD ---------------------------------------------------------------------------------
+// Back-fill segment_metas from the deprecated legacy parallel arrays for data written by a pre-feature
+// BE (see backfill_segment_metas_from_legacy for the per-index merge), then CLEAR the legacy arrays:
+// segment_metas is the sole canonical source in memory afterward, so keeping the legacy copies would
+// only waste cache space and risk going stale relative to segment_metas (before-save rebuilds them
+// from segment_metas on a throwaway copy, so disk dual-write for rollback is unaffected).
+
+void normalize_rowset_after_load(RowsetMetadataPB* rowset_metadata) {
+    // Back-fill (and extend) segment_metas from the legacy arrays for data written by a pre-feature BE.
+    backfill_segment_metas_from_legacy(rowset_metadata, /*allow_extend=*/true);
+    // segment_metas is now canonical; drop the legacy arrays so they aren't cached unread (or left stale).
+    rowset_metadata->clear_deprecated_segments();
+    rowset_metadata->clear_deprecated_segment_size();
+    rowset_metadata->clear_deprecated_segment_encryption_metas();
+    rowset_metadata->clear_deprecated_shared_segments();
+    rowset_metadata->clear_deprecated_bundle_file_offsets();
+}
+
+void normalize_op_write_after_load(TxnLogPB::OpWrite* op_write) {
+    if (op_write->has_rowset()) {
+        normalize_rowset_after_load(op_write->mutable_rowset());
+    }
+    backfill_op_write_metas_from_legacy(op_write, /*allow_extend=*/true);
     // dels_meta / rewrite_segments_meta are now canonical; drop the legacy arrays (the rowset's own
     // legacy arrays were already cleared by normalize_rowset_after_load above).
     op_write->clear_deprecated_dels();
@@ -126,6 +152,26 @@ Status normalize_rowset_before_save(RowsetMetadataPB* rowset_metadata) {
     if (rowset_metadata->segment_metas_size() == 0) {
         return Status::OK();
     }
+    // Fail-closed would-truncate guard: more legacy names than authoritative segment_metas slots means
+    // an un-normalized (never after-loaded) legacy rowset reached before-save; the no-extend back-fill +
+    // rebuild below would DROP the tail segment names and silently make the tablet unreadable. This must
+    // not happen in practice -- in-memory metadata is after-loaded on read (which clears the legacy
+    // arrays) and RPC/disk-shaped legacy input is after-loaded at the save choke points
+    // (put_bundle_tablet_metadata / put_combined_txn_log) -- so refuse to persist truncated metadata
+    // rather than lose data, surfacing the missing after-load loudly.
+    if (rowset_metadata->deprecated_segments_size() > rowset_metadata->segment_metas_size()) {
+        return Status::Corruption(fmt::format(
+                "lake rowset reached before-save un-normalized (rowset {} version {}): {} deprecated_segments "
+                "but only {} segment_metas; refusing to persist truncated metadata. after-load must run first.",
+                rowset_metadata->id(), rowset_metadata->version(), rowset_metadata->deprecated_segments_size(),
+                rowset_metadata->segment_metas_size()));
+    }
+    // Complete segment_metas from the legacy arrays before rebuilding those arrays from it, so an
+    // un-normalized legacy-shaped rowset keeps its real filenames instead of being rebuilt from an empty
+    // segment_metas[].filename(). No-extend: never resurrect a segment intentionally dropped from
+    // segment_metas (e.g. partial-compaction trim). Idempotent on already-normalized input.
+    backfill_segment_metas_from_legacy(rowset_metadata, /*allow_extend=*/false);
+
     rowset_metadata->clear_deprecated_segments();
     rowset_metadata->clear_deprecated_segment_size();
     rowset_metadata->clear_deprecated_segment_encryption_metas();
@@ -154,7 +200,9 @@ Status normalize_rowset_before_save(RowsetMetadataPB* rowset_metadata) {
     const bool all_have_bundle_file_offset = bundle_file_offset_count == rowset_metadata->segment_metas_size();
     // Rebuild each legacy array from segment_metas. The all_*/has_any_* flags keep every optional array
     // all-or-nothing (size 0 or == segment count), matching what the legacy readers expect.
+    int empty_filename_count = 0;
     for (const auto& segment_metadata : rowset_metadata->segment_metas()) {
+        empty_filename_count += segment_metadata.filename().empty() ? 1 : 0;
         rowset_metadata->add_deprecated_segments(segment_metadata.filename());
         if (all_have_size) {
             rowset_metadata->add_deprecated_segment_size(segment_metadata.size());
@@ -169,12 +217,44 @@ Status normalize_rowset_before_save(RowsetMetadataPB* rowset_metadata) {
             rowset_metadata->add_deprecated_bundle_file_offsets(segment_metadata.bundle_file_offset());
         }
     }
+    // A segment whose name is absent from BOTH segment_metas and the legacy arrays is genuinely lost;
+    // an empty name resolves to ".../data/" and makes the tablet unreadable. We cannot fabricate a name,
+    // but never emit one silently -- log loudly (once per rowset) so it is diagnosable.
+    if (empty_filename_count > 0) {
+        LOG(ERROR) << "lake metadata: rowset " << rowset_metadata->id() << " (version " << rowset_metadata->version()
+                   << ") has " << empty_filename_count << " of " << rowset_metadata->segment_metas_size()
+                   << " segments with an empty filename in both segment_metas and deprecated_segments; "
+                   << "persisting an empty segment name will make the tablet unreadable.";
+    }
     return Status::OK();
 }
 
 Status normalize_op_write_before_save(TxnLogPB::OpWrite* op_write) {
     if (op_write->has_rowset()) {
         RETURN_IF_ERROR(normalize_rowset_before_save(op_write->mutable_rowset()));
+    }
+
+    // Complete dels_meta / rewrite_segments_meta from the legacy arrays before rebuilding those arrays
+    // from them (same rationale and no-extend contract as normalize_rowset_before_save). Idempotent.
+    backfill_op_write_metas_from_legacy(op_write, /*allow_extend=*/false);
+
+    // Fail-closed would-truncate guards (same rationale as normalize_rowset_before_save): when the
+    // structured array is non-empty but shorter than its legacy array, the rebuild below would drop the
+    // tail names. The `*_meta_size() > 0` qualifier preserves the legitimate "old producer wrote only the
+    // legacy array" case (structured empty -> rebuild skipped, legacy left intact). In production the
+    // structured arrays are always after-loaded first, so these never fire.
+    if (op_write->dels_meta_size() > 0 && op_write->deprecated_dels_size() > op_write->dels_meta_size()) {
+        return Status::Corruption(fmt::format(
+                "lake op_write reached before-save un-normalized: {} deprecated_dels but only {} dels_meta; "
+                "refusing to persist truncated del-file names. after-load must run first.",
+                op_write->deprecated_dels_size(), op_write->dels_meta_size()));
+    }
+    if (op_write->rewrite_segments_meta_size() > 0 &&
+        op_write->deprecated_rewrite_segments_size() > op_write->rewrite_segments_meta_size()) {
+        return Status::Corruption(fmt::format(
+                "lake op_write reached before-save un-normalized: {} deprecated_rewrite_segments but only {} "
+                "rewrite_segments_meta; refusing to persist truncated names. after-load must run first.",
+                op_write->deprecated_rewrite_segments_size(), op_write->rewrite_segments_meta_size()));
     }
 
     // Only rebuild a legacy array group when its structured source is non-empty; otherwise leave the
