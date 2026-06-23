@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/tablet_column.h"
+#include "storage/primitive/tablet_column.h"
 
 #include <sstream>
 #include <utility>
@@ -21,6 +21,7 @@
 #include "gen_cpp/descriptors.pb.h"
 #include "storage/primitive/tablet_column_util.h"
 #include "storage/primitive/type_utils.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 

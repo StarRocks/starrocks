@@ -48,7 +48,7 @@
 #include "storage/primitive/aggregate_type.h"
 #include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/primitive/storage_define.h"
-#include "storage/tablet_column.h"
+#include "storage/primitive/tablet_column.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
 #include "types/agg_state_desc.h"

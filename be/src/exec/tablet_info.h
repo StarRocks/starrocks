@@ -29,7 +29,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors_fwd.h"
-#include "storage/tablet_column.h"
+#include "storage/primitive/tablet_column.h"
 
 namespace starrocks {
 
