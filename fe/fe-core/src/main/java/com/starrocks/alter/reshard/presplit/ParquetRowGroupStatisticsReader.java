@@ -158,14 +158,14 @@ public final class ParquetRowGroupStatisticsReader {
         // file's raw column_orders entry for this leaf is TypeDefinedOrder. parquet-mr's converted
         // PrimitiveType.columnOrder() defaults a missing column_orders to TYPE_DEFINED_ORDER, so we
         // inspect the raw footer instead. Only a byte-array decimal pays this extra footer read.
-        boolean signedByteArrayOrder = false;
+        boolean typeDefinedColumnOrder = false;
         if ((parquetTypeName == PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
                 || parquetTypeName == PrimitiveTypeName.BINARY)
                 && logicalAnnotation instanceof DecimalLogicalTypeAnnotation) {
-            signedByteArrayOrder = declaresSignedByteArrayOrder(
+            typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(
                     readColumnOrders(inputFile), leafColumnIndex(schema, path));
         }
-        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, signedByteArrayOrder, sortKeyColumn);
+        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn);
         return new SortKeyLocation(path, parquetTypeName, logicalAnnotation, sortKeyColumn);
     }
 
@@ -178,14 +178,14 @@ public final class ParquetRowGroupStatisticsReader {
      * TIMESTAMP annotation → StarRocks DATETIME, and INT32/INT64 with a DECIMAL annotation
      * → a same-precision/scale StarRocks DECIMAL. FIXED_LEN_BYTE_ARRAY/BINARY-backed DECIMAL is
      * accepted on the same exact-precision/scale match but only when the caller resolved a
-     * footer-declared TypeDefinedOrder ({@code signedByteArrayOrder}); a file with no/UNDEFINED
+     * footer-declared TypeDefinedOrder ({@code typeDefinedColumnOrder}); a file with no/UNDEFINED
      * column order and other annotations (UINT_*, UTC-adjusted TIMESTAMP, JSON, BSON, UUID, ...)
      * are deferred (fall back to data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
             LogicalTypeAnnotation logicalAnnotation,
-            boolean signedByteArrayOrder,
+            boolean typeDefinedColumnOrder,
             Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
@@ -226,9 +226,9 @@ public final class ParquetRowGroupStatisticsReader {
                 if (logicalAnnotation instanceof StringLogicalTypeAnnotation) {
                     yield starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR;
                 }
-                yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, signedByteArrayOrder);
+                yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             }
-            case FIXED_LEN_BYTE_ARRAY -> isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, signedByteArrayOrder);
+            case FIXED_LEN_BYTE_ARRAY -> isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             default -> false;
         };
         if (!compatible) {
@@ -380,19 +380,19 @@ public final class ParquetRowGroupStatisticsReader {
     /**
      * A byte-array (FIXED_LEN_BYTE_ARRAY/BINARY) DECIMAL is accepted only with an exact
      * precision/scale match AND a footer-declared TypeDefinedOrder — then its big-endian
-     * two's-complement footer min/max are signed-ordered (see {@link #declaresSignedByteArrayOrder}).
+     * two's-complement footer min/max are signed-ordered (see {@link #declaresTypeDefinedColumnOrder}).
      */
     private static boolean isSignedByteArrayDecimal(
-            LogicalTypeAnnotation logicalAnnotation, Column sortKeyColumn, boolean signedByteArrayOrder) {
+            LogicalTypeAnnotation logicalAnnotation, Column sortKeyColumn, boolean typeDefinedColumnOrder) {
         return logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
                 && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
-                && signedByteArrayOrder;
+                && typeDefinedColumnOrder;
     }
 
     /**
      * True only when the file's raw footer positively declares a {@code TypeDefinedOrder} column
-     * order for this leaf. For a DECIMAL logical type that guarantees parquet ordered the byte-array
-     * min/max as signed two's-complement (parquet-mr's {@code BINARY_AS_SIGNED_INTEGER_COMPARATOR}).
+     * order for this leaf — required to trust the footer min/max for byte-array DECIMAL (signed
+     * two's-complement order) and for UNSIGNED integers (unsigned order).
      *
      * <p>A null/short {@code column_orders} list (legacy file that omitted it) or an unset entry
      * (UNDEFINED order) is treated as unknown → data tier. We must read the RAW footer for this:
@@ -401,7 +401,7 @@ public final class ParquetRowGroupStatisticsReader {
      * predicate is unit-testable (parquet-mr's high-level writer cannot produce a file without
      * {@code column_orders}).
      */
-    static boolean declaresSignedByteArrayOrder(List<ColumnOrder> columnOrders, int leafIndex) {
+    static boolean declaresTypeDefinedColumnOrder(List<ColumnOrder> columnOrders, int leafIndex) {
         return columnOrders != null
                 && leafIndex >= 0
                 && leafIndex < columnOrders.size()

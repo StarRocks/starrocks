@@ -640,22 +640,22 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void declaresSignedByteArrayOrderRequiresTypeOrderEntry() {
+    void declaresTypeDefinedColumnOrderRequiresTypeOrderEntry() {
         // parquet-mr's high-level writer always emits column_orders, so the "no column_orders /
         // unknown order → data tier" rejection is verified at the raw-footer-mapping predicate level.
         ColumnOrder typeOrder = ColumnOrder.TYPE_ORDER(new TypeDefinedOrder());
         // Footer positively declares TypeDefinedOrder for the leaf → signed order confirmed.
         Assertions.assertTrue(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 0));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(List.of(typeOrder), 0));
         // Legacy file with no column_orders → not confirmed.
         Assertions.assertFalse(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(null, 0));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(null, 0));
         // Entry present but no TypeDefinedOrder set (UNDEFINED order) → not confirmed.
         Assertions.assertFalse(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(new ColumnOrder()), 0));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(List.of(new ColumnOrder()), 0));
         // Leaf index past the end of the list → not confirmed.
         Assertions.assertFalse(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 5));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(List.of(typeOrder), 5));
     }
 
     private Path writeParquet(
