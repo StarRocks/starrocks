@@ -168,8 +168,8 @@
       "summary": "Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.",
       "owned_targets": ["Platform"],
       "owned_roots": ["be/src/platform"],
-      "allowed_include_prefixes": ["platform/", "http/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["HttpCore", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_include_prefixes": ["platform/", "http/", "fs/", "io/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["HttpCore", "FSCore", "IO", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["platform_test"],
       "allowed_test_link_deps": ["Platform"],
       "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward."

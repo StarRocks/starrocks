@@ -137,8 +137,8 @@ Minimal filesystem core on top of IO.
 ### Platform (`platform`)
 Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.
 - Targets: `Platform`
-- Allowed internal include prefixes: `platform/`, `http/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `HttpCore`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `platform/`, `http/`, `fs/`, `io/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `HttpCore`, `FSCore`, `IO`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `platform_test`
 - Remediation: Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward.
 

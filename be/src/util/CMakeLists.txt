@@ -30,8 +30,6 @@ set(UTIL_FILES
   byte_buffer.cpp
   hdfs_util.cpp
   jvm_metrics.cpp
-  llm_cache.cpp
-  llm_query_service.cpp
 )
 
 ADD_BE_LIB(Util
