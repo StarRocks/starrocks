@@ -89,6 +89,19 @@ struct TypeEncodingTraits<type, PLAIN_ENCODING, Slice> {
     }
 };
 
+// Same as PLAIN_ENCODING for strings, but the page's offset trailer is delta-encoded.
+template <LogicalType type>
+struct TypeEncodingTraits<type, PLAIN_ENCODING_DELTA_OFFSET, Slice> {
+    static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
+        *builder = new BinaryPlainPageBuilder(opts, /*delta_offset=*/true);
+        return Status::OK();
+    }
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new BinaryPlainPageDecoder<type>(data, /*delta_offset=*/true);
+        return Status::OK();
+    }
+};
+
 template <LogicalType type, typename CppType>
 struct TypeEncodingTraits<type, BIT_SHUFFLE, CppType,
                           typename std::enable_if<!std::is_same<CppType, Slice>::value>::type> {
@@ -267,10 +280,12 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     _add_map<TYPE_CHAR, DICT_ENCODING>();
     _add_map<TYPE_CHAR, PLAIN_ENCODING>();
+    _add_map<TYPE_CHAR, PLAIN_ENCODING_DELTA_OFFSET>();
     _add_map<TYPE_CHAR, PREFIX_ENCODING, true>();
 
     _add_map<TYPE_VARCHAR, DICT_ENCODING>();
     _add_map<TYPE_VARCHAR, PLAIN_ENCODING>();
+    _add_map<TYPE_VARCHAR, PLAIN_ENCODING_DELTA_OFFSET>();
     _add_map<TYPE_VARCHAR, PREFIX_ENCODING, true>();
 
     _add_map<TYPE_BOOLEAN, RLE>();
