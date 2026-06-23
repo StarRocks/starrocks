@@ -77,6 +77,7 @@ public class IndexAnalyzer {
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
 
     // BloomFilterIndexUtil constants
     public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
@@ -194,6 +195,7 @@ public class IndexAnalyzer {
 
         checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
         checkInvertedIndexNgram(properties);
+        checkInvertedIndexLowerCase(properties);
 
         // add default properties
         addDefaultProperties(properties);
@@ -239,6 +241,25 @@ public class IndexAnalyzer {
         String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
         if (!BUILTIN.name().equalsIgnoreCase(impValue)) {
             throw new SemanticException("INVERTED index with " + impValue + " implement is invalid for dict gram.");
+        }
+    }
+
+    public static void checkInvertedIndexLowerCase(Map<String, String> properties) {
+        String lowerCase = properties == null ? null : properties.get(INVERTED_INDEX_LOWER_CASE_KEY);
+        if (lowerCase == null) {
+            return;
+        }
+
+        // lower_case is only meaningful for the builtin english analyzer.
+        String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+        String parser = getInvertedIndexParser(properties);
+        if (!BUILTIN.name().equalsIgnoreCase(impValue) || !INVERTED_INDEX_PARSER_ENGLISH.equalsIgnoreCase(parser)) {
+            throw new SemanticException(
+                    "INVERTED index lower_case is only supported when imp_lib is builtin and parser is english.");
+        }
+
+        if (!"true".equalsIgnoreCase(lowerCase) && !"false".equalsIgnoreCase(lowerCase)) {
+            throw new SemanticException("INVERTED index lower_case should be true or false.");
         }
     }
 
