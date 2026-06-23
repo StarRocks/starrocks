@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
-description: "SQLAlchemy、Alembic、sqlacodegen を使用してStarRocksスキーマのマイグレーションを管理する方法。"
-sidebar_label: "スキーママイグレーション"
+description: "スキーマ管理と移行"
+sidebar_label: "スキーマ管理と移行"
 ---
 
 # SQLAlchemyとAlembicを使用したスキーマ管理とマイグレーション
