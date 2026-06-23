@@ -21,12 +21,12 @@
 #include "column/chunk.h"
 #include "column/column_access_path.h"
 #include "common/status.h"
-#include "exec/olap_utils.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/primitive/conjunctive_predicates.h"
+#include "storage/query/olap_scan_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 
