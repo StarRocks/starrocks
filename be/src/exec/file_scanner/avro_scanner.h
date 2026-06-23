@@ -97,6 +97,8 @@ private:
     ObjectPool _pool;
     std::shared_ptr<SequentialFile> _file;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
+    // Maps each source slot id to its intermediate avro load type (see AvroScanner::_construct_avro_types).
+    std::unordered_map<SlotId, TypeDescriptor> _slot_id_to_avro_type;
     std::vector<bool> _found_columns;
     std::vector<SlotInfo> _data_idx_to_slot;
     std::vector<std::string> _data_idx_to_fieldname;

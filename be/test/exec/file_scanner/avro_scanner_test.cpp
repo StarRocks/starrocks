@@ -1358,6 +1358,587 @@ TEST_F(AvroScannerTest, test_map_to_json) {
     }
 }
 
+TEST_F(AvroScannerTest, test_map_type) {
+    std::string schema_path = "./be/test/exec/test_data/avro_scanner/avro_map_schema.json";
+    AvroHelper avro_helper;
+    init_avro_value(schema_path, avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t boolean_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "booleantype", &boolean_value, NULL) == 0) {
+        avro_value_set_boolean(&boolean_value, true);
+    }
+
+    avro_value_t long_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "longtype", &long_value, NULL) == 0) {
+        avro_value_set_long(&long_value, 4294967296);
+    }
+
+    avro_value_t double_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "doubletype", &double_value, NULL) == 0) {
+        avro_value_set_double(&double_value, 1.234567);
+    }
+
+    avro_value_t map_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "maptype", &map_value, NULL) == 0) {
+        avro_value_t ele1;
+        avro_value_add(&map_value, "ele1", &ele1, NULL, NULL);
+        avro_value_set_long(&ele1, 4294967297);
+
+        avro_value_t ele2;
+        avro_value_add(&map_value, "ele2", &ele2, NULL, NULL);
+        avro_value_set_long(&ele2, 4294967298);
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_map_data.json";
+    write_avro_data(avro_helper, data_path);
+
+    // load avro map natively into a MAP<VARCHAR, BIGINT> column (no jsonpaths)
+    {
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TYPE_BOOLEAN);
+        types.emplace_back(TYPE_BIGINT);
+        types.emplace_back(TYPE_DOUBLE);
+        types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(65533),
+                                                           TypeDescriptor(TYPE_BIGINT)));
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_AVRO;
+        range.__set_path(data_path);
+        ranges.emplace_back(range);
+
+        auto scanner = create_avro_scanner(types, ranges, {"booleantype", "longtype", "doubletype", "maptype"},
+                                           avro_helper.schema_text);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st;
+
+        auto st2 = scanner->get_next();
+        ASSERT_TRUE(st2.ok()) << st2.status();
+
+        ChunkPtr chunk = st2.value();
+        EXPECT_EQ(4, chunk->num_columns());
+        EXPECT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(1, chunk->get(0)[0].get_int8());
+        EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
+        EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
+        EXPECT_EQ("{'ele1':4294967297,'ele2':4294967298}", chunk->get_column_by_index(3)->debug_item(0));
+    }
+
+    // load avro map natively into a MAP<VARCHAR, BIGINT> column selected via jsonpaths
+    {
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(65533),
+                                                           TypeDescriptor(TYPE_BIGINT)));
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_AVRO;
+        range.__set_path(data_path);
+        range.__isset.jsonpaths = true;
+        range.jsonpaths = R"(["$.maptype"])";
+        ranges.emplace_back(range);
+
+        auto scanner = create_avro_scanner(types, ranges, {"maptype"}, avro_helper.schema_text);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st;
+
+        auto st2 = scanner->get_next();
+        ASSERT_TRUE(st2.ok()) << st2.status();
+
+        ChunkPtr chunk = st2.value();
+        EXPECT_EQ(1, chunk->num_columns());
+        EXPECT_EQ(1, chunk->num_rows());
+        EXPECT_EQ("{'ele1':4294967297,'ele2':4294967298}", chunk->get_column_by_index(0)->debug_item(0));
+    }
+}
+
+TEST_F(AvroScannerTest, test_struct_type) {
+    // record root { record s { int f_int; string f_str; union{ null, string } f_opt; } }
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"s","type":{"type":"record","name":"inner","fields":[{"name":"f_int","type":"int"},{"name":"f_str","type":"string"},{"name":"f_opt","type":["null","string"]}]}}]})";
+
+    // build one avro record, scan it into a native STRUCT column, return the struct's debug_item.
+    // opt_value == nullptr selects the null branch of f_opt.
+    auto build_and_scan = [&](const char* opt_value) -> std::string {
+        AvroHelper avro_helper;
+        init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+        DeferOp avro_helper_deleter([&] {
+            avro_schema_decref(avro_helper.schema);
+            avro_value_iface_decref(avro_helper.iface);
+            avro_value_decref(&avro_helper.avro_val);
+        });
+
+        avro_value_t s_value;
+        EXPECT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "s", &s_value, NULL));
+
+        avro_value_t f_int;
+        if (avro_value_get_by_name(&s_value, "f_int", &f_int, NULL) == 0) {
+            avro_value_set_int(&f_int, 42);
+        }
+        avro_value_t f_str;
+        if (avro_value_get_by_name(&s_value, "f_str", &f_str, NULL) == 0) {
+            avro_value_set_string(&f_str, "hello");
+        }
+        avro_value_t f_opt;
+        if (avro_value_get_by_name(&s_value, "f_opt", &f_opt, NULL) == 0) {
+            avro_value_t branch;
+            if (opt_value == nullptr) {
+                avro_value_set_branch(&f_opt, 0, &branch);
+                avro_value_set_null(&branch);
+            } else {
+                avro_value_set_branch(&f_opt, 1, &branch);
+                avro_value_set_string(&branch, opt_value);
+            }
+        }
+
+        std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_struct_data.avro";
+        EXPECT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TypeDescriptor::create_struct_type(
+                {"f_int", "f_str", "f_opt"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(50),
+                                              TypeDescriptor::create_varchar_type(50)}));
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_AVRO;
+        range.__set_path(data_path);
+        ranges.emplace_back(range);
+
+        auto scanner = create_avro_scanner(types, ranges, {"s"}, avro_helper.schema_text);
+        Status st = scanner->open();
+        EXPECT_TRUE(st.ok()) << st;
+        if (!st.ok()) {
+            return std::string("open failed: ") + st.to_string();
+        }
+
+        auto st2 = scanner->get_next();
+        EXPECT_TRUE(st2.ok()) << st2.status();
+        if (!st2.ok()) {
+            return std::string("get_next failed: ") + st2.status().to_string();
+        }
+
+        ChunkPtr chunk = st2.value();
+        EXPECT_EQ(1, chunk->num_columns());
+        EXPECT_EQ(1, chunk->num_rows());
+        return chunk->get_column_by_index(0)->debug_item(0);
+    };
+
+    // Native struct parsing must be independent of avro_ignore_union_type_tag (that config only
+    // affects the JSON-string serialization path, not the native readers).
+    for (bool ignore_tag : {false, true}) {
+        config::avro_ignore_union_type_tag = ignore_tag;
+        // non-null union branch is unwrapped
+        EXPECT_EQ("{f_int:42,f_str:'hello',f_opt:'world'}", build_and_scan("world"));
+        // null union branch becomes a NULL struct field
+        EXPECT_EQ("{f_int:42,f_str:'hello',f_opt:NULL}", build_and_scan(nullptr));
+    }
+}
+
+TEST_F(AvroScannerTest, test_array_of_nullable_string) {
+    // record root { array< union{ null, string } > a }
+    // Regression guard for the codex review (PR #74901): an ARRAY<VARCHAR> whose elements are avro
+    // unions produces identical output under both avro_ignore_union_type_tag values. Array elements
+    // are delivered to the column writer already unwrapped, so the union wrapper never reaches the
+    // serializer and the config (which only governs union-tag serialization) is a no-op here. A
+    // null union element becomes a SQL NULL. This refutes the claim that the PR changed
+    // ARRAY<VARCHAR>/ARRAY<JSON> union-element serialization.
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"a","type":{"type":"array","items":["null","string"]}}]})";
+
+    // Build one avro record holding the array ["x", null, "y"] (each element a union branch) and
+    // scan it into a native ARRAY<VARCHAR> column.
+    auto build_and_scan = [&]() -> ChunkPtr {
+        AvroHelper avro_helper;
+        init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+        DeferOp avro_helper_deleter([&] {
+            avro_schema_decref(avro_helper.schema);
+            avro_value_iface_decref(avro_helper.iface);
+            avro_value_decref(&avro_helper.avro_val);
+        });
+
+        avro_value_t array_value;
+        EXPECT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "a", &array_value, NULL));
+        // element 0: union -> "x"
+        avro_value_t ele0, branch0;
+        avro_value_append(&array_value, &ele0, NULL);
+        avro_value_set_branch(&ele0, 1, &branch0);
+        avro_value_set_string(&branch0, "x");
+        // element 1: union -> null
+        avro_value_t ele1, branch1;
+        avro_value_append(&array_value, &ele1, NULL);
+        avro_value_set_branch(&ele1, 0, &branch1);
+        avro_value_set_null(&branch1);
+        // element 2: union -> "y"
+        avro_value_t ele2, branch2;
+        avro_value_append(&array_value, &ele2, NULL);
+        avro_value_set_branch(&ele2, 1, &branch2);
+        avro_value_set_string(&branch2, "y");
+
+        std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_array_nullable_string_data.avro";
+        EXPECT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+        std::vector<TypeDescriptor> types;
+        TypeDescriptor t(TYPE_ARRAY);
+        t.children.emplace_back(TypeDescriptor::create_varchar_type(50));
+        types.emplace_back(t);
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_AVRO;
+        range.__isset.jsonpaths = false;
+        range.__set_path(data_path);
+        ranges.emplace_back(range);
+
+        auto scanner = create_avro_scanner(types, ranges, {"a"}, avro_helper.schema_text);
+        Status st = scanner->open();
+        EXPECT_TRUE(st.ok()) << st;
+        auto st2 = scanner->get_next();
+        EXPECT_TRUE(st2.ok()) << st2.status();
+        return st2.value();
+    };
+
+    // Elements arrive unwrapped: clean string values, the null union element is a SQL NULL.
+    {
+        config::avro_ignore_union_type_tag = true;
+        ChunkPtr chunk = build_and_scan();
+        ASSERT_EQ(1, chunk->num_columns());
+        ASSERT_EQ(1, chunk->num_rows());
+        auto array = chunk->get(0)[0].get_array();
+        ASSERT_EQ(3, array.size());
+        EXPECT_EQ("x", array[0].get_slice());
+        EXPECT_TRUE(array[1].is_null());
+        EXPECT_EQ("y", array[2].get_slice());
+    }
+    // =false produces the byte-identical result: the config does not reach array-element handling.
+    {
+        config::avro_ignore_union_type_tag = false;
+        ChunkPtr chunk = build_and_scan();
+        ASSERT_EQ(1, chunk->num_columns());
+        ASSERT_EQ(1, chunk->num_rows());
+        auto array = chunk->get(0)[0].get_array();
+        ASSERT_EQ(3, array.size());
+        EXPECT_EQ("x", array[0].get_slice());
+        EXPECT_TRUE(array[1].is_null());
+        EXPECT_EQ("y", array[2].get_slice());
+    }
+}
+
+TEST_F(AvroScannerTest, test_array_of_map) {
+    // record root { array< map<int> > am }
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"am","type":{"type":"array","items":{"type":"map","values":"int"}}}]})";
+    AvroHelper avro_helper;
+    init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t am_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "am", &am_value, NULL));
+    {
+        avro_value_t m1;
+        ASSERT_EQ(0, avro_value_append(&am_value, &m1, NULL));
+        avro_value_t a;
+        avro_value_add(&m1, "a", &a, NULL, NULL);
+        avro_value_set_int(&a, 1);
+        avro_value_t b;
+        avro_value_add(&m1, "b", &b, NULL, NULL);
+        avro_value_set_int(&b, 2);
+    }
+    {
+        avro_value_t m2;
+        ASSERT_EQ(0, avro_value_append(&am_value, &m2, NULL));
+        avro_value_t c;
+        avro_value_add(&m2, "c", &c, NULL, NULL);
+        avro_value_set_int(&c, 3);
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_array_of_map_data.avro";
+    ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_array_type(
+            TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_INT))));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges, {"am"}, avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st;
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok()) << st2.status();
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[{'a':1,'b':2},{'c':3}]", chunk->get_column_by_index(0)->debug_item(0));
+}
+
+TEST_F(AvroScannerTest, test_map_of_array) {
+    // record root { map< array<int> > ma }
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"ma","type":{"type":"map","values":{"type":"array","items":"int"}}}]})";
+    AvroHelper avro_helper;
+    init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t ma_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "ma", &ma_value, NULL));
+    {
+        avro_value_t arr_x;
+        avro_value_add(&ma_value, "x", &arr_x, NULL, NULL);
+        avro_value_t e1;
+        avro_value_append(&arr_x, &e1, NULL);
+        avro_value_set_int(&e1, 1);
+        avro_value_t e2;
+        avro_value_append(&arr_x, &e2, NULL);
+        avro_value_set_int(&e2, 2);
+    }
+    {
+        avro_value_t arr_y;
+        avro_value_add(&ma_value, "y", &arr_y, NULL, NULL);
+        avro_value_t e3;
+        avro_value_append(&arr_y, &e3, NULL);
+        avro_value_set_int(&e3, 3);
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_map_of_array_data.avro";
+    ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20),
+                                                       TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges, {"ma"}, avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st;
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok()) << st2.status();
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("{'x':[1,2],'y':[3]}", chunk->get_column_by_index(0)->debug_item(0));
+}
+
+TEST_F(AvroScannerTest, test_array_of_struct) {
+    // record root { array< record{ int a; string b; } > as }
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"as","type":{"type":"array","items":{"type":"record","name":"item","fields":[{"name":"a","type":"int"},{"name":"b","type":"string"}]}}}]})";
+    AvroHelper avro_helper;
+    init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t as_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "as", &as_value, NULL));
+    {
+        avro_value_t rec;
+        ASSERT_EQ(0, avro_value_append(&as_value, &rec, NULL));
+        avro_value_t a;
+        avro_value_get_by_name(&rec, "a", &a, NULL);
+        avro_value_set_int(&a, 1);
+        avro_value_t b;
+        avro_value_get_by_name(&rec, "b", &b, NULL);
+        avro_value_set_string(&b, "x");
+    }
+    {
+        avro_value_t rec;
+        ASSERT_EQ(0, avro_value_append(&as_value, &rec, NULL));
+        avro_value_t a;
+        avro_value_get_by_name(&rec, "a", &a, NULL);
+        avro_value_set_int(&a, 2);
+        avro_value_t b;
+        avro_value_get_by_name(&rec, "b", &b, NULL);
+        avro_value_set_string(&b, "y");
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_array_of_struct_data.avro";
+    ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"a", "b"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(20)})));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges, {"as"}, avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st;
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok()) << st2.status();
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[{a:1,b:'x'},{a:2,b:'y'}]", chunk->get_column_by_index(0)->debug_item(0));
+}
+
+TEST_F(AvroScannerTest, test_struct_with_map) {
+    // record root { record s { int id; map<int> m; } }
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"s","type":{"type":"record","name":"inner","fields":[{"name":"id","type":"int"},{"name":"m","type":{"type":"map","values":"int"}}]}}]})";
+    AvroHelper avro_helper;
+    init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t s_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "s", &s_value, NULL));
+    avro_value_t id_value;
+    avro_value_get_by_name(&s_value, "id", &id_value, NULL);
+    avro_value_set_int(&id_value, 7);
+    avro_value_t m_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&s_value, "m", &m_value, NULL));
+    {
+        avro_value_t k1;
+        avro_value_add(&m_value, "k1", &k1, NULL, NULL);
+        avro_value_set_int(&k1, 10);
+        avro_value_t k2;
+        avro_value_add(&m_value, "k2", &k2, NULL, NULL);
+        avro_value_set_int(&k2, 20);
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_struct_with_map_data.avro";
+    ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_struct_type(
+            {"id", "m"},
+            {TypeDescriptor(TYPE_INT),
+             TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_INT))}));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges, {"s"}, avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st;
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok()) << st2.status();
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("{id:7,m:{'k1':10,'k2':20}}", chunk->get_column_by_index(0)->debug_item(0));
+}
+
+TEST_F(AvroScannerTest, test_deep_nested) {
+    // record root { array< record item{ string k; map< array<int> > m; } > data }
+    //   => destination ARRAY< STRUCT< k VARCHAR, m MAP<VARCHAR, ARRAY<INT>> > >
+    // Crosses all three container kinds in one chain: array -> struct -> map -> array.
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"data","type":{"type":"array","items":{"type":"record","name":"item","fields":[{"name":"k","type":"string"},{"name":"m","type":{"type":"map","values":{"type":"array","items":"int"}}}]}}}]})";
+    AvroHelper avro_helper;
+    init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    auto add_int_array = [](avro_value_t* map_value, const char* key, const std::vector<int>& vals) {
+        avro_value_t arr;
+        avro_value_add(map_value, key, &arr, NULL, NULL);
+        for (int v : vals) {
+            avro_value_t e;
+            avro_value_append(&arr, &e, NULL);
+            avro_value_set_int(&e, v);
+        }
+    };
+
+    avro_value_t data_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "data", &data_value, NULL));
+    {
+        avro_value_t item;
+        ASSERT_EQ(0, avro_value_append(&data_value, &item, NULL));
+        avro_value_t k;
+        avro_value_get_by_name(&item, "k", &k, NULL);
+        avro_value_set_string(&k, "a");
+        avro_value_t m;
+        avro_value_get_by_name(&item, "m", &m, NULL);
+        add_int_array(&m, "x", {1, 2});
+        add_int_array(&m, "y", {3});
+    }
+    {
+        avro_value_t item;
+        ASSERT_EQ(0, avro_value_append(&data_value, &item, NULL));
+        avro_value_t k;
+        avro_value_get_by_name(&item, "k", &k, NULL);
+        avro_value_set_string(&k, "b");
+        avro_value_t m;
+        avro_value_get_by_name(&item, "m", &m, NULL);
+        add_int_array(&m, "z", {4});
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_deep_nested_data.avro";
+    ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"k", "m"},
+            {TypeDescriptor::create_varchar_type(20),
+             TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20),
+                                             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)))})));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges, {"data"}, avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st;
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok()) << st2.status();
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[{k:'a',m:{'x':[1,2],'y':[3]}},{k:'b',m:{'z':[4]}}]", chunk->get_column_by_index(0)->debug_item(0));
+}
+
 void AvroScannerTest::test_map_nested_struct() {
     // protocol request {
     //     record cookie {
