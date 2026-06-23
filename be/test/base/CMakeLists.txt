@@ -61,6 +61,7 @@ set(BASE_TEST_FILES
     hash/crc32c_test.cpp
     hash/hash_util_test.cpp
     json/easy_json-test.cpp
+    json/json_util_test.cpp
     path/filesystem_util_test.cpp
     path/file_util_test.cpp
     path/path_builder_test.cpp

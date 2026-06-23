@@ -292,7 +292,6 @@ set(EXEC_FILES
         ./runtime/exception_stack_test.cpp
         ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp
-        ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp

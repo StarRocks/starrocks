@@ -24,7 +24,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
-#include "util/json_util.h"
+#include "base/json/json_util.h"
 #include "utils.h"
 
 namespace starrocks {

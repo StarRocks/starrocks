@@ -83,7 +83,7 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "simdjson.h"
 #include "util/byte_buffer.h"
-#include "util/json_util.h"
+#include "base/json/json_util.h"
 
 namespace starrocks {
 

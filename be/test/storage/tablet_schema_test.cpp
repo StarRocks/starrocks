@@ -18,7 +18,7 @@
 
 #include "storage/tablet_schema_helper.h"
 #include "storage/tablet_schema_map.h"
-#include "util/json_util.h"
+#include "base/json/json_util.h"
 
 namespace starrocks {
 // NOLINTNEXTLINE
