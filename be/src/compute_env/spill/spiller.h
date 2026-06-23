@@ -270,10 +270,7 @@ public:
 
     bool is_cancel() const { return _is_cancel; }
 
-    void cancel() {
-        _is_cancel = true;
-        _writer->cancel();
-    }
+    void cancel() { _is_cancel = true; }
 
     void set_finished() { cancel(); }
 
