@@ -22,6 +22,7 @@
 #include "common/logging.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 #include "compute_env/load_path/dummy_load_path_mgr.h"
 #include "compute_env/load_path/load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
@@ -38,7 +39,7 @@
 
 namespace starrocks {
 
-ComputeEnv::ComputeEnv() = default;
+ComputeEnv::ComputeEnv() : _dictionary_cache_manager(std::make_unique<DictionaryCacheManager>()) {}
 
 ComputeEnv::~ComputeEnv() = default;
 
@@ -206,6 +207,7 @@ void ComputeEnv::destroy() {
     _cache_mgr.reset();
     _driver_limiter.reset();
     _pipeline_timer.reset();
+    _dictionary_cache_manager.reset();
 }
 
 } // namespace starrocks

@@ -15,11 +15,11 @@
 #pragma once
 #include <memory>
 
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_fwd.h"
-#include "storage/dictionary_cache_manager.h"
-#include "storage/tablet_schema.h"
 
 namespace starrocks {
 

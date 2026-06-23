@@ -63,6 +63,7 @@
 #include "storage/primitive/column_expr_predicate.h"
 #include "storage/primitive/column_predicate.h"
 #include "storage/primitive/predicate_tree/predicate_tree.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -745,7 +746,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
     read_schema.append(id_field);
 
     // Add vector column to schema (simulating the case where FE doesn't prune it)
-    auto vec_field = std::make_shared<Field>(ChunkHelper::convert_field(1, schema->column(1)));
+    auto vec_field = std::make_shared<Field>(StorageSchemaHelper::convert_field(1, schema->column(1)));
     read_schema.append(vec_field);
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);

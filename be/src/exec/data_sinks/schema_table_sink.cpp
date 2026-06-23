@@ -25,7 +25,6 @@
 #include "common/configbase.h"
 #include "common/runtime_profile.h"
 #include "common/system/master_info.h"
-#include "exec/tablet_info.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -33,6 +32,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
+#include "storage/primitive/tablet_info.h"
 #include "types/datum.h"
 
 namespace starrocks {

@@ -22,11 +22,11 @@
 #include "exec/pipeline/fetch_sink_operator.h"
 #include "exec/pipeline/fetch_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/tablet_info.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
 FetchNode::FetchNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

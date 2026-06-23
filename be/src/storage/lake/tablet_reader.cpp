@@ -36,7 +36,6 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
-#include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
@@ -44,6 +43,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/primitive/conjunctive_predicates.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -722,7 +722,7 @@ Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const Olap
 
     for (size_t i = 0; i < input.size(); i++) {
         int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema.column(idx)));
+        auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(idx, tablet_schema.column(idx)));
         schema.append(f);
         values.emplace_back();
         if (input.is_null(i)) {

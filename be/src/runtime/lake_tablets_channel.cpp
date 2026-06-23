@@ -33,7 +33,6 @@
 #include "common/system/backend_options.h"
 #include "common/util/stack_trace_mutex.h"
 #include "common/util/table_metrics.h"
-#include "exec/tablet_info.h"
 #include "fs/bundle_file.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
@@ -50,6 +49,7 @@
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
+#include "storage/primitive/tablet_info.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {

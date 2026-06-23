@@ -54,6 +54,4 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, uint32_t nex
                                      const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                                      TabletSchemaPB* out_schema, TCompressionType::type compression_type);
 
-Status preprocess_default_expr_for_tcolumns(std::vector<TColumn>& columns);
-
 } // namespace starrocks

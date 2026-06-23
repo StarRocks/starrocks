@@ -33,10 +33,10 @@
 #include "common/thread/threadpool.h"
 #include "common/tracer_fwd.h"
 #include "exec/data_sinks/async_data_sink.h"
-#include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
 

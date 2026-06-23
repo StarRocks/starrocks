@@ -84,7 +84,6 @@ class TAllocateAutoIncrementIdParam;
 class TAllocateAutoIncrementIdResult;
 class UpdateManager;
 class CompactionManager;
-class DictionaryCacheManager;
 class LoadSpillBlockMergeExecutor;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
@@ -231,8 +230,6 @@ public:
     ReplicationTxnManager* replication_txn_manager() { return _replication_txn_manager.get(); }
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
-
-    DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
@@ -521,8 +518,6 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
-
-    std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 

@@ -59,7 +59,9 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
@@ -89,7 +91,6 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/service_metrics.h"
-#include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/type_descriptor.h"
@@ -1081,9 +1082,10 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     PProcessDictionaryCacheRequestType request_type = request->type();
+    auto* dictionary_cache_manager = _exec_env->compute_env()->dictionary_cache_manager();
     switch (request_type) {
     case PProcessDictionaryCacheRequestType::BEGIN: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
+        auto st = dictionary_cache_manager->begin(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1093,7 +1095,7 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::REFRESH: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        auto st = dictionary_cache_manager->refresh(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1103,7 +1105,7 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::COMMIT: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
+        auto st = dictionary_cache_manager->commit(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1113,12 +1115,12 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::CLEAR: {
-        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        dictionary_cache_manager->clear(request->dict_id(), request->is_cancel());
         Status::OK().to_protobuf(response->mutable_status());
         break;
     }
     case PProcessDictionaryCacheRequestType::STATISTIC: {
-        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        dictionary_cache_manager->get_info(request->dict_id(), *response);
         Status::OK().to_protobuf(response->mutable_status());
         break;
     }

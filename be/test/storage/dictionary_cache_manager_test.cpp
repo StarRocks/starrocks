@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/dictionary_cache_manager.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 
 #include <fmt/format.h>
 #include <gmock/gmock.h>
@@ -22,12 +22,15 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
+#include "compute_env/compute_env.h"
 #include "compute_env/dictionary_cache/chunk_util.h"
-#include "exec/tablet_info.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/primitive/tablet_info.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/column_test_helper.h"
@@ -246,7 +249,8 @@ public:
         return e;
     }
 
-    starrocks::DictionaryCacheManager* dictionary_cache_manager = StorageEngine::instance()->dictionary_cache_manager();
+    starrocks::DictionaryCacheManager* dictionary_cache_manager =
+            ExecEnv::GetInstance()->compute_env()->dictionary_cache_manager();
     TabletSharedPtr test_tablet = nullptr;
 };
 
@@ -354,7 +358,8 @@ TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_test) {
     dictionary_get_expr->add_child(
             new_mock_expr(ColumnTestHelper::build_column<int64_t>({0}), LogicalType::TYPE_BIGINT, objpool));
 
-    ASSERT_TRUE(dictionary_get_expr->prepare(nullptr, nullptr).ok());
+    RuntimeState runtime_state(ExecEnv::GetInstance());
+    ASSERT_TRUE(dictionary_get_expr->prepare(&runtime_state, nullptr).ok());
     auto res = dictionary_get_expr->evaluate_checked(nullptr, nullptr);
     ASSERT_TRUE(res.ok());
 

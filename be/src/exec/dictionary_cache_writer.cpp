@@ -20,8 +20,8 @@
 #include "compute_env/dictionary_cache/chunk_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
-#include "exec/tablet_info.h"
 #include "runtime/service_contexts.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
 

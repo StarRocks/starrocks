@@ -28,6 +28,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/primitive/primary_key_encoder.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/types.h"
 #include "types/storage_type_traits.h"
 #include "types/type_descriptor.h"
@@ -131,7 +132,7 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
         for (int i = 0; i < n; i++) {
             const int idx = sort_key_idxes[i];
             schema.append_sort_key_idx(idx);
-            auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
+            auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(idx, tablet_schema->column(idx)));
             schema.append(f);
 
             Datum datum;

@@ -24,10 +24,10 @@
 #include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/ref_counted.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace brpc {
 class Controller;

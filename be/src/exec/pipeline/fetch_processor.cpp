@@ -29,11 +29,11 @@
 #include "common/runtime_profile.h"
 #include "common/system/master_info.h"
 #include "exec/pipeline/fetch_task.h"
-#include "exec/tablet_info.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks::pipeline {
 

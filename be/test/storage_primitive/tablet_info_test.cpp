@@ -32,12 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/tablet_info.h"
+#include "storage/primitive/tablet_info.h"
 
 #include <gtest/gtest.h>
 
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -215,14 +214,9 @@ static TExpr make_slot_ref_texpr() {
 }
 
 static RuntimeState* make_runtime_state(ObjectPool* pool) {
-    TUniqueId query_id;
-    TQueryOptions query_options;
     TQueryGlobals query_globals;
-    TUniqueId fragment_id;
-    auto* exec_env = ExecEnv::GetInstance();
-    auto* state = pool->add(new RuntimeState(query_id, fragment_id, query_options, query_globals,
-                                             &exec_env->query_execution_services(), exec_env));
-    state->init_mem_trackers(query_id);
+    auto* state = pool->add(new RuntimeState(query_globals));
+    state->init_instance_mem_tracker();
     return state;
 }
 

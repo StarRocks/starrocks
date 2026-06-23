@@ -75,7 +75,6 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
-#include "storage/dictionary_cache_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -134,8 +133,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _storage_cleanup_executor(new StorageCleanupExecutor()),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
-          _compaction_manager(new CompactionManager()),
-          _dictionary_cache_manager(new DictionaryCacheManager()) {
+          _compaction_manager(new CompactionManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;

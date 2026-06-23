@@ -308,7 +308,6 @@ set(EXEC_NON_PIPELINE_FILES
     short_circuit.cpp
     short_circuit_hybrid.cpp
     olap_common.cpp
-    tablet_info.cpp
     write_combined_txn_log.cpp
     cache_stats_scanner.cpp
     local_file_writer.cpp
