@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "compute_env/spill/block_manager.h"
@@ -126,6 +128,8 @@ private:
     RuntimeProfile* _profile = nullptr;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+    // Load spilling uses a dummy RuntimeState without QueryContext.
+    std::atomic_int64_t _total_spill_bytes = 0;
     // pipeline merge context for managing merge tasks
     LoadSpillPipelineMergeContext* _pipeline_merge_context = nullptr;
     // used when input profile is nullptr
