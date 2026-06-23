@@ -97,7 +97,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         groupKeys.add(distinctColRef);
         final var partitionBys = aggOp.getGroupingKeys();
 
-        return !SplitMultiPhaseAggRule.isThreeStageMoreEfficient(context.getConnectContext(), input, groupKeys, partitionBys);
+        return !SplitMultiPhaseAggRule.isThreeStageMoreEfficient(input, groupKeys, partitionBys);
     }
 
     // compute the type of bucket column, since bucket column introduce extra cost, so we
