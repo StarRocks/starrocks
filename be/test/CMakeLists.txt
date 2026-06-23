@@ -289,7 +289,6 @@ set(EXEC_FILES
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
-        ./util/dynamic_cache_test.cpp
         ./runtime/exception_stack_test.cpp
         ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp

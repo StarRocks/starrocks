@@ -18,13 +18,13 @@
 #include <unordered_map>
 
 #include "base/string/parse_util.h"
+#include "cache/dynamic_cache.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
-#include "util/dynamic_cache.h"
 
 namespace starrocks {
 

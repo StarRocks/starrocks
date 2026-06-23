@@ -19,6 +19,7 @@
 
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "cache/dynamic_cache.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/system/master_info.h"
@@ -41,7 +42,6 @@
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type.h"
-#include "util/dynamic_cache.h"
 #include "vacuum.h"
 
 namespace starrocks::lake {

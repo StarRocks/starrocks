@@ -33,6 +33,7 @@
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/rowset_column_update_state.h"
+#include "storage/rowset_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
