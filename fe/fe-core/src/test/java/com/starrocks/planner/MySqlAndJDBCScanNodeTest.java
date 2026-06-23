@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -29,6 +30,12 @@ import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.DateType;
@@ -40,6 +47,7 @@ import org.junit.jupiter.api.Test;
 import java.sql.Types;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -76,6 +84,15 @@ public class MySqlAndJDBCScanNodeTest {
         slot.setColumn(column);
         slot.setIsMaterialized(true);
         return slot;
+    }
+
+    private LogicalJDBCScanOperator createJDBCScanOperator(JDBCTable table,
+                                                           Map<ColumnRefOperator, Column> scanColumns,
+                                                           long limit,
+                                                           ScalarOperator predicate) {
+        Map<Column, ColumnRefOperator> columnToRef = new LinkedHashMap<>();
+        scanColumns.forEach((ref, column) -> columnToRef.put(column, ref));
+        return new LogicalJDBCScanOperator(table, scanColumns, columnToRef, limit, predicate, null);
     }
 
     private List<Expr> createConjuncts() {
@@ -198,6 +215,19 @@ public class MySqlAndJDBCScanNodeTest {
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: select"), nodeString);
         Assertions.assertTrue(nodeString.contains("FROM select"), nodeString);
+    }
+
+    @Test
+    public void testOracleJDBCScanNodeLimitUsesRowNum() throws DdlException {
+        Column column = new Column("group", VarcharType.VARCHAR);
+        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(column),
+                Collections.singletonList(createSlotDescriptor(1, column)));
+        scanNode.setLimit(5);
+        scanNode.computeColumnsAndFilters();
+
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains(
+                "QUERY: SELECT * FROM (SELECT group FROM orders) WHERE ROWNUM <= 5"), nodeString);
     }
 
     @Test
@@ -379,7 +409,6 @@ public class MySqlAndJDBCScanNodeTest {
     @Test
     public void testOracleAggregatePushDownQueryUsesSafeAliasAndTemporalRewrite() throws DdlException {
         Column datetimeColumn = new Column("ts_col", VarcharType.VARCHAR);
-        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
 
@@ -394,21 +423,73 @@ public class MySqlAndJDBCScanNodeTest {
                 Collections.singletonList(datetimeColumn), properties);
         oracleTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
 
-        String pushDownQuery = JDBCScanNode.buildAggregatePushDownQuery(oracleTable,
-                Lists.newArrayList(new SlotRef("ts_col", datetimeSlot)),
+        ColumnRefOperator tsColRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "ts_col", true);
+        Map<ColumnRefOperator, Column> scanColumns = new LinkedHashMap<>();
+        scanColumns.put(tsColRef, datetimeColumn);
+
+        ScalarOperator scanPredicate = new BinaryPredicateOperator(BinaryType.GE,
+                tsColRef, ConstantOperator.createVarchar("2026-03-12 09:30:15"));
+        LogicalJDBCScanOperator scan = createJDBCScanOperator(oracleTable, scanColumns,
+                Operator.DEFAULT_LIMIT, scanPredicate);
+
+        String pushDownQuery = JDBCPushDownSQLBuilder.buildScalarSelectQuery(scan,
+                Lists.newArrayList(tsColRef),
                 Lists.newArrayList("jdbc_agg_1"),
-                Lists.newArrayList(new BinaryPredicate(BinaryType.GE,
-                        new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-12 09:30:15"))),
-                Lists.newArrayList(new SlotRef("ts_col", datetimeSlot)),
-                Lists.newArrayList(new BinaryPredicate(BinaryType.LE,
-                        new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-13 09:30:15"))));
+                Lists.newArrayList(tsColRef),
+                Lists.newArrayList(new BinaryPredicateOperator(BinaryType.LE,
+                        tsColRef, ConstantOperator.createVarchar("2026-03-13 09:30:15"))));
 
         Assertions.assertTrue(pushDownQuery.contains("ts_col AS jdbc_agg_1"), pushDownQuery);
         Assertions.assertFalse(pushDownQuery.contains("__jdbc_agg_"), pushDownQuery);
-        Assertions.assertTrue(pushDownQuery.contains("WHERE (ts_col >= timestamp '2026-03-12 09:30:15')"),
+        Assertions.assertTrue(pushDownQuery.contains("WHERE (ts_col >= TIMESTAMP '2026-03-12 09:30:15')"),
                 pushDownQuery);
-        Assertions.assertTrue(pushDownQuery.contains("HAVING (ts_col <= timestamp '2026-03-13 09:30:15')"),
+        Assertions.assertTrue(pushDownQuery.contains("GROUP BY ts_col"), pushDownQuery);
+        Assertions.assertTrue(pushDownQuery.contains("HAVING (ts_col <= TIMESTAMP '2026-03-13 09:30:15')"),
                 pushDownQuery);
+    }
+
+    @Test
+    public void testAggregatePushDownQueryWithTableLimitUsesDialect() throws DdlException {
+        Column column = new Column("a", VarcharType.VARCHAR);
+        ColumnRefOperator colRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "a", true);
+        Map<ColumnRefOperator, Column> scanColumns = new LinkedHashMap<>();
+        scanColumns.put(colRef, column);
+        ScalarOperator scanPredicate =
+                new BinaryPredicateOperator(BinaryType.EQ, colRef, ConstantOperator.createVarchar("x"));
+
+        Map<String, String> oracleProperties = Maps.newHashMap();
+        oracleProperties.put("user", "oracle");
+        oracleProperties.put("password", "123456");
+        oracleProperties.put("jdbc_uri", "jdbc:oracle:thin:@localhost:1521:orcl");
+        oracleProperties.put("driver_url", "driver_url");
+        oracleProperties.put("checksum", "checksum");
+        oracleProperties.put("driver_class", "oracle.jdbc.driver.OracleDriver");
+        JDBCTable oracleTable = new JDBCTable(1, "orders", Collections.singletonList(column), oracleProperties);
+
+        LogicalJDBCScanOperator oracleScan = createJDBCScanOperator(oracleTable, scanColumns, 4, scanPredicate);
+        String oracleQuery = JDBCPushDownSQLBuilder.buildScalarSelectQuery(oracleScan,
+                Lists.newArrayList(colRef), Lists.newArrayList("a"), Lists.newArrayList(colRef),
+                Collections.emptyList());
+        Assertions.assertTrue(oracleQuery.contains(
+                "FROM (SELECT * FROM (SELECT a FROM orders WHERE (a = 'x')) WHERE ROWNUM <= 4) sr_limited"),
+                oracleQuery);
+
+        Map<String, String> sqlServerProperties = Maps.newHashMap();
+        sqlServerProperties.put("user", "sa");
+        sqlServerProperties.put("password", "123456");
+        sqlServerProperties.put("jdbc_uri", "jdbc:sqlserver://localhost:1433;databaseName=testdb");
+        sqlServerProperties.put("driver_url", "driver_url");
+        sqlServerProperties.put("checksum", "checksum");
+        sqlServerProperties.put("driver_class", "com.microsoft.sqlserver.jdbc.SQLServerDriver");
+        JDBCTable sqlServerTable = new JDBCTable(1, "orders", Collections.singletonList(column), sqlServerProperties);
+
+        LogicalJDBCScanOperator sqlServerScan = createJDBCScanOperator(sqlServerTable, scanColumns,
+                4, scanPredicate);
+        String sqlServerQuery = JDBCPushDownSQLBuilder.buildScalarSelectQuery(sqlServerScan,
+                Lists.newArrayList(colRef), Lists.newArrayList("a"), Lists.newArrayList(colRef),
+                Collections.emptyList());
+        Assertions.assertTrue(sqlServerQuery.contains(
+                "FROM (SELECT TOP(4) a FROM orders WHERE (a = 'x')) sr_limited"), sqlServerQuery);
     }
 
     @Test
@@ -425,10 +506,24 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(sqlServerTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, sqlServerTable);
+        scanNode.setLimit(8);
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: table"), nodeString);
-        Assertions.assertTrue(nodeString.contains("FROM table"), nodeString);
+        Assertions.assertTrue(nodeString.contains("QUERY: SELECT TOP(8) * FROM table"), nodeString);
+    }
+
+    @Test
+    public void testBuildSelectQueryLimitDialect() {
+        Assertions.assertEquals("SELECT `a` FROM `tbl` LIMIT 3",
+                JDBCPushDownSQLBuilder.buildSelectQuery("jdbc:mysql://localhost:3306",
+                        Collections.singletonList("`a`"), "`tbl`", Collections.emptyList(), 3));
+        Assertions.assertEquals("SELECT TOP(3) a FROM tbl",
+                JDBCPushDownSQLBuilder.buildSelectQuery("jdbc:sqlserver://localhost:1433",
+                        Collections.singletonList("a"), "tbl", Collections.emptyList(), 3));
+        Assertions.assertEquals("SELECT * FROM (SELECT a FROM tbl WHERE (a > 1)) WHERE ROWNUM <= 3",
+                JDBCPushDownSQLBuilder.buildSelectQuery("jdbc:oracle:thin:@localhost:1521:orcl",
+                        Collections.singletonList("a"), "tbl", Collections.singletonList("a > 1"), 3));
     }
 
     @Test

@@ -15,12 +15,13 @@
 
 package com.starrocks.planner;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
+import com.starrocks.connector.jdbc.ScalarOperatorToJDBCSQLVisitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
@@ -38,13 +39,10 @@ import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.VarcharType;
 
-import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -172,109 +170,10 @@ public class JDBCScanNode extends ScanNode {
         return output.toString();
     }
 
+    // Explain-only preview ("QUERY:" line). Keep it on the same JDBC SQL builder path as
+    // optimizer-generated pushdown SQL so FE limit rendering stays dialect-aware.
     private String getJDBCQueryStr() {
-        return buildJDBCQueryStr(columns, tableName, filters, Lists.newArrayList(),
-                Lists.newArrayList(), limit);
-    }
-
-    public static String buildAggregatePushDownQuery(JDBCTable table, List<Expr> selectExprs,
-                                                     List<String> selectAliases, List<Expr> predicates,
-                                                     List<Expr> groupByExprs) {
-        return buildAggregatePushDownQuery(table, selectExprs, selectAliases, predicates, groupByExprs,
-                Lists.newArrayList());
-    }
-
-    public static String buildAggregatePushDownQuery(JDBCTable table, List<Expr> selectExprs,
-                                                     List<String> selectAliases, List<Expr> predicates,
-                                                     List<Expr> groupByExprs, List<Expr> havingExprs) {
-        return buildPushDownQuery(table, selectExprs, selectAliases, predicates, groupByExprs, havingExprs);
-    }
-
-    private static String buildPushDownQuery(JDBCTable table, List<Expr> selectExprs,
-                                             List<String> selectAliases, List<Expr> predicates,
-                                             List<Expr> groupByExprs, List<Expr> havingExprs) {
-        String identifier = getIdentifierSymbol(table.getJdbcUri());
-        String tableName = (table.isQueryTable() || table.isDerivedTable()) ?
-                table.getCatalogTableName() : wrapWithIdentifier(table.getCatalogTableName(), identifier);
-        List<String> selectItems = toJdbcSelectItems(selectExprs, selectAliases, identifier);
-        List<String> filters = toJdbcSql(rewriteJdbcPredicateExprs(table, predicates), identifier);
-        List<String> groupByColumns = toJdbcSql(groupByExprs, identifier);
-        List<String> havingPredicates = toJdbcSql(rewriteJdbcPredicateExprs(table, havingExprs), identifier);
-        return buildJDBCQueryStr(selectItems, tableName, filters, groupByColumns, havingPredicates);
-    }
-
-    private static String buildJDBCQueryStr(List<String> columns, String tableName, List<String> filters,
-                                            List<String> groupByColumns) {
-        return buildJDBCQueryStr(columns, tableName, filters, groupByColumns, Lists.newArrayList());
-    }
-
-    private static String buildJDBCQueryStr(List<String> columns, String tableName, List<String> filters,
-                                            List<String> groupByColumns, List<String> havingPredicates) {
-        return buildJDBCQueryStr(columns, tableName, filters, groupByColumns, havingPredicates, -1);
-    }
-
-    private static String buildJDBCQueryStr(List<String> columns, String tableName, List<String> filters,
-                                            List<String> groupByColumns, List<String> havingPredicates, long limit) {
-        StringBuilder sql = new StringBuilder("SELECT ");
-        sql.append(Joiner.on(", ").join(columns));
-        sql.append(" FROM ").append(tableName);
-
-        if (!filters.isEmpty()) {
-            sql.append(" WHERE (");
-            sql.append(Joiner.on(") AND (").join(filters));
-            sql.append(")");
-        }
-        if (!groupByColumns.isEmpty()) {
-            sql.append(" GROUP BY ");
-            sql.append(Joiner.on(", ").join(groupByColumns));
-        }
-        if (!havingPredicates.isEmpty()) {
-            sql.append(" HAVING (");
-            sql.append(Joiner.on(") AND (").join(havingPredicates));
-            sql.append(")");
-        }
-        if (limit > 0) {
-            sql.append(" LIMIT ").append(limit);
-        }
-        return sql.toString();
-    }
-
-    private static List<String> toJdbcSelectItems(List<Expr> exprs, List<String> aliases, String identifier) {
-        List<String> sqls = Lists.newArrayList();
-        for (int i = 0; i < exprs.size(); i++) {
-            String sql = toJdbcSql(exprs.get(i), identifier);
-            if (aliases != null && i < aliases.size() && aliases.get(i) != null) {
-                sql += " AS " + wrapColumnWithIdentifier(aliases.get(i), identifier);
-            }
-            sqls.add(sql);
-        }
-        return sqls;
-    }
-
-    private static List<String> toJdbcSql(List<Expr> exprs, String identifier) {
-        List<String> sqls = Lists.newArrayList();
-        for (Expr expr : exprs) {
-            sqls.add(toJdbcSql(expr, identifier));
-        }
-        return sqls;
-    }
-
-    private static String toJdbcSql(Expr expr, String identifier) {
-        return AstToStringBuilder.toString(rewriteSlotRefsWithIdentifier(expr, identifier));
-    }
-
-    private static Expr rewriteSlotRefsWithIdentifier(Expr expr, String identifier) {
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        ExprUtils.collectList(Lists.newArrayList(expr), SlotRef.class, slotRefs);
-        ExprSubstitutionMap sMap = new ExprSubstitutionMap();
-        for (SlotRef slotRef : slotRefs) {
-            SlotRef tmpRef = (SlotRef) slotRef.clone();
-            tmpRef.setTblName(null);
-            String label = tmpRef.getLabel() == null ? tmpRef.getColumnName() : tmpRef.getLabel();
-            tmpRef.setLabel(wrapColumnWithIdentifier(label, identifier));
-            sMap.put(slotRef, tmpRef);
-        }
-        return ExprUtils.cloneList(Lists.newArrayList(expr), sMap).get(0);
+        return JDBCPushDownSQLBuilder.buildSelectQuery(getJdbcUri(), columns, tableName, filters, limit);
     }
 
     private static String wrapColumnWithIdentifier(String name, String identifier) {
@@ -334,78 +233,8 @@ public class JDBCScanNode extends ScanNode {
         return jdbcUri != null && jdbcUri.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle");
     }
 
-    private static String normalizeColumnName(String columnName) {
-        if (columnName == null) {
-            return "";
-        }
-        if (columnName.length() >= 2) {
-            char first = columnName.charAt(0);
-            char last = columnName.charAt(columnName.length() - 1);
-            if ((first == '"' && last == '"') || (first == '`' && last == '`')) {
-                columnName = columnName.substring(1, columnName.length() - 1);
-            }
-        }
-        return columnName.toLowerCase(Locale.ROOT);
-    }
-
-    private static final int ORACLE_TIMESTAMP_WITH_LOCAL_TZ = -102;
-    private static final int ORACLE_TIMESTAMP_WITH_TZ = -101;
-
-    private static PrimitiveType mapJdbcTypeToTemporalType(int jdbcType) {
-        switch (jdbcType) {
-            case Types.DATE:
-                return PrimitiveType.DATE;
-            case Types.TIMESTAMP:
-            case ORACLE_TIMESTAMP_WITH_LOCAL_TZ:
-            case ORACLE_TIMESTAMP_WITH_TZ:
-            case Types.TIMESTAMP_WITH_TIMEZONE:
-                return PrimitiveType.DATETIME;
-            default:
-                return null;
-        }
-    }
-
-    private Map<String, PrimitiveType> collectOracleTemporalColumns() {
-        return collectOracleTemporalColumns(table);
-    }
-
-    private static Map<String, PrimitiveType> collectOracleTemporalColumns(JDBCTable table) {
-        Map<String, PrimitiveType> temporalColumns = new HashMap<>();
-
-        // Prefer original JDBC types from the cached column schema (covers TIMESTAMP -> VARCHAR mapping)
-        Map<String, Integer> originalJdbcTypes = table.getOriginalJdbcColumnTypes();
-        if (originalJdbcTypes != null && !originalJdbcTypes.isEmpty()) {
-            for (Map.Entry<String, Integer> entry : originalJdbcTypes.entrySet()) {
-                PrimitiveType temporalType = mapJdbcTypeToTemporalType(entry.getValue());
-                if (temporalType != null) {
-                    temporalColumns.put(normalizeColumnName(entry.getKey()), temporalType);
-                }
-            }
-            return temporalColumns;
-        }
-        return temporalColumns;
-    }
-
-    private static List<Expr> rewriteJdbcPredicateExprs(JDBCTable table, List<Expr> exprs) {
-        if (exprs.isEmpty()) {
-            return exprs;
-        }
-        List<Expr> rewrittenExprs = Lists.newArrayList();
-        Map<String, PrimitiveType> oracleTemporalColumns = Collections.emptyMap();
-        if (isOracleJdbcUri(table.getJdbcUri())) {
-            oracleTemporalColumns = collectOracleTemporalColumns(table);
-        }
-        for (Expr expr : ExprUtils.cloneList(exprs)) {
-            expr = ExprUtils.replaceLargeStringLiteral(expr);
-            if (!oracleTemporalColumns.isEmpty()) {
-                expr = rewriteOracleTemporalPredicateExpr(expr, oracleTemporalColumns);
-            }
-            rewrittenExprs.add(expr);
-        }
-        return rewrittenExprs;
-    }
-
-    private static Expr rewriteOracleTemporalPredicateExpr(Expr expr, Map<String, PrimitiveType> temporalColumns) {
+    private static Expr rewriteOracleTemporalPredicateExpr(
+            Expr expr, Map<String, ScalarOperatorToJDBCSQLVisitor.TemporalKind> temporalColumns) {
         for (int i = 0; i < expr.getChildren().size(); i++) {
             expr.setChild(i, rewriteOracleTemporalPredicateExpr(expr.getChild(i), temporalColumns));
         }
@@ -420,10 +249,9 @@ public class JDBCScanNode extends ScanNode {
 
             SlotRef slotRef = (SlotRef) left;
             String slotColumnName = slotRef.getColumnName() != null ? slotRef.getColumnName() : slotRef.getLabel();
-            PrimitiveType slotType = temporalColumns.get(normalizeColumnName(slotColumnName));
-            if (slotType == null) {
-                return expr;
-            } else if (slotType != PrimitiveType.DATE && slotType != PrimitiveType.DATETIME) {
+            ScalarOperatorToJDBCSQLVisitor.TemporalKind slotKind =
+                    temporalColumns.get(ScalarOperatorToJDBCSQLVisitor.normalizeColumnName(slotColumnName));
+            if (slotKind == null) {
                 return expr;
             }
 
@@ -445,10 +273,9 @@ public class JDBCScanNode extends ScanNode {
 
             SlotRef slotRef = (SlotRef) left;
             String slotColumnName = slotRef.getColumnName() != null ? slotRef.getColumnName() : slotRef.getLabel();
-            PrimitiveType slotType = temporalColumns.get(normalizeColumnName(slotColumnName));
-            if (slotType == null) {
-                return expr;
-            } else if (slotType != PrimitiveType.DATE && slotType != PrimitiveType.DATETIME) {
+            ScalarOperatorToJDBCSQLVisitor.TemporalKind slotKind =
+                    temporalColumns.get(ScalarOperatorToJDBCSQLVisitor.normalizeColumnName(slotColumnName));
+            if (slotKind == null) {
                 return expr;
             }
 
@@ -482,10 +309,9 @@ public class JDBCScanNode extends ScanNode {
 
         SlotRef slotRef = (SlotRef) left;
         String slotColumnName = slotRef.getColumnName() != null ? slotRef.getColumnName() : slotRef.getLabel();
-        PrimitiveType slotType = temporalColumns.get(normalizeColumnName(slotColumnName));
-        if (slotType == null) {
-            return expr;
-        } else if (slotType != PrimitiveType.DATE && slotType != PrimitiveType.DATETIME) {
+        ScalarOperatorToJDBCSQLVisitor.TemporalKind slotKind =
+                temporalColumns.get(ScalarOperatorToJDBCSQLVisitor.normalizeColumnName(slotColumnName));
+        if (slotKind == null) {
             return expr;
         }
 
@@ -545,9 +371,9 @@ public class JDBCScanNode extends ScanNode {
         // would be unmatched after remove cast operator in PushDownPredicateTOExternalTableScanRule, which
         // would cause BE report error "VectorizedInPredicate type not same";
         conjuncts.clear();
-        Map<String, PrimitiveType> oracleTemporalColumns = Collections.emptyMap();
+        Map<String, ScalarOperatorToJDBCSQLVisitor.TemporalKind> oracleTemporalColumns = Collections.emptyMap();
         if (isOracleJdbcUri()) {
-            oracleTemporalColumns = collectOracleTemporalColumns();
+            oracleTemporalColumns = ScalarOperatorToJDBCSQLVisitor.temporalColumnsByNormalizedName(table);
         }
         List<String> originalFilters = new ArrayList<>(jdbcConjuncts.size());
         for (Expr p : jdbcConjuncts) {

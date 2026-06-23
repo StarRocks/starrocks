@@ -21,12 +21,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.planner.JDBCScanNode;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.SlotId;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
 import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -41,7 +37,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.type.Type;
 
 import java.util.List;
@@ -75,7 +70,8 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         }
         LogicalAggregationOperator aggregationOperator = input.getOp().cast();
         LogicalJDBCScanOperator scanOperator = getScanOperator(input);
-        return buildAggregatePushDown(aggregationOperator, scanOperator) != null;
+        // Cheap structural gate only; the full feasibility analysis runs once in transform().
+        return canPushDownAggregate(aggregationOperator, scanOperator);
     }
 
     @Override
@@ -84,18 +80,18 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         LogicalJDBCScanOperator scanOperator = getScanOperator(input);
         AggregatePushDown pushDown = buildAggregatePushDown(aggregationOperator, scanOperator);
         if (pushDown == null) {
-            return Lists.newArrayList(input);
+            // An empty result means "not applied" — returning the input would count as a
+            // change and keep an iterative rewrite pass spinning.
+            return Lists.newArrayList();
         }
 
         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap = Maps.newLinkedHashMap();
         Map<Column, ColumnRefOperator> newColumnMetaToColRefMap = Maps.newLinkedHashMap();
         List<Column> outputColumns = Lists.newArrayList();
-        List<Expr> selectExprs = Lists.newArrayList();
+        List<ScalarOperator> selectItems = Lists.newArrayList();
         List<String> selectAliases = Lists.newArrayList();
         Set<String> outputColumnNames = Sets.newHashSet();
         int aggregateAliasIndex = 0;
-        ScalarOperatorToExpr.FormatterContext inputFormatter =
-                new ScalarOperatorToExpr.FormatterContext(buildJDBCInputExprMap(scanOperator));
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : pushDown.outputColumnRefToExpr.entrySet()) {
             ColumnRefOperator outputColumnRef = entry.getKey();
@@ -106,34 +102,23 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
                     aggregateAlias = JDBC_AGG_ALIAS_PREFIX + aggregateAliasIndex++;
                 } while (outputColumnNames.contains(aggregateAlias.toLowerCase(Locale.ROOT)));
             }
-            Column outputColumn = createOutputColumn(outputColumnRef, outputExpr, scanOperator, aggregateAlias);
+            String columnName = outputExpr instanceof CallOperator ? aggregateAlias : outputColumnRef.getName();
+            Column outputColumn = JDBCPushDownRuleUtils.createOutputColumn(
+                    outputColumnRef, outputExpr, scanOperator, columnName);
 
             newColRefToColumnMetaMap.put(outputColumnRef, outputColumn);
             newColumnMetaToColRefMap.put(outputColumn, outputColumnRef);
             outputColumns.add(outputColumn);
             outputColumnNames.add(outputColumn.getName().toLowerCase(Locale.ROOT));
-            selectExprs.add(ScalarOperatorToExpr.buildExecExpression(outputExpr, inputFormatter));
+            selectItems.add(outputExpr);
             selectAliases.add(outputColumn.getName());
         }
 
-        List<Expr> predicateExprs = Lists.newArrayList();
-        for (ScalarOperator predicate : Utils.extractConjuncts(scanOperator.getPredicate())) {
-            predicateExprs.add(ScalarOperatorToExpr.buildExecExpression(predicate, inputFormatter));
-        }
-
-        List<Expr> groupByExprs = Lists.newArrayList();
-        for (ScalarOperator groupByExpr : pushDown.groupByExprs) {
-            groupByExprs.add(ScalarOperatorToExpr.buildExecExpression(groupByExpr, inputFormatter));
-        }
-
-        List<Expr> havingExprs = Lists.newArrayList();
-        for (ScalarOperator havingPredicate : Utils.extractConjuncts(pushDown.havingPredicate)) {
-            havingExprs.add(ScalarOperatorToExpr.buildExecExpression(havingPredicate, inputFormatter));
-        }
-
         JDBCTable jdbcTable = (JDBCTable) scanOperator.getTable();
-        String pushDownQuery = JDBCScanNode.buildAggregatePushDownQuery(jdbcTable, selectExprs, selectAliases,
-                predicateExprs, groupByExprs, havingExprs);
+        String pushDownQuery = JDBCPushDownSQLBuilder.buildScalarSelectQuery(
+                scanOperator, selectItems, selectAliases,
+                pushDown.groupByExprs,
+                Utils.extractConjuncts(pushDown.havingPredicate));
         JDBCTable queryTable = new JDBCTable(jdbcTable);
         queryTable.setNewFullSchema(outputColumns);
         queryTable.setPushDownQuery(pushDownQuery);
@@ -153,9 +138,6 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
     private AggregatePushDown buildAggregatePushDown(
             LogicalAggregationOperator aggregationOperator,
             LogicalJDBCScanOperator scanOperator) {
-        if (!canPushDownAggregate(aggregationOperator, scanOperator)) {
-            return null;
-        }
 
         Map<ColumnRefOperator, ScalarOperator> outputColumnRefToExpr = Maps.newLinkedHashMap();
         List<ScalarOperator> groupByExprs = Lists.newArrayList();
@@ -207,36 +189,10 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         if (aggregationOperator.hasRemoveDistinctFunc() ||
                 aggregationOperator.isTopNLocalAgg() ||
                 aggregationOperator.getAggTopnSortInfo() != null || !isPartitionBySameWithGroupBy ||
-                scanOperator.getProjection() != null) {
-            return false;
-        }
-        if (scanOperator.hasLimit()) {
+                !JDBCPushDownRuleUtils.isColumnPruningOnly(scanOperator.getProjection())) {
             return false;
         }
         return true;
-    }
-
-    private Map<ColumnRefOperator, Expr> buildJDBCInputExprMap(LogicalJDBCScanOperator scanOperator) {
-        Map<ColumnRefOperator, Expr> inputExprMap = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, Column> entry : scanOperator.getColRefToColumnMetaMap().entrySet()) {
-            ColumnRefOperator columnRef = entry.getKey();
-            Column column = entry.getValue();
-            SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnRef.getId()),
-                    column.getName(), columnRef.getType(), columnRef.isNullable());
-            slotDescriptor.setColumn(column);
-            inputExprMap.put(columnRef, new SlotRef(column.getName(), slotDescriptor));
-        }
-        return inputExprMap;
-    }
-
-    private Column createOutputColumn(ColumnRefOperator outputColumnRef, ScalarOperator outputExpr,
-                                      LogicalJDBCScanOperator scanOperator, String aggregateAlias) {
-        Column scanColumn = scanOperator.getColRefToColumnMetaMap().get(outputColumnRef);
-        if (scanColumn != null && outputExpr.equals(outputColumnRef)) {
-            return scanColumn;
-        }
-        String columnName = outputExpr instanceof CallOperator ? aggregateAlias : outputColumnRef.getName();
-        return new Column(columnName, outputColumnRef.getType(), outputColumnRef.isNullable());
     }
 
     private boolean isSimpleJDBCColumnRef(ScalarOperator scalarOperator, LogicalJDBCScanOperator scanOperator) {

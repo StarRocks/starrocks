@@ -290,6 +290,24 @@ public class ExternalTableTest extends PlanTestBase {
     }
 
     @Test
+    public void testJDBCAggPushDownThroughColumnPruningProjection() throws Exception {
+        // `b` is referenced only by the predicate, not the output, so column pruning leaves a
+        // pure identity projection {a, c} on the scan; isMergeableProjection lets the aggregate
+        // still push down through that column-pruning projection.
+        connectContext.getSessionVariable().setEnableJdbcAggPushDown(true);
+        try {
+            String sql = "select sum(a) from test.jdbc_test where b = '1' group by c";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  0:SCAN JDBC\n" +
+                    "     TABLE: (SELECT `c` AS `c`, sum(`a`) AS `jdbc_agg_");
+            assertContains(plan, "FROM `test_table` WHERE (`b` = '1') GROUP BY `c`) sr_merged");
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
+        }
+    }
+
+    @Test
     public void testPostgreSQLJDBCTableFilter() throws Exception {
         String sql = "select * from test.jdbc_pg_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);

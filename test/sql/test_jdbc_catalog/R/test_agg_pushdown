@@ -135,21 +135,14 @@ from orders
 where status = 'paid';
 -- result:
 PLAN FRAGMENT 0
- OUTPUT EXPRS:6: count | 7: max
+ OUTPUT EXPRS:count | max
   PARTITION: UNPARTITIONED
 
   RESULT SINK
 
-  2:AGGREGATE (update finalize)
-  |  output: count(*), max(4: amount)
-  |  group by: 
-  |  
-  1:Project
-  |  <slot 4> : amount
-  |  
   0:SCAN JDBC
-     TABLE: `db_agg_pushdown`.`orders`
-     QUERY: SELECT `amount`, `status` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')
+     TABLE: (SELECT count(*) AS `jdbc_agg_0`, max(`amount`) AS `jdbc_agg_1` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
+     QUERY: SELECT `jdbc_agg_0`, `jdbc_agg_1` FROM (SELECT count(*) AS `jdbc_agg_0`, max(`amount`) AS `jdbc_agg_1` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
 -- !result
 explain select count(*)
 from t2
