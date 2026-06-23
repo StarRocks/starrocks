@@ -96,15 +96,7 @@ Status SpillableChunksSorter<TChunksSorter>::do_done(RuntimeState* state) {
 template <DerivedFromChunksSorter TChunksSorter>
 void SpillableChunksSorter<TChunksSorter>::cancel() {
     if (_spiller->spilled()) {
-        if (_spill_channel->has_task()) {
-            std::function<StatusOr<ChunkPtr>()> cancel_task = [this]() -> StatusOr<ChunkPtr> {
-                _spiller->cancel();
-                return Status::EndOfFile("eos");
-            };
-            _spill_channel->add_spill_task(std::move(cancel_task));
-        } else {
-            _spiller->cancel();
-        }
+        _spiller->cancel();
     }
 }
 
