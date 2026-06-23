@@ -270,6 +270,7 @@ check_prerequest "automake --version" "automake"
 check_prerequest "libtoolize --version" "libtool"
 
 BUILD_SYSTEM=${BUILD_SYSTEM:-make}
+export CMAKE_POLICY_VERSION_MINIMUM="${CMAKE_POLICY_VERSION_MINIMUM:-3.5}"
 
 # sudo apt-get install binutils-dev
 # sudo yum install binutils-devel
@@ -882,7 +883,7 @@ build_brotli() {
     cd $TP_SOURCE_DIR/$BROTLI_SOURCE
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
