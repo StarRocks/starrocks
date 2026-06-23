@@ -39,7 +39,10 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
+#include "util/hyper_json_transformer.h"
+#include "util/json_flat_path.h"
 #include "util/json_flattener.h"
+#include "util/json_merger.h"
 
 namespace starrocks {
 
