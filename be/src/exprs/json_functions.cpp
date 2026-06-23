@@ -34,6 +34,7 @@
 #include "common/compiler_util.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/object_pool.h"
+#include "common/simdjson_util.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
@@ -44,6 +45,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
@@ -253,6 +255,16 @@ StatusOr<ColumnPtr> JsonFunctions::get_json_scalar_string(FunctionContext* conte
     return _get_json_scalar_value(context, columns);
 }
 
+StatusOr<ColumnPtr> JsonFunctions::get_json_bool(FunctionContext* context, const Columns& columns) {
+    return _get_json_value<TYPE_BOOLEAN>(context, columns);
+}
+
+// FE-fusion target for `parse_json(x) -> 'p'` and `cast(json_query(parse_json(x), 'p') as JSON)`.
+// Same VARCHAR/VARCHAR signature as get_json_string, but returns JSON.
+StatusOr<ColumnPtr> JsonFunctions::json_query_from_string(FunctionContext* context, const Columns& columns) {
+    return _get_json_value<TYPE_JSON>(context, columns);
+}
+
 StatusOr<ColumnPtr> JsonFunctions::get_native_json_bool(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_BOOLEAN>(context, columns);
 }
@@ -282,7 +294,28 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(num_rows);
 
-    for (int row = 0; row < columns[0]->size(); row++) {
+    // Constant JSON fast path: parse exactly once, replicate the resulting JsonValue across rows.
+    // Builds a one-row JSON column and lets the caller treat it as constant-folded; matches existing
+    // is_all_const(columns) semantics at build time.
+    if (columns[0]->is_constant() && !columns[0]->only_null() && num_rows > 0) {
+        Slice slice = viewer.value(0);
+        auto json = JsonValue::parse(slice);
+        if (!json.ok()) {
+            for (int row = 0; row < num_rows; ++row) {
+                result.append_null();
+            }
+        } else {
+            JsonValue jv = std::move(json.value());
+            for (int row = 0; row < num_rows; ++row) {
+                // ColumnBuilder<TYPE_JSON>::append takes JsonValue&&; build a fresh copy per row.
+                result.append(JsonValue(jv));
+            }
+        }
+        DCHECK(num_rows == result.data_column_raw_ptr()->size());
+        return result.build(ColumnHelper::is_all_const(columns));
+    }
+
+    for (int row = 0; row < num_rows; row++) {
         if (viewer.is_null(row)) {
             result.append_null();
             continue;
@@ -374,13 +407,6 @@ StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& column
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <LogicalType ResultType>
-StatusOr<ColumnPtr> JsonFunctions::_get_json_value(FunctionContext* context, const Columns& columns) {
-    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
-    const auto& paths = columns[1];
-    return _full_json_query_impl<ResultType>(context, Columns{jsons, paths});
-}
-
 StatusOr<ColumnPtr> JsonFunctions::_get_json_scalar_value(FunctionContext* context, const Columns& columns) {
     ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
     const auto& paths = columns[1];
@@ -406,10 +432,87 @@ public:
     Expr* cast_expr;
 
     bool is_json_column_scalar = false;
+
+    // Fused-fast-path planning fields. Populated in native_json_path_prepare(FRAGMENT_LOCAL).
+    // Read-only afterwards — safe to share across cloned drivers via _fragment_local_fn_state copy.
+    JsonPathShape fast_shape = JsonPathShape::Unsupported;
+    std::vector<JsonMoveStep> fast_moves;
+    bool fast_path_disabled = false;
 };
 
 static NativeJsonState* get_native_json_state(FunctionContext* context) {
     return reinterpret_cast<NativeJsonState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+}
+
+static JsonGetThreadState* get_json_thread_state(FunctionContext* /*context*/) {
+    // The fused fast path keeps reusable MUTABLE scratch here (a simdjson ondemand parser + buffers).
+    // FunctionContext::THREAD_LOCAL state is NOT per-pipeline-driver: a pipeline ProjectOperator (and the
+    // scan operators) share one ExprContext -- hence one FunctionContext -- across all `pipeline_dop` drivers
+    // (project_operator.h: `_expr_ctxs` is a reference handed to every per-driver operator; the operator never
+    // clones it). simdjson's ondemand parser is not thread-safe, so a shared instance is raced by concurrent
+    // drivers and scrambles string values across rows. Use a genuine per-OS-thread instance instead: a driver
+    // runs a chunk to completion without preemption, and concurrent drivers are on different threads.
+    thread_local JsonGetThreadState ts;
+    // Bound pathological growth: being thread_local, ts persists for the thread's lifetime and its simdjson
+    // parser + scratch buffers grow to the largest document seen on this thread. Once they exceed a cap, reset
+    // them at this chunk boundary (this accessor runs once per chunk, not per row), so a one-off huge document
+    // does not pin memory. The reset fires only after an oversized document; the check itself is trivial.
+    constexpr size_t kRetainCapBytes = 1 << 20; // 1 MB
+    if (ts.parser.capacity() > kRetainCapBytes) {
+        ts.parser = simdjson::ondemand::parser{};
+        ts.padded_scratch.clear();
+        ts.padded_scratch.shrink_to_fit();
+        ts.unescape_scratch.clear();
+        ts.unescape_scratch.shrink_to_fit();
+        ts.key_scratch.clear();
+        ts.key_scratch.shrink_to_fit();
+    }
+    return &ts;
+}
+
+void JsonFunctions::_plan_fast_moves(const JsonPath& path, NativeJsonState* state) {
+    state->fast_moves.clear();
+    state->fast_shape = JsonPathShape::SimpleFlat;
+    bool has_index = false;
+
+    for (size_t i = 0; i < path.paths.size(); ++i) {
+        const auto& p = path.paths[i];
+        // Skip the root anchor "$" with NONE selector at index 0.
+        if (i == 0 && p.key == "$" && p.array_selector && p.array_selector->type == ArraySelectorType::NONE) {
+            continue;
+        }
+
+        const auto sel_type = p.array_selector ? p.array_selector->type : ArraySelectorType::INVALID;
+
+        if (sel_type == ArraySelectorType::WILDCARD || sel_type == ArraySelectorType::SLICE ||
+            sel_type == ArraySelectorType::INVALID) {
+            state->fast_shape = JsonPathShape::Unsupported;
+            state->fast_moves.clear();
+            return;
+        }
+
+        // Field part (skip empty key — used by chained selectors like $.a[0][1] producing ("",SINGLE 1)).
+        if (!p.key.empty() && p.key != "$") {
+            JsonMoveStep step;
+            step.kind = JsonMoveStep::Kind::Field;
+            step.field = p.key;
+            step.index = -1;
+            state->fast_moves.push_back(std::move(step));
+        }
+        if (sel_type == ArraySelectorType::SINGLE) {
+            int idx = down_cast<const ArraySelectorSingle*>(p.array_selector.get())->index;
+            JsonMoveStep step;
+            step.kind = JsonMoveStep::Kind::ArrayIndex;
+            step.field.clear();
+            step.index = idx;
+            state->fast_moves.push_back(std::move(step));
+            has_index = true;
+        }
+    }
+
+    if (has_index) {
+        state->fast_shape = JsonPathShape::HasIndex;
+    }
 }
 
 static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice slice, JsonPath* out) {
@@ -424,26 +527,41 @@ static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice
 }
 
 Status JsonFunctions::native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    // The fused fast path's mutable scratch (simdjson parser + buffers) lives in a per-OS-thread thread_local
+    // (see get_json_thread_state), NOT in FunctionContext THREAD_LOCAL state: pipeline operators share one
+    // ExprContext across drivers, so THREAD_LOCAL function state is not per-driver and a shared simdjson parser
+    // would be raced. Hence nothing to allocate at THREAD_LOCAL scope here.
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
+
+    auto* state = new NativeJsonState();
+    state->init_flat = false;
 
     if (context->is_notnull_constant_column(1)) {
         auto path_column = context->get_constant_column(1);
         Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
         auto json_path = JsonPath::parse(path_value);
-        RETURN_IF(!json_path.ok(), json_path.status());
-
-        auto* state = new NativeJsonState();
+        if (!json_path.ok()) {
+            delete state;
+            return json_path.status();
+        }
         state->json_path.reset(std::move(json_path.value()));
-        state->init_flat = false;
-        context->set_function_state(scope, state);
+
+        // Fused fast path is only valid for constant non-null paths. Plan moves now.
+        _plan_fast_moves(state->json_path, state);
         VLOG(10) << "prepare json path: " << path_value;
     } else {
-        auto* state = new NativeJsonState();
-        state->init_flat = false;
-        context->set_function_state(scope, state);
+        // Variable / nullable path columns are routed to legacy at execute time.
+        state->fast_shape = JsonPathShape::Unsupported;
     }
+
+    // Session var is the single switch. When context->state() is null (no RuntimeState,
+    // e.g. unit tests built via FunctionContext::create_test_context), leave the fast path
+    // enabled — tests use set_json_fast_path_disabled_for_test() to flip it explicitly.
+    state->fast_path_disabled = context->state() != nullptr && !context->state()->enable_json_extract_fusion();
+
+    context->set_function_state(scope, state);
     return Status::OK();
 }
 
@@ -453,6 +571,226 @@ Status JsonFunctions::native_json_path_close(FunctionContext* context, FunctionC
         delete state;
     }
     return Status::OK();
+}
+
+void set_json_fast_path_disabled_for_test(FunctionContext* ctx, bool disabled) {
+    auto* state = reinterpret_cast<NativeJsonState*>(ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state != nullptr) {
+        state->fast_path_disabled = disabled;
+    }
+}
+
+// =====================================================================================
+// Fused simdjson fast path for get_json_*(VARCHAR, VARCHAR).
+// =====================================================================================
+
+// Resolve one object field by UNESCAPED key, mirroring `.get()` semantics:
+// returns false on success (and assigns the field value to `out`), true on miss/error.
+//
+// simdjson's find_field_unordered compares the raw, still-escaped key token byte for
+// byte (raw_json_string::unsafe_is_equal -> memcmp), so a document key that carries a JSON
+// unicode/backslash escape never matches the already-unescaped path segment. The legacy
+// parse_json->VPack route compares unescaped keys, so we iterate the object and compare the unescaped key to stay
+// byte-identical. field_unescaped_key_safe returns the raw token view for the common
+// escape-free key (no copy) and only unescapes into `key_buf` when the key contains a
+// backslash, so escape-free payloads keep the fast path's cost.
+template <typename Container>
+static bool fused_resolve_field(Container&& container, std::string_view seg, faststring* key_buf,
+                                simdjson::ondemand::value& out) {
+    simdjson::ondemand::object obj;
+    if (container.get_object().get(obj)) {
+        return true; // not an object / parse error -> miss
+    }
+    for (auto field : obj) {
+        if (field.error()) {
+            return true;
+        }
+        auto key = field_unescaped_key_safe(field, key_buf);
+        if (key.error()) {
+            return true;
+        }
+        if (key.value() == seg) {
+            return field.value().get(out); // false == success
+        }
+    }
+    return true; // key absent
+}
+
+template <LogicalType ResultType>
+JsonFunctions::ExtractResult JsonFunctions::_fused_extract_one(const Slice& raw, const NativeJsonState* fs,
+                                                               JsonGetThreadState* ts, ColumnBuilder<ResultType>& out) {
+    // Step 1: bare-scalar / empty / whitespace-only guard. Mirrors JsonValue::parse_json_or_string:
+    //   empty           -> JSON empty-string
+    //   whitespace-only -> JSON string of the whitespace
+    //   first non-ws byte not in {'{','[','"'} -> whole input becomes JSON string
+    // All three need the legacy from_string code path; we delegate to _fallback_extract_one.
+    if (UNLIKELY(raw.size > kJSONLengthLimit)) {
+        out.append_null();
+        return ExtractResult::Handled;
+    }
+    if (raw.empty()) {
+        return ExtractResult::FallbackRow;
+    }
+    auto ws_end = std::find_if_not(raw.data, raw.data + raw.size, [](unsigned char c) { return std::isspace(c); });
+    if (ws_end == raw.data + raw.size) {
+        return ExtractResult::FallbackRow;
+    }
+    char first = *ws_end;
+    if (first != '{' && first != '[' && first != '"') {
+        return ExtractResult::FallbackRow;
+    }
+
+    // Step 2: pad + iterate.
+    const size_t cap = raw.size + simdjson::SIMDJSON_PADDING;
+    ts->padded_scratch.resize(cap);
+    std::memcpy(ts->padded_scratch.data(), raw.data, raw.size);
+    std::memset(ts->padded_scratch.data() + raw.size, 0, simdjson::SIMDJSON_PADDING);
+
+    simdjson::ondemand::document doc;
+    if (ts->parser.iterate(ts->padded_scratch.data(), raw.size, cap).get(doc)) {
+        out.append_null();
+        return ExtractResult::Handled;
+    }
+
+    // Step 3: descend pre-planned moves. The first move is special because the document is
+    // not a value yet (find_field_unordered/get_array work directly on document_reference).
+    simdjson::ondemand::value cur;
+    if (fs->fast_moves.empty()) {
+        if (doc.get_value().get(cur)) {
+            out.append_null();
+            return ExtractResult::Handled;
+        }
+    } else {
+        const auto& m0 = fs->fast_moves[0];
+        if (m0.kind == JsonMoveStep::Kind::Field) {
+            if (fused_resolve_field(doc, m0.field, &ts->key_scratch, cur)) {
+                out.append_null();
+                return ExtractResult::Handled;
+            }
+        } else {
+            simdjson::ondemand::array arr;
+            if (doc.get_array().get(arr) || arr.at(m0.index).get(cur)) {
+                out.append_null();
+                return ExtractResult::Handled;
+            }
+        }
+        for (size_t i = 1; i < fs->fast_moves.size(); ++i) {
+            const auto& m = fs->fast_moves[i];
+            if (m.kind == JsonMoveStep::Kind::Field) {
+                if (fused_resolve_field(cur, m.field, &ts->key_scratch, cur)) {
+                    out.append_null();
+                    return ExtractResult::Handled;
+                }
+            } else {
+                simdjson::ondemand::array arr;
+                if (cur.get_array().get(arr) || arr.at(m.index).get(cur)) {
+                    out.append_null();
+                    return ExtractResult::Handled;
+                }
+            }
+        }
+    }
+
+    // Step 4: emit leaf.
+    if constexpr (ResultType == TYPE_VARCHAR) {
+        simdjson::ondemand::json_type t;
+        if (cur.type().get(t)) {
+            out.append_null();
+            return ExtractResult::Handled;
+        }
+        if (t == simdjson::ondemand::json_type::string) {
+            auto sv = value_get_string_safe(&cur, &ts->unescape_scratch);
+            if (sv.error()) {
+                out.append_null();
+                return ExtractResult::Handled;
+            }
+            out.append(Slice(sv.value())); // ColumnBuilder<TYPE_VARCHAR> copies into ColumnString
+            return ExtractResult::Handled;
+        }
+        // non-string leaf -> mini-VPack -> cast_vpjson_to (singleLinePrettyPrint)
+    }
+
+    ts->leaf_builder.clear();
+    auto st = convert_simdjson_to_vpack(cur, &ts->leaf_builder);
+    if (!st.ok()) {
+        out.append_null();
+        return ExtractResult::Handled;
+    }
+    auto cast_st = cast_vpjson_to<ResultType, false>(ts->leaf_builder.slice(), out);
+    (void)cast_st; // cast_vpjson_to appends NULL on its own errors (AllowThrowException=false)
+    return ExtractResult::Handled;
+}
+
+template <LogicalType ResultType>
+Status JsonFunctions::_fallback_extract_one(const Slice& raw, const NativeJsonState* fs, JsonGetThreadState* ts,
+                                            ColumnBuilder<ResultType>& out) {
+    // Single-row legacy path: parse_json_or_string + JsonPath::extract + cast_vpjson_to.
+    // Strict NULL discipline: any error appends NULL, never returns Status::error.
+    auto jv_or = JsonValue::parse_json_or_string(raw);
+    if (!jv_or.ok()) {
+        out.append_null();
+        return Status::OK();
+    }
+    JsonValue jv = std::move(jv_or.value());
+
+    ts->leaf_builder.clear();
+    vpack::Slice slice = JsonPath::extract(&jv, fs->json_path, &ts->leaf_builder);
+
+    auto cast_st = cast_vpjson_to<ResultType, false>(slice, out);
+    (void)cast_st;
+    return Status::OK();
+}
+
+template <LogicalType ResultType>
+StatusOr<ColumnPtr> JsonFunctions::_fused_get_json_value(FunctionContext* context, const Columns& columns,
+                                                         const NativeJsonState* fs, JsonGetThreadState* ts) {
+    ColumnViewer<TYPE_VARCHAR> json_v(columns[0]);
+    const int n = columns[0]->size();
+    ColumnBuilder<ResultType> out(n);
+
+    for (int row = 0; row < n; ++row) {
+        if (json_v.is_null(row)) {
+            out.append_null();
+            continue;
+        }
+        Slice raw = json_v.value(row);
+        switch (_fused_extract_one<ResultType>(raw, fs, ts, out)) {
+        case ExtractResult::Handled:
+            break;
+        case ExtractResult::FallbackRow:
+            (void)_fallback_extract_one<ResultType>(raw, fs, ts, out);
+            break;
+        case ExtractResult::FallbackBatch:
+            __builtin_unreachable(); // reserved for future; v4 never produces this
+        }
+    }
+    return out.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType ResultType>
+StatusOr<ColumnPtr> JsonFunctions::_get_json_value(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto* fstate = get_native_json_state(context);
+    auto* tstate = get_json_thread_state(context);
+
+    // Strict mode (allow_throw_exception=true, e.g. INSERT with strict_mode) needs every
+    // parse error surfaced as a Status. The fused path swallows simdjson errors into NULL
+    // (per-row), so route the whole call through _string_json which honors allow_throw.
+    const bool strict_mode = context != nullptr && context->allow_throw_exception();
+
+    const bool can_fast = !strict_mode && fstate != nullptr && tstate != nullptr && !fstate->fast_path_disabled &&
+                          fstate->fast_shape != JsonPathShape::Unsupported && context->is_notnull_constant_column(1) &&
+                          !columns[0]->only_null();
+
+    if (can_fast) {
+        return _fused_get_json_value<ResultType>(context, columns, fstate, tstate);
+    }
+
+    // Legacy: parse VARCHAR rows to JSON column, then run _full_json_query_impl.
+    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
+    const auto& paths = columns[1];
+    return _full_json_query_impl<ResultType>(context, Columns{jsons, paths});
 }
 
 StatusOr<ColumnPtr> JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
