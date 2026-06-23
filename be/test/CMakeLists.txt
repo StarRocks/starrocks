@@ -45,10 +45,10 @@ set(EXEC_FILES
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
-        ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./fs/poco_http_client_test.cpp
         ./fs/bundle_file_test.cpp
+        ./platform/key_cache_script_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp

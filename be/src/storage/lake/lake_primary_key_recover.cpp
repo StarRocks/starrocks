@@ -17,7 +17,7 @@
 #include "column/column.h"
 #include "common/constexpr.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"

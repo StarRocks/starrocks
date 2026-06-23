@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
-#include "script/script.h"
 
 namespace starrocks {
 
@@ -89,15 +87,8 @@ TEST_F(KeyCacheTest, AddKey) {
     key->set_id(2);
     cache.add_key(key);
     ASSERT_EQ(2, cache.size());
-    std::string result;
-    ASSERT_TRUE(execute_script("System.print(ExecEnv.key_cache_info())", result).ok());
-    ASSERT_TRUE(execute_script("System.print(StorageEngine.decode_encryption_meta("
-                               "\"Ch4IARiztZ64BiAAKAE6EHp8EnQlAIgiy8dgbPRP53kKPAgCEAEYs7WeuAYgACgBMiyZegO5j9P16bHelpUAU"
-                               "xEj1c5P4xWQsJSy6sc2yIKC0g/rRPqsGNumdy6WQgo0EAIgACgBMixDCSo3rP5l8oiZLcgtts8x7xJ+M4+/"
-                               "INZvGPhCOA1m9zf2vpCRbjbVoOl2EQ==\"))",
-                               result)
-                        .ok());
-    ASSERT_TRUE(result.find("keyHierarchy") != result.npos);
+    ASSERT_NE(cache.to_string().find("id:1"), std::string::npos);
+    ASSERT_NE(cache.to_string().find("id:2"), std::string::npos);
 }
 
 static void wrap_unwrap_test(int num_level) {
