@@ -315,18 +315,40 @@ class OrcStripeStatisticsReaderTest {
     }
 
     @Test
-    void pre1970DateStripeFallsBackToDataTier() throws Exception {
-        // day-of-epoch -1 = 1969-12-31 < 1970-01-01: outside the safe window → data tier.
+    void pre1970DateStripeIsAccepted() throws Exception {
+        // day-of-epoch -1 = 1969-12-31. A DATE has no sub-second part and BE's day-of-epoch load is
+        // proleptic-Gregorian end to end, so a pre-1970 DATE boundary is FE/BE-identical and stays
+        // on the meta tier (only DATETIME keeps the 1970 lower bound).
         Path orcPath = writeOrc(
                 "struct<event_day:date>",
                 /*rowCount=*/ 2,
                 (batch, batchRow, rowIndex) ->
                         ((LongColumnVector) batch.cols[0]).vector[batchRow] = -1 - rowIndex);
 
-        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
-                OrcStripeStatisticsReader.read(
-                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
-                        new Column("event_day", DateType.DATE)));
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertEquals("1969-12-31",
+                stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void pre1582DateStripeIsAccepted() throws Exception {
+        // day-of-epoch -171499 = 1500-06-15, before the 1582 Gregorian cutover. BE's calendar is
+        // proleptic Gregorian (no Julian switch), so this still aligns and stays on the meta tier.
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = -171499);
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertEquals("1500-06-15",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
     }
 
     @Test

@@ -55,8 +55,9 @@ import java.util.Objects;
  * <ul>
  *   <li>ORC BYTE/SHORT/INT/LONG → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
  *   <li>ORC DATE → StarRocks DATE (day-of-epoch, timezone-free), gated to
- *       {@code [1970-01-01, 9999-12-31]} — values outside that window (year &le; 0
- *       rendering, pre-1582 proleptic/hybrid calendar ambiguity) fall back to data tier</li>
+ *       {@code [0001-01-01, 9999-12-31]} (the BE day-of-epoch load is proleptic-Gregorian with no
+ *       sub-second part, so the boundary is FE/BE-identical down to year 1); values outside that
+ *       window fall back to data tier</li>
  *   <li>ORC DECIMAL → StarRocks DECIMAL of the SAME precision and scale (ORC orders decimal
  *       stats correctly, so footer min/max are usable). Non-matching precision/scale → data tier</li>
  *   <li>ORC TIMESTAMP (local, no timezone) → StarRocks DATETIME, using the tz-independent UTC stat,
@@ -318,13 +319,13 @@ public final class OrcStripeStatisticsReader {
             // wrong data or wrong results (and if a conversion ever yields min > max, the downstream
             // ParquetMetadataSampler treats the row group as fallback rather than emitting a boundary).
             // Modern writers (StarRocks unload, Spark, Hive, ORC >= 1.5) emit minimumUtc and are unaffected.
-            // rejectDateOutsideWindow throws a CHECKED MetaTierUnavailableException that propagates past the
+            // rejectDateTimeOutsideWindow throws a CHECKED MetaTierUnavailableException that propagates past the
             // catch(RuntimeException) below (keeping its own message); getMinimumUTC/Variant.of
             // RuntimeExceptions are wrapped as the data-tier fallback signal — mirroring convertDateStripe.
             LocalDateTime minDateTime = utcTimestampToDateTime(timestampStatistics.getMinimumUTC());
             LocalDateTime maxDateTime = utcTimestampToDateTime(timestampStatistics.getMaximumUTC());
-            MetaTierTemporalWindow.rejectDateOutsideWindow(minDateTime.toLocalDate());
-            MetaTierTemporalWindow.rejectDateOutsideWindow(maxDateTime.toLocalDate());
+            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(minDateTime.toLocalDate());
+            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(maxDateTime.toLocalDate());
             minVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(minDateTime));
             maxVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(maxDateTime));
         } catch (RuntimeException conversionFailure) {
