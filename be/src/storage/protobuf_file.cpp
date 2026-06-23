@@ -21,7 +21,7 @@
 #include "base/testutil/sync_point.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/utils.h"
 
 namespace starrocks {

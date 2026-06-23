@@ -51,7 +51,7 @@
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
 #include "storage/manual_compaction.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"

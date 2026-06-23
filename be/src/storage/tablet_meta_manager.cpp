@@ -60,7 +60,7 @@
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/kv_store.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"

@@ -45,7 +45,7 @@
 #include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 
 #ifndef BE_TEST
 #define BE_TEST

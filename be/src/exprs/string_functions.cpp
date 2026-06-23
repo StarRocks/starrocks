@@ -61,7 +61,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "util/utf8_encoding.h"
 
 namespace starrocks {

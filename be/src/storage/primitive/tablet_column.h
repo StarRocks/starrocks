@@ -27,8 +27,8 @@
 #include "column/column_access_path.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/primitive/aggregate_type.h"
-#include "storage/types.h"
 #include "types/agg_state_desc.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

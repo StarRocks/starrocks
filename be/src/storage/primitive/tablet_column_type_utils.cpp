@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/tablet_column_type_utils.h"
+#include "storage/primitive/tablet_column_type_utils.h"
 
-#include "storage/olap_define.h"
+#include <cstdint>
 
 namespace starrocks {
 
@@ -70,7 +70,7 @@ uint32_t get_tablet_column_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_JSON:
     case TYPE_VARIANT:
     case TYPE_VARBINARY:
-        return string_length + sizeof(get_olap_string_max_length());
+        return string_length + sizeof(uint32_t);
     case TYPE_ARRAY:
         return string_length;
     }

@@ -58,7 +58,7 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 
 using std::string;
 using std::set;

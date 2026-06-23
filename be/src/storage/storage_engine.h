@@ -59,8 +59,8 @@
 #include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/options.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
 

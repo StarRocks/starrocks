@@ -38,7 +38,7 @@
 #include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"

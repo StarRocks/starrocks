@@ -27,7 +27,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/util.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

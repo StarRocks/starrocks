@@ -46,7 +46,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"

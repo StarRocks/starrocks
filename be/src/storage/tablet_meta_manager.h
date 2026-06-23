@@ -43,7 +43,7 @@
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/kv_store.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/tablet_meta.h"
 
 namespace starrocks {

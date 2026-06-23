@@ -35,7 +35,7 @@
 #pragma once
 
 #include "gen_cpp/AgentService_types.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/task/engine_task.h"
 
 namespace starrocks {

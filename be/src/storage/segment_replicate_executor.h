@@ -24,7 +24,7 @@
 #include "common/status.h"
 #include "common/thread/threadpool.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

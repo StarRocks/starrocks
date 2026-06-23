@@ -25,7 +25,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"

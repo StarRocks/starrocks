@@ -24,7 +24,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/cumulative_compaction.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"

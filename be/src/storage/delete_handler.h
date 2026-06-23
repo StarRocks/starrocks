@@ -39,7 +39,7 @@
 
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
