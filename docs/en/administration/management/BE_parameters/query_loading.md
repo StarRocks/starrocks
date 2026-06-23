@@ -307,7 +307,7 @@ This topic introduces the following types of BE configurations:
 
 ### json_parse_max_nesting_depth
 
-- Default: 1000
+- Default: 10000
 - Type: Int
 - Unit:
 - Is mutable: Yes

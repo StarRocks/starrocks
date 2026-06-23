@@ -14,6 +14,7 @@
 
 set(TYPES_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    ../testutil/json_parse_config_test_env.cpp
     agg_state_desc_test.cpp
     bitmap_value_test.cpp
     copied_datum_test.cpp

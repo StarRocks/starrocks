@@ -24,6 +24,6 @@ namespace starrocks::config {
 // JSON parser recurses one stack frame per nesting level with no bound, so input nested deeper than
 // this would overflow the stack and crash the BE; it is rejected with a clean error instead. The
 // default leaves a large margin below the stack-overflow threshold.
-CONF_mInt32(json_parse_max_nesting_depth, "1000");
+CONF_mInt32(json_parse_max_nesting_depth, "10000");
 
 } // namespace starrocks::config

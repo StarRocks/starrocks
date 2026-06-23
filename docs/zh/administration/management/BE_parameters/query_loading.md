@@ -304,7 +304,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### json_parse_max_nesting_depth
 
-- 默认值：1000
+- 默认值：10000
 - 类型：Int
 - 单位：
 - 是否动态：是

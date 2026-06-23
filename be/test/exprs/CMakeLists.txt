@@ -19,6 +19,7 @@ endif()
 
 set(EXPR_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    ../testutil/json_parse_config_test_env.cpp
     agg/aggregate_factory_core_test.cpp
     arithmetic_expr_test.cpp
     array_expr_test.cpp
