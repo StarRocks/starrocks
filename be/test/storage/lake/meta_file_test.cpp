@@ -25,7 +25,7 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"

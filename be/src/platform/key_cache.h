@@ -15,7 +15,11 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "common/statusor.h"
 #include "fs/encryption.h"

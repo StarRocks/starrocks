@@ -28,7 +28,7 @@
 #include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"

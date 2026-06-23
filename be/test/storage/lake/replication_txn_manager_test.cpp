@@ -30,7 +30,7 @@
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "platform/store_path.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"

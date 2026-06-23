@@ -15,7 +15,7 @@
 #include "storage/local_primary_key_recover.h"
 
 #include "fs/fs_factory.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"

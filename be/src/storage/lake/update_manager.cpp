@@ -28,7 +28,7 @@
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
 #include "storage/chunk_helper.h"

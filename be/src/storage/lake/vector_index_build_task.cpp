@@ -23,7 +23,7 @@
 #include "column/chunk_factory.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/index/vector/vector_index_builder.h"
 #include "storage/index/vector/vector_index_builder_factory.h"
 #include "storage/index/vector/vector_index_file_writer.h"

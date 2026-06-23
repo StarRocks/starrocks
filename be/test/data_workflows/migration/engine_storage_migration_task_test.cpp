@@ -37,7 +37,7 @@
 #include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "platform/user_function_cache.h"
