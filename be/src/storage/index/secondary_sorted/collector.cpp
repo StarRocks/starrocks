@@ -18,9 +18,9 @@
 
 #include "column/chunk.h"
 #include "column/schema.h"
+#include "column/sorting/sorting.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "column/sorting/sorting.h"
 #include "fs/fs_factory.h"
 #include "runtime/chunk_helper.h"
 #include "storage/chunk_helper.h"
