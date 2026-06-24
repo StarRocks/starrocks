@@ -166,6 +166,19 @@ TEST_F(OrderedPartitionExchangerTest, same_partition_continues_after_prev_chunk_
     EXPECT_TRUE(_drain(2).empty());
 }
 
+// An empty chunk must be dropped: it carries no rows and no partition boundary, and accepting it must not
+// underflow the boundary-row indexing (cur_num_rows - 1). It also must not disturb routing of later chunks.
+TEST_F(OrderedPartitionExchangerTest, empty_chunk_is_dropped) {
+    ASSERT_OK(_exchanger->accept(_make_chunk({}), 0));        // empty, before any boundary is recorded
+    ASSERT_OK(_exchanger->accept(_make_chunk({7, 7, 7, 7}), 0));
+    ASSERT_OK(_exchanger->accept(_make_chunk({}), 0));        // empty, after a boundary exists
+    ASSERT_OK(_exchanger->accept(_make_chunk({7, 7}), 0));    // continues the same partition
+
+    EXPECT_EQ(_drain(0), (std::vector<int32_t>{7, 7, 7, 7, 7, 7}));
+    EXPECT_TRUE(_drain(1).empty());
+    EXPECT_TRUE(_drain(2).empty());
+}
+
 // The first row of the next chunk starts a brand-new partition, so it is routed to the
 // least-loaded channel rather than continuing on the previous channel.
 TEST_F(OrderedPartitionExchangerTest, new_partition_goes_to_min_channel) {

@@ -229,6 +229,12 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
     DCHECK_EQ(sink_driver_sequence, 0);
 
     const size_t cur_num_rows = chunk->num_rows();
+    // Drop empty chunks: they carry no rows to route and no partition boundary. This also guards the
+    // `cur_num_rows - 1` boundary-row indexing below from wrapping. Matches the other row-partition
+    // exchangers, which all early-return on empty input.
+    if (cur_num_rows == 0) {
+        return Status::OK();
+    }
 
     Columns partition_columns(_partition_exprs.size());
     for (size_t i = 0; i < partition_columns.size(); ++i) {
