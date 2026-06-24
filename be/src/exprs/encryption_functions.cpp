@@ -17,6 +17,7 @@
 #include <optional>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/crypto/aes_util.h"
 #include "base/crypto/md5.h"
 #include "base/crypto/sha.h"
@@ -25,7 +26,6 @@
 #include "column/column_viewer.h"
 #include "common/config_expr_fwd.h"
 #include "common/status.h"
-#include "exprs/base64.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {

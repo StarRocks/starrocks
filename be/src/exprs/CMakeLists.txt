@@ -40,7 +40,6 @@ set(EXPR_CORE_FILES
   sort_exec_exprs.cpp
   array_element_expr.cpp
   array_expr.cpp
-  base64.cpp
   bit_functions.cpp
   binary_predicate.cpp
   bitmap_functions.cpp
