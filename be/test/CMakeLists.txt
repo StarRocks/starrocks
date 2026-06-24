@@ -574,7 +574,6 @@ SET(DW_TEST_FILES
 )
 
 if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND DW_TEST_FILES ./fs/fs_starlet_test.cpp)
     list(APPEND DW_TEST_FILES ./storage/lake/local_pk_index_manager_test.cpp)
 endif ()
 

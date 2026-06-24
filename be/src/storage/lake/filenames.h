@@ -23,6 +23,7 @@
 #include "base/uid_util.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/strings/util.h"
+#include "storage/primitive/lake_file_name.h"
 
 namespace starrocks::lake {
 
@@ -33,66 +34,6 @@ constexpr static const int kTabletMetadataLockFilenameLength = 55;
 constexpr static const int64 kInitialVersion = 1;
 
 constexpr static const char* const kGCFileName = "GC.json";
-
-inline bool is_segment(std::string_view file_name) {
-    return HasSuffixString(file_name, ".dat");
-}
-
-inline bool is_del(std::string_view file_name) {
-    return HasSuffixString(file_name, ".del");
-}
-
-inline bool is_delvec(std::string_view file_name) {
-    return HasSuffixString(file_name, ".delvec");
-}
-
-inline bool is_txn_log(std::string_view file_name) {
-    return HasSuffixString(file_name, ".log");
-}
-
-inline bool is_txn_slog(std::string_view file_name) {
-    return HasSuffixString(file_name, ".slog");
-}
-
-inline bool is_txn_vlog(std::string_view file_name) {
-    return HasSuffixString(file_name, ".vlog");
-}
-
-inline bool is_tablet_metadata(std::string_view file_name) {
-    return HasSuffixString(file_name, ".meta");
-}
-
-inline bool is_tablet_initial_metadata(std::string_view file_name) {
-    return HasPrefixString(file_name, "0000000000000000_");
-}
-
-inline bool is_tablet_metadata_lock(std::string_view file_name) {
-    return HasSuffixString(file_name, ".lock");
-}
-
-inline bool is_sst(std::string_view file_name) {
-    return HasSuffixString(file_name, ".sst");
-}
-
-inline bool is_cols(std::string_view file_name) {
-    return HasSuffixString(file_name, ".cols");
-}
-
-// Index Delta Group payload file produced by ADD INDEX fast-path schema change.
-// One .idx per ADD INDEX alter per segment, holding bloom-filter / bitmap /
-// ngram-bloom blobs (GIN keeps its own per-column inverted directory and is
-// referenced by IndexDeltaGroupEntryPB.index_file by directory name).
-inline bool is_idx(std::string_view file_name) {
-    return HasSuffixString(file_name, ".idx");
-}
-
-// Check if file is a Lake Compaction Rows Mapper file
-// WHY: Need to distinguish between local (.crm) and remote (.lcrm) mapper files
-// for correct cleanup behavior. Remote lcrm files must not be deleted immediately
-// after use since they may be accessed by multiple nodes during parallel pk execution.
-inline bool is_lcrm(std::string_view file_name) {
-    return HasSuffixString(file_name, ".lcrm");
-}
 
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
@@ -145,10 +86,6 @@ inline std::string combined_txn_log_filename(int64_t txn_id) {
     return fmt::format("{:016X}.logs", txn_id);
 }
 
-inline bool is_combined_txn_log(std::string_view file_name) {
-    return HasSuffixString(file_name, ".logs");
-}
-
 inline int64_t parse_combined_txn_log_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
     CHECK_EQ(21, file_name.size());
@@ -196,10 +133,6 @@ inline std::string gen_vector_index_path_from_segment_path(std::string_view segm
         return vi_filename;
     }
     return fmt::format("{}/{}", dir, vi_filename);
-}
-
-inline bool is_vector_index(std::string_view file_name) {
-    return HasSuffixString(file_name, ".vi");
 }
 
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration

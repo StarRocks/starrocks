@@ -16,6 +16,11 @@
 
 #ifdef USE_STAROS
 
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+
 #include "common/statusor.h"
 #include "fs/fs.h"
 

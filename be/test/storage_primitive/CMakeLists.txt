@@ -25,6 +25,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
     column_value_range_test.cpp
     disjunctive_predicates_test.cpp
     key_coder_test.cpp
+    lake_file_name_test.cpp
     predicate_tree_test.cpp
     projection_iterator_test.cpp
     range_test.cpp
