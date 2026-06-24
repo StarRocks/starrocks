@@ -37,6 +37,15 @@
 #include <stdexcept>
 #include <string>
 
+<<<<<<< HEAD
+=======
+#include "base/container/raw_container.h"
+#include "base/crypto/blake3_hash.h"
+#include "base/crypto/sm3.h"
+#include "base/string/utf8.h"
+#include "base/string/utf8_encoding.h"
+#include "base/types/int128.h"
+>>>>>>> d0556874ce ([Enhancement] add blake3 fast cryptographic hash (#72801))
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -2768,6 +2777,31 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
 
 StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(blake3Impl, str) {
+    const Slice& input_str = str;
+    const auto* message = reinterpret_cast<const unsigned char*>(input_str.data);
+    size_t message_len = input_str.size;
+
+    uint8_t output[Blake3Hash::BLAKE3_HASH_BYTES];
+    Blake3Hash::blake3_compute(message, message_len, output);
+
+    // Format as a continuous lowercase hex string.
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string result;
+    result.resize(Blake3Hash::BLAKE3_HASH_BYTES * 2);
+    size_t pos = 0;
+    for (int i = 0; i < Blake3Hash::BLAKE3_HASH_BYTES; ++i) {
+        result[pos++] = kHex[(output[i] >> 4) & 0xF];
+        result[pos++] = kHex[output[i] & 0xF];
+    }
+
+    return result;
+}
+
+StatusOr<ColumnPtr> StringFunctions::blake3(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<blake3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
 // ascii

@@ -538,6 +538,7 @@ set(STARROCKS_DEPENDENCIES
     icuuc
     icui18n
     icudata
+    blake3
     ${WL_END_GROUP}
 )
 
