@@ -51,7 +51,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
@@ -907,12 +909,31 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     abstract RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo);
 
-    // call before first scheduling
+    // called by the scheduler every time this job is scheduled, i.e. whenever it is in
+    // NEED_SCHEDULE: the initial scheduling, after each resume, and on reschedules
+    // (e.g. after a Kafka partition-count change).
     // derived class can override this.
     public void prepare() throws StarRocksException {
+        this.computeResource = acquireComputeResource();
+    }
+
+    // Acquire a compute resource for this job's warehouse and return it WITHOUT mutating the
+    // shared computeResource field. Only the scheduling path (prepare()) writes the field, so
+    // validation-only callers (partition checks at CREATE/ALTER) acquire a local resource to
+    // route their broker RPC to the right warehouse without racing the scheduler/refresh paths
+    // that read computeResource under the job lock. An unavailable warehouse is rethrown as a
+    // checked LoadException so that every caller handles it as a regular job/DDL failure: the
+    // scheduler in particular only catches StarRocksException per job, and an escaping
+    // RuntimeException would abort the whole scheduler round and stall all other routine load
+    // jobs.
+    protected ComputeResource acquireComputeResource() throws LoadException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        try {
+            return warehouseManager.acquireComputeResource(acquireContext);
+        } catch (ErrorReportException e) {
+            throw new LoadException(e.getMessage(), e);
+        }
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
