@@ -73,6 +73,7 @@
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/batch_write_util.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -83,7 +84,6 @@
 #include "runtime/stream_load/stream_load_metrics.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "simdjson.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 

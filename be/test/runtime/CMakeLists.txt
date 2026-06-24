@@ -19,6 +19,7 @@ endif()
 
 set(RUNTIME_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    byte_buffer_test.cpp
     current_thread_core_test.cpp
     runtime_chunk_helper_test.cpp
     mem_tracker_test.cpp

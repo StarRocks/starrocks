@@ -37,7 +37,7 @@
 #include <utility>
 
 #include "common/status.h"
-#include "util/byte_buffer.h"
+#include "runtime/byte_buffer.h"
 
 namespace starrocks {
 
