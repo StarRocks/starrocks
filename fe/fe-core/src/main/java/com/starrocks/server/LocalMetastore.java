@@ -4278,21 +4278,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (db == null) {
             throw new DdlException("the DB " + dbName + " is not exist");
         }
-<<<<<<< HEAD
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-=======
-        // Optimistically get table by name under no lock.
-        Table shadowTable = db.getTable(tableName);
-        if (shadowTable == null) {
-            throw new DdlException("the DB " + dbName + " table: " + tableName + " doesn't exist");
-        }
         // WRITE (not READ): the edit-log callback mutates TableProperty.hasForbiddenGlobalDict, a plain
         // non-volatile boolean that optimizer rules read under a table READ lock. The replay path
         // (replayModifyTableProperty) already takes WRITE here, so match it to serialize the mutation.
-        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), shadowTable.getId(), LockType.WRITE)) {
->>>>>>> 1661a5e910 ([BugFix] Fix three FE metadata-lock correctness races (#74968))
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
             Table table = getTable(db.getFullName(), tableName);
             if (table == null) {
                 throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
@@ -4313,7 +4304,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbiddenGlobalDict(info);
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
