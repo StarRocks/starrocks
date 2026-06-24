@@ -357,7 +357,8 @@ public class CreateFunctionAnalyzer {
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation),
+                objectFile, handleClass.getCanonicalName(), "", "",
+                !CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation),
                 cloudConfiguration);
         function.setChecksum(checksum);
         return function;
@@ -478,7 +479,7 @@ public class CreateFunctionAnalyzer {
                 .isAnalyticFn(isAnalyticFn)
                 .symbolName(mainClass.getCanonicalName())
                 .cloudConfiguration(cloudConfiguration)
-                .setIsolationType(!"shared".equalsIgnoreCase(isolation));
+                .setIsolationType(!CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation));
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;
@@ -1058,7 +1059,7 @@ public class CreateFunctionAnalyzer {
                 objectFile(objectFile).
                 inputType(inputType).
                 symbolName(symbol).
-                isolation(!"shared".equalsIgnoreCase(isolation)).
+                isolation(!CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation)).
                 content(content);
         ScalarFunction function = scalarFunctionBuilder.build();
         function.setChecksum(checksum);
