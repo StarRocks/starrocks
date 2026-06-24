@@ -98,6 +98,16 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
         if (detail.min_or_null_value() == detail.max_value()) {
+            // For FLOAT/DOUBLE a [c,c] zone may hide a NaN that the zonemap writer dropped from
+            // min/max (NaN is excluded from the orderable range). Since NaN is NOT IN any finite set
+            // (NaN != c for all c), that hidden NaN row matches this predicate, so single-value
+            // pruning below would wrongly drop a page that still holds a matching row. Without a
+            // persisted NaN marker we cannot prove NaN-absence, so keep. Compile-time no-op for
+            // non-float field types. (A legacy NaN endpoint is also kept: it either compares unequal
+            // here and falls through to the final keep, or lands on this same guard.)
+            if constexpr (lt_is_float<field_type>) {
+                return true;
+            }
             const auto type_info = this->type_info();
             for (const ValueType& v : _values) {
                 if (type_info->cmp(Datum(v), detail.max_value()) == 0) {

@@ -591,6 +591,14 @@ public:
         const auto& max = detail.max_value();
         const auto type_info = this->type_info();
         if (min == max) {
+            // For FLOAT/DOUBLE a [c,c] zone may hide a NaN that the zonemap writer dropped from
+            // min/max (NaN is excluded from the orderable range). Since NaN != c is true, that
+            // hidden NaN row matches this predicate, so single-value pruning would wrongly drop a
+            // page that still holds a matching row. Without a persisted NaN marker we cannot prove
+            // NaN-absence, so keep conservatively. Compile-time no-op for non-float field types.
+            if constexpr (lt_is_float<field_type>) {
+                return true;
+            }
             return type_info->cmp(Datum(this->_value), min) != 0;
         }
         return true;
