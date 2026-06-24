@@ -85,6 +85,15 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### lake_enable_protobuf_file_checksum
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Enable it only after the whole cluster has been upgraded to a version that understands the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
+- Introduced in: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
