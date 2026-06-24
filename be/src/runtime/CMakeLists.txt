@@ -21,6 +21,7 @@ set(RUNTIME_CORE_FILES
     current_thread.cpp
     chunk_helper.cpp
     descriptors.cpp
+    descriptors_ext.cpp
     runtime_state.cpp
     mem_tracker.cpp
     mem_pool.cpp
@@ -82,7 +83,6 @@ target_link_libraries(RuntimeEnv PUBLIC
 set(RUNTIME_FILES
     broker_mgr.cpp
     lookup_stream_mgr.cpp
-    descriptors_ext.cpp
     exec_env.cpp
     jdbc_driver_manager.cpp
     plan_fragment_executor.cpp
