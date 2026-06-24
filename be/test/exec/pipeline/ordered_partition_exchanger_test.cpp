@@ -122,11 +122,10 @@ protected:
     size_t _dop = 3;
 };
 
-// Regression for the heap-use-after-free fixed alongside this test: once a chunk is handed downstream,
-// it may be mutated on another thread (AnalyticSinkOperator appends window result columns, reallocating
-// the chunk's column vector). The exchanger must not read the previous chunk on the next accept().
-// Here we deterministically reproduce that hazard by appending a column to the already-accepted chunk
-// between two accept() calls. Under ASAN this would trip on `_previous_chunk->num_rows()` before the fix.
+// Regression coverage for OrderedPartitionExchanger state tracking: after a chunk is handed downstream,
+// it may be mutated (e.g. AnalyticSinkOperator appends window result columns, changing the chunk's
+// internal column vector). This test mutates the previously accepted chunk before the next accept()
+// and verifies routing decisions don't require dereferencing the previous chunk object.
 TEST_F(OrderedPartitionExchangerTest, same_partition_continues_after_prev_chunk_mutated) {
     auto chunk_a = _make_chunk({7, 7, 7, 7});
     ASSERT_OK(_exchanger->accept(chunk_a, 0));
