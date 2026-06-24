@@ -31,7 +31,7 @@
 #include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
-#include "types/datum.h"
+#include "column/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks::pipeline {
