@@ -84,6 +84,24 @@ protected:
     RuntimeProfile _dummy_runtime_profile{"dummy"};
 };
 
+TEST_F(SpillMemTableSinkTest, test_flush_chunk_without_query_context_uses_local_spill_counter) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    auto chunk = gen_data(kChunkSize, 0);
+    starrocks::SegmentPB segment;
+    ASSERT_OK(sink.flush_chunk(*chunk, &segment, false));
+
+    ASSERT_NE(nullptr, sink.get_spiller());
+    ASSERT_NE(nullptr, sink.get_spiller()->metrics().total_spill_bytes);
+}
+
 TEST_F(SpillMemTableSinkTest, test_flush_chunk) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
