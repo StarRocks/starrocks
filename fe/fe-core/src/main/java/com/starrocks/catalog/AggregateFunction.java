@@ -452,6 +452,9 @@ public class AggregateFunction extends Function {
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName == null ? "" : symbolName);
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
+        // isolationType defaults to true (isolated); surface it so users can tell whether the
+        // function was created with isolation = "shared".
+        properties.put(CreateFunctionStmt.ISOLATION_KEY, isolationType ? "isolated" : "shared");
         return new Gson().toJson(properties);
     }
 
