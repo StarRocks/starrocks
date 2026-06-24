@@ -39,17 +39,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-// Repro: a lambda argument ColumnRefOperator collides in id with a scalar table column,
-// re-typing the varchar column (transaction_uuid / client_key) as the array element
-// struct<name,value>. Root cause: SqlToScalarOperatorTranslator caches the lambda arg's
-// ColumnRefOperator on the shared AST node (LambdaArgument.transformedOp) and never resets
-// it. When the same lambda-bearing AST is translated again by a *different* ColumnRefFactory
-// (plan retry / MV rewrite re-translate the same statement), the cached id leaks across
-// factories: the second factory numbers scalar columns from scratch and lands on an id the
-// cached lambda arg already owns -> two ColumnRefOperators share one id with different types.
+// Regression test for historical bug fixed by #73273: when the same analyzed AST is
+// transformed twice with different ColumnRefFactory instances, lambda-argument ColumnRefOperator
+// ids must not leak across factories and collide with scalar column ids.
 //
-// A single getVerboseExplain() pass does NOT reproduce it (one factory, monotonic ids), so
-// this test drives the transform twice with two factories to recreate the retry/MV condition.
+// The original bug cached the lambda argument ColumnRefOperator on the AST node
+// (LambdaArgument.transformedOp). A second transform with a fresh factory could then reuse that
+// stale id and collide with a newly created scalar column id, corrupting types (e.g. VARCHAR
+// transaction_uuid/client_key becoming the array element struct<...>) and producing invalid
+// predicates (e.g. struct = varchar join conjunct).
 public class LambdaArgIdCollisionTest extends PlanTestNoneDBBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
