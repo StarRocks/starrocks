@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/base64.h"
 #include "base/phmap/phmap.h"
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
@@ -24,7 +25,6 @@
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_expr_fwd.h"
-#include "exprs/base64.h"
 #include "exprs/function_context.h"
 #include "types/bitmap_value.h"
 

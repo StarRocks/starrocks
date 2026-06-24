@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include "base/base64.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
@@ -30,7 +31,6 @@
 #include "column/raw_data_visitor.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/base64.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"

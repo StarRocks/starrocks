@@ -16,11 +16,11 @@
 
 #include <iostream>
 
+#include "base/base64.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "common/config_scan_io_fwd.h"
-#include "exprs/base64.h"
 #include "gutil/strings/escaping.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
