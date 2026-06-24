@@ -147,10 +147,18 @@ std::string RuntimeFilterProbeDescriptor::debug_string() const {
 
 RuntimeFilterProbeDescriptor::~RuntimeFilterProbeDescriptor() = default;
 
-void RuntimeFilterProbeDescriptor::add_observer(RuntimeState* state, ReadyObserver observer) {
+void RuntimeFilterProbeDescriptor::add_observer(RuntimeState* state, const void* owner, ReadyObserver observer) {
     if (state != nullptr && state->enable_event_scheduler() && observer) {
-        _ready_observers.emplace_back(std::move(observer));
+        std::lock_guard<std::mutex> l(_observer_mutex);
+        _ready_observers.emplace_back(owner, std::move(observer));
     }
+}
+
+void RuntimeFilterProbeDescriptor::remove_observer(const void* owner) {
+    std::lock_guard<std::mutex> l(_observer_mutex);
+    auto it = std::remove_if(_ready_observers.begin(), _ready_observers.end(),
+                             [owner](const auto& entry) { return entry.first == owner; });
+    _ready_observers.erase(it, _ready_observers.end());
 }
 
 static const int default_runtime_filter_wait_timeout_ms = 1000;
@@ -544,8 +552,9 @@ void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
     auto notify = DeferOp([this]() {
         FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_B, { this->barrier.arrive_B(); });
         if (_runtime_state && _runtime_state->fragment_prepared()) {
-            for (auto& observer : _ready_observers) {
-                observer();
+            std::lock_guard<std::mutex> l(_observer_mutex);
+            for (auto& entry : _ready_observers) {
+                entry.second();
             }
         }
     });

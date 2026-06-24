@@ -20,7 +20,9 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
@@ -103,7 +105,14 @@ public:
     }
     void set_runtime_filter(const RuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf);
-    void add_observer(RuntimeState* state, ReadyObserver observer);
+    // `owner` identifies the registrant (e.g. the PipelineDriver's observer) so it can be
+    // detached again via remove_observer(). Thread-safe.
+    void add_observer(RuntimeState* state, const void* owner, ReadyObserver observer);
+    // Detach the observer previously registered with `owner`. Idempotent (no-op when absent).
+    // MUST be called when the registrant is torn down (PipelineDriver::finalize), otherwise a
+    // runtime filter delivered asynchronously on the RuntimeFilterWorker thread would invoke a
+    // callback that captured the now-destructed observer (use-after-free).
+    void remove_observer(const void* owner);
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
@@ -138,7 +147,12 @@ private:
     std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    std::vector<ReadyObserver> _ready_observers;
+    // Guards _ready_observers: set_runtime_filter() notifies on the RuntimeFilterWorker thread
+    // while remove_observer() runs on the driver-executor thread during finalize; the lock
+    // serializes them so a notify never invokes a callback whose owner was just detached.
+    mutable std::mutex _observer_mutex;
+    // {owner, callback}. owner is an opaque key used by remove_observer().
+    std::vector<std::pair<const void*, ReadyObserver>> _ready_observers;
     bool _has_push_down_to_storage = false;
     // Exchange hash function version: 0 for FNV (for backward compatibility), 1 for XXH3
     int32_t _exchange_hash_function_version = 0;

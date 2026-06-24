@@ -233,7 +233,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 #endif
                     auto* observer = this->observer();
                     DCHECK(observer != nullptr || !runtime_state->enable_event_scheduler());
-                    desc->add_observer(_runtime_state, [observer]() { observer->source_trigger(); });
+                    // Key the callback by `observer` so it can be detached in finalize(); the
+                    // descriptor outlives this driver, so a late runtime filter must not invoke a
+                    // callback capturing the destructed observer (use-after-free).
+                    desc->add_observer(_runtime_state, observer, [observer]() { observer->source_trigger(); });
                 }
             }
 
@@ -860,6 +863,20 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, size_t operator
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+    // Global runtime filters are delivered asynchronously on the RuntimeFilterWorker thread and
+    // the probe descriptors outlive this driver (they live in the fragment's object pool). This
+    // driver registered a callback capturing its PipelineObserver into each descriptor during
+    // prepare(); detach them before teardown, otherwise a late runtime filter would invoke that
+    // callback over the destructed observer (use-after-free, crashing in set_runtime_filter ->
+    // PipelineObserver::source_trigger -> _do_update). The fragment_prepared() guard only covers
+    // the prepare side and stays true once set, so it does not protect this teardown window. The
+    // matching timer observer is removed via the global RF timer unschedule below.
+    if (runtime_state->enable_event_scheduler()) {
+        for (auto* desc : _global_rf_descriptors) {
+            desc->remove_observer(observer());
+        }
+    }
+
     stop_timers();
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
