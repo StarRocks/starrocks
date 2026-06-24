@@ -243,6 +243,31 @@ public class ScalarFunction extends Function {
         return sb.toString();
     }
 
+<<<<<<< HEAD
+=======
+    private Map<String, String> synthesizePropertiesFromFields() {
+        Map<String, String> props = new LinkedHashMap<>();
+        String typeStr = binaryTypeToPropertyValue(getBinaryType());
+        if (typeStr != null) {
+            props.put(CreateFunctionStmt.TYPE_KEY, typeStr);
+        }
+        if (getLocation() != null) {
+            props.put(CreateFunctionStmt.FILE_KEY, getLocation().toString());
+        }
+        if (!Strings.isEmpty(getSymbolName())) {
+            props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
+        }
+        if (!Strings.isEmpty(inputType)) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, inputType);
+        }
+        // Default isolation is isolated (true); only emit the property when explicitly shared.
+        if (!isolationType) {
+            props.put(CreateFunctionStmt.ISOLATION_KEY, CreateFunctionStmt.ISOLATION_SHARED);
+        }
+        return props;
+    }
+
+>>>>>>> 68626af16f ([BugFix] Surface isolation property in SHOW FUNCTIONS output (#75255))
     @Override
     public TFunction toThrift() {
         TFunction fn = super.toThrift();
@@ -276,6 +301,10 @@ public class ScalarFunction extends Function {
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
+        // isolationType defaults to true (isolated); surface it so users can tell whether the
+        // function was created with isolation = "shared".
+        properties.put(CreateFunctionStmt.ISOLATION_KEY,
+                isolationType ? CreateFunctionStmt.ISOLATION_ISOLATED : CreateFunctionStmt.ISOLATION_SHARED);
         return new Gson().toJson(properties);
     }
 
