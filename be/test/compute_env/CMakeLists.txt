@@ -48,6 +48,19 @@ set(COMPUTE_ENV_SPILL_TEST_FILES
     spill/spill_test.cpp
 )
 
+set(COMPUTE_ENV_STAROS_TEST_FILES
+    staros/staros_worker_metrics_test.cpp
+)
+
+if (NOT APPLE)
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES ../base/cxa_throw_wrap.cpp)
+endif()
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/starlet_filesystem_test.cpp)
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/staros_worker_test.cpp)
+endif()
+
 add_executable(compute_env_test
         buffer_control_block_test.cpp
         compute_env_test.cpp
@@ -64,7 +77,8 @@ add_executable(compute_env_test
         result_queue_mgr_test.cpp
         runtime_range_pruner_test.cpp
         ${COMPUTE_ENV_WORKGROUP_TEST_FILES}
-        ${COMPUTE_ENV_SPILL_TEST_FILES})
+        ${COMPUTE_ENV_SPILL_TEST_FILES}
+        ${COMPUTE_ENV_STAROS_TEST_FILES})
 set_target_properties(compute_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS})
 
@@ -96,24 +110,3 @@ set(COMPUTE_ENV_SORTING_TEST_LINK_LIBS
 
 add_executable(compute_env_sorting_test ${COMPUTE_ENV_SORTING_TEST_FILES})
 target_link_libraries(compute_env_sorting_test ${COMPUTE_ENV_SORTING_TEST_LINK_LIBS} gtest_main)
-
-set(COMPUTE_ENV_STAROS_TEST_FILES
-    ${BE_TEST_MACOS_LINK_STUBS}
-    staros/staros_worker_metrics_test.cpp
-)
-
-if (NOT APPLE)
-    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES ../base/cxa_throw_wrap.cpp)
-endif()
-
-if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/starlet_filesystem_test.cpp)
-    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/staros_worker_test.cpp)
-endif()
-
-add_library(compute_env_staros_test_objs OBJECT ${COMPUTE_ENV_STAROS_TEST_FILES})
-target_link_libraries(compute_env_staros_test_objs PRIVATE StarRocksPCH)
-set_target_properties(compute_env_staros_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-
-add_executable(compute_env_staros_test $<TARGET_OBJECTS:compute_env_staros_test_objs>)
-target_link_libraries(compute_env_staros_test ${COMPUTE_ENV_TEST_LINK_LIBS} gtest_main)
