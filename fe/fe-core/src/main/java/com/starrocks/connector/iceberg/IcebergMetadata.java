@@ -1697,17 +1697,19 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    / existingRows unreliable for a snapshot range. Delta files are few by definition,
         //    so O(files) plan cost is acceptable; accuracy is required.
         if (isIncrementalDelta) {
-            return getIncrementalCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
+            return getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
         }
         //
         // C. Whole-table snapshot (default, column-stats off, non-delta):
         //    Manifest addedRows+existingRows is PROVABLY exact for total live files regardless of
-        //    write style (fastAppend / MergeAppend / compaction / MOR).  partition-aware pruning
-        //    via filterManifests at manifest-granularity yields a safe over-estimate (typically
-        //    <5x vs 100x for snapshot total-records).  Cost: O(manifests), ZERO manifest-file opens,
-        //    ZERO DataFile enumeration — splitTasks never populated, incremental scan range delivery
-        //    stays unlocked.
-        return getStatisticsFromManifest(icebergTable, columns, predicate, version);
+        //    write style.  In the vast majority of cases (all modern Iceberg writers: StarRocks,
+        //    Spark, Trino, Flink) manifests carry the row-count fields needed; partition-aware
+        //    pruning via filterManifests at manifest-granularity yields a safe over-estimate.
+        //    Cost: O(manifests), ZERO manifest-file opens, ZERO DataFile enumeration — splitTasks
+        //    never populated, incremental scan range delivery stays unlocked.
+        //    Rare fallback: if a matching manifest is missing row-count metadata (v1 manifest list
+        //    or pre-0.10 Iceberg), we fall through to Path B for exact cardinality via planFiles.
+        return getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
     }
 
     // -------------------------------------------------------------------------
@@ -1718,25 +1720,38 @@ public class IcebergMetadata implements ConnectorMetadata {
     // every file within it. Typical over-estimate: <5x (safe direction for CBO).  Cost is
     // O(manifests) with ZERO manifest-file opens and ZERO DataFile enumeration, so splitTasks is
     // never populated and incremental scan range delivery stays lazy/streaming.
+    //
+    // Fallback: if any matching manifest has files but is missing both addedRowsCount and
+    // existingRowsCount (e.g. older or upgraded Iceberg metadata with v1 manifest list), the
+    // manifest-pruned count would be incomplete — fall back to planFiles for exact cardinality.
     private Statistics getStatisticsFromManifest(IcebergTable icebergTable,
                                                   Map<ColumnRefOperator, Column> columns,
                                                   ScalarOperator predicate,
+                                                  long limit,
                                                   TvrVersionRange version) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality")) {
             long rowCount = getManifestPrunedRowCount(icebergTable, predicate, version);
+            if (rowCount < 0) {
+                // Manifest row-count metadata incomplete → fall back to planFiles.
+                return getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
+            }
             return statisticProvider.buildRowCountStatistics(columns, rowCount);
         }
     }
 
     // -------------------------------------------------------------------------
-    // Path B: incremental delta (append-only), column-stats off.
+    // Path B: incremental delta (append-only) and fallback — column-stats off.
     //
-    // Trade-off: delta requires datafile-level precision (added_snapshot_id on each DataFile)
-    // because MergeAppend/compaction rewrites manifests, merging old and new records into the
-    // same manifest — manifest-level addedRows/existingRows becomes unreliable for ranges.
-    // Only DataFile-level added_snapshot_id (read via IncrementalAppendScan / planFiles entry
-    // iteration) correctly isolates the delta.  Delta files are few, so O(files) is acceptable.
-    private Statistics getIncrementalCardinalityFromPlanFiles(IcebergTable icebergTable,
+    // Used for two cases:
+    //   1. Incremental delta: requires datafile-level precision (added_snapshot_id on each DataFile)
+    //      because MergeAppend/compaction merges old + new records into the same manifest, making
+    //      manifest-level addedRows/existingRows unreliable for snapshot ranges. Delta files are
+    //      few, so O(files) is acceptable; accuracy is required.
+    //   2. Fallback from manifest-pruned: when a matching manifest has live files but is missing
+    //      addedRowsCount / existingRowsCount (e.g. v1 manifest list or pre-0.10 Iceberg metadata),
+    //      the manifest-pruned count would be incomplete. planFiles gets exact cardinality every
+    //      time because DataFile.recordCount() is a required field.
+    private Statistics getCardinalityFromPlanFiles(IcebergTable icebergTable,
                                                                Map<ColumnRefOperator, Column> columns,
                                                                ScalarOperator predicate, long limit,
                                                                TvrVersionRange version) {
@@ -1799,8 +1814,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     // its FULL row count — resulting in a partition-aware over-estimate (safe for CBO).
     //
     // NOT SAFE for incremental versions (TvrTableDelta with start present): MergeAppend/compaction
-    // makes manifest-level added/existing unreliable for ranges. Use getIncrementalCardinality
-    // instead for delta cardinality.
+    // makes manifest-level added/existing unreliable for ranges. Use Path B instead for delta.
+    //
+    // Returns a negative value when any matching manifest has files but is missing both
+    // addedRowsCount and existingRowsCount (e.g. v1 manifest list or upgraded metadata) —
+    // callers must fall back to planFiles for exact cardinality.
     private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TvrVersionRange version) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         if (!version.end().isPresent()) {
@@ -1821,6 +1839,9 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         long rowCount = 0;
         for (ManifestFile manifest : matchingManifests) {
+            if (!canCountRowsFromManifest(manifest)) {
+                return -1;
+            }
             rowCount += orZeroRows(manifest.addedRowsCount()) + orZeroRows(manifest.existingRowsCount());
         }
         return Math.max(rowCount, 1);
@@ -1828,6 +1849,23 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private static long orZeroRows(Long value) {
         return value == null ? 0L : value;
+    }
+
+    // A manifest can only be counted via addedRowsCount / existingRowsCount when the
+    // manifest-list entry carries those row-count fields. They were added in Iceberg v2
+    // manifest-list format (~0.10, 2021); v1 manifest lists and pre-0.10 metadata lack them.
+    // All modern writers (StarRocks, Spark, Trino, Flink, etc.) write v2+ manifest lists
+    // that include these fields, so normal tables always pass this check. It only rejects
+    // manifests from very old or non-standard Iceberg metadata — and even then, only when
+    // the manifest actually contains live files (added / existing / deleted).
+    private static boolean canCountRowsFromManifest(ManifestFile manifest) {
+        // At least one non-null row count → safe to estimate from manifest metadata.
+        if (manifest.addedRowsCount() != null || manifest.existingRowsCount() != null) {
+            return true;
+        }
+        // Both row counts are null. If the manifest has any live files, the count would be
+        // a severe under-estimate → caller must fall back to planFiles for exact cardinality.
+        return !manifest.hasAddedFiles() && !manifest.hasExistingFiles() && !manifest.hasDeletedFiles();
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
