@@ -723,7 +723,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     TExpr t_expr;
     t_expr.nodes = nodes;
 
-    chunk_changer.init_runtime_state(TQueryOptions(), TQueryGlobals());
+    chunk_changer.init_runtime_state(TQueryOptions(), TQueryGlobals(), nullptr);
 
     ExprContext* ctx = nullptr;
 

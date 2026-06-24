@@ -49,8 +49,9 @@ namespace starrocks {
 
 using std::to_string;
 
-EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request)
-        : _alter_tablet_req(request) {
+EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request,
+                                             ExecEnv* exec_env)
+        : _alter_tablet_req(request), _exec_env(exec_env) {
     size_t mem_limit = static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
     _mem_tracker = std::make_unique<MemTracker>(MemTrackerType::SCHEMA_CHANGE_TASK, mem_limit, "schema change task",
                                                 mem_tracker);
@@ -70,10 +71,10 @@ Status EngineAlterTabletTask::execute() {
     std::string task_detail_msg = "";
     if (_alter_tablet_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         lake::SchemaChangeHandler handler(StorageEnv::GetInstance()->lake_tablet_manager(),
-                                          StorageEngine::instance()->lake_schema_change_thread_pool());
+                                          StorageEngine::instance()->lake_schema_change_thread_pool(), _exec_env);
         res = handler.process_alter_tablet(_alter_tablet_req);
     } else {
-        SchemaChangeHandler handler;
+        SchemaChangeHandler handler(_exec_env);
         handler.set_alter_msg_header(alter_msg_header);
         res = handler.process_alter_tablet(_alter_tablet_req);
         task_detail_msg = handler.get_task_detail_msg();

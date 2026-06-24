@@ -16,7 +16,5 @@ src/service/service_be/lake_service.cpp
 src/service/service_be/starrocks_be.cpp
 src/storage/load_chunk_spiller.cpp
 src/data_workflows/load/push_broker_reader.cpp
-src/storage/rowset/json_column_iterator.cpp
-src/storage/schema_change_utils.cpp
 src/udf/java/utils.cpp
 src/util/system_metrics.cpp
