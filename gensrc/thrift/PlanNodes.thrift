@@ -90,7 +90,11 @@ enum TPlanNodeType {
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
+<<<<<<< HEAD
   CHANGES_SCAN_NODE
+=======
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE
+>>>>>>> cc38557d877... [Feature] Add MERGE INTO planner, EnforceUniqueRowLocator check, and Iceberg row-delta commit path (#74725)
 }
 
 // phases of an execution node
@@ -1298,6 +1302,13 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
+struct TEnforceUniqueRowLocatorNode {
+    // Slot ids of the unique-key columns. The BE resolves the actual chunk
+    // columns through the chunk's slot-id map, so the FE does not need to
+    // predict the physical column order of the BE chunk.
+    1: optional list<Types.TSlotId> unique_key_slot_ids
+}
+
 struct THdfsScanNode {
     1: optional Types.TTupleId tuple_id
 
@@ -1603,7 +1614,11 @@ struct TPlanNode {
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
+<<<<<<< HEAD
   86: optional TChangesScanNode changes_scan_node;
+=======
+  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+>>>>>>> cc38557d877... [Feature] Add MERGE INTO planner, EnforceUniqueRowLocator check, and Iceberg row-delta commit path (#74725)
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

@@ -75,7 +75,12 @@ public class ProfilingExecPlanTest {
                         "STREAM_LOAD_SCAN", "ANALYTIC_EVAL", "ICEBERG_SCAN", "AGGREGATION", "FILE_SCAN", "EXCHANGE",
                         "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN",
                         "CAPTURE_VERSION", "ICEBERG_EQUALITY_DELETE_SCAN", "RAW_VALUES", "FETCH", "LOOK_UP",
+<<<<<<< HEAD
                         "BENCHMARK_SCAN", "ICEBERG_METADATA_DELETE", "CACHE_STATS_SCAN", "CHANGES_SCAN");
+=======
+                        "BENCHMARK_SCAN", "ICEBERG_METADATA_DELETE", "CACHE_STATS_SCAN",
+                        "ENFORCE_UNIQUE_ROW_LOCATOR");
+>>>>>>> cc38557d877... [Feature] Add MERGE INTO planner, EnforceUniqueRowLocator check, and Iceberg row-delta commit path (#74725)
 
         Method method = ProfilingExecPlan.class.getDeclaredMethod("normalizeNodeName", Class.class);
         method.setAccessible(true);
