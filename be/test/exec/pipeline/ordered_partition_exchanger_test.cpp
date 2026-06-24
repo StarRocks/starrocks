@@ -17,22 +17,21 @@
 #include <memory>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exprs/expr_executor.h"
-#include "exprs/expr_factory.h"
+#include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
-#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks::pipeline {
@@ -46,15 +45,12 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         query_options.batch_size = 4096;
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
-                                                        &_exec_env->query_execution_services(), _exec_env);
-        _query_context->attach_to_runtime_state(_runtime_state.get());
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
         _runtime_state->init_instance_mem_tracker();
 
         _memory_manager = std::make_shared<ChunkBufferMemoryManager>(_dop, 1024 * 1024);
@@ -81,7 +77,7 @@ protected:
         std::vector<TExpr> t_exprs{
                 ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(kPartitionSlotId, /*is_nullable=*/false)};
         std::vector<ExprContext*> exprs;
-        CHECK(ExprFactory::create_expr_trees(&_object_pool, t_exprs, &exprs, nullptr).ok());
+        CHECK(Expr::create_expr_trees(&_object_pool, t_exprs, &exprs, nullptr).ok());
         return exprs;
     }
 
