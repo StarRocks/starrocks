@@ -89,7 +89,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (scalarOperator.isColumnRef()) {
             return new ColumnRefSet(((ColumnRefOperator) scalarOperator).getId());
         }
-        Map<String, ColumnRefOperator> structFieldsData = context.getFieldUseStringRefMap(scalarOperator);
+        Map<String, ColumnRefOperator> structFieldsData = context.structManager.getFieldStringRefMap(scalarOperator);
         if (structFieldsData != null) {
             return new ColumnRefSet(structFieldsData.values());
         }
@@ -431,7 +431,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         inputColumns.union(inputColumns.getStream()
                 .map(factory::getColumnRef)
                 .filter(c -> c.getType().isStructType())
-                .map(context::getFieldUseStringRefMap)
+                .map(context.structManager::getFieldStringRefMap)
                 .filter(Objects::nonNull)
                 .flatMap(k -> k.values().stream())
                 .toList());
@@ -706,7 +706,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         for (int sid : fragmentUseDictExprs.getColumnIds()) {
             ColumnRefOperator strRef = factory.getColumnRef(sid);
             if (strRef.getType().isStructType()) {
-                Map<String, ColumnRefOperator> subFields = context.getFieldUseStringRefMap(strRef);
+                Map<String, ColumnRefOperator> subFields = context.structManager.getFieldStringRefMap(strRef);
                 if (subFields != null) {
                     useDictExprs.union(subFields.values());
                 }
