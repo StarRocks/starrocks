@@ -20,7 +20,6 @@
 #include "column/datum_convert.h"
 #include "column/type_converter.h"
 #include "exprs/expr_factory.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
@@ -56,9 +55,9 @@ ChunkChanger::~ChunkChanger() {
     }
 }
 
-void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals) {
-    _state = _obj_pool.add(
-            new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
+void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals,
+                                      ExecEnv* exec_env) {
+    _state = _obj_pool.add(new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, exec_env));
 }
 
 ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
