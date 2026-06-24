@@ -210,7 +210,13 @@ public class CreateFunctionAnalyzer {
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
+<<<<<<< HEAD
                 objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
+=======
+                objectFile, handleClass.getCanonicalName(), "", "",
+                !CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation),
+                cloudConfiguration);
+>>>>>>> 68626af16f ([BugFix] Surface isolation property in SHOW FUNCTIONS output (#75255))
         function.setChecksum(checksum);
         return function;
     }
@@ -324,7 +330,12 @@ public class CreateFunctionAnalyzer {
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType.getType()).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
                 .symbolName(mainClass.getCanonicalName())
+<<<<<<< HEAD
                 .setIsolationType(!"shared".equalsIgnoreCase(isolation));
+=======
+                .cloudConfiguration(cloudConfiguration)
+                .setIsolationType(!CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation));
+>>>>>>> 68626af16f ([BugFix] Surface isolation property in SHOW FUNCTIONS output (#75255))
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;
@@ -606,7 +617,7 @@ public class CreateFunctionAnalyzer {
                 objectFile(objectFile).
                 inputType(inputType).
                 symbolName(symbol).
-                isolation(!"shared".equalsIgnoreCase(isolation)).
+                isolation(!CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation)).
                 content(content);
         ScalarFunction function = scalarFunctionBuilder.build();
         function.setChecksum(checksum);
