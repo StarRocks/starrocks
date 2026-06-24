@@ -43,6 +43,17 @@ FROM t;
 -- result:
 5	5
 -- !result
+SET streaming_preaggregation_mode = 'force_streaming';
+-- result:
+-- !result
+SELECT region,
+       count_state_merge(count_combine(nullable_score)) AS via_col_streaming,
+       count(nullable_score)                            AS direct
+FROM t GROUP BY region ORDER BY region;
+-- result:
+CN	2	2
+US	1	1
+-- !result
 DROP DATABASE test_count_combine_nullable_${uuid0};
 -- result:
 -- !result
