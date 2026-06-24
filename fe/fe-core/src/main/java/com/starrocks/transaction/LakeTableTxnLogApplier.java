@@ -18,12 +18,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -31,6 +36,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnLogApplier.class);
@@ -120,6 +126,14 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
             }
+            // Publish-driven real-time reshard triggering + transient stat refresh. Leader-only; on
+            // followers / replay / checkpoint the transient tabletStats map is empty, so skip there.
+            if (GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.isCheckpointThread()) {
+                Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
+                if (tabletStats != null && !tabletStats.isEmpty()) {
+                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, versionTime);
+                }
+            }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
@@ -136,6 +150,56 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                         .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
             }
         }
+    }
+
+    /**
+     * Leader-only post-publish bookkeeping for one lake partition: refresh each LakeTablet's data size
+     * and row count from the BE-reported {@code tabletStats}, then mark the table a reshard candidate
+     * with the largest just-published tablet size ({@code addReshardCandidate} applies the split threshold).
+     *
+     * <p>The candidate carries only the split signal (merge = Long.MAX_VALUE): split is the publish
+     * path's real-time benefit and is never gated by the merge parallelism floor, so this stays a pure
+     * in-memory max with no StarMgr RPC on the write-locked publish path. maxTabletSize is taken over
+     * only the just-published tablets (those in {@code tabletStats}); a tablet only grows when written,
+     * so this is the real-time signal, and the periodic TabletStatMgr scan is the backstop for any
+     * already-oversized tablet this publish did not touch. It is also monotone (table-wide &gt;= this
+     * partition's), so a per-partition crossing is decision-safe. Merge is left to the periodic scan,
+     * whose adjacency signal requires every neighbor to be fresh — a single publish rarely satisfies that.
+     *
+     * <p>{@code tabletStats} is transient transport: it is consumed here and cleared to bound FE heap,
+     * since the LakeTablet row counts set above persist independently and the post-visible first-load
+     * statistics collector samples from LakeTablet.getFuzzyRowCount(), not from this map.
+     */
+    private void refreshTabletStatsAndMarkReshardCandidate(PhysicalPartition partition,
+            Map<Long, TabletStatPB> tabletStats, Database db, long versionTime) {
+        List<MaterializedIndex> indexes = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+        long maxTabletSize = 0L;
+        // Walk only the tablets this publish actually reported, not every tablet in the partition: this
+        // runs under the table write lock, so resolve each reported id directly (O(1) per index).
+        for (Map.Entry<Long, TabletStatPB> entry : tabletStats.entrySet()) {
+            Tablet tablet = null;
+            for (MaterializedIndex index : indexes) {
+                tablet = index.getTablet(entry.getKey());
+                if (tablet != null) {
+                    break;
+                }
+            }
+            if (!(tablet instanceof LakeTablet)) {
+                continue;
+            }
+            LakeTablet lakeTablet = (LakeTablet) tablet;
+            TabletStatPB tabletStat = entry.getValue();
+            long dataSize = tabletStat.dataSize != null ? tabletStat.dataSize : 0L;
+            lakeTablet.setDataSize(dataSize);
+            lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L);
+            lakeTablet.setDataSizeUpdateTime(versionTime);
+            maxTabletSize = Math.max(maxTabletSize, dataSize);
+        }
+        if (maxTabletSize > 0 && table.isRangeDistribution()) {
+            GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                    .addReshardCandidate(db.getId(), table.getId(), maxTabletSize, Long.MAX_VALUE);
+        }
+        tabletStats.clear();
     }
 
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {

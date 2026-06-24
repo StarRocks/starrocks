@@ -302,7 +302,8 @@ public class SplitTabletJobTest {
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
                                        long baseVersion, long newVersion, Map<Long, Double> compactionScores,
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
-                                       Map<Long, Long> tabletRowNums, boolean useAggregatePublish) {
+                                       Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                       boolean useAggregatePublish) {
                 actualResource.set(computeResource);
             }
         };

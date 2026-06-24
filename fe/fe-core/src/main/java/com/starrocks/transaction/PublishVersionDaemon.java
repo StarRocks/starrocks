@@ -57,6 +57,7 @@ import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -689,17 +690,22 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+                // Per-tablet stats for real-time reshard triggering (range-distribution tablets only).
+                Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            computeResource, null);
+                            computeResource, tabletStats);
                 } else {
-                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion, 
-                            compactionScores, nodeToTablets, computeResource, null);
+                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
+                            compactionScores, nodeToTablets, computeResource, tabletStats);
                 }
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
+                if (!tabletStats.isEmpty()) {
+                    stateBatch.setTabletStats(tableId, partitionId, tabletStats);
+                }
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
@@ -1083,15 +1089,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                // Used to collect statistics when the partition is first imported
-                Map<Long, Long> tabletRowNums = new HashMap<>();
+                // Per-tablet stats from the publish response: first-load row counts for statistics
+                // collection, and range-distribution tablet sizes for real-time reshard triggering.
+                Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        computeResource, tabletRowNums, useAggregatePublish);
+                        computeResource, tabletStats, useAggregatePublish);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
-                if (!tabletRowNums.isEmpty()) {
-                    partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().putAll(tabletRowNums);
+                if (!tabletStats.isEmpty()) {
+                    partitionCommitInfo.getTabletStats().putAll(tabletStats);
                 }
             }
             return true;

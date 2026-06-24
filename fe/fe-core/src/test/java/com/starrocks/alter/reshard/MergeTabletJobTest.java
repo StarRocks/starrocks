@@ -444,7 +444,7 @@ public class MergeTabletJobTest {
                                        long baseVersion, long newVersion, Map<Long, Double> compactionScores,
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
-                                       Map<Long, Long> tabletRowNums,
+                                       Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish) throws Exception {
                 throw new RuntimeException("mock");
             }
@@ -477,7 +477,7 @@ public class MergeTabletJobTest {
                                        long baseVersion, long newVersion, Map<Long, Double> compactionScores,
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
-                                       Map<Long, Long> tabletRowNums,
+                                       Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish) {
                 actualResource.set(computeResource);
             }
