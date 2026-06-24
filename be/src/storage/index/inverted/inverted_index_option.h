@@ -37,4 +37,6 @@ int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& p
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);
 
+bool get_lower_case_from_properties(const std::map<std::string, std::string>& properties);
+
 } // namespace starrocks
