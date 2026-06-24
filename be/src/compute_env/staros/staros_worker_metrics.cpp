@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "staros_integration/staros_worker_metrics.h"
+#include "compute_env/staros/staros_worker_metrics.h"
 
 #include "gutil/macros.h"
 

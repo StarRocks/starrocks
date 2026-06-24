@@ -51,9 +51,9 @@
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
-#include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
 
 #ifdef WITH_STARCACHE

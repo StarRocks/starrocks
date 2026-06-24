@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifdef USE_STAROS
-#include "staros_integration/staros_starcache.h"
+#include "compute_env/staros/staros_starcache.h"
 
 #include "common/config_staros_worker_fwd.h"
 #include "fslib/star_cache_configuration.h"

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifdef USE_STAROS
-#include "staros_integration/staros_worker.h"
+#include "compute_env/staros/staros_worker.h"
 
 #include <starlet.h>
 
@@ -25,11 +25,16 @@
 #include "common/logging.h"
 #include "common/util/debug_util.h"
 #include "common/util/table_metrics.h"
+#include "compute_env/staros/staros_worker_metrics.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+<<<<<<< HEAD:be/src/staros_integration/staros_worker.cpp
 #include "staros_integration/staros_status.h"
 #include "staros_integration/staros_worker_metrics.h"
 #include "staros_integration/staros_worker_runtime.h"
+=======
+>>>>>>> d2369a95f86... [Refactor] Move StarOS integration into ComputeEnv (#75307):be/src/compute_env/staros/staros_worker.cpp
 
 namespace starrocks {
 

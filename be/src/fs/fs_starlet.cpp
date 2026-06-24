@@ -37,6 +37,9 @@
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 #include "fs/fs_registry.h"
 #endif
+#include "compute_env/staros/staros_status.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
 #include "io/input_stream.h"
@@ -45,9 +48,6 @@
 #include "io/seekable_input_stream.h"
 #include "io/throttled_output_stream.h"
 #include "io/throttled_seekable_input_stream.h"
-#include "staros_integration/staros_status.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
 #include "storage/primitive/storage_stats.h"
 

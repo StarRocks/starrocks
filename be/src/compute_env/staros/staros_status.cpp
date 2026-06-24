@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifdef USE_STAROS
-#include "staros_integration/staros_status.h"
+#include "compute_env/staros/staros_status.h"
 
 #include "fmt/format.h"
 

@@ -96,3 +96,23 @@ set(COMPUTE_ENV_SORTING_TEST_LINK_LIBS
 
 add_executable(compute_env_sorting_test ${COMPUTE_ENV_SORTING_TEST_FILES})
 target_link_libraries(compute_env_sorting_test ${COMPUTE_ENV_SORTING_TEST_LINK_LIBS} gtest_main)
+
+set(COMPUTE_ENV_STAROS_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    staros/staros_worker_metrics_test.cpp
+)
+
+if (NOT APPLE)
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES ../base/cxa_throw_wrap.cpp)
+endif()
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/staros_worker_test.cpp)
+endif()
+
+add_library(compute_env_staros_test_objs OBJECT ${COMPUTE_ENV_STAROS_TEST_FILES})
+target_link_libraries(compute_env_staros_test_objs PRIVATE StarRocksPCH)
+set_target_properties(compute_env_staros_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
+add_executable(compute_env_staros_test $<TARGET_OBJECTS:compute_env_staros_test_objs>)
+target_link_libraries(compute_env_staros_test ${COMPUTE_ENV_TEST_LINK_LIBS} gtest_main)
