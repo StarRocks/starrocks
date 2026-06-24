@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "byte_buffer.h"
+#include "runtime/byte_buffer.h"
 
 namespace starrocks {
 

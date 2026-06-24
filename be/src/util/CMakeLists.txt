@@ -26,7 +26,6 @@ set(UTIL_FILES
   system_metrics.cpp
 # coding_util.cpp
   memory_lock.cpp
-  byte_buffer.cpp
   hdfs_util.cpp
   jvm_metrics.cpp
 )

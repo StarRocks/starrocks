@@ -52,9 +52,9 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "pulsar/Client.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker_fwd.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 

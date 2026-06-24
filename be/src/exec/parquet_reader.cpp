@@ -30,8 +30,8 @@
 #include "parquet/arrow/schema.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/descriptors.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 // ====================================================================================================================
