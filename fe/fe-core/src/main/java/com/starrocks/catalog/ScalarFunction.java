@@ -266,7 +266,7 @@ public class ScalarFunction extends Function {
         }
         // Default isolation is isolated (true); only emit the property when explicitly shared.
         if (!isolationType) {
-            props.put(CreateFunctionStmt.ISOLATION_KEY, "shared");
+            props.put(CreateFunctionStmt.ISOLATION_KEY, CreateFunctionStmt.ISOLATION_SHARED);
         }
         return props;
     }
@@ -304,6 +304,10 @@ public class ScalarFunction extends Function {
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
+        // isolationType defaults to true (isolated); surface it so users can tell whether the
+        // function was created with isolation = "shared".
+        properties.put(CreateFunctionStmt.ISOLATION_KEY,
+                isolationType ? CreateFunctionStmt.ISOLATION_ISOLATED : CreateFunctionStmt.ISOLATION_SHARED);
         return new Gson().toJson(properties);
     }
 
