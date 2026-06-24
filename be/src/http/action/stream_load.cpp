@@ -82,7 +82,7 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/stream_load/stream_load_pipe.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "simdjson.h"
 
 namespace starrocks {

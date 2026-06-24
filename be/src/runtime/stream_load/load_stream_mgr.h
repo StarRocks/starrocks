@@ -40,7 +40,7 @@
 
 #include "base/uid_util.h" // for std::hash for UniqueId
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_pipe.h" // for StreamLoadPipe
+#include "compute_env/load/stream_load_pipe.h" // for StreamLoadPipe
 
 namespace starrocks {
 

@@ -18,7 +18,7 @@
 
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
-#include "runtime/stream_load/stream_load_pipe.h"
+#include "compute_env/load/stream_load_pipe.h"
 
 namespace starrocks {
 

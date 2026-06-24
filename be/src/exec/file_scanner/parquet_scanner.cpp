@@ -28,8 +28,7 @@
 #include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_pipe.h"
+#include "compute_env/load/stream_load_pipe.h"
 
 namespace starrocks {
 
