@@ -1676,29 +1676,63 @@ public class IcebergMetadata implements ConnectorMetadata {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 
+        // Default path (column statistics disabled): derive row count from manifest metadata
+        // (O(manifests)) without enumerating DataFiles. This avoids triggering a full planFiles()
+        // in the foreground, so it no longer pre-populates splitTasks and incremental scan range
+        // delivery (getRemoteFilesAsync) stays on its lazy/streaming path.
+        if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality")) {
+                long rowCount = getManifestPrunedRowCount(icebergTable, predicate, version);
+                return statisticProvider.buildRowCountStatistics(columns, rowCount);
+            }
+        }
+
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setLimit(limit)
                 .setTableVersionRange(version)
-                .setEnableColumnStats(session.getSessionVariable().enableIcebergColumnStatistics())
+                .setEnableColumnStats(true)
                 .build();
 
         PredicateSearchKey key = PredicateSearchKey.of(
                 icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
         triggerIcebergPlanFilesIfNeeded(key, icebergTable);
+        return statisticProvider.getTableStatistics(icebergTable, columns, session, params);
+    }
 
-        if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
-            List<FileScanTask> icebergScanTasks = splitTasks.get(key);
-            if (icebergScanTasks == null) {
-                throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
-                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), predicate);
-            }
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality" + key)) {
-                return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
-            }
-        } else {
-            return statisticProvider.getTableStatistics(icebergTable, columns, session, params);
+    // Estimate row count from manifest metadata with partition-aware manifest pruning, in O(manifests).
+    // It reads only the manifest list (one file) plus in-memory manifest evaluation; it does NOT open
+    // manifest files or enumerate DataFiles, so it never populates splitTasks and keeps incremental
+    // scan range delivery intact. Manifest-level pruning is coarser than file-level: a matching manifest
+    // contributes its full row count, yielding a partition-aware over-estimate (never an undercount),
+    // which is the safe direction for CBO. Delete files are ignored, consistent with getCardinalityStats.
+    private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TvrVersionRange version) {
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        if (!version.end().isPresent()) {
+            return 1;
         }
+        Snapshot snapshot = nativeTbl.snapshot(version.end().get());
+        if (snapshot == null) {
+            return 1;
+        }
+
+        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+
+        List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTbl.io());
+        List<ManifestFile> matchingManifests = filterManifests(dataManifests, nativeTbl, icebergPredicate);
+
+        long rowCount = 0;
+        for (ManifestFile manifest : matchingManifests) {
+            rowCount += orZeroRows(manifest.addedRowsCount()) + orZeroRows(manifest.existingRowsCount());
+        }
+        return Math.max(rowCount, 1);
+    }
+
+    private static long orZeroRows(Long value) {
+        return value == null ? 0L : value;
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(

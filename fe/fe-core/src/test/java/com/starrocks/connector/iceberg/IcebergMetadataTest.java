@@ -1454,6 +1454,40 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetTableStatisticsManifestPrunedKeepsIncrementalDelivery() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
+                new ConnectorProperties(ConnectorType.ICEBERG,
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
+        // Two separate commits => two data manifests. Manifest-pruned row count must sum across manifests
+        // (FILE_A=2 + FILE_A_2=2 = 4).
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A_2).commit();
+        mockedNativeTableA.refresh();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "id", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", IntegerType.INT));
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+        Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
+        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        Statistics statistics = metadata.getTableStatistics(
+                context, icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
+        Assertions.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
+
+        // The default (manifest-pruned) path must NOT enumerate DataFiles, i.e. it must not pre-populate
+        // splitTasks. Otherwise getRemoteFilesAsync would replay an eager full list and incremental scan
+        // range delivery would be defeated.
+        java.lang.reflect.Field splitTasksField = IcebergMetadata.class.getDeclaredField("splitTasks");
+        splitTasksField.setAccessible(true);
+        Map<?, ?> splitTasks = (Map<?, ?>) splitTasksField.get(metadata);
+        Assertions.assertTrue(splitTasks.isEmpty());
+    }
+
+    @Test
     public void testGetTableStatisticsWithColumnStats() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
