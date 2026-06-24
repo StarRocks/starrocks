@@ -17,19 +17,18 @@
 #include <memory>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exprs/expr_executor.h"
-#include "exprs/expr_factory.h"
+#include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/datum.h"
@@ -81,7 +80,7 @@ protected:
         std::vector<TExpr> t_exprs{
                 ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(kPartitionSlotId, /*is_nullable=*/false)};
         std::vector<ExprContext*> exprs;
-        CHECK(ExprFactory::create_expr_trees(&_object_pool, t_exprs, &exprs, nullptr).ok());
+        CHECK(Expr::create_expr_trees(&_object_pool, t_exprs, &exprs, nullptr).ok());
         return exprs;
     }
 

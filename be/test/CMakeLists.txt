@@ -77,11 +77,7 @@ set(EXEC_FILES
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
-<<<<<<< HEAD
-=======
-        ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
->>>>>>> a38b33c2fe ([BugFix] Fix heap-use-after-free in OrderedPartitionExchanger when previous chunk is mutated downstream (#75279))
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/fragment_executor_test.cpp

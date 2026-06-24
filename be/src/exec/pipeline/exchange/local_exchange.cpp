@@ -22,12 +22,8 @@
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
-<<<<<<< HEAD
 #include "gutil/hash/hash.h"
 #include "util/runtime_profile.h"
-=======
-#include "exprs/expr_executor.h"
->>>>>>> a38b33c2fe ([BugFix] Fix heap-use-after-free in OrderedPartitionExchanger when previous chunk is mutated downstream (#75279))
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
