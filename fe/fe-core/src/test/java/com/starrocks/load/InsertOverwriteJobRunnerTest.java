@@ -20,7 +20,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
@@ -30,10 +29,6 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.LambdaArgument;
-=======
->>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273))
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -332,61 +327,6 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testClearLambdaArgumentTransformedOps() throws Exception {
-        // Test that clearLambdaArgumentTransformedOps correctly clears all LambdaArgument.transformedOp
-        // in the AST tree. This is critical for INSERT OVERWRITE re-plan correctness.
-        String sql = "insert overwrite t_lambda_target " +
-                "select k1, array_map(x -> x + 1, k2) from t_lambda_src1 " +
-                "union all " +
-                "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
-        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-
-        // Collect all LambdaArgument nodes from the AST
-        List<LambdaArgument> lambdaArgs = new ArrayList<>();
-        new AstTraverser<Void, Void>() {
-            @Override
-            public Void visitLambdaArguments(LambdaArgument node, Void context) {
-                lambdaArgs.add(node);
-                return null;
-            }
-        }.visit(insertStmt);
-
-        // Verify that lambda arguments exist in the AST
-        Assertions.assertFalse(lambdaArgs.isEmpty(),
-                "InsertStmt with array_map should contain LambdaArgument nodes");
-        // UNION ALL with two array_map calls should have at least 2 lambda arguments
-        Assertions.assertTrue(lambdaArgs.size() >= 2,
-                "Expected at least 2 LambdaArgument nodes for UNION ALL with two array_map calls, got: " + lambdaArgs.size());
-
-        // Simulate the first plan() caching ColumnRefOperators in LambdaArgument.transformedOp
-        for (LambdaArgument arg : lambdaArgs) {
-            ColumnRefOperator mockOp = new ColumnRefOperator(999, Type.INT, "mock_col", true);
-            arg.setTransformed(mockOp);
-            Assertions.assertNotNull(arg.getTransformed(), "transformedOp should be set");
-        }
-
-        // Call clearLambdaArgumentTransformedOps directly
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t_lambda_target");
-        OlapTable olapTable = (OlapTable) table;
-        InsertOverwriteJob job = new InsertOverwriteJob(300L, insertStmt, database.getId(), olapTable.getId(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
-        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
-        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, connectContext, executor);
-
-        runner.clearLambdaArgumentTransformedOps(insertStmt);
-
-        // Verify all LambdaArgument.transformedOp are cleared
-        for (LambdaArgument arg : lambdaArgs) {
-            Assertions.assertNull(arg.getTransformed(),
-                    "LambdaArgument.transformedOp should be null after clearLambdaArgumentTransformedOps");
-        }
-    }
-
-    @Test
-=======
->>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273))
     public void testInsertOverwriteWithUnionAllAndLambda() throws Exception {
         // Integration regression for issue #72831: INSERT OVERWRITE + UNION ALL + lambda used to
         // surface "expr_type does not match slot_type" because the second plan was reading

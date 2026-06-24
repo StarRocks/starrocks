@@ -16,27 +16,19 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.ImmutableList;
-<<<<<<< HEAD
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.StringLiteral;
-=======
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.LambdaArgument;
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273))
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -81,8 +73,8 @@ public class SqlToScalarOperatorTranslatorTest {
     @Test
     public void testLambdaArgRefCacheScopedToFactory() {
         LambdaArgument arg = new LambdaArgument("x");
-        arg.setType(IntegerType.INT);
-        arg.setOriginType(IntegerType.INT);
+        arg.setType(Type.INT);
+        arg.setOriginType(Type.INT);
 
         ColumnRefFactory firstFactory = new ColumnRefFactory();
         ColumnRefOperator first = firstFactory.computeLambdaArgRefIfAbsent(arg,

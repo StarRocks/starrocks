@@ -1081,33 +1081,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
                 "  |  cardinality: 1"), plan);
     }
-<<<<<<< HEAD
-}
-=======
-
-    @Test
-    public void testLeadLagUsingArrayAsParameterType() throws Exception {
-
-        String sql = "select /*+SET_VAR(array_low_cardinality_optimize=true)*/ v1, v2," +
-                " lead(a1) over(partition by v1 order by v2)\n" +
-                "  from s1;";
-        String plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  4:Decode\n" +
-                "  |  <dict id 7> : <string id 5>\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  3:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: v1, BIGINT, true]\n" +
-                "  |  2 <-> [2: v2, INT, true]\n" +
-                "  |  7 <-> [7: lead(3: a1, 1, null), ARRAY<INT>, true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  2:ANALYTIC\n" +
-                "  |  functions: [, lead[([6: a1, ARRAY<INT>, true], 1, NULL); " +
-                "args: INVALID_TYPE; result: ARRAY<INT>; args nullable: true; result nullable: true], ]\n" +
-                "  |  partition by: [1: v1, BIGINT, true]"));
-    }
 
     // Regression for the LambdaArgument transformed-ref cache refactor (issue #72831 / PR #72832).
     // Two array_map calls reuse the same lambda argument name `x` on different array<varchar>
@@ -1139,4 +1112,3 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "two array_map calls reusing arg name `x` must get distinct slot ids, plan was:\n" + plan);
     }
 }
->>>>>>> e988c40d5c ([Refactor] Move LambdaArgument transformed ref cache to ColumnRefFactory (#73273))
