@@ -251,13 +251,14 @@ public:
     static constexpr int64_t DEFAULT_MV_VERSION = 1;
     inline static std::string DEFAULT_MEM_POOL{"default_mem_pool"};
 
-    // Process-wide accessor for the reserved default workgroup. It is registered once at
-    // ComputeEnv startup (see DefaultWorkGroupInitialization) and lets ComputeEnv-layer code
-    // (e.g. the spill framework) resolve a "no workgroup specified" request to the default
-    // without reaching back to the ExecEnv singleton. Returns nullptr before startup or in
-    // unit tests where ComputeEnv is never initialized.
+    // Process-wide accessor for the reserved default workgroup. It is registered at ComputeEnv
+    // startup (see DefaultWorkGroupInitialization) and lets ComputeEnv-layer code (e.g. the spill
+    // framework) resolve a "no workgroup specified" request to the default without reaching back
+    // to the ExecEnv singleton. Returns nullptr before startup or in unit tests where ComputeEnv
+    // is never initialized.
     static WorkGroupPtr default_workgroup();
     static void set_default_workgroup(WorkGroupPtr wg);
+    static void unset_default_workgroup(const WorkGroup* wg, WorkGroupPtr replacement);
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;

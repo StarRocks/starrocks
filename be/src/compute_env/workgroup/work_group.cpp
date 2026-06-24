@@ -98,19 +98,23 @@ WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_l
 WorkGroup::~WorkGroup() = default;
 
 namespace {
-// Process-wide reserved default workgroup. Set once at ComputeEnv startup, before any spill path
-// runs, then read-only afterwards -- so plain access needs no synchronization.
-WorkGroupPtr g_default_workgroup;
+// Process-wide reserved default workgroup. Replaced only during WorkGroupManager init/teardown.
+// WorkGroupManager owns the group; this non-owning pointer only lets ComputeEnv-layer code
+// resolve a missing query workgroup while the owning manager is alive.
+std::weak_ptr<WorkGroup> g_default_workgroup;
 } // namespace
 
 WorkGroupPtr WorkGroup::default_workgroup() {
-    return g_default_workgroup;
+    return g_default_workgroup.lock();
 }
 
 void WorkGroup::set_default_workgroup(WorkGroupPtr wg) {
-    // Registered once at startup; later calls are ignored so readers never observe a changing value.
-    if (g_default_workgroup == nullptr) {
-        g_default_workgroup = std::move(wg);
+    g_default_workgroup = std::move(wg);
+}
+
+void WorkGroup::unset_default_workgroup(const WorkGroup* wg, WorkGroupPtr replacement) {
+    if (g_default_workgroup.lock().get() == wg) {
+        g_default_workgroup = std::move(replacement);
     }
 }
 
