@@ -283,10 +283,10 @@ Status PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(
         return Status::OK();
     }
 
-    return Status::CapacityLimitExceed(fmt::format(
-            "primary key encoded BinaryColumn cannot be serialized with legacy u32 format, bytes_size: {}, "
-            "offset_bytes_size: {}, limit: {}",
-            bytes_size, offset_bytes_size, std::numeric_limits<uint32_t>::max()));
+    return Status::CapacityLimitExceed(
+            fmt::format("primary key encoded BinaryColumn cannot be serialized with legacy u32 format, bytes_size: {}, "
+                        "offset_bytes_size: {}, limit: {}",
+                        bytes_size, offset_bytes_size, std::numeric_limits<uint32_t>::max()));
 }
 
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,

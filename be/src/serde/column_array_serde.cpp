@@ -394,8 +394,8 @@ private:
         int64_t size = sizeof(SerializedValue);
         if (is_string_encoding_enabled(encode_level) && bytes.size() >= ENCODE_SIZE_LIMIT &&
             bytes.size() <= LZ4_MAX_INPUT_SIZE) {
-            size += sizeof(uint64_t) + std::max(static_cast<int64_t>(bytes.size()),
-                                                static_cast<int64_t>(LZ4_compressBound(bytes.size())));
+            size += sizeof(uint64_t) +
+                    std::max(static_cast<int64_t>(bytes.size()), static_cast<int64_t>(LZ4_compressBound(bytes.size())));
         } else {
             size += bytes.size();
         }
@@ -404,9 +404,8 @@ private:
         size += sizeof(SerializedValue);
         if (_can_encode_offsets_as_integers(offset_bytes_size, encode_level)) {
             const auto integer_count = upper_int32(offset_bytes_size);
-            size += sizeof(uint64_t) +
-                    std::max(static_cast<int64_t>(offset_bytes_size),
-                             static_cast<int64_t>(streamvbyte_max_compressedbytes(integer_count)));
+            size += sizeof(uint64_t) + std::max(static_cast<int64_t>(offset_bytes_size),
+                                                static_cast<int64_t>(streamvbyte_max_compressedbytes(integer_count)));
         } else {
             size += offset_bytes_size;
         }
@@ -466,8 +465,8 @@ private:
 
     template <typename SerializedValue, typename T>
     static StatusOr<const uint8_t*> _deserialize_bytes_with_size(const uint8_t* buff, const uint8_t* end,
-                                                                 BinaryColumnBase<T>* column, SerializedValue bytes_size,
-                                                                 int encode_level) {
+                                                                 BinaryColumnBase<T>* column,
+                                                                 SerializedValue bytes_size, int encode_level) {
         column->get_bytes().resize(bytes_size);
         auto* bytes_data = column->get_bytes().data();
         if (is_string_encoding_enabled(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
@@ -479,9 +478,9 @@ private:
 
     template <typename SerializedOffset, typename T>
     static StatusOr<const uint8_t*> _deserialize_offsets_with_size(const uint8_t* buff, const uint8_t* end,
-                                                                    BinaryColumnBase<T>* column,
-                                                                    SerializedOffset offset_bytes_size,
-                                                                    int encode_level) {
+                                                                   BinaryColumnBase<T>* column,
+                                                                   SerializedOffset offset_bytes_size,
+                                                                   int encode_level) {
         if (UNLIKELY(offset_bytes_size % sizeof(SerializedOffset) != 0)) {
             return Status::InternalError(fmt::format("invalid binary column offset bytes size {}, offset width {}",
                                                      offset_bytes_size, sizeof(SerializedOffset)));
@@ -516,8 +515,8 @@ private:
     static StatusOr<const uint8_t*> _deserialize_body_with_size(const uint8_t* buff, const uint8_t* end,
                                                                 BinaryColumnBase<T>* column, SerializedValue bytes_size,
                                                                 int encode_level) {
-        ASSIGN_OR_RETURN(
-                buff, _deserialize_bytes_with_size<SerializedValue>(buff, end, column, bytes_size, encode_level));
+        ASSIGN_OR_RETURN(buff,
+                         _deserialize_bytes_with_size<SerializedValue>(buff, end, column, bytes_size, encode_level));
         return _deserialize_offsets<SerializedValue>(buff, end, column, encode_level);
     }
 

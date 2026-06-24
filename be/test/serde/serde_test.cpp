@@ -852,8 +852,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serde_offset_width_layouts) {
         append_binary_serde_test_strings(c1.get());
         ASSERT_FALSE(c1->get_offset().is_large());
 
-        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint32_t) +
-                                   sizeof(uint32_t) * 2;
+        const auto expected_size =
+                c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint32_t) + sizeof(uint32_t) * 2;
         assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, false);
     }
 
@@ -864,8 +864,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serde_offset_width_layouts) {
         force_large_offsets(c1.get());
         ASSERT_TRUE(c1->get_offset().is_large());
 
-        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint32_t) +
-                                   sizeof(uint32_t) * 2;
+        const auto expected_size =
+                c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint32_t) + sizeof(uint32_t) * 2;
         assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, false);
     }
 
@@ -875,8 +875,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serde_offset_width_layouts) {
         append_binary_serde_test_strings(c1.get());
         ASSERT_FALSE(c1->get_offset().is_large());
 
-        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) +
-                                   sizeof(uint64_t) * 2;
+        const auto expected_size =
+                c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) + sizeof(uint64_t) * 2;
         assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, true);
     }
 
@@ -887,8 +887,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serde_offset_width_layouts) {
         force_large_offsets(c1.get());
         ASSERT_TRUE(c1->get_offset().is_large());
 
-        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) +
-                                   sizeof(uint64_t) * 2;
+        const auto expected_size =
+                c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) + sizeof(uint64_t) * 2;
         assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, true);
     }
 }
@@ -1030,8 +1030,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_extended_format_serialize_roun
         if (check_exact_size) {
             // u32 escape + u32 escape + u64 bytes_size + bytes + u64 offset_bytes_size + u64 offsets
             // (small payload, so neither string nor integer encoding kicks in).
-            const auto expected_size = sizeof(uint32_t) * 2 + sizeof(uint64_t) * 2 +
-                                       src->get_immutable_bytes().size() +
+            const auto expected_size = sizeof(uint32_t) * 2 + sizeof(uint64_t) * 2 + src->get_immutable_bytes().size() +
                                        src->get_offset().size() * sizeof(uint64_t);
             ASSERT_EQ(static_cast<int64_t>(expected_size), max_size);
             ASSERT_EQ(buffer.data() + expected_size, serialized_end);
