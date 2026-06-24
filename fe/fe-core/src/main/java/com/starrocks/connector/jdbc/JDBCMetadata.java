@@ -539,7 +539,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             }
         }
         // Future in-flight or completed exceptionally: fall through to default.
-        return Statistics.builder().setOutputRowCount(rowCount).build();
+        return Statistics.builder().setOutputRowCount(rowCount)
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
     }
 
     @Override
