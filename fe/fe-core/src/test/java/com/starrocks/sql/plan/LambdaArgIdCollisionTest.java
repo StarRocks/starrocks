@@ -161,7 +161,14 @@ public class LambdaArgIdCollisionTest extends PlanTestNoneDBBase {
             for (ColumnRefOperator ref : lambda.getRefColumns()) {
                 out.add(ref);
             }
-            collectFromScalar(lambda.getLambdaExpr(), out);
+            // The CSE/reuse columnRefMap holds ColumnRefOperators (keys) and their defining
+            // expressions (values) that live only in the map: the lambda body references the
+            // keys, so the values are not reachable via getChildren()/getLambdaExpr().
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> e : lambda.getColumnRefMap().entrySet()) {
+                collectFromScalar(e.getKey(), out);
+                collectFromScalar(e.getValue(), out);
+            }
+            // lambdaExpr is traversed below via getChildren() (== [lambdaExpr]); don't recurse it here.
         }
         for (ScalarOperator child : s.getChildren()) {
             collectFromScalar(child, out);
