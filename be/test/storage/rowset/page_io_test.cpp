@@ -22,7 +22,7 @@
 #include "cache/datacache.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
-#include "common/config_lake_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_memory.h"
 #include "io/seekable_input_stream.h"
