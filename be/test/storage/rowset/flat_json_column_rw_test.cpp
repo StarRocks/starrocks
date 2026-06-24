@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include <lz4/lz4.h>
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -54,6 +56,41 @@ namespace starrocks {
 
 // NOLINTNEXTLINE
 static const std::string TEST_DIR = "/flat_json_column_rw_test";
+
+namespace {
+
+class TestJsonColumnIterator final : public ColumnIterator {
+public:
+    explicit TestJsonColumnIterator(MutableColumnPtr source) : _source(std::move(source)) {}
+
+    Status seek_to_first() override {
+        _current = 0;
+        return Status::OK();
+    }
+
+    Status seek_to_ordinal(ordinal_t ord) override {
+        _current = std::min<size_t>(static_cast<size_t>(ord), _source->size());
+        return Status::OK();
+    }
+
+    ordinal_t num_rows() const override { return _source->size(); }
+
+    Status next_batch(size_t* n, Column* dst) override {
+        size_t rows = std::min(*n, _source->size() - _current);
+        dst->append(*_source, _current, rows);
+        _current += rows;
+        *n = rows;
+        return Status::OK();
+    }
+
+    ordinal_t get_current_ordinal() const override { return static_cast<ordinal_t>(_current); }
+
+private:
+    MutableColumnPtr _source;
+    size_t _current = 0;
+};
+
+} // namespace
 
 class FlatJsonColumnRWTest : public testing::Test {
 public:
@@ -226,6 +263,33 @@ TEST_F(FlatJsonColumnRWTest, testNormalJsonWithPath) {
     EXPECT_EQ(2, read_json->get_flat_fields().size());
     EXPECT_EQ("{a: 1, b: 21}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
+}
+
+TEST_F(FlatJsonColumnRWTest, testJsonExtractIteratorUsesLocalRuntimeState) {
+    MutableColumnPtr source = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(source.get());
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse("{\"a\": 2, \"b\": 22}"));
+    json_col->append(&jv1);
+    json_col->append(&jv2);
+
+    ASSIGN_OR_ABORT(auto iter, create_json_extract_iterator(std::make_unique<TestJsonColumnIterator>(std::move(source)),
+                                                            false, "a", LogicalType::TYPE_BIGINT));
+
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    ASSERT_OK(iter->init(iter_opts));
+
+    auto result = Int64Column::create();
+    size_t rows_read = 2;
+    ASSERT_OK(iter->next_batch(&rows_read, result.get()));
+
+    ASSERT_EQ(2, rows_read);
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(1, result->get_data()[0]);
+    EXPECT_EQ(2, result->get_data()[1]);
+    EXPECT_EQ(1, stats.extract_json_hits["$.a"]);
 }
 
 TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {

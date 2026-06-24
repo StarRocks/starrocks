@@ -35,7 +35,6 @@
 #include "exprs/json_functions.h"
 #include "exprs/jsonpath.h"
 #include "gutil/casts.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_iterator_decorator.h"
@@ -673,7 +672,10 @@ public:
             : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
               _path(std::move(path)),
               _type(type),
-              _state(ExecEnv::GetInstance()),
+              // JsonFunctions only needs RuntimeState as FunctionContext backing here. Constant-path JSON
+              // extraction does not access ExecEnv-backed services, so a local state keeps rowset reads independent
+              // from the process-global ExecEnv singleton.
+              _state(TQueryGlobals{}),
               _mem_pool(),
               _source_chunk() {
         // prepare the source chunk
