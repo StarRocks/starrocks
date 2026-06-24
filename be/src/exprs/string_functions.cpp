@@ -37,15 +37,6 @@
 #include <stdexcept>
 #include <string>
 
-<<<<<<< HEAD
-=======
-#include "base/container/raw_container.h"
-#include "base/crypto/blake3_hash.h"
-#include "base/crypto/sm3.h"
-#include "base/string/utf8.h"
-#include "base/string/utf8_encoding.h"
-#include "base/types/int128.h"
->>>>>>> d0556874ce ([Enhancement] add blake3 fast cryptographic hash (#72801))
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -66,6 +57,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
 #include "types/large_int_value.h"
+#include "util/blake3_hash.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
