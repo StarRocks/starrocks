@@ -429,10 +429,20 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
 
     // Build a transient BitmapIndexReader backed by the .idx file. The
     // upstream IndexReadOptions points at the original segment data; swap
-    // in the .idx stream so the underlying page reads come from the right
+    // in the .idx file so the underlying page reads come from the right
     // file. Stats / cache options are inherited.
+    //
+    // Use the RandomAccessFile WRAPPER (not idx_file->stream(), the inner
+    // SeekableInputStream): the page cache key is derived from
+    // read_file->page_cache_key(), and only the wrapper carries the unique
+    // .idx path. The inner stream (e.g. lake StarletInputStream) leaves
+    // filename() empty, which collapses every .idx page key to ("", offset)
+    // and makes the global StoragePageCache return a CRC-valid page from an
+    // unrelated .idx file/column -> "Failed to decode value at position 0"
+    // or wrong rows. The wrapper outlives the reader: idx_file is moved into
+    // the OwningBitmapIndexIterator below and its object address is stable.
     IndexReadOptions sub_opts = opts;
-    sub_opts.read_file = idx_file->stream().get();
+    sub_opts.read_file = idx_file.get();
 
     auto bitmap_reader = std::make_unique<BitmapIndexReader>();
     ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
@@ -589,8 +599,16 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                 if (meta == nullptr || !meta->has_bloom_filter_index()) {
                     return Status::Corruption("IDG entry references missing bloom filter in .idx file");
                 }
+                // Use the RandomAccessFile WRAPPER, not its inner stream: the
+                // page cache key comes from read_file->page_cache_key(), and
+                // only the wrapper carries the unique .idx path. Passing the
+                // inner stream (whose filename() is empty on lake) collapses
+                // all .idx page keys to ("", offset) and returns the wrong
+                // file's cached page. idg_file_holder outlives bf_iter (both
+                // are stack locals; the holder is declared first so it is
+                // destroyed last).
                 IndexReadOptions sub_opts = opts;
-                sub_opts.read_file = idg_file_holder->stream().get();
+                sub_opts.read_file = idg_file_holder.get();
                 idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
                 ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
                 (void)bf_first_load;

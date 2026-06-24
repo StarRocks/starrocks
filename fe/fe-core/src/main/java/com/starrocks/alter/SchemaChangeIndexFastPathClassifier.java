@@ -14,14 +14,17 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -248,6 +251,43 @@ public final class SchemaChangeIndexFastPathClassifier {
             // new set atomically.
             LOG.debug("BF fast-path rejected: mixed add+drop");
             return null;
+        }
+        // Validate column-type / key-column eligibility for every newly added
+        // bloom-filter column. The legacy createJob path
+        // (PropertyAnalyzer.analyzeBloomFilterColumns -> Type.supportBloomFilter
+        // plus the key/agg rule) is bypassed once the fast path is taken, so
+        // without this guard unsupported types (JSON, ARRAY and other
+        // complex/float types) on the bloom_filter_columns property would
+        // silently succeed instead of erroring. On any ineligible column, fall
+        // back to the legacy path, which raises the canonical error message.
+        if (!added.isEmpty()) {
+            List<Column> baseSchema = table.getBaseSchema();
+            if (baseSchema == null) {
+                // Defensive: without a base schema we cannot validate column
+                // types, so fall back to the legacy path rather than risk an NPE.
+                return null;
+            }
+            boolean isPrimaryKey = table.getKeysType() == KeysType.PRIMARY_KEYS;
+            for (String addedCol : added) {
+                Column column = null;
+                for (Column c : baseSchema) {
+                    if (c.getName().equalsIgnoreCase(addedCol)) {
+                        column = c;
+                        break;
+                    }
+                }
+                if (column == null || !column.getType().supportBloomFilter()) {
+                    LOG.debug("BF fast-path rejected: column {} missing or unsupported type", addedCol);
+                    return null;
+                }
+                // Bloom filter is only allowed on DUP/PRIMARY columns or the key
+                // columns of UNIQUE/AGG tables, mirroring the legacy validation.
+                if (!(column.isKey() || isPrimaryKey || column.getAggregationType() == AggregateType.NONE)) {
+                    LOG.debug("BF fast-path rejected: column {} is a non-key value column of a UNIQUE/AGG table",
+                            addedCol);
+                    return null;
+                }
+            }
         }
         return new BloomFilterDelta(
                 Collections.unmodifiableSet(added), Collections.unmodifiableSet(dropped));

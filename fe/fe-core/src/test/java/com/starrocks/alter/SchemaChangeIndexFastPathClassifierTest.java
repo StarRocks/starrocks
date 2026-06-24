@@ -14,15 +14,22 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -49,6 +56,29 @@ public class SchemaChangeIndexFastPathClassifierTest {
     private static OlapTable lakeTable() {
         OlapTable t = mock(OlapTable.class);
         when(t.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        // Default DUPLICATE schema with c1/c2/c3 so the column-type validation
+        // added to classifyBloomFilterChange (the IDG bloom-filter fix) can
+        // resolve the bf columns used by the pure-add tests below. Drop /
+        // add-index tests don't reach that validation, so this is harmless.
+        when(t.getKeysType()).thenReturn(KeysType.DUP_KEYS);
+        when(t.getBaseSchema()).thenReturn(List.of(
+                keyCol("c1", IntegerType.INT), keyCol("c2", IntegerType.INT), keyCol("c3", IntegerType.INT)));
+        return t;
+    }
+
+    private static Column keyCol(String name, Type type) {
+        Column c = new Column(name, type);
+        c.setIsKey(true);
+        return c;
+    }
+
+    private static OlapTable lakeTableWithSchema(KeysType keys, Column... cols) {
+        OlapTable t = mock(OlapTable.class);
+        when(t.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(t.getKeysType()).thenReturn(keys);
+        when(t.getBaseSchema()).thenReturn(List.of(cols));
+        when(t.getBfFpp()).thenReturn(0.05);
+        when(t.getBfColumnNames()).thenReturn(Collections.emptySet());
         return t;
     }
 
@@ -454,6 +484,79 @@ public class SchemaChangeIndexFastPathClassifierTest {
         } finally {
             Config.enable_lake_add_index_fast_path = prev;
         }
+    }
+
+    // -----------------------------------------------------------------
+    // classifyBloomFilterChange: column-type / key-column validation.
+    // The fast path must NOT accept bloom filters on column types the legacy
+    // path rejects (JSON, ARRAY, ...) — it must fall back (return null) so the
+    // legacy createJob raises the canonical error. Reproduces A4 from
+    // StarRocksTest#11468 (test_json_modify_column_err_* / test_alter_array).
+    // -----------------------------------------------------------------
+
+    @Test
+    public void testBfClassify_JsonColumnRejected() {
+        // PRIMARY KEY table with a JSON column k3: SET bloom_filter_columns=k3
+        // must NOT take the fast path (JSON does not support bloom filter).
+        OlapTable t = lakeTableWithSchema(KeysType.PRIMARY_KEYS,
+                keyCol("k1", IntegerType.INT), new Column("k3", JsonType.JSON));
+        assertNull(SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t,
+                List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "k3")))));
+    }
+
+    @Test
+    public void testBfClassify_ArrayColumnRejected() {
+        // DUPLICATE table with an ARRAY<INT> column c1: ARRAY is not a scalar
+        // type, so supportBloomFilter() is false and the fast path must reject.
+        OlapTable t = lakeTableWithSchema(KeysType.DUP_KEYS,
+                new Column("c0", IntegerType.INT), new Column("c1", new ArrayType(IntegerType.INT)));
+        assertNull(SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t,
+                List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "c1")))));
+    }
+
+    @Test
+    public void testBfClassify_UnknownColumnRejected() {
+        // A bf column that does not exist in the schema falls back to legacy,
+        // which raises "Invalid bloom filter column 'cX': not exists".
+        OlapTable t = lakeTableWithSchema(KeysType.DUP_KEYS, keyCol("c1", IntegerType.INT));
+        assertNull(SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t,
+                List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "cX")))));
+    }
+
+    @Test
+    public void testBfClassify_NonKeyValueColumnOfAggTableRejected() {
+        // AGGREGATE table: bloom filter is only allowed on key columns. A
+        // non-key SUM value column (supported scalar type) must still reject.
+        OlapTable t = lakeTableWithSchema(KeysType.AGG_KEYS,
+                keyCol("k1", IntegerType.INT),
+                new Column("v1", IntegerType.INT, false, AggregateType.SUM, "0", ""));
+        assertNull(SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t,
+                List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "v1")))));
+    }
+
+    @Test
+    public void testBfClassify_AggKeyColumnAccepted() {
+        // Positive control: a key column of an AGG table with a supported
+        // scalar type stays on the fast path.
+        OlapTable t = lakeTableWithSchema(KeysType.AGG_KEYS,
+                keyCol("k1", IntegerType.INT),
+                new Column("v1", IntegerType.INT, false, AggregateType.SUM, "0", ""));
+        SchemaChangeIndexFastPathClassifier.BloomFilterDelta delta =
+                SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t,
+                        List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "k1"))));
+        assertNotNull(delta);
+        assertTrue(delta.isPureAdd());
+    }
+
+    @Test
+    public void testBfClassify_SupportedScalarAccepted() {
+        // Positive control: INT key column on a DUP table is bf-eligible.
+        OlapTable t = lakeTableWithSchema(KeysType.DUP_KEYS, keyCol("c1", IntegerType.INT));
+        SchemaChangeIndexFastPathClassifier.BloomFilterDelta delta =
+                SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t,
+                        List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "c1"))));
+        assertNotNull(delta);
+        assertTrue(delta.isPureAdd());
     }
 
     private static ModifyTablePropertiesClause bfPropClause(Map<String, String> props) {
