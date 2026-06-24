@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifdef USE_STAROS
-#include "fs/fs_starlet.h"
+#include "compute_env/staros/starlet_filesystem.h"
 
 #include <bvar/bvar.h>
 #include <fmt/core.h>
@@ -48,7 +48,7 @@
 #include "io/seekable_input_stream.h"
 #include "io/throttled_output_stream.h"
 #include "io/throttled_seekable_input_stream.h"
-#include "storage/lake/filenames.h"
+#include "storage/primitive/lake_file_name.h"
 #include "storage/primitive/storage_stats.h"
 
 namespace starrocks {

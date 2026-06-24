@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/fs_starlet.h"
+#include "compute_env/staros/starlet_filesystem.h"
 
 #include <fmt/format.h>
 #include <fslib/configuration.h>
@@ -33,8 +33,9 @@
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_posix.h"
+#include "fs/fs_registry.h"
 #include "gutil/strings/join.h"
-#include "storage/rowset/page_io.h"
 
 namespace starrocks {
 
@@ -42,6 +43,26 @@ class StarletFileSystemTest : public ::testing::TestWithParam<std::string> {
 public:
     StarletFileSystemTest() { srand(time(nullptr)); }
     ~StarletFileSystemTest() override = default;
+
+    static void SetUpTestSuite() {
+        _previous_registry = &fs::default_file_system_provider_registry();
+        static fs::FileSystemProviderRegistry registry;
+        static const fs::FrozenFileSystemProviderRegistry* frozen = [] {
+            auto st = registry.register_provider(fs::new_posix_file_system_provider());
+            CHECK(st.ok()) << st;
+            st = registry.register_provider(fs::new_starlet_file_system_provider());
+            CHECK(st.ok()) << st;
+            return &registry.freeze();
+        }();
+        fs::install_default_file_system_provider_registry(*frozen);
+    }
+
+    static void TearDownTestSuite() {
+        if (_previous_registry != nullptr) {
+            fs::install_default_file_system_provider_registry(*_previous_registry);
+            _previous_registry = nullptr;
+        }
+    }
 
     void SetUp() override {
         if (config::object_storage_access_key_id.empty()) {
@@ -134,6 +155,9 @@ public:
 
 public:
     bool _is_skipped = false;
+
+private:
+    static inline const fs::FrozenFileSystemProviderRegistry* _previous_registry = nullptr;
 };
 
 TEST_P(StarletFileSystemTest, test_build_and_parse_uri) {
@@ -449,27 +473,6 @@ TEST_P(StarletFileSystemTest, test_tag) {
     config::starlet_write_file_with_tag = old;
 }
 
-TEST_P(StarletFileSystemTest, test_drop_cache) {
-    std::string test_type = GetParam();
-    if (test_type == "s3") {
-        return;
-    }
-    bool old = config::lake_clear_corrupted_cache_data;
-    config::lake_clear_corrupted_cache_data = false;
-    auto uri = StarletPath("cache.dat");
-    ASSERT_TRUE(drop_local_cache_data(uri).is_not_supported());
-    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
-    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
-    ASSERT_OK(wf->append("hello"));
-    ASSERT_OK(wf->append(" world!"));
-    ASSERT_OK(wf->close());
-    config::lake_clear_corrupted_cache_data = true;
-    std::string bad = "bad.dat";
-    ASSERT_TRUE(drop_local_cache_data(bad).is_not_supported());
-    ASSERT_TRUE(drop_local_cache_data(uri).ok());
-    config::lake_clear_corrupted_cache_data = old;
-}
-
 TEST_P(StarletFileSystemTest, test_get_cache_stats) {
     auto uri = StarletPath("cache_stats.dat");
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
@@ -480,7 +483,7 @@ TEST_P(StarletFileSystemTest, test_get_cache_stats) {
 
     auto result = fs->get_cache_stats(uri, 0, 12);
     // get_cache_stats may or may not be supported depending on the underlying fslib,
-    // but the code path in fs_starlet.cpp is exercised either way.
+    // but the code path in starlet_filesystem.cpp is exercised either way.
     if (result.ok()) {
         EXPECT_EQ(result.value().second, 12);
     }

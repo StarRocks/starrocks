@@ -26,7 +26,7 @@
 #include "fs/hdfs/fs_hdfs.h"
 #endif
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-#include "fs/fs_starlet.h"
+#include "compute_env/staros/starlet_filesystem.h"
 #endif
 
 namespace starrocks::fs {

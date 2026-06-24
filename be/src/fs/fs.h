@@ -369,7 +369,7 @@ public:
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     std::string _name;
-    // for cachefs in fs_starlet
+    // for cachefs in starlet_filesystem
     bool _is_cache_hit{false};
     // Slice base offset within the underlying physical file when this RandomAccessFile wraps a
     // BundleSeekableInputStream; 0 otherwise. Used only by page_cache_key to keep slices distinct.

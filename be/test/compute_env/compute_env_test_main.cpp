@@ -14,7 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <iostream>
+#include <string>
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_thrift_server_fwd.h"
@@ -24,9 +26,32 @@
 #include "common/system/mem_info.h"
 #include "runtime/env/global_env.h"
 
-int main(int argc, char** argv) {
+namespace {
+
+bool init_config() {
+#ifdef USE_STAROS
+    const char* starrocks_home = std::getenv("STARROCKS_HOME");
+    if (starrocks_home != nullptr) {
+        const std::string conffile = std::string(starrocks_home) + "/conf/be_test.conf";
+        if (!starrocks::config::init(conffile.c_str())) {
+            std::cerr << "failed to initialize config from " << conffile << std::endl;
+            return false;
+        }
+        return true;
+    }
+#endif
+
     if (!starrocks::config::init(nullptr)) {
         std::cerr << "failed to initialize config defaults" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    if (!init_config()) {
         return 1;
     }
 

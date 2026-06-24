@@ -97,6 +97,10 @@ set(COMPUTE_ENV_STAROS_FILES
     staros/staros_worker_runtime.cpp
 )
 
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND COMPUTE_ENV_STAROS_FILES staros/starlet_filesystem.cpp)
+endif()
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
