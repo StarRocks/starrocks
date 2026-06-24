@@ -23,6 +23,7 @@
 #include "cache/mem_cache/page_cache.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_memory.h"
+#include "io/seekable_input_stream.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 
@@ -504,6 +505,108 @@ TEST_F(PageIOTest, test_distinct_files_do_not_collide_in_page_cache) {
         Int32Column col;
         ASSERT_OK(decoder.next_batch(&size, &col));
         ASSERT_EQ(col.debug_string(), "[10, 20, 30]");
+    }
+}
+
+// Regression for StarRocksTest#11468 RC#1: the lake ADD INDEX (IDG) read path
+// must hand the page cache the .idx file's NAMED identity (the RandomAccessFile
+// wrapper), not its inner SeekableInputStream. On shared-data the inner stream
+// (StarletInputStream) leaves filename() empty, so page_cache_key() collapses to
+// ("", offset); the global StoragePageCache then returns a CRC-valid page from an
+// unrelated .idx file/column -> "Failed to decode value at position 0" or wrong
+// rows. column_reader.cpp previously passed idx_file->stream().get(); the fix
+// passes idx_file.get(). Here a base io::SeekableInputStreamWrapper plays the
+// nameless inner stream: it reproduces the collision, while the named wrapper
+// avoids it. (test_distinct_files_do_not_collide_in_page_cache covers the named
+// side; this adds the nameless-inner-stream half that the fix actually removes.)
+TEST_F(PageIOTest, test_idg_read_file_must_use_named_wrapper) {
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+
+    // Two distinct .idx-like files, each one uncompressed page at offset 0.
+    // _build_data_page encodes exactly 3 values, so use 3 distinct values per
+    // file (equal encoded size keeps the two pages the same length).
+    OwnedSlice page_a = _build_data_page({11, 12, 13});
+    OwnedSlice page_b = _build_data_page({21, 22, 23});
+    PageFooterPB footer_a = _build_page_footer(page_a.slice().size);
+    PageFooterPB footer_b = _build_page_footer(page_b.slice().size);
+
+    ASSIGN_OR_ASSERT_FAIL(auto write_a, _fs->new_writable_file(write_opts, "/idg_a.idx"));
+    PagePointer pp_a;
+    std::vector<Slice> body_a{page_a.slice()};
+    ASSERT_OK(PageIO::write_page(write_a.get(), body_a, footer_a, &pp_a));
+    ASSERT_OK(write_a->close());
+    uint64_t size_a = write_a->size();
+
+    ASSIGN_OR_ASSERT_FAIL(auto write_b, _fs->new_writable_file(write_opts, "/idg_b.idx"));
+    PagePointer pp_b;
+    std::vector<Slice> body_b{page_b.slice()};
+    ASSERT_OK(PageIO::write_page(write_b.get(), body_b, footer_b, &pp_b));
+    ASSERT_OK(write_b->close());
+    uint64_t size_b = write_b->size();
+
+    ASSIGN_OR_ASSERT_FAIL(auto file_a, _fs->new_random_access_file("/idg_a.idx"));
+    ASSIGN_OR_ASSERT_FAIL(auto file_b, _fs->new_random_access_file("/idg_b.idx"));
+
+    // Simulate the lake StarletInputStream: a base io::SeekableInputStreamWrapper
+    // forwards reads to the real inner stream but carries no name, so
+    // page_cache_key() falls back to ("", offset).
+    io::SeekableInputStreamWrapper nameless_a(file_a->stream().get(), kDontTakeOwnership);
+    io::SeekableInputStreamWrapper nameless_b(file_b->stream().get(), kDontTakeOwnership);
+
+    // Bug precondition (nameless inner streams collide) vs fix invariant
+    // (named wrappers stay distinct).
+    ASSERT_EQ(nameless_a.page_cache_key(0), nameless_b.page_cache_key(0));
+    ASSERT_NE(file_a->page_cache_key(0), file_b->page_cache_key(0));
+
+    auto decode_values = [](const Slice& body) -> std::string {
+        BitShufflePageDecoder<TYPE_INT> decoder(body);
+        Status st = decoder.init();
+        EXPECT_TRUE(st.ok()) << st.to_string();
+        size_t n = 16;
+        Int32Column col;
+        st = decoder.next_batch(&n, &col);
+        EXPECT_TRUE(st.ok()) << st.to_string();
+        return col.debug_string();
+    };
+
+    // Buggy choice (inner nameless stream): warm the cache from file B, then read
+    // file A at offset 0 -> collides on ("", 0) and returns file B's page.
+    {
+        PageReadOptions ro = _build_read_options(&nameless_b, 0, size_b, true);
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
+        ASSERT_EQ(decode_values(body), "[21, 22, 23]");
+    }
+    {
+        PageReadOptions ro = _build_read_options(&nameless_a, 0, size_a, true);
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
+        // Collision: reading file A returns file B's cached page.
+        ASSERT_EQ(decode_values(body), "[21, 22, 23]");
+    }
+
+    // Fixed choice (named wrapper): distinct keys, so each file reads its own page
+    // even though the cache is warm with the ("", 0) collision entry.
+    {
+        PageReadOptions ro = _build_read_options(file_a.get(), 0, size_a, true);
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
+        ASSERT_EQ(decode_values(body), "[11, 12, 13]");
+    }
+    {
+        PageReadOptions ro = _build_read_options(file_b.get(), 0, size_b, true);
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
+        ASSERT_EQ(decode_values(body), "[21, 22, 23]");
     }
 }
 
