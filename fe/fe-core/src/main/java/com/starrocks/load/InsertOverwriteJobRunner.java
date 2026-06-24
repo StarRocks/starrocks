@@ -35,6 +35,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -719,16 +720,19 @@ public class InsertOverwriteJobRunner {
                         for (var entry : tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
                             long physicalPartitionId = entry.getKey();
                             PartitionCommitInfo partitionCommitInfo = entry.getValue();
-                            Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+                            Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
 
                             PhysicalPartition physicalPartition = targetTable.getPhysicalPartition(physicalPartitionId);
                             if (physicalPartition != null) {
                                 Partition partition = targetTable.getPartition(physicalPartition.getParentId());
-                                if (partition != null && !tabletRows.isEmpty() &&
+                                if (partition != null && !tabletStats.isEmpty() &&
                                         stats.getTargetPartitionIds().contains(partition.getId())) {
                                     long partitionId = partition.getId();
-                                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId,
-                                            tabletId, rowCount));
+                                    tabletStats.forEach((tabletId, stat) -> {
+                                        if (stat != null && stat.numRows != null) {
+                                            partitionTabletRowCounts.put(partitionId, tabletId, stat.numRows);
+                                        }
+                                    });
                                 }
                             }
                         }

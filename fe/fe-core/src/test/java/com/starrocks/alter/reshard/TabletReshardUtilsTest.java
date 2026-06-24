@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard;
 
 import com.starrocks.common.Config;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -188,6 +190,20 @@ public class TabletReshardUtilsTest {
         long data = (Long.MAX_VALUE / t) * t;
         // expected to cap at max_split_count
         assertEquals(Config.tablet_reshard_max_split_count, TabletReshardUtils.calcSplitCount(data, t));
+    }
+
+    @Test
+    public void safeComputeParallelismFloor_returnsZeroWhenComputeFails() {
+        // computeParallelismFloor resolves warehouse / compute-node state via StarMgr and can throw
+        // (e.g. the warehouse no longer exists). safeComputeParallelismFloor must swallow that and
+        // fall back to "no floor" (0) so a single table's warehouse error cannot abort the scan.
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int computeParallelismFloor(long tableId) {
+                throw new RuntimeException("warehouse unavailable");
+            }
+        };
+        assertEquals(0, TabletReshardUtils.safeComputeParallelismFloor(123L));
     }
 
     @Test
