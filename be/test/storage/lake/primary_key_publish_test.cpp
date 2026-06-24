@@ -1561,6 +1561,169 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
     EXPECT_EQ(kChunkSize, read_rows(tablet_id, version));
 }
 
+// Regression repro for the shared-data PK correctness bug:
+// An explicit multi-statement transaction that does DELETE then INSERT of the SAME primary
+// key commits with the correct result, but after the primary index is rebuilt (CN restart /
+// index-cache eviction / tablet migration) a later upsert of that key produces a DUPLICATE
+// primary key.
+//
+// Mechanism: the two statements are separate op_writes (separate load_ids under one txn_id).
+// apply() runs them sequentially (erase-then-upsert) -> correct committed result. But the
+// batch apply merges them into a single rowset and persists the del file with
+// `op_offset = max_segment_idx` (meta_file.cpp set_final_rowset). On rebuild,
+// LakePersistentIndex::load_from_lake_tablet scans all segments then replays the del file
+// using that op_offset (delete modeled as "after all upserts"), erasing the row that apply
+// had kept. The rebuilt index diverges from apply; the next upsert can no longer find the
+// key, fails to tombstone the surviving row, and a duplicate appears.
+//
+// Only CLOUD_NATIVE persistent index replays del files at rebuild, so only it is affected;
+// the in-memory / LOCAL path reconstructs from segments+delvecs and is immune.
+//
+// The assertions below encode the CORRECT behavior (pk stays unique). On the current code the
+// final read returns 2 rows, so this test fails until the apply/rebuild interleave-order is
+// fixed. It is DISABLED_ to keep CI green; remove the prefix together with that fix.
+TEST_P(LakePrimaryKeyPublishTest, DISABLED_test_multi_stmt_delete_then_insert_rebuild_pk_dup) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // Build a single-row chunk (pk, v, __op).
+    auto make_row = [&](int32_t pk, int32_t v, bool upsert) -> std::pair<ChunkPtr, std::vector<uint32_t>> {
+        std::vector<int32_t> k{pk};
+        std::vector<int32_t> val{v};
+        std::vector<uint8_t> op{static_cast<uint8_t>(upsert ? TOpType::UPSERT : TOpType::DELETE)};
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int8Column::create();
+        c0->append_numbers(k.data(), k.size() * sizeof(int32_t));
+        c1->append_numbers(val.data(), val.size() * sizeof(int32_t));
+        c2->append_numbers(op.data(), op.size() * sizeof(uint8_t));
+        auto chunk = std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
+        std::vector<uint32_t> idx{0};
+        return {std::move(chunk), std::move(idx)};
+    };
+
+    auto write_single_stmt = [&](int64_t txn_id, const ChunkPtr& chunk, std::vector<uint32_t> idx) {
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_slot_pointers)
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(*chunk, idx.data(), idx.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+    };
+
+    int64_t version = 1;
+
+    // 1. Base row (pk=1, v=100).
+    {
+        int64_t txn_id = next_id();
+        auto [chunk, idx] = make_row(1, 100, true);
+        write_single_stmt(txn_id, chunk, idx);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++; // v2
+    }
+    EXPECT_EQ(1, read_rows(tablet_id, version));
+
+    // 2. Explicit multi-statement txn: DELETE pk=1, then INSERT (1, 888).
+    //    Two load_ids under one txn_id; each statement is its own op_write/txn log.
+    int64_t multi_txn_id = next_id();
+    PUniqueId load_id_del;
+    load_id_del.set_hi(multi_txn_id);
+    load_id_del.set_lo(1);
+    PUniqueId load_id_ins;
+    load_id_ins.set_hi(multi_txn_id);
+    load_id_ins.set_lo(2);
+
+    auto write_multi_stmt = [&](const PUniqueId& load_id, const ChunkPtr& chunk, std::vector<uint32_t> idx) {
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(multi_txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_slot_pointers)
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .set_load_id(load_id)
+                                         .set_is_multi_statements_txn(true)
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(*chunk, idx.data(), idx.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+    };
+
+    {
+        auto [del_chunk, del_idx] = make_row(1, 0, false); // statement 1: DELETE pk=1
+        write_multi_stmt(load_id_del, del_chunk, del_idx);
+        auto [ins_chunk, ins_idx] = make_row(1, 888, true); // statement 2: INSERT (1, 888)
+        write_multi_stmt(load_id_ins, ins_chunk, ins_idx);
+    }
+
+    // Publish the multi-statement txn (load_ids drive the merge/batch apply path).
+    {
+        TxnInfoPB info;
+        info.set_txn_id(multi_txn_id);
+        info.set_txn_type(TXN_NORMAL);
+        info.set_combined_txn_log(false);
+        info.set_commit_time(time(nullptr));
+        info.set_force_publish(false);
+        info.add_load_ids()->CopyFrom(load_id_del);
+        info.add_load_ids()->CopyFrom(load_id_ins);
+        std::vector<TxnInfoPB> txns{info};
+        ASSIGN_OR_ABORT(auto md,
+                        publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), version, version + 1, txns,
+                                        false));
+        version++; // v3
+        // The batch apply merges the two op_writes into one rowset; the del file is persisted
+        // with op_offset = max_segment_idx -- the seed of the rebuild divergence.
+        EXPECT_EQ(md->rowsets_size(), 1);
+        EXPECT_EQ(md->rowsets(0).del_files_size(), 1);
+    }
+
+    // apply result is correct: exactly one row, value 888.
+    {
+        ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(888, chunk->get(0)[1].get_int32());
+    }
+
+    // 3. Simulate CN restart / index-cache eviction; next write rebuilds the index.
+    EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+    // The read path uses segment + delvec, so the corruption stays latent here.
+    EXPECT_EQ(1, read_rows(tablet_id, version));
+
+    // 4. Upsert (1, 999). Publishing this first rebuilds the index from v3 metadata.
+    {
+        int64_t txn_id = next_id();
+        auto [chunk, idx] = make_row(1, 999, true);
+        write_single_stmt(txn_id, chunk, idx);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++; // v4
+    }
+
+    // CORRECT behavior: pk=1 is unique, single row with the latest value 999.
+    // BUG (current code): rebuild erased pk=1, so (1,888) was never tombstoned and (1,999) is
+    // appended -> two rows sharing the same primary key.
+    {
+        ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+        EXPECT_EQ(1, chunk->num_rows()); // fails on buggy code (returns 2)
+        if (chunk->num_rows() == 1) {
+            EXPECT_EQ(999, chunk->get(0)[1].get_int32());
+        }
+    }
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
     if (!GetParam().enable_persistent_index ||
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
