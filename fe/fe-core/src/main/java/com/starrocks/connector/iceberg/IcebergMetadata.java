@@ -1676,36 +1676,131 @@ public class IcebergMetadata implements ConnectorMetadata {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 
-        // Default path (column statistics disabled): derive row count from manifest metadata
-        // (O(manifests)) without enumerating DataFiles. This avoids triggering a full planFiles()
-        // in the foreground, so it no longer pre-populates splitTasks and incremental scan range
-        // delivery (getRemoteFilesAsync) stays on its lazy/streaming path.
-        if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality")) {
-                long rowCount = getManifestPrunedRowCount(icebergTable, predicate, version);
-                return statisticProvider.buildRowCountStatistics(columns, rowCount);
-            }
-        }
+        boolean enableColumnStats = session.getSessionVariable().enableIcebergColumnStatistics();
+        boolean isIncrementalDelta = version instanceof TvrTableDelta &&
+                version.start() != null && version.start().isPresent();
 
+        // -------- path selection --------
+        // Three paths with different accuracy/cost trade-offs:
+        //
+        // A. Column-statistics enabled (opt-in, default OFF):
+        //    Must scan files for per-column bounds and Puffin NDV. buildFileScanTaskIterator
+        //    handles both full-table and delta internally.  Cost: O(files) planFiles + per-column
+        //    metadata collection.  Accuracy: best (NDV + min/max).
+        if (enableColumnStats) {
+            return getFullTableStatisticsFromPlanFiles(icebergTable, columns, session, predicate, limit, version);
+        }
+        //
+        // B. Incremental delta (append-only, column-stats off):
+        //    Requires datafile-level precision (added_snapshot_id) because MergeAppend/compaction
+        //    rewrites manifests and merges old + new records, making manifest-level addedRows
+        //    / existingRows unreliable for a snapshot range. Delta files are few by definition,
+        //    so O(files) plan cost is acceptable; accuracy is required.
+        if (isIncrementalDelta) {
+            return getIncrementalCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
+        }
+        //
+        // C. Whole-table snapshot (default, column-stats off, non-delta):
+        //    Manifest addedRows+existingRows is PROVABLY exact for total live files regardless of
+        //    write style (fastAppend / MergeAppend / compaction / MOR).  partition-aware pruning
+        //    via filterManifests at manifest-granularity yields a safe over-estimate (typically
+        //    <5x vs 100x for snapshot total-records).  Cost: O(manifests), ZERO manifest-file opens,
+        //    ZERO DataFile enumeration — splitTasks never populated, incremental scan range delivery
+        //    stays unlocked.
+        return getStatisticsFromManifest(icebergTable, columns, predicate, version);
+    }
+
+    // -------------------------------------------------------------------------
+    // Path A: whole-table snapshot, manifest-pruned (default, column-stats off, non-delta).
+    //
+    // Trade-off: manifest-level partition pruning (filterManifests) is coarser than file-level
+    // — a matching manifest contributes its FULL row count even if the predicate doesn't match
+    // every file within it. Typical over-estimate: <5x (safe direction for CBO).  Cost is
+    // O(manifests) with ZERO manifest-file opens and ZERO DataFile enumeration, so splitTasks is
+    // never populated and incremental scan range delivery stays lazy/streaming.
+    private Statistics getStatisticsFromManifest(IcebergTable icebergTable,
+                                                  Map<ColumnRefOperator, Column> columns,
+                                                  ScalarOperator predicate,
+                                                  TvrVersionRange version) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality")) {
+            long rowCount = getManifestPrunedRowCount(icebergTable, predicate, version);
+            return statisticProvider.buildRowCountStatistics(columns, rowCount);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Path B: incremental delta (append-only), column-stats off.
+    //
+    // Trade-off: delta requires datafile-level precision (added_snapshot_id on each DataFile)
+    // because MergeAppend/compaction rewrites manifests, merging old and new records into the
+    // same manifest — manifest-level addedRows/existingRows becomes unreliable for ranges.
+    // Only DataFile-level added_snapshot_id (read via IncrementalAppendScan / planFiles entry
+    // iteration) correctly isolates the delta.  Delta files are few, so O(files) is acceptable.
+    private Statistics getIncrementalCardinalityFromPlanFiles(IcebergTable icebergTable,
+                                                               Map<ColumnRefOperator, Column> columns,
+                                                               ScalarOperator predicate, long limit,
+                                                               TvrVersionRange version) {
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setPredicate(predicate)
+                .setLimit(limit)
+                .setTableVersionRange(version)
+                .setEnableColumnStats(false)
+                .build();
+        PredicateSearchKey key = PredicateSearchKey.of(
+                icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable);
+        // buildFileScanTaskIterator detects TvrTableDelta internally → IncrementalAppendScan.
+        List<FileScanTask> icebergScanTasks = splitTasks.get(key);
+        if (icebergScanTasks == null) {
+            throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), predicate);
+        }
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality" + key)) {
+            return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Path C: column-statistics enabled (opt-in, default OFF).
+    //
+    // Trade-off: full file enumeration to collect per-column lowerBounds / upperBounds /
+    // nullCounts / columnSizes and (when available) Puffin NDV.  Highest front-end cost
+    // (O(files) planFiles + per-column metadata) but richest statistics (NDV + min/max).
+    // buildFileScanTaskIterator handles both full-table and delta internally.
+    private Statistics getFullTableStatisticsFromPlanFiles(IcebergTable icebergTable,
+                                                            Map<ColumnRefOperator, Column> columns,
+                                                            OptimizerContext session,
+                                                            ScalarOperator predicate, long limit,
+                                                            TvrVersionRange version) {
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setLimit(limit)
                 .setTableVersionRange(version)
                 .setEnableColumnStats(true)
                 .build();
-
         PredicateSearchKey key = PredicateSearchKey.of(
                 icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
         triggerIcebergPlanFilesIfNeeded(key, icebergTable);
         return statisticProvider.getTableStatistics(icebergTable, columns, session, params);
     }
 
-    // Estimate row count from manifest metadata with partition-aware manifest pruning, in O(manifests).
-    // It reads only the manifest list (one file) plus in-memory manifest evaluation; it does NOT open
-    // manifest files or enumerate DataFiles, so it never populates splitTasks and keeps incremental
-    // scan range delivery intact. Manifest-level pruning is coarser than file-level: a matching manifest
-    // contributes its full row count, yielding a partition-aware over-estimate (never an undercount),
-    // which is the safe direction for CBO. Delete files are ignored, consistent with getCardinalityStats.
+    // -------------------------------------------------------------------------
+    // Whole-table row count from manifest metadata with partition-aware manifest pruning.
+    // O(manifests), ZERO manifest-file opens, ZERO DataFile enumeration.
+    //
+    // Accuracy: for a whole-table snapshot, the sum of (addedRowsCount + existingRowsCount)
+    // across all matching data manifests is EXACTLY the total live file row count — regardless
+    // of write style (fastAppend / MergeAppend / compaction / MOR). The manifest list is a
+    // complete, consistent catalogue of all live data files at that snapshot. Delete files are
+    // ignored (over-count not undercount; consistent with getCardinalityStats).
+    //
+    // Partition pruning: filterManifests uses ManifestEvaluator against inline manifest partition
+    // summaries (from the manifest LIST; no manifest-file open). A matching manifest contributes
+    // its FULL row count — resulting in a partition-aware over-estimate (safe for CBO).
+    //
+    // NOT SAFE for incremental versions (TvrTableDelta with start present): MergeAppend/compaction
+    // makes manifest-level added/existing unreliable for ranges. Use getIncrementalCardinality
+    // instead for delta cardinality.
     private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TvrVersionRange version) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         if (!version.end().isPresent()) {
