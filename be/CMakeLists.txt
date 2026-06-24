@@ -580,7 +580,6 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:Types>
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IO>
-    StarOSIntegration
     Geo
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
@@ -972,7 +971,6 @@ add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
-add_subdirectory(${SRC_DIR}/staros_integration)
 add_subdirectory(${SRC_DIR}/fs)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
@@ -986,12 +984,12 @@ add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/data_workflows)
 add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/cache)
 add_subdirectory(${SRC_DIR}/compute_env)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
-add_subdirectory(${SRC_DIR}/cache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)

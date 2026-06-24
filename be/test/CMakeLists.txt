@@ -361,7 +361,6 @@ add_subdirectory(http)
 add_subdirectory(geo)
 add_subdirectory(cache)
 add_subdirectory(serde)
-add_subdirectory(staros_integration)
 
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)

@@ -89,6 +89,14 @@ set(COMPUTE_ENV_LOAD_PATH_FILES
     load_path/rejected_record_writer.cpp
 )
 
+set(COMPUTE_ENV_STAROS_FILES
+    staros/staros_status.cpp
+    staros/staros_starcache.cpp
+    staros/staros_worker.cpp
+    staros/staros_worker_metrics.cpp
+    staros/staros_worker_runtime.cpp
+)
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -110,9 +118,11 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_GLOBAL_DICT_FILES}
     ${COMPUTE_ENV_DICTIONARY_CACHE_FILES}
     ${COMPUTE_ENV_LOAD_PATH_FILES}
+    ${COMPUTE_ENV_STAROS_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
+    Cache
     StoragePrimitive
     ExecPrimitive
     ExprCore

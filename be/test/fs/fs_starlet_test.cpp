@@ -30,10 +30,10 @@
 #include "base/utility/defer_op.h"
 #include "common/config_object_storage_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/join.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
 #include "storage/rowset/page_io.h"
 
 namespace starrocks {

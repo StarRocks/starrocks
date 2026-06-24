@@ -20,11 +20,11 @@
 #include <unordered_map>
 
 #include "common/logging.h"
+#include "compute_env/staros/staros_status.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "fs/fs_starlet.h"
 #include "gutil/strings/util.h"
-#include "staros_integration/staros_status.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
 
 namespace starrocks::lake {
 

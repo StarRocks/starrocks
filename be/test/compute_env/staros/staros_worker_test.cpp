@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifdef USE_STAROS
-#include "staros_integration/staros_worker.h"
+#include "compute_env/staros/staros_worker.h"
 
 #include <aws/core/Aws.h>
 #include <fslib/configuration.h>
@@ -28,8 +28,8 @@
 
 #include "base/utility/defer_op.h"
 #include "common/shutdown_hook.h"
-#include "staros_integration/staros_worker_metrics.h"
-#include "staros_integration/staros_worker_runtime.h"
+#include "compute_env/staros/staros_worker_metrics.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 
 namespace starrocks {
 
