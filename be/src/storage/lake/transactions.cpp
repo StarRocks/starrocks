@@ -21,7 +21,6 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/replication_txn_manager.h"

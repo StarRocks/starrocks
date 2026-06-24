@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
+#include "gen_cpp/Types_types.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/meta_reader.h"
 
@@ -31,9 +33,16 @@ class VersionedTablet;
 
 struct LakeMetaReaderParams : MetaReaderParams {
     LakeMetaReaderParams() = default;
+    struct SchemaScanContext {
+        TUniqueId query_id;
+        TNetworkAddress coordinator_fe;
+    };
+
     lake::TabletManager* tablet_manager = nullptr;
     // The key of the schema used for reading. no value for legacy compatibility.
     std::optional<TableSchemaKeyPB> schema_key;
+    // Required when schema_key is set.
+    std::optional<SchemaScanContext> schema_scan_context;
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     size_t next_uniq_id;
 };

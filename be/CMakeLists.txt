@@ -568,6 +568,7 @@ set(STARROCKS_LINK_LIBS
     ExecRuntime
     ComputeEnv
     ExecPrimitive
+    StoragePrimitive
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     Serde
     $<TARGET_FILE:Cache>

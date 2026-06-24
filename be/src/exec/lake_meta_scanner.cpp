@@ -17,6 +17,7 @@
 #include "base/testutil/sync_point.h"
 #include "column/global_dict/config.h"
 #include "exec/lake_meta_scan_node.h"
+#include "exec/runtime/fragment_runtime_state.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
@@ -67,6 +68,12 @@ Status LakeMetaScanner::_real_init() {
         reader_params.schema_key->set_schema_id(t_schema_key.schema_id);
         reader_params.schema_key->set_db_id(t_schema_key.db_id);
         reader_params.schema_key->set_table_id(t_schema_key.table_id);
+
+        auto* fragment_runtime_state = _runtime_state->fragment_runtime_state();
+        RETURN_IF(fragment_runtime_state == nullptr,
+                  Status::InternalError("fragment runtime state is not initialized"));
+        reader_params.schema_scan_context.emplace(
+                LakeMetaReaderParams::SchemaScanContext{_runtime_state->query_id(), fragment_runtime_state->fe_addr()});
     }
 
     // Pass column access paths and extend schema similar to OLAP path
