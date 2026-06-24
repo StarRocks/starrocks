@@ -91,6 +91,7 @@ set(COMPUTE_ENV_LOAD_PATH_FILES
 
 set(COMPUTE_ENV_LOAD_FILES
     load/stream_load_pipe.cpp
+    load/time_bounded_stream_load_pipe.cpp
 )
 
 set(COMPUTE_ENV_STAROS_FILES

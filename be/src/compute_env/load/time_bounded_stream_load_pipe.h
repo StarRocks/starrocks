@@ -14,7 +14,11 @@
 
 #pragma once
 
-#include <cmath>
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <utility>
 
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
