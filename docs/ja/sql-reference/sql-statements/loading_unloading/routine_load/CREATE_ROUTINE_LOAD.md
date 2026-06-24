@@ -254,7 +254,12 @@ FROM <data_source>
 #### `property.kafka_default_offsets`
 
 **必須**: いいえ\
-**説明**: すべての消費者パーティションのデフォルトの開始オフセット。このプロパティのサポートされる値は `kafka_offsets` プロパティと同じです。
+**説明**: すべての消費者パーティションのデフォルトの開始オフセット。このプロパティのサポートされる値は `kafka_offsets` プロパティと同じです。ジョブが既に消費進捗を持った後に発見されたパーティション（たとえば、後から Kafka トピックに追加されたパーティション）は、このオフセットから消費を開始します。このプロパティが指定されていない場合は `OFFSET_BEGINNING` から消費を開始します。
+
+#### `property.kafka_partition_discovery`
+
+**必須**: いいえ\
+**説明**: `kafka_partitions` が指定されている場合でも、Routine Load ジョブが新しい Kafka パーティションを自動的に発見し続けるかどうか。有効な値: `true` および `false`（デフォルト）。デフォルトでは、`kafka_partitions` を指定するとジョブはリストされたパーティションのみを消費し、後からトピックに追加されたパーティションは消費されません。このプロパティを `true` に設定すると、`kafka_partitions` と `kafka_offsets` はリストされたパーティションの開始オフセットの指定にのみ使用され、ジョブは後から追加されたパーティションを含むトピックのすべてのパーティションを消費します。`kafka_partitions` にリストされていないパーティションは、`property.kafka_default_offsets` で指定されたオフセットから消費を開始します。`property.kafka_default_offsets` が指定されていない場合は `OFFSET_BEGINNING` から消費を開始します。リストされていないパーティションを最新のオフセットから消費させたい場合は、`property.kafka_default_offsets` を `OFFSET_END` に明示的に設定してください。このプロパティは `kafka_partitions` と一緒にのみ使用できます。
 
 #### `confluent.schema.registry.url`
 
