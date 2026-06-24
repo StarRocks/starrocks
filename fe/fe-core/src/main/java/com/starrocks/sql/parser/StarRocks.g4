@@ -2694,7 +2694,6 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
-    | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
     | PARAMETER                                                                           #Parameter
     ;
@@ -3069,8 +3068,17 @@ unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4
 unitBoundary
     : FLOOR | CEIL
+=======
+filesSchema
+    : filesSchemaColumn (',' filesSchemaColumn)* EOF
+    ;
+
+filesSchemaColumn
+    : identifier type
+>>>>>>> 69bbe70905 ([BugFix] Allow non-reserved keywords FLOOR/CEIL as column names (#75241)):fe/fe-grammar/src/main/antlr/com/starrocks/grammar/StarRocks.g4
     ;
 
 type

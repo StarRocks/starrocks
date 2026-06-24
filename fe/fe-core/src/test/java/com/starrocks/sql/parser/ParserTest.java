@@ -199,6 +199,62 @@ class ParserTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    void testVariantAsIdentifier() {
+        // VARIANT was added as a baseType keyword; it must remain usable as an identifier
+        // (bare and backticked) — e.g. as a column name or struct field name.
+        SessionVariable sessionVariable = new SessionVariable();
+        List<String> sqls = Lists.newArrayList(
+                "select variant from t",
+                "select `variant` from t",
+                "select t.variant from t",
+                "select t.`variant` from t",
+                "select cast(c as struct<variant int, other varchar(10)>) from t",
+                "select cast(c as struct<`variant` int, other varchar(10)>) from t");
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should succeed: " + sql + " errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void testFloorCeilAsIdentifier() {
+        // FLOOR and CEIL are non-reserved keywords (the time_slice/date_slice boundary argument).
+        // They must remain usable as ordinary identifiers (column / table names) and must not be
+        // parsed as a UnitBoundary literal in expression position. Regression for:
+        // "class com.starrocks.sql.ast.UnitBoundary cannot be cast to ...ast.expression.Expr".
+        SessionVariable sessionVariable = new SessionVariable();
+        List<String> sqls = Lists.newArrayList(
+                // bare keyword as a column reference (the originally reported failure)
+                "select floor from t",
+                "select ceil from t",
+                "select floor, ceil from t",
+                "select floor + 1 as c from t",
+                "select * from t where floor > 1 and ceil < 2",
+                "select floor as f from t group by floor order by floor",
+                // back-quoted / qualified / as a table name
+                "select `floor` from t",
+                "select t.floor from t",
+                "select * from floor",
+                // the time_slice/date_slice boundary keyword must still parse
+                "select time_slice(th, interval 1 year, floor) from t",
+                "select time_slice(th, interval 1 year, CEIL) from t",
+                "select date_slice(th, interval 1 year, ceil) from t");
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should succeed: " + sql + " errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
+>>>>>>> 69bbe70905 ([BugFix] Allow non-reserved keywords FLOOR/CEIL as column names (#75241))
     void testParseLargeDecimal() {
         String sql = "select cast(1 as decimal(85,0))";
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
