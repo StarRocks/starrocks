@@ -17,8 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-add_subdirectory(rowset)
-
 ADD_BE_LIB(StoragePrimitive
     primitive/aggregate_type.cpp
     primitive/chunk_iterator.cpp
@@ -360,7 +358,12 @@ set(STORAGE_FILES
     index/inverted/builtin/builtin_inverted_reader.cpp
     index/inverted/builtin/builtin_inverted_index_iterator.cpp
     index/inverted/builtin/builtin_simple_analyzer.cpp
-    manual_compaction.cpp)
+    manual_compaction.cpp
+    rowset/unique_rowset_id_generator.cpp
+    rowset/rowset.cpp
+    rowset/rowset_factory.cpp
+    rowset/rowset_meta_manager.cpp
+    rowset/rowset_writer.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
@@ -370,4 +373,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache HttpCore)

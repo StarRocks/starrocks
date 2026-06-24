@@ -33,7 +33,6 @@ ADD_BE_LIB(DataWorkflows
 
 target_link_libraries(DataWorkflows PUBLIC
     Storage
-    Rowset
     Exec
     Runtime
     StoragePrimitive
