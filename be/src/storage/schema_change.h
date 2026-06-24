@@ -50,6 +50,7 @@
 #include "types/datum.h"
 
 namespace starrocks {
+class ExecEnv;
 class Field;
 class Tablet;
 
@@ -135,7 +136,7 @@ private:
 
 class SchemaChangeHandler {
 public:
-    SchemaChangeHandler() = default;
+    explicit SchemaChangeHandler(ExecEnv* exec_env = nullptr) : _exec_env(exec_env) {}
     ~SchemaChangeHandler() = default;
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
@@ -158,6 +159,7 @@ private:
     Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 
     DISALLOW_COPY(SchemaChangeHandler);
+    ExecEnv* _exec_env = nullptr;
     std::string _alter_msg_header;
     std::string _task_detail_msg = "";
 };
