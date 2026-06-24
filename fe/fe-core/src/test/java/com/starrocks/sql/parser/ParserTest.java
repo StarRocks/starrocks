@@ -190,6 +190,38 @@ class ParserTest {
     }
 
     @Test
+    void testFloorCeilAsIdentifier() {
+        // FLOOR and CEIL are non-reserved keywords (the time_slice/date_slice boundary argument).
+        // They must remain usable as ordinary identifiers (column / table names) and must not be
+        // parsed as a UnitBoundary literal in expression position. Regression for:
+        // "class com.starrocks.sql.ast.UnitBoundary cannot be cast to ...ast.expression.Expr".
+        SessionVariable sessionVariable = new SessionVariable();
+        List<String> sqls = Lists.newArrayList(
+                // bare keyword as a column reference (the originally reported failure)
+                "select floor from t",
+                "select ceil from t",
+                "select floor, ceil from t",
+                "select floor + 1 as c from t",
+                "select * from t where floor > 1 and ceil < 2",
+                "select floor as f from t group by floor order by floor",
+                // back-quoted / qualified / as a table name
+                "select `floor` from t",
+                "select t.floor from t",
+                "select * from floor",
+                // the time_slice/date_slice boundary keyword must still parse
+                "select time_slice(th, interval 1 year, floor) from t",
+                "select time_slice(th, interval 1 year, CEIL) from t",
+                "select date_slice(th, interval 1 year, ceil) from t");
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should succeed: " + sql + " errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
     void testParseLargeDecimal() {
         String sql = "select cast(1 as decimal(65,0))";
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
