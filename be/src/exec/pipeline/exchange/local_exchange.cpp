@@ -228,9 +228,6 @@ void OrderedPartitionExchanger::close(RuntimeState* state) {
 Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     DCHECK_EQ(sink_driver_sequence, 0);
 
-    // Capture the row count now, before the chunk is handed downstream below. Once published, the chunk
-    // may be mutated on another thread (e.g. AnalyticSinkOperator appends window-function result columns),
-    // so reading chunk->num_rows() afterwards would race on the chunk's column vector.
     const size_t cur_num_rows = chunk->num_rows();
 
     Columns partition_columns(_partition_exprs.size());
@@ -260,10 +257,10 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
             return true;
         };
         // Check if the joint of two consecutive chunks are the same.
-        // _previous_partition_columns aliases the previous chunk's (read-only) partition-key column objects,
-        // which are never mutated downstream; only the chunk's column vector is, so we use the captured
-        // _previous_num_rows instead of dereferencing the previous chunk to index its last row.
-        bool is_joint_equal = is_equal(_previous_partition_columns, _previous_num_rows - 1, partition_columns, 0);
+        // _previous_partition_columns is an owned single-row copy of the previous chunk's last row (at
+        // offset 0), so it stays valid even after the previous chunk has been handed to and mutated by
+        // downstream operators.
+        bool is_joint_equal = is_equal(_previous_partition_columns, 0, partition_columns, 0);
 
         if (!is_joint_equal) {
             // The first row of current chunk is the start of a new partition, so
@@ -295,17 +292,33 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
         }
     }
 
+    // Clone the boundary (last) row of the partition key BEFORE publishing the chunk downstream. At this
+    // point the chunk is still owned solely by this driver thread, so reading partition_columns is safe.
+    // After add_chunk() the chunk may be mutated concurrently by downstream operators (AnalyticSinkOperator
+    // appends window result columns and, on the LIMIT path, set_num_rows() resizes columns in place), so we
+    // must not retain any reference that aliases it.
+    Columns boundary_partition_columns = _clone_partition_key_row(partition_columns, cur_num_rows - 1);
+
     for (auto& kv : chunks) {
         _channel_row_nums[kv.first] += kv.second->num_rows();
         _source->get_sources()[kv.first]->add_chunk(kv.second);
     }
 
     _previous_channel_id = chunks.back().first;
-    _previous_num_rows = cur_num_rows;
-    _previous_partition_columns = std::move(partition_columns);
+    _previous_partition_columns = std::move(boundary_partition_columns);
     _has_previous = true;
 
     return Status::OK();
+}
+
+Columns OrderedPartitionExchanger::_clone_partition_key_row(const Columns& partition_columns, size_t row) {
+    Columns result(partition_columns.size());
+    for (size_t i = 0; i < partition_columns.size(); ++i) {
+        auto cloned = partition_columns[i]->clone_empty();
+        cloned->append(*partition_columns[i], row, 1);
+        result[i] = std::move(cloned);
+    }
+    return result;
 }
 
 size_t OrderedPartitionExchanger::_find_min_channel_id() {

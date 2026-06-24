@@ -221,17 +221,19 @@ public:
 
 private:
     size_t _find_min_channel_id();
+    // Deep-copy the partition-key values of a single row (the previous chunk's last row) into freshly owned
+    // columns, so the retained boundary key does not alias any chunk handed downstream.
+    static Columns _clone_partition_key_row(const Columns& partition_columns, size_t row);
 
     std::vector<ExprContext*> _partition_exprs;
     std::vector<size_t> _channel_row_nums;
+    // Owned single-row copy of the previous chunk's last-row partition key (stored at offset 0).
+    // We must NOT retain a reference to the previous chunk (or columns aliasing it): once handed downstream
+    // the chunk may be mutated concurrently (AnalyticSinkOperator appends window-function result columns and,
+    // on the LIMIT path, set_num_rows() resizes columns in place), which would make reading it here a data
+    // race / heap-use-after-free.
     Columns _previous_partition_columns;
     size_t _previous_channel_id = 0;
-    // Row count of the previous chunk, captured before the chunk is handed downstream.
-    // We must NOT keep a pointer to the previous chunk and read num_rows() from it later: once handed
-    // downstream the chunk may be mutated concurrently (e.g. AnalyticSinkOperator appends window-function
-    // result columns, reallocating the chunk's column vector), which would make reading it a data race /
-    // heap-use-after-free.
-    size_t _previous_num_rows = 0;
     bool _has_previous = false;
 };
 

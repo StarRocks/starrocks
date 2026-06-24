@@ -122,11 +122,13 @@ protected:
     size_t _dop = 3;
 };
 
-// Regression coverage for OrderedPartitionExchanger state tracking: after a chunk is handed downstream,
-// it may be mutated (e.g. AnalyticSinkOperator appends window result columns, changing the chunk's
-// internal column vector). This test mutates the previously accepted chunk before the next accept()
-// and verifies routing decisions don't require dereferencing the previous chunk object.
-TEST_F(OrderedPartitionExchangerTest, same_partition_continues_after_prev_chunk_mutated) {
+// Regression for the heap-use-after-free fixed alongside this test: once a chunk is handed downstream, it
+// may be mutated on another thread (AnalyticSinkOperator appends window result columns, reallocating the
+// chunk's column vector). The exchanger must retain only an owned copy of the previous boundary key, never
+// a reference into the handed-off chunk. We deterministically reproduce that hazard by appending a column
+// to the already-accepted chunk between two accept() calls; under ASAN this would trip on
+// `_previous_chunk->num_rows()` before the fix.
+TEST_F(OrderedPartitionExchangerTest, same_partition_continues_after_prev_chunk_appended) {
     auto chunk_a = _make_chunk({7, 7, 7, 7});
     ASSERT_OK(_exchanger->accept(chunk_a, 0));
 
@@ -140,6 +142,26 @@ TEST_F(OrderedPartitionExchangerTest, same_partition_continues_after_prev_chunk_
 
     // Both chunks land on channel 0 (the first chunk's min-loaded channel); the join is preserved.
     EXPECT_EQ(_drain(0), (std::vector<int32_t>{7, 7, 7, 7, 7, 7, 7, 7}));
+    EXPECT_TRUE(_drain(1).empty());
+    EXPECT_TRUE(_drain(2).empty());
+}
+
+// Same hazard via the other downstream mutation: the analytic LIMIT path calls Chunk::set_num_rows(), which
+// resizes every column in place -- including the partition-key column the exchanger used to alias. Caching
+// the previous row count (rather than cloning the boundary row) would index past the shrunk column here;
+// the owned single-row copy must remain valid and the routing decision must still be correct.
+TEST_F(OrderedPartitionExchangerTest, same_partition_continues_after_prev_chunk_truncated) {
+    auto chunk_a = _make_chunk({7, 7, 7, 7});
+    ASSERT_OK(_exchanger->accept(chunk_a, 0));
+
+    // Simulate the LIMIT path shrinking the already-handed-off chunk in place.
+    chunk_a->set_num_rows(2);
+
+    // chunk_b continues chunk_a's partition (7); the boundary key copy (7) must still drive the decision.
+    auto chunk_b = _make_chunk({7, 7, 7, 7});
+    ASSERT_OK(_exchanger->accept(chunk_b, 0));
+
+    EXPECT_EQ(_drain(0), (std::vector<int32_t>{7, 7, 7, 7, 7, 7}));
     EXPECT_TRUE(_drain(1).empty());
     EXPECT_TRUE(_drain(2).empty());
 }
