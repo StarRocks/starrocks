@@ -5909,10 +5909,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return TvrTableSnapshot.empty();
         }
         OlapTable olapTable = (OlapTable) table;
-        // Sum all partition visible versions so that a load into any partition advances the
-        // watermark, not just loads that beat the current per-partition maximum.
+        // Sum per-partition version epochs rather than visible versions. The version epoch is a
+        // globally-monotonic GTID (GtidGenerator.nextGtid()) stamped on every committed load and
+        // partition DDL, so the watermark strictly advances on any change AND cannot collide across
+        // partition-shape changes. Summed visible versions can collide: e.g. partitions [2,1] sum to
+        // 3, and after dropping the first partition and loading a new one to [1,2] they sum to 3
+        // again, making MVIVMRefreshProcessor treat the shape change as "no change" and skip refresh.
+        // Epochs are never reused, so a re-added partition always carries a strictly larger epoch.
         long watermark = olapTable.getPhysicalPartitions().stream()
-                .mapToLong(PhysicalPartition::getVisibleVersion)
+                .mapToLong(PhysicalPartition::getVersionEpoch)
                 .sum();
         return watermark > 0 ? TvrTableSnapshot.of(watermark) : TvrTableSnapshot.empty();
     }

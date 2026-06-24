@@ -30,6 +30,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -45,12 +46,16 @@ public class LocalMetastoreTvrTest {
         store = mock(LocalMetastore.class, CALLS_REAL_METHODS);
     }
 
-    private OlapTable mockOlapTable(KeysType keysType, long... versions) {
+    private OlapTable mockOlapTable(KeysType keysType, long... epochs) {
         OlapTable table = mock(OlapTable.class);
         List<PhysicalPartition> partitions = new ArrayList<>();
-        for (long v : versions) {
+        for (long e : epochs) {
             PhysicalPartition p = mock(PhysicalPartition.class);
-            when(p.getVisibleVersion()).thenReturn(v);
+            when(p.getVersionEpoch()).thenReturn(e);
+            // visibleVersion deliberately differs from the epoch so the watermark assertions
+            // prove the snapshot is derived from the globally-monotonic version epoch, not the
+            // partition-local visible version.
+            when(p.getVisibleVersion()).thenReturn(e * 1000 + 7);
             partitions.add(p);
         }
         when(table.getPhysicalPartitions()).thenReturn(partitions);
@@ -61,11 +66,11 @@ public class LocalMetastoreTvrTest {
     // ---- getCurrentTvrSnapshot ----
 
     @Test
-    public void testSnapshot_dupKeys_returnsSumVersion() {
+    public void testSnapshot_dupKeys_returnsSumEpoch() {
         OlapTable table = mockOlapTable(KeysType.DUP_KEYS, 3L, 5L, 2L);
         TvrTableSnapshot snap = store.getCurrentTvrSnapshot("db", table);
         assertFalse(snap.isEmpty());
-        assertEquals(10L, snap.getSnapshotId()); // 3 + 5 + 2
+        assertEquals(10L, snap.getSnapshotId()); // 3 + 5 + 2 (version epochs, not visible versions)
     }
 
     @Test
@@ -83,11 +88,25 @@ public class LocalMetastoreTvrTest {
     }
 
     @Test
-    public void testSnapshot_primaryKeys_returnsSumVersion() {
+    public void testSnapshot_primaryKeys_returnsSumEpoch() {
         OlapTable table = mockOlapTable(KeysType.PRIMARY_KEYS, 10L, 8L);
         TvrTableSnapshot snap = store.getCurrentTvrSnapshot("db", table);
         assertFalse(snap.isEmpty());
-        assertEquals(18L, snap.getSnapshotId()); // 10 + 8
+        assertEquals(18L, snap.getSnapshotId()); // 10 + 8 (version epochs, not visible versions)
+    }
+
+    @Test
+    public void testSnapshot_dropAddYieldsDistinctWatermark() {
+        // Codex P2: summed visible versions collide across a drop+add — e.g. partitions [2,1] sum to
+        // 3, then dropping the first and loading a new one to [1,2] also sums to 3, so the shape
+        // change reads as "no change" and refresh is skipped. The version epoch is globally
+        // monotonic and never reused, so the re-added partition always carries a strictly larger
+        // epoch and the watermark cannot collide.
+        long beforeWatermark = store.getCurrentTvrSnapshot("db",
+                mockOlapTable(KeysType.DUP_KEYS, 2L, 1L)).getSnapshotId(); // epochs {2, 1} = 3
+        long afterWatermark = store.getCurrentTvrSnapshot("db",
+                mockOlapTable(KeysType.DUP_KEYS, 1L, 9L)).getSnapshotId(); // surviving {1} + fresh epoch {9}
+        assertNotEquals(beforeWatermark, afterWatermark);
     }
 
     // ---- listTableDeltaTraits ----
