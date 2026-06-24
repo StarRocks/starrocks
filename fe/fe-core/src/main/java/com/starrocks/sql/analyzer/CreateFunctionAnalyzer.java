@@ -606,7 +606,7 @@ public class CreateFunctionAnalyzer {
                 objectFile(objectFile).
                 inputType(inputType).
                 symbolName(symbol).
-                isolation(!"shared".equalsIgnoreCase(isolation)).
+                isolation(!CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation)).
                 content(content);
         ScalarFunction function = scalarFunctionBuilder.build();
         function.setChecksum(checksum);
