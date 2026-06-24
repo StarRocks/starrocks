@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifdef USE_STAROS
-#include "staros_integration/staros_worker_runtime.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 
 #include <fslib/fslib_all_initializer.h>
 #include <starlet.h>
@@ -25,10 +25,10 @@
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "common/util/table_metrics.h"
+#include "compute_env/staros/staros_worker.h"
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
-#include "staros_integration/staros_worker.h"
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);

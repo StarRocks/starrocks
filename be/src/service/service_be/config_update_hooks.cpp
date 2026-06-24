@@ -70,9 +70,9 @@
 
 #ifdef USE_STAROS
 #include "common/gflags_utils.h"
-#include "staros_integration/staros_starcache.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
+#include "compute_env/staros/staros_starcache.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #endif // USE_STAROS
 
 namespace starrocks {

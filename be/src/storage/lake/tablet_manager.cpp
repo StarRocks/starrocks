@@ -63,8 +63,8 @@
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #endif
 
 namespace starrocks::lake {
