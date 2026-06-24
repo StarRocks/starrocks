@@ -479,6 +479,31 @@ public class DatabaseTransactionMgrTest {
         masterDbTransMgr.finishTransaction(txnId, null, 0);
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
     }
+
+    @Test
+    public void getMaxCommittedTxnPendingPublishMsTest() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // setUp() seeds several committed transactions; the metric reports the pending-publish time of the oldest one.
+        // getCommittedTxnList() is sorted ascending by commit time, so the first entry is the oldest.
+        List<TransactionState> committedTxns = masterDbTransMgr.getCommittedTxnList();
+        Assertions.assertFalse(committedTxns.isEmpty());
+        long oldestCommitTime = committedTxns.get(0).getCommitTime();
+
+        // pending-publish time is measured from the oldest commit time; use a fixed "now" for a deterministic assertion
+        assertEquals(5000L, masterDbTransMgr.getMaxCommittedTxnPendingPublishMs(oldestCommitTime + 5000L));
+        // a "now" earlier than the commit time must be clamped to 0, never negative
+        assertEquals(0L, masterDbTransMgr.getMaxCommittedTxnPendingPublishMs(oldestCommitTime - 1000L));
+
+        // once every committed transaction becomes visible, nothing is sitting in committed status
+        for (TransactionState txn : committedTxns) {
+            masterDbTransMgr.finishTransaction(txn.getTransactionId(), null, 0);
+        }
+        Assertions.assertTrue(masterDbTransMgr.getCommittedTxnList().isEmpty());
+        assertEquals(0L, masterDbTransMgr.getMaxCommittedTxnPendingPublishMs(System.currentTimeMillis()));
+    }
+
     @Test
     public void testAbortTransactionWithNotFoundException() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
