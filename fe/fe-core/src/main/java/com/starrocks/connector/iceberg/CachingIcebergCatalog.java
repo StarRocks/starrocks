@@ -133,13 +133,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            BaseTable updateTable = 
+                            BaseTable updateTable =
                                     (BaseTable) delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
-                            TableOperations newOps = updateTable.operations();
-                            TableOperations oldOps = ((BaseTable) oldValue).operations();
-                            if (oldOps.current().metadataFileLocation().equals(newOps.current().metadataFileLocation())) {
-                                return oldValue;
-                            }
                             return updateTable;
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
@@ -263,17 +258,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
-        // do not cache if vended credentials are enabled, because credentials may expire before cache TTL.
-        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog)) &&
-                !delegate.isVendedCredentialsEnabled();
-        if (!cacheAllowed) {
-            return delegate.getTable(connectContext, dbName, tableName);
-        }
-
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
+        }
+
+        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+        if (!cacheAllowed) {
+            return delegate.getTable(connectContext, dbName, tableName);
         }
         try {
             if (shouldOnlyReadCache(connectContext)) {

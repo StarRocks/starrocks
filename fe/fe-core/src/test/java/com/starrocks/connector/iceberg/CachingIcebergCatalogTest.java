@@ -464,63 +464,79 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-    public void testGetTableBypassCacheWhenVendedCredentialsEnabled(@Mocked IcebergRESTCatalog restCatalog) {
-        // When vended credentials is enabled, caching should be bypassed to avoid
-        // using expired credentials.
-        ConnectContext ctx = new ConnectContext();
-        Table nativeTable1 = createBaseTableWithManifests(1, 1);
-        Table nativeTable2 = createBaseTableWithManifests(1, 1);
+    public void testReloadAlwaysReturnsFreshTable(@Mocked IcebergCatalog delegate,
+                                                   @Mocked IcebergCatalogProperties props,
+                                                   @Mocked ConnectContext ctx) throws Exception {
+        // Two tables with SAME metadataFileLocation but different identity,
+        // simulating a REST catalog returning fresh vended credentials on each loadTable call.
+        Table oldTable = createBaseTableWithManifests(1, 1);
+        Table freshTable = createBaseTableWithManifests(1, 1);
+        String sharedMetadataLocation = "s3://bucket/metadata/v1.metadata.json";
+        Mockito.when(((BaseTable) oldTable).operations().current().metadataFileLocation())
+                .thenReturn(sharedMetadataLocation);
+        Mockito.when(((BaseTable) freshTable).operations().current().metadataFileLocation())
+                .thenReturn(sharedMetadataLocation);
+
+        AtomicLong callCount = new AtomicLong(0);
 
         new Expectations() {
             {
-                restCatalog.isVendedCredentialsEnabled();
+                props.isEnableIcebergMetadataCache();
                 result = true;
-                minTimes = 0;
+                props.isEnableIcebergTableCache();
+                result = true;
+                props.getIcebergMetaCacheTtlSec();
+                result = 60L;
+                props.getIcebergTableCacheRefreshIntervalSec();
+                result = 1L;
+                props.getIcebergTableCacheMemoryUsageRatio();
+                result = 1;
+                props.getIcebergDataFileCacheMemoryUsageRatio();
+                result = 0.0;
+                props.getIcebergDeleteFileCacheMemoryUsageRatio();
+                result = 0.0;
 
-                restCatalog.getTable(ctx, "db4", "tbl4");
-                result = nativeTable1;
-                result = nativeTable2;
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = new Delegate<Table>() {
+                    Table capture(ConnectContext c, String db, String tbl) {
+                        long idx = callCount.incrementAndGet();
+                        if (idx == 1) {
+                            return oldTable;
+                        }
+                        return freshTable;
+                    }
+                };
             }
         };
 
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
-                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        try {
+            CachingIcebergCatalog catalog =
+                    new CachingIcebergCatalog("iceberg0", delegate, props, es);
+            IcebergTableName key = new IcebergTableName("db1", "t1");
 
-        Table result1 = cachingIcebergCatalog.getTable(ctx, "db4", "tbl4");
-        Table result2 = cachingIcebergCatalog.getTable(ctx, "db4", "tbl4");
+            // Initial load returns oldTable
+            Table cached = catalog.getTable(ctx, "db1", "t1");
+            Assertions.assertSame(oldTable, cached, "initial load should return oldTable");
+            Assertions.assertEquals(1, callCount.get());
 
-        // Should return different instances (no caching)
-        Assertions.assertSame(nativeTable1, result1);
-        Assertions.assertSame(nativeTable2, result2);
-    }
+            // Wait for refresh interval to elapse, then trigger async reload
+            LoadingCache<IcebergTableName, Table> tableCache = Deencapsulation.getField(catalog, "tables");
+            Thread.sleep(1100);
+            tableCache.get(key); // triggers async reload
+            Thread.sleep(300);   // allow async reload to complete
 
-    @Test
-    public void testGetTableWithCacheWhenVendedCredentialsDisabled(@Mocked IcebergRESTCatalog restCatalog) {
-        // When vended credentials is disabled, normal caching should work.
-        ConnectContext ctx = new ConnectContext();
-        Table nativeTable = createBaseTableWithManifests(1, 1);
-
-        new Expectations() {
-            {
-                restCatalog.isVendedCredentialsEnabled();
-                result = false;
-                minTimes = 0;
-
-                restCatalog.getTable(ctx, "db5", "tbl5");
-                result = nativeTable;
-            }
-        };
-
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
-                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
-
-        Table result1 = cachingIcebergCatalog.getTable(ctx, "db5", "tbl5");
-        Table result2 = cachingIcebergCatalog.getTable(ctx, "db5", "tbl5");
-
-        // Should return the same instance (cached)
-        Assertions.assertSame(nativeTable, result1);
-        Assertions.assertSame(nativeTable, result2);
-        Assertions.assertSame(result1, result2);
+            // After reload, cache must hold freshTable (not oldTable),
+            // even though metadataFileLocation is identical.
+            Assertions.assertEquals(2, callCount.get(), "delegate should have been called twice");
+            Table reloaded = tableCache.get(key);
+            Assertions.assertSame(freshTable, reloaded,
+                    "reload must return freshly loaded table even when metadata location is unchanged");
+            Assertions.assertNotSame(oldTable, reloaded,
+                    "reload must NOT return stale oldTable when metadata location is unchanged");
+        } finally {
+            es.shutdownNow();
+        }
     }
 
     @Test
