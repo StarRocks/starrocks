@@ -46,6 +46,7 @@ const std::string INVERTED_INDEX_PARSER_CHINESE = "chinese";
 const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
+const std::string INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
 
 enum class InvertedIndexReaderType {
     UNKNOWN = -1,
