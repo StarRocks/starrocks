@@ -201,6 +201,8 @@ import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFA
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
+import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL;
+import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL_DEFAULT;
 
@@ -1855,16 +1857,30 @@ public class IcebergMetadata implements ConnectorMetadata {
                 }
             }
 
-            if (hasPositionDeletes && hasDataFiles) {
-                // UPDATE / MERGE: RowDelta with both delete and data files
+            // Route MERGE by its operation type, not by the emitted file mix. Routing on
+            // the file mix alone is wrong for a MERGE in two ways: (1) an INSERT-only MERGE
+            // emits data files only and would take the plain-append path, which ignores the
+            // frozen base snapshot and conflict-detection filter and so escapes SERIALIZABLE
+            // conflict detection; (2) a delete-only MERGE would take the pure-DELETE path,
+            // which records iceberg_delete_* metrics instead of the merge accounting and
+            // skips validateNoConflictingDeleteFiles. Sending every MERGE that emits files
+            // through commitRowDeltaOperation gives it uniform SERIALIZABLE validation and
+            // merge metrics; commitRowDeltaOperation handles a data-only or delete-only file
+            // set (it conditionally addRows()/addDeletes()). An empty MERGE (no files) has
+            // nothing to validate or count and falls through to the no-op append path.
+            boolean isMerge = extra instanceof IcebergSinkExtra
+                    && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
+
+            if ((hasPositionDeletes && hasDataFiles) || (isMerge && (hasDataFiles || hasPositionDeletes))) {
+                // UPDATE, or any MERGE that emitted files: RowDelta with delete and/or data files
                 commitRowDeltaOperation(transaction, nativeTbl, dataFiles, branch,
                         dbName, tableName, extra, context);
             } else if (hasPositionDeletes) {
-                // Pure DELETE (unchanged)
+                // Pure (non-MERGE) DELETE (unchanged)
                 commitDeleteOperation(transaction, nativeTbl, dataFiles, branch,
                         dbName, tableName, extra, context);
             } else {
-                // Pure INSERT/OVERWRITE (unchanged)
+                // Pure INSERT/OVERWRITE, or an empty MERGE (unchanged)
                 commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite,
                         isRewrite, extra, dbName, tableName, context);
             }
@@ -2104,9 +2120,13 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        // Use the base snapshot id frozen at plan time so conflict detection covers
-        // every commit landed between scan and commit. Falling back to currentSnapshot
-        // here would silently skip that window and defeat SERIALIZABLE isolation.
+        boolean isMerge = extra instanceof IcebergSinkExtra
+                && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
+
+        // Use the base snapshot id frozen at plan time so conflict detection covers every
+        // commit landed between scan and commit. The MERGE/UPDATE planners freeze it from the
+        // target scan whenever existing rows are modified; the currentSnapshot fallback below
+        // covers paths that do not (plain appends, target-less MERGE).
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
@@ -2132,8 +2152,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().
-                getOrDefault(UPDATE_ISOLATION_LEVEL, UPDATE_ISOLATION_LEVEL_DEFAULT));
+        // MERGE and UPDATE have separate Iceberg isolation-level properties; pick by op type
+        // so a table that relaxes one but not the other validates at the right level.
+        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().getOrDefault(
+                isMerge ? MERGE_ISOLATION_LEVEL : UPDATE_ISOLATION_LEVEL,
+                isMerge ? MERGE_ISOLATION_LEVEL_DEFAULT : UPDATE_ISOLATION_LEVEL_DEFAULT));
         if (isolationLevel == IsolationLevel.SERIALIZABLE) {
             rowDelta.validateNoConflictingDataFiles();
         }
@@ -2157,26 +2180,57 @@ public class IcebergMetadata implements ConnectorMetadata {
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
-            ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
+            if (isMerge) {
+                ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
 
-            Snapshot newSnapshot = nativeTbl.currentSnapshot();
-            if (newSnapshot != null && newSnapshot.summary() != null) {
-                long affectedRows = Long.parseLong(newSnapshot.summary()
-                        .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
-                ConnectorMetricsMgr.increaseUpdateRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, affectedRows);
+                Snapshot newSnapshot = nativeTbl.currentSnapshot();
+                if (newSnapshot != null && newSnapshot.summary() != null) {
+                    // matched = target rows hit by UPDATE/DELETE (position deletes);
+                    // written = data rows written (UPDATE rewrites + INSERTs).
+                    long matchedRows = Long.parseLong(newSnapshot.summary()
+                            .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
+                    long writtenRows = Long.parseLong(newSnapshot.summary()
+                            .getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(matchedRows,
+                            ConnectorMetricsMgr.MERGE_ROW_TYPE_MATCHED);
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(writtenRows,
+                            ConnectorMetricsMgr.MERGE_ROW_TYPE_WRITTEN);
+                }
+
+                ConnectorMetricsMgr.increaseIcebergMergeBytes(deleteBytes,
+                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseIcebergMergeBytes(dataBytes,
+                        ConnectorMetricsMgr.FILE_TYPE_DATA);
+                ConnectorMetricsMgr.increaseIcebergMergeFiles(deleteFileCount,
+                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseIcebergMergeFiles(dataFileCount,
+                        ConnectorMetricsMgr.FILE_TYPE_DATA);
+            } else {
+                ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
+
+                Snapshot updateSnapshot = nativeTbl.currentSnapshot();
+                if (updateSnapshot != null && updateSnapshot.summary() != null) {
+                    long affectedRows = Long.parseLong(updateSnapshot.summary()
+                            .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
+                    ConnectorMetricsMgr.increaseUpdateRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, affectedRows);
+                }
+
+                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        deleteBytes, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        dataBytes, ConnectorMetricsMgr.FILE_TYPE_DATA);
+                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        deleteFileCount, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        dataFileCount, ConnectorMetricsMgr.FILE_TYPE_DATA);
             }
-
-            ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    deleteBytes, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-            ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    dataBytes, ConnectorMetricsMgr.FILE_TYPE_DATA);
-            ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    deleteFileCount, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-            ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    dataFileCount, ConnectorMetricsMgr.FILE_TYPE_DATA);
         } finally {
-            ConnectorMetricsMgr.increaseUpdateDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    System.currentTimeMillis() - startMs);
+            if (isMerge) {
+                ConnectorMetricsMgr.increaseIcebergMergeDurationMs(System.currentTimeMillis() - startMs);
+            } else {
+                ConnectorMetricsMgr.increaseUpdateDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs);
+            }
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
@@ -2376,6 +2430,15 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     public static class IcebergSinkExtra {
+        /**
+         * Which row-delta DML produced this sink. Drives metric routing on the
+         * commit path (UPDATE vs MERGE counters).
+         */
+        public enum OperationType {
+            UPDATE,
+            MERGE
+        }
+
         private final Set<DataFile> scannedDataFiles;
         private final Set<DeleteFile> appliedDeleteFiles;
         private Expression conflictDetectionFilter;
@@ -2383,10 +2446,19 @@ public class IcebergMetadata implements ConnectorMetadata {
         // so conflict detection covers the window between scan and commit, not a fresher
         // snapshot re-read at commit time.
         private Long baseSnapshotId;
+        private OperationType operationType = OperationType.UPDATE;
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
             this.appliedDeleteFiles = new HashSet<>();
+        }
+
+        public void setOperationType(OperationType operationType) {
+            this.operationType = operationType;
+        }
+
+        public OperationType getOperationType() {
+            return operationType;
         }
 
         public void addScannedDataFiles(Set<DataFile> o) {

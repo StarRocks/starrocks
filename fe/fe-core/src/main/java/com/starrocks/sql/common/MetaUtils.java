@@ -182,6 +182,10 @@ public class MetaUtils {
         return "update_" + DebugUtil.printId(executionId);
     }
 
+    public static String genMergeLabel(TUniqueId executionId) {
+        return "merge_" + DebugUtil.printId(executionId);
+    }
+
     public static ExternalOlapTable syncOLAPExternalTableMeta(ExternalOlapTable externalOlapTable) {
         ExternalOlapTable copiedTable = new ExternalOlapTable();
         externalOlapTable.copyOnlyForQuery(copiedTable);
