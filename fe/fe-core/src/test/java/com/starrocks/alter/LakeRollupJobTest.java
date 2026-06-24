@@ -298,7 +298,7 @@ public class LakeRollupJobTest {
             public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
                     long baseVersion, ComputeResource computeResource,
                     Map<Long, Double> compactionScores,
-                    Map<Long, Long> tabletRowNum,
+                    Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                     java.util.List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos)
                     throws NoAliveBackendException, RpcException {
                 // Do nothing, just return successfully

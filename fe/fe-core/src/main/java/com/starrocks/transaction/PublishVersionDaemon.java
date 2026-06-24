@@ -58,6 +58,7 @@ import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.rpc.BrpcProxy;
@@ -705,14 +706,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+                // Per-tablet stats for real-time reshard triggering (range-distribution tablets only).
+                Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            computeResource, null, vectorIndexBuildInfos);
+                            computeResource, tabletStats, vectorIndexBuildInfos);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
-                            compactionScores, nodeToTablets, computeResource, null, vectorIndexBuildInfos);
+                            compactionScores, nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos);
                 }
 
                 // Mixed batches (rare) fall back to false so the load-tail delay protects
@@ -722,6 +725,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, allFromCompaction);
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
+                if (!tabletStats.isEmpty()) {
+                    stateBatch.setTabletStats(tableId, partitionId, tabletStats);
+                }
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
@@ -1106,17 +1112,18 @@ public class PublishVersionDaemon extends LeaderDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                // Used to collect statistics when the partition is first imported
-                Map<Long, Long> tabletRowNums = new HashMap<>();
+                // Per-tablet stats from the publish response: first-load row counts for statistics
+                // collection, and range-distribution tablet sizes for real-time reshard triggering.
+                Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        computeResource, tabletRowNums, useAggregatePublish, vectorIndexBuildInfos);
+                        computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos);
 
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
-                if (!tabletRowNums.isEmpty()) {
-                    partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().putAll(tabletRowNums);
+                if (!tabletStats.isEmpty()) {
+                    partitionCommitInfo.getTabletStats().putAll(tabletStats);
                 }
             }
             return true;

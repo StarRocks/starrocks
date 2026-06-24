@@ -57,8 +57,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.MergeTabletClause;
-import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -141,7 +139,14 @@ public class TabletStatMgr extends FrontendDaemon {
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
-                int parallelismFloor = resolveMergeParallelismFloor(db, olapTable);
+                // Reshard is leader-only (TabletStatMgr runs on all FEs), and only for cloud-native
+                // range-distribution tables. This gates the parallelism-floor lookup (a StarMgr RPC),
+                // the adjacency walk, and the reshard trigger — none of which should run on followers.
+                boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
+                        && olapTable.isCloudNativeTableOrMaterializedView()
+                        && olapTable.isRangeDistribution();
+                int parallelismFloor = reshardEligible
+                        ? TabletReshardUtils.safeComputeParallelismFloor(table.getId()) : 0;
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -210,62 +215,19 @@ public class TabletStatMgr extends FrontendDaemon {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                 }
 
-                // Trigger tablet reshard
-                if (GlobalStateMgr.getCurrentState().isLeader()) {
-                    triggerTabletReshard(db, olapTable, maxTabletSize, minAdjacentTabletPairSize);
+                // Emit a reshard candidate with the signals computed above; addReshardCandidate drops
+                // non-actionable signals and the TabletReshardJobMgr drain owns job creation. This
+                // periodic scan is the fallback for the publish-driven path, so unlike publish it
+                // carries the merge signal too.
+                if (reshardEligible) {
+                    GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
+                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize);
                 }
             }
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
                 (System.currentTimeMillis() - start));
         lastWorkTimestamp = LocalDateTime.now();
-    }
-
-    /**
-     * Minimum tablet count auto-merge must keep per index for {@code table}. Returns 0 ("not
-     * floor-gated") for tables that never auto-merge (non-cloud-native or non-range-distribution),
-     * and also on lookup failure so a single table's warehouse error cannot abort the daemon cycle.
-     * Called before the table lock since it resolves warehouse/compute-node state.
-     */
-    private static int resolveMergeParallelismFloor(Database db, OlapTable table) {
-        if (!table.isCloudNativeTableOrMaterializedView() || !table.isRangeDistribution()) {
-            return 0;
-        }
-        try {
-            return TabletReshardUtils.computeParallelismFloor(table.getId());
-        } catch (RuntimeException e) {
-            LOG.warn("Parallelism floor unavailable for table {}.{}; "
-                            + "auto-merge will not be floor-gated for this table.",
-                    db.getFullName(), table.getName(), e);
-            return 0;
-        }
-    }
-
-    private static void triggerTabletReshard(Database db, OlapTable table,
-                                             long maxTabletSize, long minAdjacentTabletPairSize) {
-        if (!table.isCloudNativeTableOrMaterializedView() || !table.isRangeDistribution()) {
-            return;
-        }
-
-        try {
-            if (TabletReshardUtils.needSplit(maxTabletSize)) {
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
-                        db, table, new SplitTabletClause());
-                LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
-                        db.getFullName(), table.getName(), maxTabletSize);
-                return;
-            }
-
-            if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
-                        db, table, new MergeTabletClause());
-                LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
-                        db.getFullName(), table.getName(), minAdjacentTabletPairSize);
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to create tablet reshard job for table {}.{}.",
-                    db.getFullName(), table.getName(), e);
-        }
     }
 
     private void updateLocalTabletStat() {
