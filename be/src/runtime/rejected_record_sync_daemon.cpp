@@ -33,9 +33,9 @@
 #include "http/http_common.h"
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 

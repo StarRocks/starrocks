@@ -288,7 +288,6 @@ set(EXEC_FILES
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/brpc_stub_cache_test.cpp
-        ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
         ./runtime/exception_stack_test.cpp

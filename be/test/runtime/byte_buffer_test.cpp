@@ -15,14 +15,31 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/byte_buffer.h"
+#include "runtime/byte_buffer.h"
 
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
 #include "common/logging.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
+
+namespace {
+
+bool g_env_initialized = false;
+MemTracker* g_process_mem_tracker = nullptr;
+
+bool is_env_initialized_for_test() {
+    return g_env_initialized;
+}
+
+MemTracker* process_mem_tracker_for_test() {
+    return g_process_mem_tracker;
+}
+
+} // namespace
 
 class ByteBufferTest : public testing::Test {
 public:
@@ -30,6 +47,26 @@ public:
     ~ByteBufferTest() override = default;
 
 protected:
+    // ByteBuffer::allocate_with_tracker() requires a non-null CurrentThread mem tracker. Under the
+    // legacy be_test binary GlobalEnv supplied one; runtime_core_test uses the stock gtest_main, so
+    // install a process mem tracker source for the duration of each test.
+    void SetUp() override {
+        _process_mem_tracker = std::make_unique<MemTracker>();
+        g_env_initialized = true;
+        g_process_mem_tracker = _process_mem_tracker.get();
+        tls_mem_tracker = nullptr;
+        CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
+    }
+
+    void TearDown() override {
+        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        tls_mem_tracker = nullptr;
+        g_env_initialized = false;
+        g_process_mem_tracker = nullptr;
+        _process_mem_tracker.reset();
+    }
+
+    std::unique_ptr<MemTracker> _process_mem_tracker;
     char _write_data[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
     char _read_data[10];
 };
