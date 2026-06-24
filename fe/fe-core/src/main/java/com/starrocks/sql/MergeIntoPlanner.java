@@ -27,6 +27,7 @@ import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.JoinNode;
+import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
@@ -403,6 +404,8 @@ public class MergeIntoPlanner {
      *   <li>within a BE: the hash join's probe side is locally shuffled by join key
      *       across drivers, so all matches of one target row land on one driver.</li>
      * </ul>
+     * The MERGE join disables post-join passthrough so this local key distribution is
+     * still intact when rows reach the check.
      * Everything above the check (e.g. the partition-column shuffle for partitioned
      * targets) is free to redistribute rows arbitrarily.
      */
@@ -415,8 +418,12 @@ public class MergeIntoPlanner {
             // the USING subquery.
             return;
         }
-        PlanNode joinNode = mergeTargetContext.mergeJoin;
+        JoinNode joinNode = mergeTargetContext.mergeJoin;
         validateMergeJoinKeepsTargetUnreplicated(joinNode);
+        // Keep the join's local key distribution intact for the duplicate check.
+        // This gate only suppresses the post-join passthrough exchange; the join
+        // input-side local shuffle is still controlled by the BE hash-join builder.
+        joinNode.setCanLocalShuffle(false);
 
         PlanFragment joinFragment = joinNode.getFragment();
         PlanNode currentRoot = joinFragment.getPlanRoot();
@@ -529,8 +536,11 @@ public class MergeIntoPlanner {
      * where it is exact; a scanned source is always rejected.
      */
     private static void validateMergeJoinKeepsTargetUnreplicated(PlanNode joinNode) {
-        if (joinNode instanceof HashJoinNode) {
-            JoinNode.DistributionMode mode = ((HashJoinNode) joinNode).getDistrMode();
+        // Hash and merge joins are both distribution-based: their DistributionMode tells
+        // whether the target side stays partitioned. A merge-join plan (join_implementation_mode
+        // = "merge") is just as valid here as a hash join, so accept both.
+        if (joinNode instanceof HashJoinNode || joinNode instanceof MergeJoinNode) {
+            JoinNode.DistributionMode mode = ((JoinNode) joinNode).getDistrMode();
             Preconditions.checkState(mode == JoinNode.DistributionMode.PARTITIONED
                             || mode == JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET
                             || mode == JoinNode.DistributionMode.COLOCATE,

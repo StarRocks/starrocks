@@ -35,6 +35,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.MergeIntoPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.JoinOperator;
@@ -47,11 +48,14 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPlan;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
@@ -529,6 +533,35 @@ public class MergeIntoPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testMergeHashJoinDisablesPostJoinPassthrough() throws Exception {
+        boolean previous = setHashJoinInterpolatePassthrough(true);
+        try {
+            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                    "USING (" +
+                    "  SELECT 1 AS id, 'a' AS data, '2024-01-01' AS date " +
+                    "  UNION ALL SELECT 2 AS id, 'b' AS data, '2024-01-01' AS date " +
+                    ") AS s " +
+                    "ON t.id = s.id " +
+                    "WHEN MATCHED THEN UPDATE SET data = s.data " +
+                    "WHEN NOT MATCHED THEN INSERT (id, data, date) VALUES (s.id, s.data, s.date)";
+            ExecPlan execPlan = getMergeExecPlan(sql);
+            HashJoinNode joinNode = findNode(execPlan, HashJoinNode.class);
+            assertNotNull(joinNode, "Plan must contain the merge HashJoinNode");
+            assertFalse(joinNode.getCanLocalShuffle(),
+                    "MERGE planner must suppress post-join passthrough on the target join");
+
+            TPlanNode thriftJoin = findThriftNode(joinNode.treeToThrift(), joinNode.getId().asInt());
+            assertNotNull(thriftJoin, "Join node must be serialized to thrift");
+            assertFalse(thriftJoin.hash_join_node.isSetInterpolate_passthrough()
+                            && thriftJoin.hash_join_node.isInterpolate_passthrough(),
+                    "MERGE duplicate checking relies on the join's local key distribution; "
+                            + "post-join passthrough must be disabled");
+        } finally {
+            setHashJoinInterpolatePassthrough(previous);
+        }
+    }
+
+    @Test
     public void testDuplicateConstantSourceMergeContainsEnforceUnique() throws Exception {
         int previousPipelineDop = connectContext.getSessionVariable().getPipelineDop();
         int previousPipelineSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
@@ -638,6 +671,8 @@ public class MergeIntoPlanTest extends PlanTestBase {
         NestLoopJoinNode nestLoopJoin = findNode(execPlan, NestLoopJoinNode.class);
         assertNotNull(nestLoopJoin,
                 "Constant-source MERGE is expected to fold the ON equality and plan a nestloop join");
+        assertFalse(nestLoopJoin.getCanLocalShuffle(),
+                "MERGE planner must suppress post-join passthrough on the target join");
         EnforceUniqueRowLocatorNode enforceNode = findNode(execPlan, EnforceUniqueRowLocatorNode.class);
         assertNotNull(enforceNode, "Plan must contain an EnforceUniqueRowLocatorNode");
         assertEquals(enforceNode.getFragment(), nestLoopJoin.getFragment(),
@@ -775,6 +810,22 @@ public class MergeIntoPlanTest extends PlanTestBase {
             queue.addAll(node.getChildren());
         }
         return matches;
+    }
+
+    private static TPlanNode findThriftNode(TPlan plan, int nodeId) {
+        return plan.getNodes().stream()
+                .filter(node -> node.node_id == nodeId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static boolean setHashJoinInterpolatePassthrough(boolean value) throws Exception {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        Field field = SessionVariable.class.getDeclaredField("hashJoinInterpolatePassthrough");
+        field.setAccessible(true);
+        boolean previous = field.getBoolean(sessionVariable);
+        field.setBoolean(sessionVariable, value);
+        return previous;
     }
 
     @Test
