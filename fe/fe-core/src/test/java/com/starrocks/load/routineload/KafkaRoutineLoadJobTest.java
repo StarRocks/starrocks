@@ -40,11 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ExceptionChecker;
->>>>>>> 57b2b2ac72 ([Enhancement] Support property.kafka_partition_discovery for routine load (#74729))
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
