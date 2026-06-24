@@ -19,6 +19,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -31,7 +32,6 @@
 #include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
-#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks::pipeline {
