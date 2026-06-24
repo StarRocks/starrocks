@@ -527,6 +527,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         JDBCTableName key = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
 
         long rowCount = Config.default_statistics_output_row_count;
+        boolean hasRealRowCount = false;
         CompletableFuture<Long> future = rowCountCache.getIfPresent(key);
         if (future == null) {
             // Cold start: fire async load, return default for this planning round.
@@ -534,13 +535,17 @@ public class JDBCMetadata implements ConnectorMetadata {
         } else if (future.isDone() && !future.isCompletedExceptionally()) {
             try {
                 rowCount = future.getNow(Config.default_statistics_output_row_count);
+                hasRealRowCount = true;
             } catch (Exception e) {
                 LOG.warn("Unexpected error reading row count for {}.{}", key.getDatabaseName(), key.getTableName(), e);
             }
         }
         // Future in-flight or completed exceptionally: fall through to default.
-        return Statistics.builder().setOutputRowCount(rowCount)
-                .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
+        Statistics.Builder builder = Statistics.builder().setOutputRowCount(rowCount);
+        if (hasRealRowCount) {
+            builder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        }
+        return builder.build();
     }
 
     @Override
