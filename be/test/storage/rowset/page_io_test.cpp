@@ -18,9 +18,11 @@
 
 #include "base/compression/block_compression.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/config_lake_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_memory.h"
 #include "io/seekable_input_stream.h"
@@ -28,6 +30,19 @@
 #include "storage/rowset/bitshuffle_page.h"
 
 namespace starrocks {
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+TEST(PageIODropLocalCacheDataTest, test_guard_conditions) {
+    const bool old_clear_corrupted_cache_data = config::lake_clear_corrupted_cache_data;
+    DeferOp restore([&] { config::lake_clear_corrupted_cache_data = old_clear_corrupted_cache_data; });
+
+    config::lake_clear_corrupted_cache_data = false;
+    EXPECT_TRUE(drop_local_cache_data("staros://1/cache.dat").is_not_supported());
+
+    config::lake_clear_corrupted_cache_data = true;
+    EXPECT_TRUE(drop_local_cache_data("cache.dat").is_not_supported());
+}
+#endif
 
 class PageIOTest : public testing::Test {
 public:

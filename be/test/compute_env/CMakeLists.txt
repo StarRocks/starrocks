@@ -107,6 +107,7 @@ if (NOT APPLE)
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/starlet_filesystem_test.cpp)
     list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/staros_worker_test.cpp)
 endif()
 

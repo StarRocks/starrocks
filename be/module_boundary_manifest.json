@@ -153,7 +153,6 @@
         "fs/fs_broker.h",
         "fs/fs_options_helper.h",
         "fs/fs_s3.h",
-        "fs/fs_starlet.h",
         "fs/key_cache.h",
         "fs/output_stream_adapter.h"
       ],
