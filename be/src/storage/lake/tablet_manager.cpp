@@ -78,7 +78,6 @@ static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
                                                                       "lake_read_bundle_tablet_meta_real_access_cnt");
 static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_read_bundle_tablet_meta_latency");
 
-<<<<<<< HEAD
 void TabletManager::enable_tablet_warmup_listener() {
 #ifdef USE_STAROS
     if (g_worker == nullptr) {
@@ -91,7 +90,8 @@ void TabletManager::enable_tablet_warmup_listener() {
     g_worker->register_add_shard_listener(
             std::bind(&TabletWarmupManager::warmup_tablet, mgr->_tablet_warmup_manager.get(), std::placeholders::_1));
 #endif
-=======
+}
+
 // Save a lake metadata/txn-log protobuf, using the checksummed header format when
 // lake_enable_protobuf_file_checksum is on and the legacy headerless format otherwise.
 static Status save_lake_protobuf(const std::string& path, const ::google::protobuf::Message& message) {
@@ -109,7 +109,6 @@ static Status load_lake_protobuf(const std::string& path, ::google::protobuf::Me
                                  const std::shared_ptr<FileSystem>& fs = nullptr) {
     ProtobufFileWithHeader file(path, fs, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
     return file.load(message, fill_cache);
->>>>>>> abf52b5de16... [Enhancement] Add checksum protection for shared-data tablet metadata and txn log (backport #74924) (#75102)
 }
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
