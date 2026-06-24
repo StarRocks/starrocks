@@ -30,6 +30,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -654,7 +655,14 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     // source partition identified by sourcePartitionName. Mirrors the visibility gate used by the offline
     // OptimizeJobV2, so the online job never replaces a partition that an unpublished load still references.
     protected boolean hasCommittedNotVisible(Database db, OlapTable tbl, String sourcePartitionName) {
-        long sourcePartitionId;
+        // Committed load metadata (TableCommitInfo's PartitionCommitInfo map) is keyed by PHYSICAL partition
+        // id, not the logical partition id (see TableCommitInfo.addPartitionCommitInfo). For normal partitions
+        // the logical Partition.getId() differs from the physical partition id, so resolve the source
+        // partition's physical partition(s) here: passing the logical id would make existCommittedTxns miss a
+        // committed-but-not-visible load and let the replacement proceed under an unpublished transaction,
+        // reopening the publish-failure window this gate is meant to close. The source partition has a single
+        // sub-partition (see enableDoubleWritePartition), but iterate defensively in case that changes.
+        List<Long> sourcePhysicalPartitionIds = Lists.newArrayList();
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), tbl.getId(), LockType.READ);
         try {
@@ -662,12 +670,19 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             if (partition == null) {
                 return false;
             }
-            sourcePartitionId = partition.getId();
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                sourcePhysicalPartitionIds.add(physicalPartition.getId());
+            }
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tbl.getId(), LockType.READ);
         }
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .existCommittedTxns(db.getId(), tbl.getId(), sourcePartitionId);
+        for (long physicalPartitionId : sourcePhysicalPartitionIds) {
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .existCommittedTxns(db.getId(), tbl.getId(), physicalPartitionId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
