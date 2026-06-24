@@ -24,6 +24,7 @@
 
 #include "base/coding.h"
 #include "base/compression/compression_headers.h"
+#include "base/failpoint/fail_point.h"
 #include "base/status.h"
 #include "base/statusor.h"
 #include "column/array_column.h"
@@ -45,6 +46,14 @@
 #include "types/percentile_value.h"
 
 namespace starrocks::serde {
+
+// Test-only seam. The real trigger for the extended BinaryColumn layout is a
+// payload that overflows the legacy u32 format (bytes or offsets > UINT32_MAX),
+// which cannot be allocated in a unit test. When this failpoint is enabled,
+// `_can_use_legacy_u32_format` reports overflow so the extended serialize/size
+// path can be exercised on a small column. Compiled out entirely without
+// FIU_ENABLE, so it has no effect on release builds.
+DEFINE_FAIL_POINT(binary_column_serde_force_extended_format);
 
 static Status check_remaining_size(const uint8_t* current, const uint8_t* end, size_t expected_remains) {
     if (expected_remains > static_cast<size_t>(end - current)) {
@@ -348,6 +357,9 @@ private:
     static constexpr int64_t kExtendedHeaderSize = sizeof(uint32_t) * 2;
 
     static bool _can_use_legacy_u32_format(const BinaryColumnBase<uint32_t>& column) {
+        // Test-only: pretend the payload overflows the legacy u32 layout so the
+        // extended serialize/size path is reachable without a >4GB column.
+        FAIL_POINT_TRIGGER_RETURN(binary_column_serde_force_extended_format, false);
         const auto bytes_size = column.get_immutable_bytes().size();
         const auto offset_bytes_size = static_cast<uint64_t>(column.get_offset().size()) * sizeof(uint32_t);
         return bytes_size <= std::numeric_limits<uint32_t>::max() &&

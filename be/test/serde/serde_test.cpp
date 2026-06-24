@@ -982,6 +982,78 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_extended_format_deserialize) {
     ASSERT_EQ(Slice("cc"), column->get_slice(2));
 }
 
+#ifdef FIU_ENABLE
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_extended_format_serialize_round_trip) {
+    // The real overflow trigger (bytes/offsets payload > UINT32_MAX) cannot be
+    // allocated in a unit test, so force the extended layout via a failpoint and
+    // verify the serialize + max_serialized_size + round-trip path end to end.
+    auto* fp = failpoint::FailPointRegistry::GetInstance()->get("binary_column_serde_force_extended_format");
+    ASSERT_NE(fp, nullptr);
+    PFailPointTriggerMode enable_mode;
+    enable_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    PFailPointTriggerMode disable_mode;
+    disable_mode.set_mode(FailPointTriggerModeType::DISABLE);
+
+    auto run_case = [&](int num_strings, int encode_level, bool check_exact_size) {
+        auto src = BinaryColumn::create();
+        std::vector<std::string> values;
+        std::vector<Slice> slices;
+        values.reserve(num_strings);
+        slices.reserve(num_strings);
+        for (int i = 0; i < num_strings; ++i) {
+            values.emplace_back(strings::Substitute("payload-value-$0", i));
+            slices.emplace_back(values.back());
+        }
+        src->append_strings(slices.data(), slices.size());
+        // A normal small BinaryColumn: only the failpoint, not the real payload,
+        // makes it take the extended path.
+        ASSERT_FALSE(src->get_offset().is_large());
+
+        // Keep the failpoint scoped to size-computation + serialization only, so a
+        // later assertion failure cannot leak the forced-extended state into other
+        // tests. Deserialization auto-detects the escape from the wire and needs
+        // no failpoint.
+        fp->setMode(enable_mode);
+        const auto max_size = ColumnArraySerde::max_serialized_size(*src, encode_level);
+        std::vector<uint8_t> buffer(max_size > 0 ? static_cast<size_t>(max_size) : 0);
+        auto serialize_result = ColumnArraySerde::serialize(*src, buffer.data(), false, encode_level);
+        fp->setMode(disable_mode);
+
+        ASSERT_GT(max_size, 0);
+        ASSERT_TRUE(serialize_result.ok()) << serialize_result.status();
+        auto* serialized_end = serialize_result.value();
+        ASSERT_LE(serialized_end, buffer.data() + buffer.size());
+        // The extended layout always begins with the u32 0 / u32 0 escape header.
+        ASSERT_TRUE(has_binary_serde_extended_escape(buffer.data()));
+
+        if (check_exact_size) {
+            // u32 escape + u32 escape + u64 bytes_size + bytes + u64 offset_bytes_size + u64 offsets
+            // (small payload, so neither string nor integer encoding kicks in).
+            const auto expected_size = sizeof(uint32_t) * 2 + sizeof(uint64_t) * 2 +
+                                       src->get_immutable_bytes().size() +
+                                       src->get_offset().size() * sizeof(uint64_t);
+            ASSERT_EQ(static_cast<int64_t>(expected_size), max_size);
+            ASSERT_EQ(buffer.data() + expected_size, serialized_end);
+        }
+
+        auto dst = BinaryColumn::create();
+        ASSIGN_OR_ABORT(auto deserialized_end,
+                        ColumnArraySerde::deserialize(buffer.data(), serialized_end, dst.get(), false, encode_level));
+        ASSERT_EQ(serialized_end, deserialized_end);
+        // An extended payload encodes offsets as u64, so it always decodes into large offsets.
+        ASSERT_TRUE(dst->get_offset().is_large());
+        assert_binary_column_equal(*src, *dst);
+    };
+
+    // Plain layout: assert the exact extended size and escape header.
+    run_case(3, 0, /*check_exact_size=*/true);
+    // Larger payload with encoding enabled: exercises LZ4 string encoding and
+    // streamvbyte integer encoding of u64 offsets through the extended path.
+    run_case(80, ENCODE_INTEGER | ENCODE_STRING, /*check_exact_size=*/false);
+}
+#endif
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
