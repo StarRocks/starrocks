@@ -12,26 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/stream_load/load_stream_mgr.h
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 #pragma once
 
 #include <memory>
@@ -46,20 +26,24 @@ namespace starrocks {
 
 class MetricRegistry;
 
-// used to register all streams in process so that other module can get this stream
+// Used to register all streams in process so that other modules can get them.
 class LoadStreamMgr {
 public:
-    explicit LoadStreamMgr(MetricRegistry* metrics = nullptr) {
+    explicit LoadStreamMgr(MetricRegistry* metrics = nullptr) { install_metrics(metrics); }
+    ~LoadStreamMgr() = default;
+
+    void install_metrics(MetricRegistry* metrics) {
+        if (metrics == nullptr || _metrics != nullptr) {
+            return;
+        }
+        _metrics = metrics;
         // Each StreamLoadPipe has a limited buffer size (default 1M), it's not needed to count the
         // actual size of all StreamLoadPipe.
-        if (metrics != nullptr) {
-            REGISTER_GAUGE_RUNTIME_METRIC(metrics, stream_load_pipe_count, [this]() {
-                std::lock_guard<std::mutex> l(_lock);
-                return _stream_map.size();
-            });
-        }
+        REGISTER_GAUGE_RUNTIME_METRIC(metrics, stream_load_pipe_count, [this]() {
+            std::lock_guard<std::mutex> l(_lock);
+            return _stream_map.size();
+        });
     }
-    ~LoadStreamMgr() = default;
 
     void close() {
         std::lock_guard<std::mutex> l(_lock);
@@ -98,6 +82,7 @@ public:
     }
 
 private:
+    MetricRegistry* _metrics = nullptr;
     std::mutex _lock;
     std::unordered_map<UniqueId, std::shared_ptr<StreamLoadPipe>> _stream_map;
 };

@@ -109,6 +109,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().result_queue_mgr, env.compute_env()->result_queue_mgr());
     EXPECT_EQ(env.load_path_mgr(), env.compute_env()->load_path_mgr());
     EXPECT_EQ(env.runtime_services().load_path_mgr, env.compute_env()->load_path_mgr());
+    EXPECT_EQ(env.load_stream_mgr(), env.compute_env()->load_stream_mgr());
+    EXPECT_EQ(env.runtime_services().load_stream_mgr, env.compute_env()->load_stream_mgr());
     EXPECT_EQ(env.runtime_services().profile_report_worker, env.compute_env()->profile_report_worker());
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
