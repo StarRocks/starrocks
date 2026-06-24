@@ -14,46 +14,26 @@
 
 package com.starrocks.lake.bookmark;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.OptionalLong;
+import java.util.Set;
 
-/** Immutable snapshot of the bookmark module's currently-active state. */
+/** Immutable snapshot the cleanup daemon takes each cycle to drive the age gauges and the TTL sweep. */
 final class BookmarkActiveStats {
 
-    private final long bookmarkCount;
-    private final long referenceCount;
-    private final long logicalPartitionCount;
-    private final long physicalPartitionCount;
     private final OptionalLong maxBookmarkAgeMs;
     private final OptionalLong maxReferenceAgeMs;
+    // Bookmarks holding at least one expired reference, keyed db id -> table id -> bookmark ids.
+    private final Map<Long, Map<Long, Set<Long>>> bookmarksWithExpiredReferences;
 
-    private BookmarkActiveStats(long bookmarkCount,
-                                long referenceCount,
-                                long logicalPartitionCount,
-                                long physicalPartitionCount,
-                                OptionalLong maxBookmarkAgeMs,
-                                OptionalLong maxReferenceAgeMs) {
-        this.bookmarkCount = bookmarkCount;
-        this.referenceCount = referenceCount;
-        this.logicalPartitionCount = logicalPartitionCount;
-        this.physicalPartitionCount = physicalPartitionCount;
+    private BookmarkActiveStats(OptionalLong maxBookmarkAgeMs,
+                                OptionalLong maxReferenceAgeMs,
+                                Map<Long, Map<Long, Set<Long>>> bookmarksWithExpiredReferences) {
         this.maxBookmarkAgeMs = maxBookmarkAgeMs;
         this.maxReferenceAgeMs = maxReferenceAgeMs;
-    }
-
-    long bookmarkCount() {
-        return bookmarkCount;
-    }
-
-    long referenceCount() {
-        return referenceCount;
-    }
-
-    long logicalPartitionCount() {
-        return logicalPartitionCount;
-    }
-
-    long physicalPartitionCount() {
-        return physicalPartitionCount;
+        this.bookmarksWithExpiredReferences = bookmarksWithExpiredReferences;
     }
 
     OptionalLong maxBookmarkAgeMs() {
@@ -64,44 +44,46 @@ final class BookmarkActiveStats {
         return maxReferenceAgeMs;
     }
 
+    Map<Long, Map<Long, Set<Long>>> bookmarksWithExpiredReferences() {
+        return bookmarksWithExpiredReferences;
+    }
+
     static Builder newBuilder() {
         return new Builder();
     }
 
     static final class Builder {
-        private long bookmarkCount;
-        private long referenceCount;
-        private long logicalPartitionCount;
-        private long physicalPartitionCount;
         private long maxBookmarkAgeMs = -1L;
         private long maxReferenceAgeMs = -1L;
+        private final Map<Long, Map<Long, Set<Long>>> bookmarksWithExpiredReferences = new HashMap<>();
 
-        Builder addBookmark(long ageMs, long logicalPartitionCount, long physicalPartitionCount) {
-            bookmarkCount++;
-            this.logicalPartitionCount += logicalPartitionCount;
-            this.physicalPartitionCount += physicalPartitionCount;
+        Builder addBookmarkAge(long ageMs) {
             if (ageMs > maxBookmarkAgeMs) {
                 maxBookmarkAgeMs = ageMs;
             }
             return this;
         }
 
-        Builder addReference(long ageMs) {
-            referenceCount++;
+        Builder addReferenceAge(long ageMs) {
             if (ageMs > maxReferenceAgeMs) {
                 maxReferenceAgeMs = ageMs;
             }
             return this;
         }
 
+        Builder addBookmarkWithExpiredReference(long dbId, long tableId, long bookmarkId) {
+            bookmarksWithExpiredReferences
+                    .computeIfAbsent(dbId, k -> new HashMap<>())
+                    .computeIfAbsent(tableId, k -> new HashSet<>())
+                    .add(bookmarkId);
+            return this;
+        }
+
         BookmarkActiveStats build() {
             return new BookmarkActiveStats(
-                    bookmarkCount,
-                    referenceCount,
-                    logicalPartitionCount,
-                    physicalPartitionCount,
                     maxBookmarkAgeMs < 0L ? OptionalLong.empty() : OptionalLong.of(maxBookmarkAgeMs),
-                    maxReferenceAgeMs < 0L ? OptionalLong.empty() : OptionalLong.of(maxReferenceAgeMs));
+                    maxReferenceAgeMs < 0L ? OptionalLong.empty() : OptionalLong.of(maxReferenceAgeMs),
+                    bookmarksWithExpiredReferences);
         }
     }
 }

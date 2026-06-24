@@ -1482,3 +1482,12 @@ This topic introduces the following types of FE configurations:
 - Description: Interval at which the bookmark module sweeps stale references.
 - Introduced in:
 
+### `bookmark_reference_max_ttl_ms`
+
+- Default: -1
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Cluster-wide ceiling on how long a bookmark reference may live before the cleanup sweep reclaims it, regardless of the reference's own TTL. `<= 0` disables the ceiling. The effective TTL of a reference is the smaller of this ceiling and the reference's own TTL.
+- Introduced in:
+

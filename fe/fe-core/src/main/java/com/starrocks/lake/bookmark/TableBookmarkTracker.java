@@ -32,6 +32,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -72,8 +73,8 @@ public class TableBookmarkTracker {
     private transient volatile Bookmark creating;
 
     // Empty after gson's no-arg constructor; BookmarkManager calls
-    // setMetrics() before the tracker accepts apply() traffic. Fresh
-    // trackers get it through the 3-arg constructor instead.
+    // initMetricsAfterImageLoad() before the tracker accepts apply() traffic.
+    // Fresh trackers get it through the 3-arg constructor instead.
     private transient Optional<BookmarkMetrics> metrics = Optional.empty();
 
     private TableBookmarkTracker() {
@@ -82,10 +83,6 @@ public class TableBookmarkTracker {
     public TableBookmarkTracker(long dbId, long tableId, BookmarkMetrics metrics) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.metrics = Optional.of(metrics);
-    }
-
-    void setMetrics(BookmarkMetrics metrics) {
         this.metrics = Optional.of(metrics);
     }
 
@@ -109,6 +106,15 @@ public class TableBookmarkTracker {
      * @throws IllegalStateException      if the table is missing from the catalog
      */
     public Bookmark create(BookmarkHolder holder)
+            throws AlreadyAtLatestException, LockTimeoutException {
+        return create(holder, -1L);
+    }
+
+    /**
+     * Same as {@link #create(BookmarkHolder)}, but the acquired reference carries {@code ttlMs}
+     * (-1 for no per-reference limit, leaving only the cluster-wide TTL ceiling to apply).
+     */
+    public Bookmark create(BookmarkHolder holder, long ttlMs)
             throws AlreadyAtLatestException, LockTimeoutException {
         Objects.requireNonNull(holder, "holder");
 
@@ -148,12 +154,13 @@ public class TableBookmarkTracker {
                         throw new AlreadyAtLatestException(dbId, tableId, b.getBookmarkId(), holder.getHolderId());
                     }
                     journalAndApply(BookmarkLogEntry.AcquireReference.of(
-                            dbId, tableId, b.getBookmarkId(), holder, System.currentTimeMillis()));
+                            dbId, tableId, b.getBookmarkId(), holder, System.currentTimeMillis(), ttlMs));
                     LOG.info("bookmark reused: db={}, table={}, bookmarkId={}, holder={}",
                             dbId, tableId, b.getBookmarkId(), holder.getHolderId());
                     return b;
                 }
-                journalAndApply(BookmarkLogEntry.AddBookmark.of(candidate, holder, candidate.getBookmarkTimeMs()));
+                journalAndApply(BookmarkLogEntry.AddBookmark.of(
+                        candidate, holder, candidate.getBookmarkTimeMs(), ttlMs));
                 return candidate;
             } finally {
                 // Clear the in-flight slot inside the write lock so an observer
@@ -175,6 +182,15 @@ public class TableBookmarkTracker {
      */
     public Bookmark acquireReference(long bookmarkId, BookmarkHolder holder)
             throws AlreadyReferencedException, BookmarkNotFoundException {
+        return acquireReference(bookmarkId, holder, -1L);
+    }
+
+    /**
+     * Same as {@link #acquireReference(long, BookmarkHolder)}, but the new reference carries
+     * {@code ttlMs} (-1 for no per-reference limit, leaving only the cluster-wide TTL ceiling to apply).
+     */
+    public Bookmark acquireReference(long bookmarkId, BookmarkHolder holder, long ttlMs)
+            throws AlreadyReferencedException, BookmarkNotFoundException {
         Objects.requireNonNull(holder, "holder");
         rwLock.writeLock().lock();
         try {
@@ -191,7 +207,7 @@ public class TableBookmarkTracker {
                 throw new AlreadyReferencedException(dbId, tableId, bookmarkId, holder.getHolderId());
             }
             journalAndApply(BookmarkLogEntry.AcquireReference.of(
-                    dbId, tableId, bookmarkId, holder, System.currentTimeMillis()));
+                    dbId, tableId, bookmarkId, holder, System.currentTimeMillis(), ttlMs));
             return b;
         } finally {
             rwLock.writeLock().unlock();
@@ -224,6 +240,38 @@ public class TableBookmarkTracker {
                 throw new ReferenceNotFoundException(dbId, tableId, bookmarkId, holderId);
             }
             journalAndApply(BookmarkLogEntry.ReleaseReference.of(dbId, tableId, bookmarkId, holderId, removed));
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * Release every reference on {@code bookmarkId} that is still expired against
+     * the live reference set, journalling one batched release. Returns the number
+     * of references released (0 if the bookmark is already gone or nothing is
+     * expired). Re-checking expiry here closes the release/re-acquire race: a
+     * reference re-acquired after the candidate scan has a newer acquisition time
+     * and is correctly skipped. The bookmark is reclaimed by the apply path when
+     * its reference set empties.
+     */
+    public int releaseExpiredReferences(long bookmarkId, long nowMs, long maxTtlMs) {
+        rwLock.writeLock().lock();
+        try {
+            ReferenceSet refSet = referencesByBookmark.get(bookmarkId);
+            if (refSet == null) {
+                return 0;
+            }
+            Map<HolderId, Reference> expired = new HashMap<>();
+            for (Map.Entry<HolderId, Reference> e : refSet.entries().entrySet()) {
+                if (e.getValue().isExpired(nowMs, maxTtlMs)) {
+                    expired.put(e.getKey(), e.getValue());
+                }
+            }
+            if (expired.isEmpty()) {
+                return 0;
+            }
+            journalAndApply(new BookmarkLogEntry.ReleaseReference(dbId, tableId, bookmarkId, expired));
+            return expired.size();
         } finally {
             rwLock.writeLock().unlock();
         }
@@ -355,7 +403,8 @@ public class TableBookmarkTracker {
         List<Reference.View> refs = new ArrayList<>();
         if (refSet != null) {
             for (Map.Entry<HolderId, Reference> r : refSet.entries().entrySet()) {
-                refs.add(new Reference.View(r.getKey().getId(), r.getValue().getAcquiredAtMs()));
+                refs.add(new Reference.View(r.getKey().getId(), r.getValue().getAcquiredAtMs(),
+                        r.getValue().getTtlMs()));
             }
         }
         return refs;
@@ -422,22 +471,56 @@ public class TableBookmarkTracker {
         }
     }
 
-    void fillStats(BookmarkActiveStats.Builder builder) {
+    /**
+     * One read-locked pass that feeds {@code builder} the largest bookmark and reference age and
+     * the bookmarks holding a reference already expired at {@code nowMs} against {@code maxTtlMs}.
+     * Those ids are re-validated under the write lock before anything is released.
+     */
+    void fillStats(BookmarkActiveStats.Builder builder, long nowMs, long maxTtlMs) {
         rwLock.readLock().lock();
         try {
-            long nowMs = System.currentTimeMillis();
             for (Bookmark b : activeBookmarks.values()) {
-                long bookmarkAge = Math.max(0L, nowMs - b.getBookmarkTimeMs());
-                builder.addBookmark(bookmarkAge, b.getLogicalPartitionCount(), b.getPhysicalPartitionCount());
+                builder.addBookmarkAge(Math.max(0L, nowMs - b.getBookmarkTimeMs()));
                 ReferenceSet refSet = referencesByBookmark.get(b.getBookmarkId());
                 if (refSet == null) {
                     continue;
                 }
+                boolean hasExpired = false;
                 for (Reference ref : refSet.entries().values()) {
-                    long refAge = Math.max(0L, nowMs - ref.getAcquiredAtMs());
-                    builder.addReference(refAge);
+                    builder.addReferenceAge(Math.max(0L, nowMs - ref.getAcquiredAtMs()));
+                    hasExpired |= ref.isExpired(nowMs, maxTtlMs);
+                }
+                if (hasExpired) {
+                    builder.addBookmarkWithExpiredReference(dbId, tableId, b.getBookmarkId());
                 }
             }
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Wires the shared metrics handle into this image-loaded tracker and seeds the bookmark,
+     * reference, and partition counts from its bookmarks. gson builds the tracker through the
+     * no-arg constructor, which leaves the handle unset and never runs the onBookmarkCreated hook,
+     * so without this the counts would miss every inherited bookmark until the next live mutation.
+     */
+    void initMetricsAfterImageLoad(BookmarkMetrics metrics) {
+        this.metrics = Optional.of(metrics);
+        rwLock.readLock().lock();
+        try {
+            long references = 0;
+            long logicalPartitions = 0;
+            long physicalPartitions = 0;
+            for (Bookmark b : activeBookmarks.values()) {
+                logicalPartitions += b.getLogicalPartitionCount();
+                physicalPartitions += b.getPhysicalPartitionCount();
+                ReferenceSet refSet = referencesByBookmark.get(b.getBookmarkId());
+                if (refSet != null) {
+                    references += refSet.size();
+                }
+            }
+            metrics.addBookmarkCounts(activeBookmarks.size(), references, logicalPartitions, physicalPartitions);
         } finally {
             rwLock.readLock().unlock();
         }

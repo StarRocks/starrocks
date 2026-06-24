@@ -79,9 +79,9 @@ public abstract class BookmarkLogEntry implements Writable {
             return initialReferences == null ? Collections.emptyMap() : initialReferences;
         }
 
-        public static AddBookmark of(Bookmark bookmark, BookmarkHolder holder, long acquiredAtMs) {
+        public static AddBookmark of(Bookmark bookmark, BookmarkHolder holder, long acquiredAtMs, long ttlMs) {
             Map<HolderId, Reference> map = new HashMap<>(1);
-            map.put(holder.getHolderId(), new Reference(acquiredAtMs, holder.getHolderInfo()));
+            map.put(holder.getHolderId(), new Reference(acquiredAtMs, holder.getHolderInfo(), ttlMs));
             return new AddBookmark(bookmark, map);
         }
     }
@@ -111,9 +111,9 @@ public abstract class BookmarkLogEntry implements Writable {
         }
 
         public static AcquireReference of(long dbId, long tableId, long bookmarkId,
-                                          BookmarkHolder holder, long acquiredAtMs) {
+                                          BookmarkHolder holder, long acquiredAtMs, long ttlMs) {
             Map<HolderId, Reference> map = new HashMap<>(1);
-            map.put(holder.getHolderId(), new Reference(acquiredAtMs, holder.getHolderInfo()));
+            map.put(holder.getHolderId(), new Reference(acquiredAtMs, holder.getHolderInfo(), ttlMs));
             return new AcquireReference(dbId, tableId, bookmarkId, map);
         }
     }

@@ -93,6 +93,8 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_scanner_test.cpp
         ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
         ./exec/schema_scanner/schema_partitions_meta_scanner_test.cpp
+        ./exec/schema_scanner/schema_table_bookmark_references_scanner_test.cpp
+        ./exec/schema_scanner/schema_table_bookmark_summary_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp

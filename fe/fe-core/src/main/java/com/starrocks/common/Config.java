@@ -4892,4 +4892,11 @@ public class Config extends ConfigBase {
                     + "Bounds caller latency when DDL or other writers hold the table lock; on timeout "
                     + "the create fails fast and the caller can retry.")
     public static int bookmark_table_lock_timeout_ms = 30 * 1000;
+
+    @ConfField(mutable = true, comment =
+            "Cluster-wide ceiling (ms) on how long a bookmark reference may live before "
+                    + "the cleanup sweep reclaims it, regardless of the reference's own TTL. "
+                    + "<= 0 disables the ceiling. The effective TTL of a reference is the smaller "
+                    + "of this ceiling and the reference's own TTL.")
+    public static long bookmark_reference_max_ttl_ms = -1;
 }

@@ -49,6 +49,7 @@ public class TableBookmarkReferencesSystemTable {
                         .column("BOOKMARK_ID", IntegerType.BIGINT)
                         .column("HOLDER_ID", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .column("CREATE_TIME", DateType.DATETIME)
+                        .column("TTL_MS", IntegerType.BIGINT)
                         .build(),
                 TSchemaTableType.SCH_TABLE_BOOKMARK_REFERENCES);
     }
@@ -79,6 +80,7 @@ public class TableBookmarkReferencesSystemTable {
                 info.setBookmark_id(b.getBookmarkId());
                 info.setHolder_id(ref.getHolderId());
                 info.setCreate_time(ref.getAcquiredAtMs());
+                info.setTtl(ref.getTtlMs());
                 out.add(info);
             }
         }

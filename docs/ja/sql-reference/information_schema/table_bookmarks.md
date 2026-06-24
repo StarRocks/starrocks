@@ -23,8 +23,8 @@ description: OlapTable のアクティブなブックマーク（インベント
 | PHYSICAL_PARTITION_COUNT | BIGINT | キャプチャされた物理パーティション数。 |
 | REFERENCE_COUNT | BIGINT | このブックマークを参照している保持者の現在数。 |
 | LATEST_CHANGED_PHYSICAL_PARTITIONS | ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>> | `visible_version_time` が最も新しい物理パーティションを最大 3 件、時刻の降順で返します。同値の場合は `physical_partition_id` が大きい方を優先します。ブックマークがパーティションをキャプチャしていない場合は空配列。パーティション数が 3 未満の場合は要素数も少なくなります。 |
-| OLDEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME> | 現在の取得時刻が最も古い保持者。同値の場合は保持者 ID が辞書順で最小の方を優先します。 |
-| NEWEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME> | 現在の取得時刻が最も新しい保持者。同値の場合の優先ルールは同じ。 |
+| OLDEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | 現在の取得時刻が最も古い保持者。同値の場合は保持者 ID が辞書順で最小の方を優先します。`ttl_ms` はその保持者の参照単位の TTL（ミリ秒）です（`<= 0` は TTL なしを意味します）。 |
+| NEWEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | 現在の取得時刻が最も新しい保持者。同値の場合の優先ルールは同じ。`ttl_ms` はその保持者の参照単位の TTL（ミリ秒）です（`<= 0` は TTL なしを意味します）。 |
 
 ## table_bookmark_partitions
 
@@ -49,6 +49,7 @@ description: OlapTable のアクティブなブックマーク（インベント
 | DB_ID, TABLE_ID, BOOKMARK_ID | (summary と同じ) | 結合キー。 |
 | HOLDER_ID | VARCHAR | 保持者の識別子。マテリアライズドビューは `mv:<dbId>-<mvId>` の形式でエンコードされます。 |
 | CREATE_TIME | DATETIME | この保持者がブックマークを取得した時刻。 |
+| TTL_MS | BIGINT | 取得時に設定された参照単位の有効期限（TTL、ミリ秒）。`<= 0` は TTL なしを意味し、バックグラウンドのスイープがその参照を単独で期限切れにすることはありません。実際の有効期間は、この値とクラスターの上限 `bookmark_reference_max_ttl_ms` のうち小さい方になります。 |
 
 ## クエリパターン
 

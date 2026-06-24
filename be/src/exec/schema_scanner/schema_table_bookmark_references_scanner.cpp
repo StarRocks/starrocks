@@ -31,6 +31,7 @@ SchemaScanner::ColumnDesc SchemaTableBookmarkReferencesScanner::_s_columns_desc[
         {"BOOKMARK_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"HOLDER_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
+        {"TTL_MS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaTableBookmarkReferencesScanner::SchemaTableBookmarkReferencesScanner()
@@ -137,6 +138,13 @@ Status SchemaTableBookmarkReferencesScanner::_fill_chunk(ChunkPtr* chunk) {
             } else {
                 fill_data_column_with_null(column);
             }
+            break;
+        }
+        case 6: {
+            // TTL: raw per-reference value in ms (<= 0 means disabled). Default
+            // -1 if an older FE did not set it, for version-skew safety.
+            int64_t ttl = info.__isset.ttl ? info.ttl : -1;
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&ttl);
             break;
         }
         default:

@@ -341,7 +341,7 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         assertThrows(IllegalStateException.class, () -> mgr.replay(badAdd));
 
         // 4. Valid AddBookmark — creates tracker + bookmark.
-        BookmarkLogEntry.AddBookmark goodAdd = BookmarkLogEntry.AddBookmark.of(fakeBookmark, h1, 1000L);
+        BookmarkLogEntry.AddBookmark goodAdd = BookmarkLogEntry.AddBookmark.of(fakeBookmark, h1, 1000L, -1L);
         mgr.replay(goodAdd);
         assertTrue(mgr.findBookmarkById(fakeDbId, fakeTableId, fakeBookmarkId).isPresent());
         assertEquals(1, mgr.referenceCount(fakeDbId, fakeTableId, fakeBookmarkId));
@@ -352,19 +352,19 @@ public class BookmarkManagerTest extends BookmarkTestBase {
 
         // 6. AcquireReference — adds a reference (refCount 1 → 2).
         BookmarkLogEntry.AcquireReference acq = BookmarkLogEntry.AcquireReference.of(
-                fakeDbId, fakeTableId, fakeBookmarkId, h2, 2000L);
+                fakeDbId, fakeTableId, fakeBookmarkId, h2, 2000L, -1L);
         mgr.replay(acq);
         assertEquals(2, mgr.referenceCount(fakeDbId, fakeTableId, fakeBookmarkId));
 
         // 7. ReleaseReference for non-last — bookmark still active.
-        Reference ref1 = new Reference(1000L, HolderInfo.EmptyInfo.INSTANCE);
+        Reference ref1 = new Reference(1000L, HolderInfo.EmptyInfo.INSTANCE, -1L);
         BookmarkLogEntry.ReleaseReference rel1 = BookmarkLogEntry.ReleaseReference.of(
                 fakeDbId, fakeTableId, fakeBookmarkId, h1.getHolderId(), ref1);
         mgr.replay(rel1);
         assertEquals(1, mgr.referenceCount(fakeDbId, fakeTableId, fakeBookmarkId));
 
         // 8. Final ReleaseReference — tracker reclaimed.
-        Reference ref2 = new Reference(2000L, HolderInfo.EmptyInfo.INSTANCE);
+        Reference ref2 = new Reference(2000L, HolderInfo.EmptyInfo.INSTANCE, -1L);
         BookmarkLogEntry.ReleaseReference rel2 = BookmarkLogEntry.ReleaseReference.of(
                 fakeDbId, fakeTableId, fakeBookmarkId, h2.getHolderId(), ref2);
         mgr.replay(rel2);
@@ -391,8 +391,8 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("snap_cluster_h1");
         BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("snap_cluster_h2");
 
-        mgr.replay(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L));
-        mgr.replay(BookmarkLogEntry.AddBookmark.of(b2, h2, 2_100L));
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L, -1L));
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(b2, h2, 2_100L, -1L));
 
         // No filter returns every tracker.
         List<Bookmark.View> views = mgr.listAllBookmarks(
@@ -443,17 +443,14 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("stats_h2");
         BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("stats_h3");
 
-        mgr.replay(BookmarkLogEntry.AddBookmark.of(bA, h1, 1_100L));
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(bA, h1, 1_100L, -1L));
 
         Map<HolderId, Reference> bInitial = new HashMap<>();
-        bInitial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo()));
-        bInitial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo()));
+        bInitial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo(), -1L));
+        bInitial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo(), -1L));
         mgr.replay(new BookmarkLogEntry.AddBookmark(bB, bInitial));
 
-        BookmarkActiveStats stats = mgr.getActiveStats();
-        assertEquals(2L, stats.bookmarkCount());
-        assertEquals(3L, stats.referenceCount());
-        assertEquals(3L, stats.logicalPartitionCount());           // 1 + 2
+        BookmarkActiveStats stats = mgr.getActiveStats(System.currentTimeMillis(), -1L);
         assertTrue(stats.maxBookmarkAgeMs().isPresent());
         assertTrue(stats.maxReferenceAgeMs().isPresent());
         // Ages are computed against System.currentTimeMillis(); just assert
@@ -462,10 +459,9 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         assertTrue(stats.maxReferenceAgeMs().getAsLong() > 0L);
 
         // An empty manager produces empty stats — no trackers walked.
-        BookmarkActiveStats noTrackers = new BookmarkManager().getActiveStats();
-        assertEquals(0L, noTrackers.bookmarkCount());
-        assertEquals(0L, noTrackers.referenceCount());
+        BookmarkActiveStats noTrackers = new BookmarkManager().getActiveStats(System.currentTimeMillis(), -1L);
         assertFalse(noTrackers.maxBookmarkAgeMs().isPresent());
+        assertFalse(noTrackers.maxReferenceAgeMs().isPresent());
     }
 
     @Test
@@ -503,7 +499,7 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         Bookmark bB = new Bookmark(fakeDbId, fakeTableId, fakeBookmarkIdB, 2_000L, partsB);
 
         // AddBookmark for A — 1 bookmark, 1 ref, 1 logical / 1 physical partition.
-        mgr.replay(BookmarkLogEntry.AddBookmark.of(bA, h1, 1_100L));
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(bA, h1, 1_100L, -1L));
         assertEquals(1L, mgr.metrics().bookmarkCount.longValue());
         assertEquals(1L, mgr.metrics().bookmarkReferenceCount.longValue());
         assertEquals(1L, mgr.metrics().bookmarkLogicalPartitionCount.longValue());
@@ -513,8 +509,8 @@ public class BookmarkManagerTest extends BookmarkTestBase {
 
         // AddBookmark for B with 2 initial refs and 2 logical / 2 physical partitions.
         Map<HolderId, Reference> bInitial = new HashMap<>();
-        bInitial.put(h1.getHolderId(), new Reference(2_100L, h1.getHolderInfo()));
-        bInitial.put(h2.getHolderId(), new Reference(2_200L, h2.getHolderInfo()));
+        bInitial.put(h1.getHolderId(), new Reference(2_100L, h1.getHolderInfo(), -1L));
+        bInitial.put(h2.getHolderId(), new Reference(2_200L, h2.getHolderInfo(), -1L));
         mgr.replay(new BookmarkLogEntry.AddBookmark(bB, bInitial));
         assertEquals(2L, mgr.metrics().bookmarkCount.longValue());
         assertEquals(3L, mgr.metrics().bookmarkReferenceCount.longValue());
@@ -525,19 +521,19 @@ public class BookmarkManagerTest extends BookmarkTestBase {
 
         // AcquireReference for h2 on A — bookmarkReferenceCount bumps to 4.
         mgr.replay(BookmarkLogEntry.AcquireReference.of(
-                fakeDbId, fakeTableId, fakeBookmarkIdA, h2, 1_500L));
+                fakeDbId, fakeTableId, fakeBookmarkIdA, h2, 1_500L, -1L));
         assertEquals(4L, mgr.metrics().bookmarkReferenceCount.longValue());
         assertEquals(4L, mgr.metrics().bookmarkReferenceAddedTotal.longValue());
 
         // Idempotent AcquireReference (h2 already there) — no double-bump.
         mgr.replay(BookmarkLogEntry.AcquireReference.of(
-                fakeDbId, fakeTableId, fakeBookmarkIdA, h2, 1_500L));
+                fakeDbId, fakeTableId, fakeBookmarkIdA, h2, 1_500L, -1L));
         assertEquals(4L, mgr.metrics().bookmarkReferenceCount.longValue());
         assertEquals(4L, mgr.metrics().bookmarkReferenceAddedTotal.longValue());
 
         // ReleaseReference removes the holder; bookmark stays because h1
         // still references it.
-        Reference relRefAh2 = new Reference(1_500L, h2.getHolderInfo());
+        Reference relRefAh2 = new Reference(1_500L, h2.getHolderInfo(), -1L);
         mgr.replay(BookmarkLogEntry.ReleaseReference.of(
                 fakeDbId, fakeTableId, fakeBookmarkIdA, h2.getHolderId(), relRefAh2));
         assertEquals(3L, mgr.metrics().bookmarkReferenceCount.longValue());
@@ -551,7 +547,7 @@ public class BookmarkManagerTest extends BookmarkTestBase {
 
         // Final ReleaseReference on A — last reference, bookmark is reclaimed,
         // bookmarkCount and partition counts both drop.
-        Reference relRefAh1 = new Reference(1_100L, h1.getHolderInfo());
+        Reference relRefAh1 = new Reference(1_100L, h1.getHolderInfo(), -1L);
         mgr.replay(BookmarkLogEntry.ReleaseReference.of(
                 fakeDbId, fakeTableId, fakeBookmarkIdA, h1.getHolderId(), relRefAh1));
         assertEquals(1L, mgr.metrics().bookmarkCount.longValue());
@@ -563,19 +559,19 @@ public class BookmarkManagerTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testRunAfterCatalogReadyRefreshesMaxAges() throws Exception {
-        // Seed two trackers via replay so the test doesn't need real OlapTables,
-        // then exercise the daemon entry point that the metric scrape relies on.
+    public void testDaemonCycleRefreshesMaxAges() throws Exception {
+        // Seed a tracker via replay so the test doesn't need real OlapTables,
+        // then run one daemon cycle that the metric scrape relies on.
         BookmarkManager mgr = new BookmarkManager();
         Bookmark b = new Bookmark(1L, 2L, 100L, 1_000L, Collections.emptyMap());
         BookmarkHolder h = BookmarkHolder.forEmptyInfo("age_h1");
-        mgr.replay(BookmarkLogEntry.AddBookmark.of(b, h, 1_100L));
+        mgr.replay(BookmarkLogEntry.AddBookmark.of(b, h, 1_100L, -1L));
 
         // Before the daemon runs the cached values are the AtomicLong default (0).
         assertEquals(0L, mgr.metrics().bookmarkMaxActiveAgeMs.get());
         assertEquals(0L, mgr.metrics().bookmarkReferenceMaxActiveAgeMs.get());
 
-        mgr.runAfterCatalogReady();
+        mgr.runAfterLeaseValid();
 
         // Bookmark was created at epoch=1_000ms, reference acquired at
         // 1_100ms; both ages are well in the past, so the cached values
@@ -662,5 +658,131 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         addPartition(tableA, "p3", "2024-04-01");
         Bookmark fresh = loaded.create(dbId, tableA, BookmarkHolder.forEmptyInfo("img_after_load"));
         assertNotEquals(bA.getBookmarkId(), fresh.getBookmarkId());
+    }
+
+    /* ---------- TTL sweep ---------- */
+
+    // Drives one TTL sweep the way the daemon does: collect the bookmarks with an expired
+    // reference at a fixed instant, then release them.
+    private static void sweep(BookmarkManager mgr, long nowMs, long maxTtlMs) {
+        mgr.sweepExpiredReferences(
+                mgr.getActiveStats(nowMs, maxTtlMs).bookmarksWithExpiredReferences(), nowMs, maxTtlMs);
+    }
+
+    @Test
+    public void testSweepReleasesExpiredAndReclaims() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("sweep_h1");
+
+        Bookmark b = mgr.create(dbId, tableId, h, 100L);
+        long bid = b.getBookmarkId();
+        long acq = b.getBookmarkTimeMs();
+
+        // Before expiry: nothing happens.
+        sweep(mgr, acq + 50, -1L);
+        assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
+
+        // At/after expiry: reference released, bookmark + tracker reclaimed.
+        sweep(mgr, acq + 100, -1L);
+        assertFalse(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
+        assertEquals(0, mgr.activeBookmarkCount(dbId, tableId));
+    }
+
+    @Test
+    public void testSweepIgnoresDisabledTtl() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("sweep_disabled");
+
+        Bookmark b = mgr.create(dbId, tableId, h);   // no-TTL overload -> -1
+        long bid = b.getBookmarkId();
+
+        sweep(mgr, b.getBookmarkTimeMs() + 1_000_000L, -1L);
+        assertTrue(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
+    }
+
+    @Test
+    public void testSweepGlobalCeiling() throws Exception {
+        BookmarkManager mgr = manager();
+
+        // (a) Ceiling forces expiry of a no-TTL reference.
+        long t1 = createDefaultTable();
+        Bookmark b1 = mgr.create(dbId, t1, BookmarkHolder.forEmptyInfo("ceil_a"), -1L);
+        sweep(mgr, b1.getBookmarkTimeMs() + 100, 50L);
+        assertFalse(mgr.findBookmarkById(dbId, t1, b1.getBookmarkId()).isPresent());
+
+        // (b) Explicit stricter than ceiling: effective = min(50, 100) = 50.
+        long t2 = createDefaultTable();
+        Bookmark b2 = mgr.create(dbId, t2, BookmarkHolder.forEmptyInfo("ceil_b"), 50L);
+        sweep(mgr, b2.getBookmarkTimeMs() + 60, 100L);
+        assertFalse(mgr.findBookmarkById(dbId, t2, b2.getBookmarkId()).isPresent());
+
+        // (c) Ceiling stricter than explicit: effective = min(100, 50) = 50.
+        long t3 = createDefaultTable();
+        Bookmark b3 = mgr.create(dbId, t3, BookmarkHolder.forEmptyInfo("ceil_c"), 100L);
+        sweep(mgr, b3.getBookmarkTimeMs() + 60, 50L);
+        assertFalse(mgr.findBookmarkById(dbId, t3, b3.getBookmarkId()).isPresent());
+    }
+
+    @Test
+    public void testSweepReleasesOnlyExpiredHolders() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("mix_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("mix_h2");
+
+        Bookmark b = mgr.create(dbId, tableId, h1, 100L);   // h1 expires
+        long bid = b.getBookmarkId();
+        mgr.acquireReference(dbId, tableId, bid, h2);        // h2 no-TTL, never expires
+
+        sweep(mgr, b.getBookmarkTimeMs() + 1_000L, -1L);
+
+        // Only h1 dropped; the bookmark survives on h2.
+        assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
+        assertTrue(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
+        assertTrue(mgr.listBookmarkIdsByHolder(dbId, tableId, h1.getHolderId()).isEmpty());
+        assertTrue(mgr.listBookmarkIdsByHolder(dbId, tableId, h2.getHolderId()).contains(bid));
+    }
+
+    @Test
+    public void testSweepRechecksLiveReference() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("recheck_h");
+
+        Bookmark b = mgr.create(dbId, tableId, h, 100L);
+        long bid = b.getBookmarkId();
+
+        // A sweep whose nowMs precedes effective expiry leaves the reference
+        // intact — the same evaluation pass 2 makes against a re-acquired ref.
+        sweep(mgr, b.getBookmarkTimeMs() + 50, -1L);
+        assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
+        assertTrue(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
+    }
+
+    @Test
+    public void testTtlSurvivesImage() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager src = manager();
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("img_ttl");
+
+        Bookmark b = src.create(dbId, tableId, h, 7_000L);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        src.save(image.getImageWriter());
+        BookmarkManager loaded = new BookmarkManager();
+        SRMetaBlockReader reader = image.getMetaBlockReader();
+        try {
+            loaded.load(reader);
+        } finally {
+            reader.close();
+        }
+
+        List<Bookmark.View> views = loaded.listAllBookmarks(
+                Optional.of(dbId), Optional.of(tableId), Optional.of(b.getBookmarkId()));
+        assertEquals(1, views.size());
+        assertEquals(1, views.get(0).getReferences().size());
+        assertEquals(7_000L, views.get(0).getReferences().get(0).getTtlMs());
     }
 }

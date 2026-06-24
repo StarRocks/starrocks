@@ -70,12 +70,12 @@ public class BookmarkMetricsTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testInitFromImageSeedsCardinality() {
+    public void testAddBookmarkCounts() {
         BookmarkMetrics m = new BookmarkMetrics();
 
-        // Seed from image: 2 bookmarks, 5 references, 7 logical partitions,
+        // Add a batch of 2 bookmarks, 5 references, 7 logical partitions,
         // 9 physical partitions.
-        m.initFromImage(2L, 5L, 7L, 9L);
+        m.addBookmarkCounts(2L, 5L, 7L, 9L);
         assertEquals(2L, m.bookmarkCount.longValue());
         assertEquals(5L, m.bookmarkReferenceCount.longValue());
         assertEquals(7L, m.bookmarkLogicalPartitionCount.longValue());

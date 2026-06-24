@@ -56,10 +56,11 @@ public class TableBookmarkSummarySystemTable {
         latestChangedPhysicalPartitionsFields.add(new StructField("time", DateType.DATETIME));
         ArrayType latestChangedType = new ArrayType(new StructType(latestChangedPhysicalPartitionsFields));
 
-        // STRUCT<id VARCHAR, time DATETIME>
+        // STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>
         ArrayList<StructField> referenceFields = new ArrayList<>();
         referenceFields.add(new StructField("id", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH)));
         referenceFields.add(new StructField("time", DateType.DATETIME));
+        referenceFields.add(new StructField("ttl_ms", IntegerType.BIGINT));
         StructType referenceType = new StructType(referenceFields);
 
         return new SystemTable(SystemIdEPack.TABLE_BOOKMARK_SUMMARY_ID,
@@ -175,6 +176,7 @@ public class TableBookmarkSummarySystemTable {
         TBookmarkReferenceSummary out = new TBookmarkReferenceSummary();
         out.setId(best.getHolderId());
         out.setTime(best.getAcquiredAtMs());
+        out.setTtl(best.getTtlMs());
         return out;
     }
 
@@ -193,6 +195,7 @@ public class TableBookmarkSummarySystemTable {
         TBookmarkReferenceSummary out = new TBookmarkReferenceSummary();
         out.setId(best.getHolderId());
         out.setTime(best.getAcquiredAtMs());
+        out.setTtl(best.getTtlMs());
         return out;
     }
 }

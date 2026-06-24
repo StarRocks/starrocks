@@ -363,3 +363,40 @@ CLEANUP {
   DROP DATABASE IF EXISTS db_a_${uuid0} FORCE;
   DROP DATABASE IF EXISTS db_b_${uuid0} FORCE;
 } END CLEANUP
+
+-- name: test_table_bookmarks_ttl @cloud
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]function: ttlbm=create_bookmark("${db[0]}", "t", "ttl_h", 123456789)
+SELECT SLEEP(1);
+-- result:
+1
+-- !result
+[UC]function: ttlbm_dup=create_bookmark("${db[0]}", "t", "nottl_h")
+SELECT holder_id, ttl_ms
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ttlbm}
+  ORDER BY holder_id;
+-- result:
+nottl_h	-1
+ttl_h	123456789
+-- !result
+SELECT
+  oldest_reference.id AS oldest_holder,
+  oldest_reference.ttl_ms AS oldest_ttl,
+  newest_reference.id AS newest_holder,
+  newest_reference.ttl_ms AS newest_ttl
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${ttlbm};
+-- result:
+ttl_h	123456789	nottl_h	-1
+-- !result
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${ttlbm}, "ttl_h")
+  function: release_bookmark("${db[0]}", "t", ${ttlbm_dup}, "nottl_h")
+} END CLEANUP

@@ -352,3 +352,42 @@ CLEANUP {
   DROP DATABASE IF EXISTS db_a_${uuid0} FORCE;
   DROP DATABASE IF EXISTS db_b_${uuid0} FORCE;
 } END CLEANUP
+
+-- ==============================================================
+-- Section 8: TTL on references and in the summary structs
+-- One bookmark, two references: holder "ttl_h" with an explicit TTL,
+-- holder "nottl_h" reusing the same bookmark with no TTL (-1).
+-- ==============================================================
+-- name: test_table_bookmarks_ttl @cloud
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+-- ttl_h acquired first (explicit TTL), nottl_h second (default -1, reuses bookmark).
+-- SLEEP gives nottl_h a strictly later acquire time: oldest/newest break equal-millisecond
+-- ties by smallest holder id, so without the gap a same-ms run would collapse both to
+-- nottl_h and drop ttl_h from the summary.
+[UC]function: ttlbm=create_bookmark("${db[0]}", "t", "ttl_h", 123456789)
+SELECT SLEEP(1);
+[UC]function: ttlbm_dup=create_bookmark("${db[0]}", "t", "nottl_h")
+
+-- References: each holder reports its own TTL (ttl_h = 123456789, nottl_h = -1).
+SELECT holder_id, ttl_ms
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ttlbm}
+  ORDER BY holder_id;
+
+-- Summary: oldest reference is ttl_h (its explicit TTL), newest is nottl_h (-1).
+SELECT
+  oldest_reference.id AS oldest_holder,
+  oldest_reference.ttl_ms AS oldest_ttl,
+  newest_reference.id AS newest_holder,
+  newest_reference.ttl_ms AS newest_ttl
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${ttlbm};
+
+CLEANUP {
+  function: release_bookmark("${db[0]}", "t", ${ttlbm}, "ttl_h")
+  function: release_bookmark("${db[0]}", "t", ${ttlbm_dup}, "nottl_h")
+} END CLEANUP

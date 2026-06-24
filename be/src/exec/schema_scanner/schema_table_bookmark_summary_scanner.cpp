@@ -32,8 +32,9 @@ TypeDescriptor SchemaTableBookmarkSummaryScanner::_latest_changed_physical_parti
                  TypeDescriptor::from_logical_type(TYPE_DATETIME)}));
 
 TypeDescriptor SchemaTableBookmarkSummaryScanner::_reference_summary_type = TypeDescriptor::create_struct_type(
-        {"id", "time"},
-        {TypeDescriptor::create_varchar_type(sizeof(Slice)), TypeDescriptor::from_logical_type(TYPE_DATETIME)});
+        {"id", "time", "ttl_ms"},
+        {TypeDescriptor::create_varchar_type(sizeof(Slice)), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+         TypeDescriptor::from_logical_type(TYPE_BIGINT)});
 
 SchemaScanner::ColumnDesc SchemaTableBookmarkSummaryScanner::_s_columns_desc[] = {
         //   name,                                  type,                                                   size,                   is_null
@@ -46,7 +47,7 @@ SchemaScanner::ColumnDesc SchemaTableBookmarkSummaryScanner::_s_columns_desc[] =
         {"REFERENCE_COUNT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         // ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>>
         {"LATEST_CHANGED_PHYSICAL_PARTITIONS", _latest_changed_physical_partitions_type, 16, true},
-        // STRUCT<id VARCHAR, time DATETIME>
+        // STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>
         {"OLDEST_REFERENCE", _reference_summary_type, 16, true},
         {"NEWEST_REFERENCE", _reference_summary_type, 16, true},
 };
@@ -124,7 +125,7 @@ Datum reference_summary_to_datum(const TBookmarkReferenceSummary& ref, const cct
         return kNullDatum;
     }
     DatumStruct fields;
-    fields.reserve(2);
+    fields.reserve(3);
     if (ref.__isset.id) {
         fields.emplace_back(Slice(ref.id));
     } else {
@@ -135,6 +136,8 @@ Datum reference_summary_to_datum(const TBookmarkReferenceSummary& ref, const cct
     } else {
         fields.emplace_back(kNullDatum);
     }
+    // TTL: raw value (<= 0 means disabled). Default -1 for version skew.
+    fields.emplace_back(ref.__isset.ttl ? ref.ttl : static_cast<int64_t>(-1));
     return Datum(fields);
 }
 

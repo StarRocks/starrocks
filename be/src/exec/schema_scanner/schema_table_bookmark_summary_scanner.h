@@ -30,6 +30,8 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
+    friend class SchemaTableBookmarkSummaryScannerTest;
+
     Status _fill_chunk(ChunkPtr* chunk);
     Status _fetch_all();
 

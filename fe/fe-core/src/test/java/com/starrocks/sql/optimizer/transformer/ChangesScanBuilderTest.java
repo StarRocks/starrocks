@@ -518,7 +518,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         Bookmark b = new Bookmark(dbId, tableId, bookmarkId, bookmarkTimeMs, parts);
         GlobalStateMgr.getCurrentState().getBookmarkManager()
                 .replay(BookmarkLogEntry.AddBookmark.of(
-                        b, BookmarkHolder.forEmptyInfo("synthetic"), bookmarkTimeMs));
+                        b, BookmarkHolder.forEmptyInfo("synthetic"), bookmarkTimeMs, -1L));
         return b;
     }
 

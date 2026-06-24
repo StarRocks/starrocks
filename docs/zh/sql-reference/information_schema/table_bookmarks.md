@@ -26,8 +26,8 @@ Bookmark 是 OlapTable 分区状态的一份不可变记录，在某一时刻取
 | PHYSICAL_PARTITION_COUNT | BIGINT | 该 Bookmark 捕获的物理分区数量。 |
 | REFERENCE_COUNT | BIGINT | 当前引用此 Bookmark 的持有者数量。 |
 | LATEST_CHANGED_PHYSICAL_PARTITIONS | ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>> | 最多返回 3 个 `visible_version_time` 最新的物理分区，按时间倒序排列。时间相同时，按 `physical_partition_id` 从大到小排序。若 Bookmark 未捕获任何分区，返回空数组；分区不足 3 个时，返回的数组长度也相应少于 3。 |
-| OLDEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME> | 当前 acquire 时间最早的持有者。时间相同时，按持有者 ID 字典序最小的优先。 |
-| NEWEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME> | 当前 acquire 时间最新的持有者。并列时的处理规则同上。 |
+| OLDEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | 当前 acquire 时间最早的持有者。时间相同时，按持有者 ID 字典序最小的优先。`ttl_ms` 为该持有者的引用级 TTL，单位为毫秒（`<= 0` 表示无 TTL）。 |
+| NEWEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | 当前 acquire 时间最新的持有者。并列时的处理规则同上。`ttl_ms` 为该持有者的引用级 TTL，单位为毫秒（`<= 0` 表示无 TTL）。 |
 
 ## table_bookmark_partitions
 
@@ -52,6 +52,7 @@ Bookmark 是 OlapTable 分区状态的一份不可变记录，在某一时刻取
 | DB_ID, TABLE_ID, BOOKMARK_ID | （同 summary） | 关联键。 |
 | HOLDER_ID | VARCHAR | 持有者标识。物化视图的编码形式为 `mv:<dbId>-<mvId>`。 |
 | CREATE_TIME | DATETIME | 该持有者获取此 Bookmark 的时间。 |
+| TTL_MS | BIGINT | 在 acquire 时设置的引用级生存时间（TTL），单位为毫秒。`<= 0` 表示无 TTL，后台清理任务自身不会让该引用过期。实际生存时间取此值与集群上限 `bookmark_reference_max_ttl_ms` 中较小的一个。 |
 
 ## 查询示例
 

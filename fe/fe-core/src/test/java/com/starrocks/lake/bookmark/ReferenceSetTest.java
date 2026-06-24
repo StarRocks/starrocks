@@ -32,20 +32,20 @@ public class ReferenceSetTest {
         assertEquals(0, rs.size());
 
         HolderId h1 = new HolderId("h1");
-        Reference ref1 = new Reference(1500L, HolderInfo.EmptyInfo.INSTANCE);
+        Reference ref1 = new Reference(1500L, HolderInfo.EmptyInfo.INSTANCE, -1L);
         rs.put(h1, ref1);
         assertSame(ref1, rs.get(h1));
         assertEquals(1, rs.size());
         assertFalse(rs.isEmpty());
 
         // Idempotent: a second put for the same holder leaves the existing ref untouched.
-        Reference ref1b = new Reference(2000L, HolderInfo.EmptyInfo.INSTANCE);
+        Reference ref1b = new Reference(2000L, HolderInfo.EmptyInfo.INSTANCE, -1L);
         rs.put(h1, ref1b);
         assertSame(ref1, rs.get(h1));
         assertEquals(1, rs.size());
 
         HolderId h2 = new HolderId("h2");
-        Reference ref2 = new Reference(2500L, HolderInfo.EmptyInfo.INSTANCE);
+        Reference ref2 = new Reference(2500L, HolderInfo.EmptyInfo.INSTANCE, -1L);
         rs.put(h2, ref2);
         assertEquals(2, rs.size());
 

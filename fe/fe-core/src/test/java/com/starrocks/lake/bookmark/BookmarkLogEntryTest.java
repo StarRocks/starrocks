@@ -44,13 +44,14 @@ public class BookmarkLogEntryTest {
         Bookmark bookmark = new Bookmark(1L, 2L, 30L, 9999L, new HashMap<>());
 
         // AddBookmark.of()
-        AddBookmark add = AddBookmark.of(bookmark, holder, 1234L);
+        AddBookmark add = AddBookmark.of(bookmark, holder, 1234L, 7_000L);
         assertEquals(1L, add.getDbId());
         assertEquals(2L, add.getTableId());
         assertSame(bookmark, add.getBookmark());
         Map<HolderId, Reference> initial = add.getInitialReferences();
         assertEquals(1, initial.size());
         assertEquals(1234L, initial.get(holderId).getAcquiredAtMs());
+        assertEquals(7_000L, initial.get(holderId).getTtlMs());
 
         // AddBookmark Gson round-trip
         String addJson = gson.toJson(add, BookmarkLogEntry.class);
@@ -61,23 +62,26 @@ public class BookmarkLogEntryTest {
         assertEquals(30L, addBack2.getBookmark().getBookmarkId());
         assertEquals(1, addBack2.getInitialReferences().size());
         assertEquals(1234L, addBack2.getInitialReferences().get(holderId).getAcquiredAtMs());
+        assertEquals(7_000L, addBack2.getInitialReferences().get(holderId).getTtlMs());
 
         // AcquireReference.of()
-        AcquireReference acq = AcquireReference.of(1L, 2L, 30L, holder, 1234L);
+        AcquireReference acq = AcquireReference.of(1L, 2L, 30L, holder, 1234L, 8_000L);
         assertEquals(1L, acq.getDbId());
         assertEquals(2L, acq.getTableId());
         assertEquals(30L, acq.getBookmarkId());
         assertEquals(1, acq.getReferences().size());
         assertEquals(1234L, acq.getReferences().get(holderId).getAcquiredAtMs());
+        assertEquals(8_000L, acq.getReferences().get(holderId).getTtlMs());
 
         String acqJson = gson.toJson(acq, BookmarkLogEntry.class);
         AcquireReference acqBack = assertInstanceOf(AcquireReference.class,
                 gson.fromJson(acqJson, BookmarkLogEntry.class));
         assertEquals(30L, acqBack.getBookmarkId());
         assertEquals(1234L, acqBack.getReferences().get(holderId).getAcquiredAtMs());
+        assertEquals(8_000L, acqBack.getReferences().get(holderId).getTtlMs());
 
         // ReleaseReference.of()
-        Reference existing = new Reference(1234L, HolderInfo.EmptyInfo.INSTANCE);
+        Reference existing = new Reference(1234L, HolderInfo.EmptyInfo.INSTANCE, -1L);
         ReleaseReference rel = ReleaseReference.of(1L, 2L, 30L, holderId, existing);
         assertEquals(30L, rel.getBookmarkId());
         assertEquals(1, rel.getReferences().size());

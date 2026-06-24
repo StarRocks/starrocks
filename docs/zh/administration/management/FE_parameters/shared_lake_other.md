@@ -1480,3 +1480,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: Bookmark 模块清理失效引用的执行间隔。
 - 引入版本:
+
+### `bookmark_reference_max_ttl_ms`
+
+- 默认值: -1
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 集群级别的 bookmark reference 最大存活时间上限。无论 reference 自身的 TTL 如何，清理任务都会在超过该上限后回收 reference。`<= 0` 表示不启用该上限。reference 的实际 TTL 取该上限与其自身 TTL 中较小的一个。
+- 引入版本:

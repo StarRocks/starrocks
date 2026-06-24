@@ -27,8 +27,8 @@ Join the three tables on `(DB_ID, TABLE_ID, BOOKMARK_ID)`.
 | PHYSICAL_PARTITION_COUNT | BIGINT | Physical partition count captured. |
 | REFERENCE_COUNT | BIGINT | Current number of holders referencing this bookmark. |
 | LATEST_CHANGED_PHYSICAL_PARTITIONS | ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>> | Up to 3 physical partitions with the most recent `visible_version_time`, ordered descending by time. Ties broken by largest `physical_partition_id`. Empty array if the bookmark captured no partitions; shorter than 3 when fewer partitions exist. |
-| OLDEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME> | Holder with the oldest current acquire time. Ties broken by lexicographically smallest holder id. |
-| NEWEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME> | Holder with the most recent current acquire time. Same tie-break rule. |
+| OLDEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | Holder with the oldest current acquire time. Ties broken by lexicographically smallest holder id. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
+| NEWEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | Holder with the most recent current acquire time. Same tie-break rule. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
 
 ## table_bookmark_partitions
 
@@ -53,6 +53,7 @@ Join the three tables on `(DB_ID, TABLE_ID, BOOKMARK_ID)`.
 | DB_ID, TABLE_ID, BOOKMARK_ID | (mirror summary) | Join keys. |
 | HOLDER_ID | VARCHAR | Holder identity. Materialized views encode as `mv:<dbId>-<mvId>`. |
 | CREATE_TIME | DATETIME | When this holder acquired the bookmark. |
+| TTL_MS | BIGINT | Per-reference time-to-live in ms set at acquire time. `<= 0` means no TTL; the background sweep never expires the reference on its own. The effective lifetime is the smaller of this and the cluster ceiling `bookmark_reference_max_ttl_ms`. |
 
 ## Query patterns
 

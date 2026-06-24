@@ -1430,3 +1430,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：マテリアライズドビュー作成時、固定長の char/varchar 列に string 型を優先するかどうか。
 - 導入時期：v4.0.0
+
+### `bookmark_reference_max_ttl_ms`
+
+- デフォルト：-1
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：bookmark reference が存続できる時間のクラスター全体の上限。reference 自身の TTL に関わらず、クリーンアップ処理がこの上限を超えた reference を回収します。`<= 0` の場合は上限を無効にします。reference の実際の TTL は、この上限と reference 自身の TTL のうち小さい方になります。
+- 導入時期：

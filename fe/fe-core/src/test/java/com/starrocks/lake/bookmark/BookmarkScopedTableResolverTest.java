@@ -206,7 +206,7 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
     private void registerSyntheticBookmark(Bookmark b) {
         GlobalStateMgr.getCurrentState().getBookmarkManager()
                 .replay(BookmarkLogEntry.AddBookmark.of(
-                        b, BookmarkHolder.forEmptyInfo("synthetic"), b.getBookmarkTimeMs()));
+                        b, BookmarkHolder.forEmptyInfo("synthetic"), b.getBookmarkTimeMs(), -1L));
     }
 
     /**

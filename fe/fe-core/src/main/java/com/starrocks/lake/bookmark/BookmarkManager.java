@@ -19,7 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.persist.ImageWriter;
@@ -36,15 +36,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Cluster-wide owner of bookmarks. Routes create / acquire / release / lookup
  * calls to the per-table tracker, persists state through the edit log and the
- * meta-image, and reclaims trackers that hold nothing.
+ * meta-image, and reclaims trackers that hold nothing. On the leader it also runs
+ * a periodic daemon that expires references past their TTL.
  */
-public class BookmarkManager extends FrontendDaemon {
+public class BookmarkManager extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(BookmarkManager.class);
 
@@ -68,28 +70,34 @@ public class BookmarkManager extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
+        // Re-read so a changed cleanup interval takes effect.
         setInterval(Config.bookmark_cleanup_interval_sec * 1000L);
-        // FrontendDaemon.runOneCycle() gates this on isReady(), which keeps
-        // the checkpoint clone from getting here, so walking every tracker
-        // can't race image load.
-        BookmarkActiveStats snapshot = getActiveStats();
-        metrics.setMaxActiveAges(
-                snapshot.maxBookmarkAgeMs().orElse(0L),
-                snapshot.maxReferenceAgeMs().orElse(0L));
-        // TODO: implement TTL-based sweep of stale references.
+        long nowMs = System.currentTimeMillis();
+        long maxTtlMs = Config.bookmark_reference_max_ttl_ms;
+        // One read-locked walk feeds both jobs below: refresh the cached age gauges and collect
+        // the bookmarks holding an expired reference. LeaderDaemon only calls this after the FE
+        // is ready, so the walk can't race image load.
+        BookmarkActiveStats stats = getActiveStats(nowMs, maxTtlMs);
+        metrics.setMaxActiveAges(stats.maxBookmarkAgeMs().orElse(0L), stats.maxReferenceAgeMs().orElse(0L));
+        sweepExpiredReferences(stats.bookmarksWithExpiredReferences(), nowMs, maxTtlMs);
     }
 
     /* ---------- bookmark lifecycle ---------- */
 
     public Bookmark create(long dbId, long tableId, BookmarkHolder holder)
             throws AlreadyAtLatestException, LockTimeoutException {
+        return create(dbId, tableId, holder, -1L);
+    }
+
+    public Bookmark create(long dbId, long tableId, BookmarkHolder holder, long ttlMs)
+            throws AlreadyAtLatestException, LockTimeoutException {
         Preconditions.checkNotNull(holder);
         trackerMapLock.readLock().lock();
         boolean success = false;
         try {
             TableBookmarkTracker tracker = getTrackerLocked(dbId, tableId, true).get();
-            Bookmark bookmark = tracker.create(holder);
+            Bookmark bookmark = tracker.create(holder, ttlMs);
             success = true;
             return bookmark;
         } finally {
@@ -102,6 +110,11 @@ public class BookmarkManager extends FrontendDaemon {
 
     public Bookmark acquireReference(long dbId, long tableId, long bookmarkId, BookmarkHolder holder)
             throws AlreadyReferencedException, BookmarkNotFoundException {
+        return acquireReference(dbId, tableId, bookmarkId, holder, -1L);
+    }
+
+    public Bookmark acquireReference(long dbId, long tableId, long bookmarkId, BookmarkHolder holder, long ttlMs)
+            throws AlreadyReferencedException, BookmarkNotFoundException {
         Preconditions.checkNotNull(holder);
         trackerMapLock.readLock().lock();
         try {
@@ -111,7 +124,7 @@ public class BookmarkManager extends FrontendDaemon {
                                 dbId, tableId, bookmarkId, holder.getHolderId());
                         return new BookmarkNotFoundException(dbId, tableId, bookmarkId, holder.getHolderId());
                     });
-            return tr.acquireReference(bookmarkId, holder);
+            return tr.acquireReference(bookmarkId, holder, ttlMs);
         } finally {
             trackerMapLock.readLock().unlock();
         }
@@ -161,6 +174,65 @@ public class BookmarkManager extends FrontendDaemon {
                 // Released concurrently — at-most-once semantics of releaseReference.
             }
         }
+    }
+
+    /**
+     * Sweeps the collected {@code bookmarksWithExpiredReferences} (keyed db -> table -> bookmark),
+     * releasing every still-expired reference and reclaiming any bookmark and tracker left empty.
+     * Each bookmark is taken under its own write lock and re-checked against {@code nowMs} /
+     * {@code maxTtlMs}, so a long sweep never blocks unrelated bookmarks. {@code nowMs} is supplied
+     * by the caller so the collecting walk and this sweep judge expiry against the same instant.
+     */
+    @VisibleForTesting
+    void sweepExpiredReferences(
+            Map<Long, Map<Long, Set<Long>>> bookmarksWithExpiredReferences, long nowMs, long maxTtlMs) {
+        int releasedRefs = 0;
+        int affectedBookmarks = 0;
+        for (Map.Entry<Long, Map<Long, Set<Long>>> dbEntry : bookmarksWithExpiredReferences.entrySet()) {
+            long dbId = dbEntry.getKey();
+            for (Map.Entry<Long, Set<Long>> tableEntry : dbEntry.getValue().entrySet()) {
+                long tableId = tableEntry.getKey();
+                for (long bookmarkId : tableEntry.getValue()) {
+                    int released = releaseExpiredReferences(dbId, tableId, bookmarkId, nowMs, maxTtlMs);
+                    if (released > 0) {
+                        releasedRefs += released;
+                        affectedBookmarks++;
+                    }
+                }
+            }
+        }
+        if (releasedRefs > 0) {
+            LOG.info("bookmark TTL sweep released {} reference(s) across {} bookmark(s)",
+                    releasedRefs, affectedBookmarks);
+        }
+    }
+
+    /**
+     * Releases one bookmark's still-expired references and reclaims the
+     * tracker if that emptied it. The tracker is re-resolved here rather than carried
+     * over from the collecting walk, so the tracker-map lock covers a single bookmark
+     * at a time; a tracker reclaimed since the walk is simply skipped (returns 0).
+     * Returns the number of references released.
+     */
+    private int releaseExpiredReferences(long dbId, long tableId, long bookmarkId, long nowMs, long maxTtlMs) {
+        int released;
+        boolean nowEmpty;
+        trackerMapLock.readLock().lock();
+        try {
+            Optional<TableBookmarkTracker> trOpt = getTrackerLocked(dbId, tableId, false);
+            if (trOpt.isEmpty()) {
+                return 0;
+            }
+            TableBookmarkTracker tr = trOpt.get();
+            released = tr.releaseExpiredReferences(bookmarkId, nowMs, maxTtlMs);
+            nowEmpty = tr.isEmpty();
+        } finally {
+            trackerMapLock.readLock().unlock();
+        }
+        if (nowEmpty) {
+            removeEmptyTracker(dbId, tableId);
+        }
+        return released;
     }
 
     /* ---------- queries ---------- */
@@ -335,18 +407,10 @@ public class BookmarkManager extends FrontendDaemon {
         BookmarkManagerImageHeader header = reader.readJson(BookmarkManagerImageHeader.class);
         for (int i = 0; i < header.totalTrackerCount; i++) {
             TableBookmarkTracker tr = reader.readJson(TableBookmarkTracker.class);
-            tr.setMetrics(metrics);
+            tr.initMetricsAfterImageLoad(metrics);
             trackers.computeIfAbsent(tr.getDbId(), k -> new ConcurrentHashMap<>())
                     .put(tr.getTableId(), tr);
         }
-        // gson skips the apply() hooks, so the cardinality counters miss
-        // the inherited state. Seed them once from the loaded trackers.
-        BookmarkActiveStats snapshot = getActiveStats();
-        metrics.initFromImage(
-                snapshot.bookmarkCount(),
-                snapshot.referenceCount(),
-                snapshot.logicalPartitionCount(),
-                snapshot.physicalPartitionCount());
     }
 
     /** Header block; @SerializedName is required for Gson's HiddenAnnotationExclusionStrategy. */
@@ -385,14 +449,15 @@ public class BookmarkManager extends FrontendDaemon {
         return new TableBookmarkTracker(dbId, tableId, metrics);
     }
 
-    // No trackerMapLock: the concurrent maps plus fillStats's per-tracker readLock
-    // already keep each tracker's read internally consistent. A removeEmptyTracker
-    // dropping a tracker mid-walk is fine — a metric snapshot is allowed to miss it.
-    BookmarkActiveStats getActiveStats() {
+    BookmarkActiveStats getActiveStats(long nowMs, long maxTtlMs) {
+        // No trackerMapLock: ConcurrentHashMap iteration is weakly consistent and each
+        // tracker guards its own state with its read lock, so a tracker dropped by
+        // removeEmptyTracker mid-walk is simply skipped — fine for a metric snapshot and
+        // for an expiry scan that re-validates under the write lock before releasing.
         BookmarkActiveStats.Builder builder = BookmarkActiveStats.newBuilder();
         for (Map<Long, TableBookmarkTracker> dbMap : trackers.values()) {
             for (TableBookmarkTracker tr : dbMap.values()) {
-                tr.fillStats(builder);
+                tr.fillStats(builder, nowMs, maxTtlMs);
             }
         }
         return builder.build();

@@ -117,15 +117,11 @@ final class BookmarkMetrics {
     }
 
     /**
-     * Seed the cardinality counters from image state. gson skips apply()
-     * during deserialisation, so without this seed the counts miss inherited
-     * state until the first live mutation. *_total counters reset per
-     * process per Prometheus convention — not seeded.
+     * Adds the given counts to the running bookmark, reference, and logical/physical partition
+     * gauges. The cumulative *_total counters are left untouched — they reset per process per the
+     * Prometheus convention.
      */
-    void initFromImage(long bookmarkCount,
-                       long referenceCount,
-                       long logicalPartitionCount,
-                       long physicalPartitionCount) {
+    void addBookmarkCounts(long bookmarkCount, long referenceCount, long logicalPartitionCount, long physicalPartitionCount) {
         this.bookmarkCount.add(bookmarkCount);
         this.bookmarkReferenceCount.add(referenceCount);
         this.bookmarkLogicalPartitionCount.add(logicalPartitionCount);

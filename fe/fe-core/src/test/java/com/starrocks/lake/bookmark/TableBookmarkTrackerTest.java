@@ -34,6 +34,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -209,11 +210,11 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
         BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("snap_h2");
         BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("snap_h3");
 
-        tracker.replayLogEntry(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L));
+        tracker.replayLogEntry(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L, -1L));
 
         Map<HolderId, Reference> b2Initial = new HashMap<>();
-        b2Initial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo()));
-        b2Initial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo()));
+        b2Initial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo(), -1L));
+        b2Initial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo(), -1L));
         tracker.replayLogEntry(new BookmarkLogEntry.AddBookmark(b2, b2Initial));
 
         List<Bookmark.View> views = tracker.listAllBookmarks();
@@ -254,22 +255,17 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testGetActiveStats() {
+    public void testFillStatsAges() {
         TableBookmarkTracker tracker = new TableBookmarkTracker(1L, 2L, new BookmarkMetrics());
 
-        // No bookmarks yet — empty stats, ages absent.
+        // No bookmarks yet — ages absent.
         BookmarkActiveStats.Builder emptyBuilder = BookmarkActiveStats.newBuilder();
-        tracker.fillStats(emptyBuilder);
+        tracker.fillStats(emptyBuilder, System.currentTimeMillis(), -1L);
         BookmarkActiveStats empty = emptyBuilder.build();
-        assertEquals(0L, empty.bookmarkCount());
-        assertEquals(0L, empty.referenceCount());
-        assertEquals(0L, empty.logicalPartitionCount());
-        assertEquals(0L, empty.physicalPartitionCount());
-        assertEquals(false, empty.maxBookmarkAgeMs().isPresent());
+        assertFalse(empty.maxBookmarkAgeMs().isPresent());
+        assertFalse(empty.maxReferenceAgeMs().isPresent());
 
-        // Seed two bookmarks via the replay path so the tracker doesn't need a
-        // real OlapTable. b1 has one logical partition + one reference; b2 has
-        // two logical partitions + two references.
+        // Seed two bookmarks via the replay path so the tracker doesn't need a real OlapTable.
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsA = new HashMap<>();
         partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsB = new HashMap<>();
@@ -283,24 +279,66 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
         BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("stats_h2");
         BookmarkHolder h3 = BookmarkHolder.forEmptyInfo("stats_h3");
 
-        tracker.replayLogEntry(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L));
+        tracker.replayLogEntry(BookmarkLogEntry.AddBookmark.of(b1, h1, 1_100L, -1L));
         Map<HolderId, Reference> b2Initial = new HashMap<>();
-        b2Initial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo()));
-        b2Initial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo()));
+        b2Initial.put(h2.getHolderId(), new Reference(2_100L, h2.getHolderInfo(), -1L));
+        b2Initial.put(h3.getHolderId(), new Reference(2_200L, h3.getHolderInfo(), -1L));
         tracker.replayLogEntry(new BookmarkLogEntry.AddBookmark(b2, b2Initial));
 
         BookmarkActiveStats.Builder builder = BookmarkActiveStats.newBuilder();
-        tracker.fillStats(builder);
+        tracker.fillStats(builder, System.currentTimeMillis(), -1L);
         BookmarkActiveStats stats = builder.build();
-        assertEquals(2L, stats.bookmarkCount());
-        assertEquals(3L, stats.referenceCount());
-        assertEquals(3L, stats.logicalPartitionCount());     // 1 + 2
-        assertEquals(3L, stats.physicalPartitionCount());    // 1 + 2
         // Ages are computed against System.currentTimeMillis(); the older
         // bookmark / reference yields the larger age.
         assertTrue(stats.maxBookmarkAgeMs().isPresent());
         assertTrue(stats.maxReferenceAgeMs().isPresent());
         assertTrue(stats.maxBookmarkAgeMs().getAsLong() > 0L);
         assertTrue(stats.maxReferenceAgeMs().getAsLong() > 0L);
+    }
+
+    @Test
+    public void testFindAndReleaseExpiredReferences() throws Exception {
+        long tableId = createDefaultTable();
+        TableBookmarkTracker tracker = new TableBookmarkTracker(dbId, tableId, new BookmarkMetrics());
+
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("trk_expired_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("trk_expired_h2");
+
+        // h1 holds the bookmark with a 100ms TTL; h2 acquires it with no TTL.
+        Bookmark b = tracker.create(h1, 100L);
+        long bid = b.getBookmarkId();
+        long acq = b.getBookmarkTimeMs();
+        tracker.acquireReference(bid, h2);
+
+        // Not yet expired: no candidate, nothing released.
+        assertTrue(expiredBookmarkIds(tracker, acq + 50, -1L).isEmpty());
+        assertEquals(0, tracker.releaseExpiredReferences(bid, acq + 50, -1L));
+        assertEquals(2, tracker.referenceCount(bid));
+
+        // Past h1's TTL: bookmark is a candidate; release drops only h1, keeps h2.
+        assertEquals(Set.of(bid), expiredBookmarkIds(tracker, acq + 1_000L, -1L));
+        assertEquals(1, tracker.releaseExpiredReferences(bid, acq + 1_000L, -1L));
+        assertEquals(1, tracker.referenceCount(bid));
+
+        // Releasing a bookmark that no longer has an expired reference is a no-op.
+        assertEquals(0, tracker.releaseExpiredReferences(bid, acq + 1_000L, -1L));
+
+        // Global ceiling forces h2 (no own TTL) to expire; bookmark reclaimed.
+        assertEquals(Set.of(bid), expiredBookmarkIds(tracker, acq + 1_000L, 50L));
+        assertEquals(1, tracker.releaseExpiredReferences(bid, acq + 1_000L, 50L));
+        assertTrue(tracker.findByBookmarkId(bid).isEmpty());
+
+        // Releasing a gone bookmark is a no-op (returns 0, no NPE).
+        assertEquals(0, tracker.releaseExpiredReferences(bid, acq + 1_000L, -1L));
+    }
+
+    // Bookmark ids the tracker reports as holding an expired reference, read back
+    // from the active-stats snapshot that fillStats now populates.
+    private static Set<Long> expiredBookmarkIds(TableBookmarkTracker tracker, long nowMs, long maxTtlMs) {
+        BookmarkActiveStats.Builder builder = BookmarkActiveStats.newBuilder();
+        tracker.fillStats(builder, nowMs, maxTtlMs);
+        return builder.build().bookmarksWithExpiredReferences()
+                .getOrDefault(tracker.getDbId(), Map.of())
+                .getOrDefault(tracker.getTableId(), Set.of());
     }
 }

@@ -1004,7 +1004,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
         BookmarkHolder holder = BookmarkHolder.forEmptyInfo("test-holder");
         Bookmark b = GlobalStateMgr.getCurrentState().getBookmarkManager()
-                .create(dbId, tableId, holder);
+                .create(dbId, tableId, holder, 12345L);
 
         // Issue the RPC
         TGetTableBookmarkSummaryRequest req = new TGetTableBookmarkSummaryRequest();
@@ -1024,6 +1024,9 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         Assertions.assertEquals(tableId, row.getTable_id());
         Assertions.assertEquals(b.getBookmarkId(), row.getBookmark_id());
         Assertions.assertEquals(1L, row.getReference_count());
+        // Single holder -> it is both oldest and newest; both carry its explicit TTL.
+        Assertions.assertEquals(12345L, row.getOldest_reference().getTtl());
+        Assertions.assertEquals(12345L, row.getNewest_reference().getTtl());
     }
 
     @Test
@@ -1081,7 +1084,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
         BookmarkHolder holder = BookmarkHolder.forEmptyInfo("test-holder");
         Bookmark b = GlobalStateMgr.getCurrentState().getBookmarkManager()
-                .create(dbId, tableId, holder);
+                .create(dbId, tableId, holder, 12345L);
         long bookmarkId = b.getBookmarkId();
 
         // Issue the RPC.
@@ -1102,6 +1105,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         Assertions.assertEquals(tableId, row.getTable_id());
         Assertions.assertEquals(bookmarkId, row.getBookmark_id());
         Assertions.assertEquals("test-holder", row.getHolder_id());
+        Assertions.assertEquals(12345L, row.getTtl());
     }
 
     @Test

@@ -3741,14 +3741,17 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             times += 1
         tools.assert_true(True, "wait row count > 0 error, max_times:" + str(max_times))
 
-    def create_bookmark(self, db, table, holder="sql_test"):
-        """Create a Bookmark on db.table via ADMIN EXECUTE; return the bookmark id (int)."""
+    def create_bookmark(self, db, table, holder="sql_test", ttl=-1):
+        """Create a Bookmark on db.table via ADMIN EXECUTE; return the bookmark id (int).
+
+        ttl: per-reference time-to-live in ms; <= 0 disables expiry.
+        """
         groovy = (
             f'import com.starrocks.lake.bookmark.BookmarkHolder; '
             f'def db = globalState.localMetastore.getDb("{db}"); '
             f'def t = db.getTable("{table}"); '
             f'def holder = BookmarkHolder.forEmptyInfo("{holder}"); '
-            f'def b = globalState.bookmarkManager.create(db.id, t.id, holder); '
+            f'def b = globalState.bookmarkManager.create(db.id, t.id, holder, {ttl}L); '
             f'out << b.bookmarkId'
         )
         sql = f"admin execute on frontend '{groovy}';"

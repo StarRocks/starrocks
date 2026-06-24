@@ -1835,6 +1835,7 @@ public class GlobalStateMgr {
             fullVacuumDaemon.start();
 
             vectorIndexBuildScheduler.start();
+            bookmarkManager.start();
         }
 
         if (Config.enable_safe_mode) {
@@ -1889,6 +1890,9 @@ public class GlobalStateMgr {
         stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopGracefully(timeoutMs));
         stopOne("replicationMgr", () -> replicationMgr.stopGracefully(timeoutMs));
         stopOne("safeModeChecker", () -> safeModeChecker.stopGracefully(timeoutMs));
+        if (RunMode.isSharedDataMode()) {
+            stopOne("bookmarkManager", () -> bookmarkManager.stopGracefully(timeoutMs));
+        }
         stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
         stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
         stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
@@ -1948,7 +1952,6 @@ public class GlobalStateMgr {
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
-        bookmarkManager.start();
         // ES state store
         esRepository.start();
 

@@ -1685,6 +1685,7 @@ struct TLatestChangedPhysicalPartitionEntry {
 struct TBookmarkReferenceSummary {
     1: optional string id
     2: optional i64 time
+    3: optional i64 ttl
 }
 
 struct TTableBookmarkSummaryInfo {
@@ -1746,6 +1747,7 @@ struct TTableBookmarkReferenceInfo {
     3: optional i64 bookmark_id
     4: optional string holder_id
     5: optional i64 create_time
+    6: optional i64 ttl
 }
 
 struct TGetTableBookmarkReferencesRequest {
