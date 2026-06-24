@@ -59,7 +59,9 @@ public class LakeTablet extends Tablet {
 
     private volatile long minVersion = 0L;
 
-    public long rebuildPindexVersion = 0L;
+    // Written by the ALTER ... DROP PERSISTENT INDEX path and read lock-free by the lake publish
+    // thread (Utils.processTablets); must be volatile so the publish thread observes the update.
+    private volatile long rebuildPindexVersion = 0L;
 
     public LakeTablet() {
         super();
