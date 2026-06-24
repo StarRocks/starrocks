@@ -48,16 +48,16 @@ public:
     // Send chunk to each source by using `partition_row_indexes`.
     Status send_chunk(const ChunkPtr& chunk, const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes);
 
-    size_t partition_begin_offset(size_t partition_id) { return _partition_row_indexes_start_points[partition_id]; }
+    size_t partition_begin_offset(size_t partition_id) const { return _partition_row_indexes_start_points[partition_id]; }
 
-    size_t partition_end_offset(size_t partition_id) { return _partition_row_indexes_start_points[partition_id + 1]; }
+    size_t partition_end_offset(size_t partition_id) const { return _partition_row_indexes_start_points[partition_id + 1]; }
 
 protected:
     LocalExchangeSourceOperatorFactory* _source;
 
-    // This array record the channel start point in _row_indexes
+    // This array records the channel start point in _row_indexes
     // And the last item is the number of rows of the current shuffle chunk.
-    // It will easy to get number of rows belong to one channel by doing
+    // It will be easy to get the number of rows belong to one channel by doing
     // _partition_row_indexes_start_points[i + 1] - _partition_row_indexes_start_points[i]
     std::vector<size_t> _partition_row_indexes_start_points;
     std::vector<uint32_t> _shuffle_channel_id;
@@ -221,8 +221,14 @@ private:
     std::vector<ExprContext*> _partition_exprs;
     std::vector<size_t> _channel_row_nums;
     Columns _previous_partition_columns;
-    size_t _previous_channel_id;
-    ChunkPtr _previous_chunk;
+    size_t _previous_channel_id = 0;
+    // Row count of the previous chunk, captured before the chunk is handed downstream.
+    // We must NOT keep a pointer to the previous chunk and read num_rows() from it later: once handed
+    // downstream the chunk may be mutated concurrently (e.g. AnalyticSinkOperator appends window-function
+    // result columns, reallocating the chunk's column vector), which would make reading it a data race /
+    // heap-use-after-free.
+    size_t _previous_num_rows = 0;
+    bool _has_previous = false;
 };
 
 // key partition mainly means that the column value of each partition is the same.

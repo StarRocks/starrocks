@@ -25,7 +25,6 @@
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
-#include "gutil/hash/hash.h"
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
@@ -229,6 +228,11 @@ void OrderedPartitionExchanger::close(RuntimeState* state) {
 Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     DCHECK_EQ(sink_driver_sequence, 0);
 
+    // Capture the row count now, before the chunk is handed downstream below. Once published, the chunk
+    // may be mutated on another thread (e.g. AnalyticSinkOperator appends window-function result columns),
+    // so reading chunk->num_rows() afterwards would race on the chunk's column vector.
+    const size_t cur_num_rows = chunk->num_rows();
+
     Columns partition_columns(_partition_exprs.size());
     for (size_t i = 0; i < partition_columns.size(); ++i) {
         ASSIGN_OR_RETURN(partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
@@ -243,7 +247,7 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
     std::vector<std::pair<size_t, ChunkPtr>> chunks;
 
     size_t min_channel_id = _find_min_channel_id();
-    if (_previous_chunk == nullptr || _previous_channel_id == min_channel_id) {
+    if (!_has_previous || _previous_channel_id == min_channel_id) {
         chunks.emplace_back(min_channel_id, chunk);
     } else {
         auto is_equal = [](const Columns& columns1, size_t offset1, const Columns& columns2, size_t offset2) {
@@ -255,9 +259,12 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
             }
             return true;
         };
-        // Check if the joint of two consecutive chunks are the same
+        // Check if the joint of two consecutive chunks are the same.
+        // _previous_partition_columns aliases the previous chunk's (read-only) partition-key column objects,
+        // which are never mutated downstream; only the chunk's column vector is, so we use the captured
+        // _previous_num_rows instead of dereferencing the previous chunk to index its last row.
         bool is_joint_equal =
-                is_equal(_previous_partition_columns, _previous_chunk->num_rows() - 1, partition_columns, 0);
+                is_equal(_previous_partition_columns, _previous_num_rows - 1, partition_columns, 0);
 
         if (!is_joint_equal) {
             // The first row of current chunk is the start of a new partition, so
@@ -265,7 +272,7 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
             chunks.emplace_back(min_channel_id, chunk);
         } else {
             bool is_current_of_same_partition =
-                    is_equal(partition_columns, 0, partition_columns, chunk->num_rows() - 1);
+                    is_equal(partition_columns, 0, partition_columns, cur_num_rows - 1);
             if (is_current_of_same_partition) {
                 chunks.emplace_back(_previous_channel_id, chunk);
             } else {
@@ -273,7 +280,7 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
                 // 1. The first part is the rows of the same partition as the last row of previous chunk, and send it to previous channel
                 // 2. The second part is the rows of the different partition, and send it to the channel with the minimum number of rows.
 
-                int64_t end = chunk->num_rows();
+                int64_t end = cur_num_rows;
                 for (auto& column : partition_columns) {
                     end = ColumnHelper::find_first_not_equal(column.get(), 0, 0, end);
                 }
@@ -282,9 +289,9 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
                 first_part->append(*chunk, 0, end);
                 chunks.emplace_back(_previous_channel_id, first_part);
 
-                // Second part: [end, chunk->num_rows())
+                // Second part: [end, cur_num_rows)
                 ChunkPtr second_part = chunk->clone_empty();
-                second_part->append(*chunk, end, chunk->num_rows() - end);
+                second_part->append(*chunk, end, cur_num_rows - end);
                 chunks.emplace_back(min_channel_id, second_part);
             }
         }
@@ -296,8 +303,9 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
     }
 
     _previous_channel_id = chunks.back().first;
-    _previous_chunk = chunk;
+    _previous_num_rows = cur_num_rows;
     _previous_partition_columns = std::move(partition_columns);
+    _has_previous = true;
 
     return Status::OK();
 }
