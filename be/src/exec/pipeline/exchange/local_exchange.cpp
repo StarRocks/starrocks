@@ -263,16 +263,14 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
         // _previous_partition_columns aliases the previous chunk's (read-only) partition-key column objects,
         // which are never mutated downstream; only the chunk's column vector is, so we use the captured
         // _previous_num_rows instead of dereferencing the previous chunk to index its last row.
-        bool is_joint_equal =
-                is_equal(_previous_partition_columns, _previous_num_rows - 1, partition_columns, 0);
+        bool is_joint_equal = is_equal(_previous_partition_columns, _previous_num_rows - 1, partition_columns, 0);
 
         if (!is_joint_equal) {
             // The first row of current chunk is the start of a new partition, so
             // send the chunk to the channel with the minimum number of rows.
             chunks.emplace_back(min_channel_id, chunk);
         } else {
-            bool is_current_of_same_partition =
-                    is_equal(partition_columns, 0, partition_columns, cur_num_rows - 1);
+            bool is_current_of_same_partition = is_equal(partition_columns, 0, partition_columns, cur_num_rows - 1);
             if (is_current_of_same_partition) {
                 chunks.emplace_back(_previous_channel_id, chunk);
             } else {

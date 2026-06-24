@@ -48,9 +48,13 @@ public:
     // Send chunk to each source by using `partition_row_indexes`.
     Status send_chunk(const ChunkPtr& chunk, const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes);
 
-    size_t partition_begin_offset(size_t partition_id) const { return _partition_row_indexes_start_points[partition_id]; }
+    size_t partition_begin_offset(size_t partition_id) const {
+        return _partition_row_indexes_start_points[partition_id];
+    }
 
-    size_t partition_end_offset(size_t partition_id) const { return _partition_row_indexes_start_points[partition_id + 1]; }
+    size_t partition_end_offset(size_t partition_id) const {
+        return _partition_row_indexes_start_points[partition_id + 1];
+    }
 
 protected:
     LocalExchangeSourceOperatorFactory* _source;
