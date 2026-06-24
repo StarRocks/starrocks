@@ -33,7 +33,7 @@
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "fs/fs_factory.h"
-#include "fs/fs_registry.h"
+#include "fs/fs_provider_bootstrap.h"
 #include "gutil/strings/join.h"
 
 namespace starrocks {
@@ -44,13 +44,8 @@ public:
     ~StarletFileSystemTest() override = default;
 
     static void SetUpTestSuite() {
-        static fs::FileSystemProviderRegistry registry;
-        static const fs::FrozenFileSystemProviderRegistry* frozen = [] {
-            auto st = registry.register_provider(fs::new_starlet_file_system_provider());
-            CHECK(st.ok()) << st;
-            return &registry.freeze();
-        }();
-        fs::install_default_file_system_provider_registry(*frozen);
+        auto st = fs::install_builtin_file_system_providers();
+        CHECK(st.ok()) << st;
     }
 
     void SetUp() override {
