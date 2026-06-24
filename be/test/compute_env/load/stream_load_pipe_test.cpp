@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/stream_load/stream_load_pipe.h"
+#include "compute_env/load/stream_load_pipe.h"
 
 #include <gtest/gtest.h>
 

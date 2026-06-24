@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/stream_load/time_bounded_stream_load_pipe.h"
+#include "compute_env/load/time_bounded_stream_load_pipe.h"
 
 #include <bvar/latency_recorder.h>
 
-#include "runtime/batch_write/batch_write_util.h"
+#include "runtime/merge_commit_trace.h"
 
 namespace starrocks {
 

@@ -27,6 +27,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/batch_write/batch_write_util.h"
+#include "runtime/merge_commit_trace.h"
 
 namespace starrocks {
 

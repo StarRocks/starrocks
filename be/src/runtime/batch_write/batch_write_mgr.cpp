@@ -21,13 +21,14 @@
 #include "butil/endpoint.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_merge_commit_fwd.h"
+#include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/merge_commit_trace.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 
 namespace starrocks {
 

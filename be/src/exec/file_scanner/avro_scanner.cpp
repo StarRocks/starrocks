@@ -27,6 +27,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/runtime_profile.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "exec/json_parser.h"
@@ -38,7 +39,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_load/stream_load_pipe.h"
 #include "types/type_descriptor.h"
 #ifdef __cplusplus
 extern "C" {

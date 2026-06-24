@@ -39,10 +39,10 @@
 #include <string>
 #include <vector>
 
+#include "compute_env/load/stream_load_pipe.h"
 #include "librdkafka/rdkafka.h"
 #include "pulsar/Client.h"
 #include "runtime/message_body_sink.h"
-#include "runtime/stream_load/stream_load_pipe.h"
 #include "simdjson.h"
 
 namespace starrocks {
