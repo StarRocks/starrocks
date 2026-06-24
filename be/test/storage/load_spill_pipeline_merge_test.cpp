@@ -18,6 +18,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "exec/spill/spiller.h"
 #include "fs/fs.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_metadata.h"
@@ -94,6 +95,16 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
+
+TEST_F(LoadSpillPipelineMergeTest, test_spill_without_query_context_uses_local_spill_counter) {
+    auto chunk = gen_data(100, 0);
+
+    auto result = _spiller->spill(*chunk, 0);
+    ASSERT_OK(result.status());
+    ASSERT_GT(result.value(), 0);
+    ASSERT_NE(nullptr, _spiller->spiller());
+    ASSERT_NE(nullptr, _spiller->spiller()->metrics().total_spill_bytes);
+}
 
 // Test basic pipeline merge task generation
 TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_basic) {
