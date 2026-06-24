@@ -216,4 +216,30 @@ public class ColocateRangeUtilsTest {
                 () -> ColocateRangeUtils.extractColocatePrefix(tabletRange, 2));
     }
 
+    @Test
+    public void testLookupPackShardGroupIdMapsPrefixToOwningRange() {
+        // Two colocate ranges split at prefix 100: [MIN, 100) -> 1001, [100, MAX) -> 1002.
+        Tuple boundary = makeTuple(100);
+        List<ColocateRange> ranges = Arrays.asList(
+                new ColocateRange(Range.lt(boundary), 1001L),
+                new ColocateRange(Range.ge(boundary), 1002L));
+        // prefix 50 lands in the first range, prefix 150 in the second.
+        Assertions.assertEquals(1001L,
+                ColocateRangeUtils.lookupPackShardGroupId(Range.ge(makeTuple(50)), ranges, 1));
+        Assertions.assertEquals(1002L,
+                ColocateRangeUtils.lookupPackShardGroupId(Range.ge(makeTuple(150)), ranges, 1));
+        // A boundary-aligned tablet at exactly 100 belongs to the second range ([100, MAX)).
+        Assertions.assertEquals(1002L,
+                ColocateRangeUtils.lookupPackShardGroupId(Range.ge(boundary), ranges, 1));
+        // An unbounded-below tablet (-inf) maps to the first range.
+        Assertions.assertEquals(1001L,
+                ColocateRangeUtils.lookupPackShardGroupId(Range.all(), ranges, 1));
+    }
+
+    @Test
+    public void testLookupPackShardGroupIdReturnsSentinelWhenUncovered() {
+        Assertions.assertEquals(PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                ColocateRangeUtils.lookupPackShardGroupId(Range.all(), List.of(), 1));
+    }
+
 }
