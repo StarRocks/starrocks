@@ -33,7 +33,8 @@
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "fs/fs_factory.h"
-#include "fs/fs_provider_bootstrap.h"
+#include "fs/fs_posix.h"
+#include "fs/fs_registry.h"
 #include "gutil/strings/join.h"
 
 namespace starrocks {
@@ -44,8 +45,23 @@ public:
     ~StarletFileSystemTest() override = default;
 
     static void SetUpTestSuite() {
-        auto st = fs::install_builtin_file_system_providers();
-        CHECK(st.ok()) << st;
+        _previous_registry = &fs::default_file_system_provider_registry();
+        static fs::FileSystemProviderRegistry registry;
+        static const fs::FrozenFileSystemProviderRegistry* frozen = [] {
+            auto st = registry.register_provider(fs::new_posix_file_system_provider());
+            CHECK(st.ok()) << st;
+            st = registry.register_provider(fs::new_starlet_file_system_provider());
+            CHECK(st.ok()) << st;
+            return &registry.freeze();
+        }();
+        fs::install_default_file_system_provider_registry(*frozen);
+    }
+
+    static void TearDownTestSuite() {
+        if (_previous_registry != nullptr) {
+            fs::install_default_file_system_provider_registry(*_previous_registry);
+            _previous_registry = nullptr;
+        }
     }
 
     void SetUp() override {
@@ -139,6 +155,9 @@ public:
 
 public:
     bool _is_skipped = false;
+
+private:
+    static inline const fs::FrozenFileSystemProviderRegistry* _previous_registry = nullptr;
 };
 
 TEST_P(StarletFileSystemTest, test_build_and_parse_uri) {
