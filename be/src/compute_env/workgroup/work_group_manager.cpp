@@ -519,6 +519,9 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization(WorkGroupManager*
     DCHECK(_workgroup_manager != nullptr);
     auto default_wg = create_default_workgroup();
     _workgroup_manager->add_workgroup(default_wg);
+    // Publish the default workgroup process-wide so ComputeEnv-layer code (e.g. the spill
+    // framework) can resolve a nullptr workgroup to the default without the ExecEnv singleton.
+    WorkGroup::set_default_workgroup(default_wg);
 
     auto default_mv_wg = create_default_mv_workgroup();
     _workgroup_manager->add_workgroup(default_mv_wg);
