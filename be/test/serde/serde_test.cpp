@@ -15,6 +15,8 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <limits>
+#include <type_traits>
 
 #include "base/coding.h"
 #include "base/failpoint/fail_point.h"
@@ -37,6 +39,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "serde/column_array_serde.h"
+#include "serde/encode_level.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
 #include "types/json_value.h"
@@ -729,6 +732,63 @@ PARALLEL_TEST(ColumnArraySerdeTest, nullable_int32_column) {
     }
 }
 
+namespace {
+
+template <typename ColumnType>
+void append_binary_serde_test_strings(ColumnType* column) {
+    std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
+    column->append_strings(strings.data(), strings.size());
+}
+
+template <typename ColumnType>
+void force_large_offsets(ColumnType* column) {
+    AdaptiveOffsets::Large large_offsets;
+    large_offsets.resize(column->get_offset().size());
+    for (size_t i = 0; i < column->get_offset().size(); ++i) {
+        large_offsets[i] = column->get_offset()[i];
+    }
+    column->get_offset().set_large_buffer(std::move(large_offsets));
+}
+
+template <typename ColumnType>
+void assert_binary_column_equal(const ColumnType& lhs, const ColumnType& rhs) {
+    ASSERT_EQ(lhs.size(), rhs.size());
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        ASSERT_EQ(lhs.get_slice(i), rhs.get_slice(i));
+    }
+}
+
+bool has_binary_serde_extended_escape(const uint8_t* buffer) {
+    const auto bytes_size = decode_fixed32_le(buffer);
+    return bytes_size == 0 && decode_fixed32_le(buffer + sizeof(uint32_t)) == 0;
+}
+
+template <typename ColumnType>
+void assert_binary_serde_round_trip(const ColumnType& src, ColumnType* dst, int64_t expected_size,
+                                    bool expect_extended_escape, bool expect_dst_large_offsets) {
+    const auto max_size = ColumnArraySerde::max_serialized_size(src);
+    ASSERT_EQ(expected_size, max_size);
+
+    ASSERT_GE(max_size, 0);
+    const auto expected_size_bytes = static_cast<size_t>(expected_size);
+    std::vector<uint8_t> buffer(expected_size_bytes);
+    ASSIGN_OR_ABORT(auto serialized_end, ColumnArraySerde::serialize(src, buffer.data()));
+    ASSERT_EQ(buffer.data() + expected_size_bytes, serialized_end);
+
+    if (expect_extended_escape) {
+        ASSERT_TRUE(has_binary_serde_extended_escape(buffer.data()));
+    } else if constexpr (std::is_same_v<ColumnType, BinaryColumn>) {
+        ASSERT_FALSE(has_binary_serde_extended_escape(buffer.data()));
+    }
+
+    ASSIGN_OR_ABORT(auto deserialized_end, ColumnArraySerde::deserialize(buffer.data(), serialized_end, dst));
+    ASSERT_EQ(serialized_end, deserialized_end);
+    ASSERT_EQ(expect_dst_large_offsets, dst->get_offset().is_large());
+    assert_binary_column_equal(src, *dst);
+}
+
+} // namespace
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
@@ -759,6 +819,167 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
     }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_empty_legacy_format) {
+    auto c1 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
+
+    const int64_t expected_size = sizeof(uint32_t) * 3;
+    ASSERT_EQ(expected_size, ColumnArraySerde::max_serialized_size(*c1));
+
+    std::vector<uint8_t> buffer(static_cast<size_t>(expected_size));
+    ASSIGN_OR_ABORT(auto serialized_end, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSERT_EQ(buffer.data() + static_cast<size_t>(expected_size), serialized_end);
+    ASSERT_EQ(0, decode_fixed32_le(buffer.data()));
+    ASSERT_EQ(static_cast<uint32_t>(sizeof(uint32_t)), decode_fixed32_le(buffer.data() + sizeof(uint32_t)));
+    ASSERT_FALSE(has_binary_serde_extended_escape(buffer.data()));
+
+    ASSIGN_OR_ABORT(auto deserialized_end, ColumnArraySerde::deserialize(buffer.data(), serialized_end, c2.get()));
+    ASSERT_EQ(serialized_end, deserialized_end);
+    ASSERT_EQ(0, c2->size());
+    ASSERT_FALSE(c2->get_offset().is_large());
+    ASSERT_EQ(1, c2->get_offset().size());
+    ASSERT_EQ(0, c2->get_offset().back());
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serde_offset_width_layouts) {
+    {
+        auto c1 = BinaryColumn::create();
+        auto c2 = BinaryColumn::create();
+        append_binary_serde_test_strings(c1.get());
+        ASSERT_FALSE(c1->get_offset().is_large());
+
+        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint32_t) +
+                                   sizeof(uint32_t) * 2;
+        assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, false);
+    }
+
+    {
+        auto c1 = BinaryColumn::create();
+        auto c2 = BinaryColumn::create();
+        append_binary_serde_test_strings(c1.get());
+        force_large_offsets(c1.get());
+        ASSERT_TRUE(c1->get_offset().is_large());
+
+        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint32_t) +
+                                   sizeof(uint32_t) * 2;
+        assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, false);
+    }
+
+    {
+        auto c1 = LargeBinaryColumn::create();
+        auto c2 = LargeBinaryColumn::create();
+        append_binary_serde_test_strings(c1.get());
+        ASSERT_FALSE(c1->get_offset().is_large());
+
+        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) +
+                                   sizeof(uint64_t) * 2;
+        assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, true);
+    }
+
+    {
+        auto c1 = LargeBinaryColumn::create();
+        auto c2 = LargeBinaryColumn::create();
+        append_binary_serde_test_strings(c1.get());
+        force_large_offsets(c1.get());
+        ASSERT_TRUE(c1->get_offset().is_large());
+
+        const auto expected_size = c1->get_immutable_bytes().size() + c1->get_offset().size() * sizeof(uint64_t) +
+                                   sizeof(uint64_t) * 2;
+        assert_binary_serde_round_trip(*c1, c2.get(), expected_size, false, true);
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_sticky_large_offsets_integer_encoding) {
+    auto c1 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
+
+    std::vector<std::string> values;
+    std::vector<Slice> slices;
+    values.reserve(80);
+    slices.reserve(80);
+    for (int i = 0; i < 80; ++i) {
+        values.emplace_back(strings::Substitute("v$0", i));
+        slices.emplace_back(values.back());
+    }
+    c1->append_strings(slices.data(), slices.size());
+    force_large_offsets(c1.get());
+    ASSERT_TRUE(c1->get_offset().is_large());
+
+    const auto max_size = ColumnArraySerde::max_serialized_size(*c1, ENCODE_INTEGER);
+    ASSERT_GE(max_size, 0);
+    std::vector<uint8_t> buffer(static_cast<size_t>(max_size));
+    ASSIGN_OR_ABORT(auto serialized_end, ColumnArraySerde::serialize(*c1, buffer.data(), false, ENCODE_INTEGER));
+    ASSERT_LE(serialized_end, buffer.data() + buffer.size());
+    ASSERT_FALSE(has_binary_serde_extended_escape(buffer.data()));
+
+    ASSIGN_OR_ABORT(auto deserialized_end,
+                    ColumnArraySerde::deserialize(buffer.data(), serialized_end, c2.get(), false, ENCODE_INTEGER));
+    ASSERT_EQ(serialized_end, deserialized_end);
+    ASSERT_FALSE(c2->get_offset().is_large());
+    assert_binary_column_equal(*c1, *c2);
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column_empty_format) {
+    auto c1 = LargeBinaryColumn::create();
+    auto c2 = LargeBinaryColumn::create();
+
+    const int64_t expected_size = sizeof(uint64_t) * 3;
+    ASSERT_EQ(expected_size, ColumnArraySerde::max_serialized_size(*c1));
+
+    std::vector<uint8_t> buffer(static_cast<size_t>(expected_size));
+    ASSIGN_OR_ABORT(auto serialized_end, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSERT_EQ(buffer.data() + static_cast<size_t>(expected_size), serialized_end);
+    ASSERT_EQ(0, decode_fixed64_le(buffer.data()));
+    ASSERT_EQ(static_cast<uint64_t>(sizeof(uint64_t)), decode_fixed64_le(buffer.data() + sizeof(uint64_t)));
+
+    ASSIGN_OR_ABORT(auto deserialized_end, ColumnArraySerde::deserialize(buffer.data(), serialized_end, c2.get()));
+    ASSERT_EQ(serialized_end, deserialized_end);
+    ASSERT_EQ(0, c2->size());
+    ASSERT_TRUE(c2->get_offset().is_large());
+    ASSERT_EQ(1, c2->get_offset().size());
+    ASSERT_EQ(0, c2->get_offset().back());
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_extended_format_deserialize) {
+    auto append_u32 = [](std::vector<uint8_t>* buffer, uint32_t value) {
+        const auto old_size = buffer->size();
+        buffer->resize(old_size + sizeof(value));
+        encode_fixed32_le(buffer->data() + old_size, value);
+    };
+    auto append_u64 = [](std::vector<uint8_t>* buffer, uint64_t value) {
+        const auto old_size = buffer->size();
+        buffer->resize(old_size + sizeof(value));
+        encode_fixed64_le(buffer->data() + old_size, value);
+    };
+
+    const std::string bytes = "aabbcc";
+    const uint64_t offsets[] = {0, 2, 4, 6};
+
+    std::vector<uint8_t> buffer;
+    append_u32(&buffer, 0);
+    append_u32(&buffer, 0);
+    append_u64(&buffer, bytes.size());
+    buffer.insert(buffer.end(), bytes.begin(), bytes.end());
+    append_u64(&buffer, sizeof(offsets));
+    for (auto offset : offsets) {
+        append_u64(&buffer, offset);
+    }
+
+    auto column = BinaryColumn::create();
+    ASSIGN_OR_ABORT(auto p, ColumnArraySerde::deserialize(buffer.data(), buffer.data() + buffer.size(), column.get()));
+    ASSERT_EQ(buffer.data() + buffer.size(), p);
+    ASSERT_EQ(3, column->size());
+    ASSERT_TRUE(column->get_offset().is_large());
+    ASSERT_EQ(Slice("aa"), column->get_slice(0));
+    ASSERT_EQ(Slice("bb"), column->get_slice(1));
+    ASSERT_EQ(Slice("cc"), column->get_slice(2));
 }
 
 // NOLINTNEXTLINE

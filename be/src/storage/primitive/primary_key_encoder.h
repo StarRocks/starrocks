@@ -162,6 +162,10 @@ public:
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
                                 PrimaryKeyEncodingType encoding_type, bool large_column = false);
 
+    // Delete files are persisted with the historical BinaryColumn serde format.
+    // Check that an encoded primary-key column can still be persisted by delete files in that legacy format.
+    static Status check_can_persist_delete_file_as_legacy_binary_format(const Column& column);
+
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
                        PrimaryKeyEncodingType encoding_type);
 

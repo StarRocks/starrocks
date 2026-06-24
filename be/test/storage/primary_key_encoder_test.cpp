@@ -22,6 +22,8 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
@@ -295,6 +297,39 @@ TEST(PrimaryKeyEncoderTest, testSingleIntV2EncodingRoundTripAndColumnType) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
                   decoded->get_column_by_index(0)->get(i).get_int32());
     }
+}
+
+TEST(PrimaryKeyEncoderTest, testDeleteFileLegacyBinaryFormatCheck) {
+    std::vector<Slice> strings{{"a"}, {"bb"}, {"ccc"}};
+
+    auto binary = BinaryColumn::create();
+    binary->append_strings(strings.data(), strings.size());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(*binary).ok());
+
+    auto sticky_large = BinaryColumn::create();
+    sticky_large->append_strings(strings.data(), strings.size());
+    AdaptiveOffsets::Large large_offsets;
+    large_offsets.resize(sticky_large->get_offset().size());
+    for (size_t i = 0; i < sticky_large->get_offset().size(); ++i) {
+        large_offsets[i] = sticky_large->get_offset()[i];
+    }
+    sticky_large->get_offset().set_large_buffer(std::move(large_offsets));
+    ASSERT_TRUE(sticky_large->get_offset().is_large());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(*sticky_large).ok());
+
+    auto nullable_data = BinaryColumn::create();
+    nullable_data->append_strings(strings.data(), strings.size());
+    auto nullable = NullableColumn::create(std::move(nullable_data), NullColumn::create(strings.size(), 0));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(*nullable).ok());
+
+    auto large_binary = LargeBinaryColumn::create();
+    large_binary->append_strings(strings.data(), strings.size());
+    ASSERT_FALSE(PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(*large_binary).ok());
+
+    auto fixed = Int32Column::create();
+    int32_t value = 1;
+    fixed->append_numbers(&value, sizeof(value));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(*fixed).ok());
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodedTypeAndFixedSizeByEncodingType) {

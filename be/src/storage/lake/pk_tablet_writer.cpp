@@ -25,6 +25,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
 
@@ -73,6 +74,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
         wopts.encryption_info = pair.info;
         encryption_meta.swap(pair.encryption_meta);
     }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(deletes));
     std::unique_ptr<WritableFile> of;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(of, _fs->new_writable_file(_location_provider->del_location(_tablet_id, name)));

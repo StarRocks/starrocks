@@ -35,8 +35,11 @@
 
 #include "storage/primitive/primary_key_encoder.h"
 
+#include <fmt/format.h>
+
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <type_traits>
@@ -261,6 +264,29 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKe
         ret += TypeUtils::estimate_field_size(t, 0);
     }
     return ret;
+}
+
+Status PrimaryKeyEncoder::check_can_persist_delete_file_as_legacy_binary_format(const Column& column) {
+    const auto* data_column = ColumnHelper::get_data_column(&column);
+    if (data_column->is_large_binary()) {
+        return Status::NotSupported("LargeBinaryColumn cannot be serialized with legacy BinaryColumn format");
+    }
+    if (!data_column->is_binary()) {
+        return Status::OK();
+    }
+
+    const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
+    const auto bytes_size = binary_column->get_immutable_bytes().size();
+    const auto offset_bytes_size = static_cast<uint64_t>(binary_column->get_offset().size()) * sizeof(uint32_t);
+    if (bytes_size <= std::numeric_limits<uint32_t>::max() &&
+        offset_bytes_size <= std::numeric_limits<uint32_t>::max()) {
+        return Status::OK();
+    }
+
+    return Status::CapacityLimitExceed(fmt::format(
+            "primary key encoded BinaryColumn cannot be serialized with legacy u32 format, bytes_size: {}, "
+            "offset_bytes_size: {}, limit: {}",
+            bytes_size, offset_bytes_size, std::numeric_limits<uint32_t>::max()));
 }
 
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
