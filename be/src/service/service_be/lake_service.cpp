@@ -37,6 +37,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
@@ -353,6 +354,19 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
                         auto score = compaction_score(_tablet_mgr, metadata);
+                        // Per-tablet stats returned to FE: for range-distribution tablets (every
+                        // publish) to drive real-time split/merge, and on first import (base_version==1)
+                        // for any tablet so FE can collect first-load statistics. Supersedes the
+                        // deprecated tablet_row_nums field; note num_rows here is the live-row count
+                        // (PK tablets subtract deletes) rather than that field's raw rowset row sum,
+                        // so a first load with intra-batch duplicate keys or deletes reports fewer
+                        // rows. Summed without delvec I/O (publish hot path).
+                        const bool emit_stats = metadata->has_range() || request->base_version() == 1;
+                        int64_t stats_num_rows = 0;
+                        int64_t stats_data_size = 0;
+                        if (emit_stats) {
+                            compute_tablet_stats(*metadata, &stats_num_rows, &stats_data_size);
+                        }
                         // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
                         TabletMetadataPB local_metadata;
                         if (skip_write_tablet_metadata) {
@@ -361,12 +375,18 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         {
                             std::lock_guard l(response_mtx);
                             response->mutable_compaction_scores()->insert({metadata->id(), score});
-                            if (request->base_version() == 1) {
-                                int64_t row_nums = std::accumulate(
-                                        metadata->rowsets().begin(), metadata->rowsets().end(), 0,
-                                        [](int64_t sum, const auto& rowset) { return sum + rowset.num_rows(); });
-                                // Used to collect statistics when the partition is first imported
-                                response->mutable_tablet_row_nums()->insert({metadata->id(), row_nums});
+                            if (emit_stats) {
+                                auto* stat = &(*response->mutable_tablet_stats())[metadata->id()];
+                                stat->set_num_rows(stats_num_rows);
+                                stat->set_data_size(stats_data_size);
+                                // Compat shim: also mirror the first-load row count into the legacy
+                                // field so an old FE (BE-before-FE rolling upgrade) still collects
+                                // first-load statistics from ordinal 4; a new FE reads tablet_stats.
+                                // Nested here because base_version==1 implies emit_stats, so
+                                // stats_num_rows is the freshly computed value.
+                                if (request->base_version() == 1) {
+                                    (*response->mutable_deprecated_tablet_row_nums())[metadata->id()] = stats_num_rows;
+                                }
                             }
                             if (skip_write_tablet_metadata) {
                                 (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
@@ -555,8 +575,11 @@ struct AggregatePublishContext {
         for (const auto& [tid, score] : resp->compaction_scores()) {
             (*response->mutable_compaction_scores())[tid] = score;
         }
-        for (const auto& [tid, row_num] : resp->tablet_row_nums()) {
-            (*response->mutable_tablet_row_nums())[tid] = row_num;
+        for (const auto& [tid, stat] : resp->tablet_stats()) {
+            (*response->mutable_tablet_stats())[tid] = stat;
+        }
+        for (const auto& [tid, row_num] : resp->deprecated_tablet_row_nums()) {
+            (*response->mutable_deprecated_tablet_row_nums())[tid] = row_num;
         }
         for (auto& [tid, meta] : *resp->mutable_tablet_metas()) {
             // Use swap to avoid copy
