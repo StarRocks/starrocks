@@ -104,6 +104,29 @@ PARALLEL_TEST(WorkGroupManagerTest, injects_driver_queue_factory_for_accepted_wo
     manager.destroy();
 }
 
+TEST(WorkGroupManagerTest, default_workgroup_reverts_after_temporary_manager_destroy) {
+    const auto previous_default = WorkGroup::default_workgroup();
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    WorkGroupManager original_manager(config, nullptr, make_fake_driver_queue_factory(),
+                                      unused_driver_executor_factory());
+    DefaultWorkGroupInitialization original_init(&original_manager, 1);
+    const auto original_default = original_manager.get_default_workgroup();
+    ASSERT_EQ(original_default, WorkGroup::default_workgroup());
+
+    WorkGroupManager temporary_manager(config, nullptr, make_fake_driver_queue_factory(),
+                                       unused_driver_executor_factory());
+    DefaultWorkGroupInitialization temporary_init(&temporary_manager, 2);
+    const auto temporary_default = temporary_manager.get_default_workgroup();
+    ASSERT_EQ(temporary_default, WorkGroup::default_workgroup());
+    ASSERT_NE(original_default.get(), temporary_default.get());
+
+    temporary_manager.destroy();
+    EXPECT_EQ(original_default, WorkGroup::default_workgroup());
+
+    original_manager.destroy();
+    EXPECT_EQ(previous_default, WorkGroup::default_workgroup());
+}
+
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
     auto _manager = std::make_unique<WorkGroupManager>(config, nullptr, make_fake_driver_queue_factory(),
