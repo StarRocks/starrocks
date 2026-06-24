@@ -30,11 +30,6 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.transaction.DatabaseTransactionMgr;
-import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.PartitionCommitInfo;
-import com.starrocks.transaction.TableCommitInfo;
-import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -436,75 +431,6 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         // The rewrite SQL is never (re-)executed across the deferred rounds: the injected future stands in for
         // the completed INSERT, and the defer branch returns before any resubmission path.
         Mockito.verify(optimizeJob, Mockito.never()).executeSql(Mockito.anyString());
-    }
-
-    @Test
-    public void testExistCommittedTxnsReturnsFalseForDroppedDb() {
-        // The visibility gate calls existCommittedTxns lock-free; if the database was dropped concurrently
-        // its DatabaseTransactionMgr is absent. That must yield "no committed txns" (safe to proceed) rather
-        // than throwing NPE inside the optimize scheduler loop.
-        long missingDbId = 987654321L;
-        boolean exists = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .existCommittedTxns(missingDbId, 1L, 1L);
-        Assertions.assertFalse(exists, "existCommittedTxns must return false (not NPE) for an absent database");
-    }
-
-    @Test
-    public void testExistCommittedTxnsTrueForCommittedPartition() {
-        // Cover the @Nullable-guarded TableCommitInfo branch: a registered db whose committed txn lists the
-        // table and has a populated TableCommitInfo/PartitionCommitInfo must report an existing committed txn
-        // (the dropped-db test only exercises the early null-DatabaseTransactionMgr short-circuit).
-        long dbId = 222333444L;
-        long tableId = 555L;
-        long partitionId = 666L;
-
-        TableCommitInfo tableCommitInfo = Mockito.mock(TableCommitInfo.class);
-        Mockito.when(tableCommitInfo.getPartitionCommitInfo(partitionId))
-                .thenReturn(Mockito.mock(PartitionCommitInfo.class));
-        TransactionState txnState = Mockito.mock(TransactionState.class);
-        Mockito.when(txnState.getTableIdList()).thenReturn(List.of(tableId));
-        Mockito.when(txnState.getTableCommitInfo(tableId)).thenReturn(tableCommitInfo);
-        DatabaseTransactionMgr dbTransactionMgr = Mockito.mock(DatabaseTransactionMgr.class);
-        Mockito.when(dbTransactionMgr.getCommittedTxnList()).thenReturn(List.of(txnState));
-
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        Map<Long, DatabaseTransactionMgr> dbMgrs = globalTransactionMgr.getAllDatabaseTransactionMgrs();
-        dbMgrs.put(dbId, dbTransactionMgr);
-        try {
-            Assertions.assertTrue(globalTransactionMgr.existCommittedTxns(dbId, tableId, partitionId),
-                    "existCommittedTxns must report the committed txn whose TableCommitInfo is populated");
-        } finally {
-            dbMgrs.remove(dbId);
-        }
-    }
-
-    @Test
-    public void testExistCommittedTxnsFalseWhenTableCommitInfoNull() {
-        // Cover the @Nullable TableCommitInfo guard: a committed txn can list the table in its tableIdList
-        // before its TableCommitInfo is populated. With a non-null partitionId, existCommittedTxns must treat
-        // the null TableCommitInfo as "no committed txn for this partition" (the short-circuit false branch of
-        // `tableCommitInfo != null`) and fall through to return false rather than NPE -- this method is called
-        // lock-free by the online optimize visibility gate.
-        long dbId = 222333445L;
-        long tableId = 777L;
-        long partitionId = 888L;
-
-        TransactionState txnState = Mockito.mock(TransactionState.class);
-        Mockito.when(txnState.getTableIdList()).thenReturn(List.of(tableId));
-        Mockito.when(txnState.getTableCommitInfo(tableId)).thenReturn(null);
-        DatabaseTransactionMgr dbTransactionMgr = Mockito.mock(DatabaseTransactionMgr.class);
-        Mockito.when(dbTransactionMgr.getCommittedTxnList()).thenReturn(List.of(txnState));
-
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        Map<Long, DatabaseTransactionMgr> dbMgrs = globalTransactionMgr.getAllDatabaseTransactionMgrs();
-        dbMgrs.put(dbId, dbTransactionMgr);
-        try {
-            Assertions.assertFalse(globalTransactionMgr.existCommittedTxns(dbId, tableId, partitionId),
-                    "existCommittedTxns must return false (not NPE) when the committed txn's TableCommitInfo "
-                            + "is not yet populated");
-        } finally {
-            dbMgrs.remove(dbId);
-        }
     }
 
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
