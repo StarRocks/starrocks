@@ -29,10 +29,10 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "util/byte_buffer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,14 +100,10 @@ protected:
         return std::make_unique<AvroScanner>(_state, _profile, *broker_scan_range, _counter, schema_text);
     }
 
-    static TRoutineLoadMetaColumn meta_desc(int32_t slot_id, TStreamSourceMetaKind::type kind,
-                                            const std::string& key = "") {
+    static TRoutineLoadMetaColumn meta_desc(int32_t slot_id, TStreamSourceMetaKind::type kind) {
         TRoutineLoadMetaColumn d;
         d.__set_slot_id(slot_id);
         d.__set_kind(kind);
-        if (!key.empty()) {
-            d.__set_key(key);
-        }
         return d;
     }
 
@@ -2323,7 +2319,7 @@ TEST_F(AvroScannerTest, test_root_array) {
 
 TEST_F(AvroScannerTest, test_source_metadata_fill) {
     // Two payload fields; the other destination columns are hidden source-metadata slots that the
-    // routine-load FE lowers from kafka_topic()/kafka_partition()/... into the scan range. BE_TEST reads
+    // routine-load FE derives from the INCLUDE METADATA clause into the scan range. BE_TEST reads
     // avro from a file rather than the Kafka pipe, so the per-message metadata is injected via
     // set_test_stream_meta(). Metadata-value formatting itself is covered by stream_source_meta_test;
     // this test covers the AvroScanner integration: slot interception and positional jsonpath alignment.
@@ -2362,11 +2358,13 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
         types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 2)
         types.emplace_back(TYPE_INT);                                // partition (meta, slot 3)
         types.emplace_back(TYPE_BIGINT);                             // offset (meta, slot 4)
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // header trace-id (meta, slot 5)
+        types.emplace_back(
+                TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(64),
+                                                TypeDescriptor::create_varchar_type(64))); // headers (slot 5)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {
                 meta_desc(2, TStreamSourceMetaKind::TOPIC), meta_desc(3, TStreamSourceMetaKind::PARTITION),
-                meta_desc(4, TStreamSourceMetaKind::OFFSET), meta_desc(5, TStreamSourceMetaKind::HEADER, "trace-id")};
+                meta_desc(4, TStreamSourceMetaKind::OFFSET), meta_desc(5, TStreamSourceMetaKind::HEADERS)};
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -2389,7 +2387,7 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
         EXPECT_EQ("orders", chunk->get(0)[2].get_slice());
         EXPECT_EQ(7, chunk->get(0)[3].get_int32());
         EXPECT_EQ(100, chunk->get(0)[4].get_int64());
-        EXPECT_EQ("xyz", chunk->get(0)[5].get_slice());
+        EXPECT_EQ(1, chunk->get(0)[5].get_map().size()); // headers map {trace-id: xyz}
     }
 
     // jsonpath path: a metadata slot sits BETWEEN the two payload columns, so the positional

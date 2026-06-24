@@ -102,7 +102,7 @@ private:
 };
 
 // Per-message metadata for routine-load stream sources (Kafka/Pulsar). Carries the message-level
-// fields a job may surface via the source-metadata functions (kafka_topic(), kafka_header('k'), ...):
+// fields a job may surface via the INCLUDE METADATA clause (KEY, PARTITION, OFFSET, HEADERS, ...):
 // topic, partition, offset/message_id, timestamp/event_timestamp, key, headers. One class for both
 // sources, tagged by type(); a field left at its sentinel (negative number / empty / !has_key) is
 // rendered as SQL NULL by the scanner. copy_from() fully overwrites every field so a buffer reused

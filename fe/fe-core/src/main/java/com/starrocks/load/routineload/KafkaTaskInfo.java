@@ -43,10 +43,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TKafkaLoadInfo;
@@ -195,15 +193,14 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         if ((routineLoadJob).getConfluentSchemaRegistryUrl() != null) {
             tKafkaLoadInfo.setConfluent_schema_registry_url((routineLoadJob).getConfluentSchemaRegistryUrl());
         }
-        // Attach per-message source metadata only when the COLUMNS clause references a metadata column;
+        // Attach per-message source metadata only when the INCLUDE METADATA clause declares a column;
         // otherwise the BE leaves the buffer metadata-free and reads every field from the payload.
         // key/headers are gated more narrowly.
-        List<ImportColumnDesc> columnDescs = routineLoadJob.getColumnDescs();
-        Set<Load.StreamMetaKind> metaKinds = Load.collectStreamMetaKinds(columnDescs);
+        Set<RoutineLoadMetadata.StreamMetaKind> metaKinds = RoutineLoadMetadata.collectStreamMetaKinds(
+                routineLoadJob.getMetadata(), routineLoadJob.getDataSourceTypeName());
         tKafkaLoadInfo.setNeed_source_metadata(!metaKinds.isEmpty());
-        tKafkaLoadInfo.setNeed_message_key(metaKinds.contains(Load.StreamMetaKind.KEY));
-        tKafkaLoadInfo.setNeed_message_headers(
-                metaKinds.contains(Load.StreamMetaKind.HEADER) || metaKinds.contains(Load.StreamMetaKind.HEADERS));
+        tKafkaLoadInfo.setNeed_message_key(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.KEY));
+        tKafkaLoadInfo.setNeed_message_headers(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.HEADERS));
         tRoutineLoadTask.setKafka_load_info(tKafkaLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.KAFKA);
         tRoutineLoadTask.setParams(plan(routineLoadJob));

@@ -69,8 +69,8 @@ public:
     // JSON/Avro path: exactly one message per buffer (no row delimiter) so the scanner can decode each
     // message individually. When `meta` is non-null it is copied onto the buffer; the scanner reads it
     // to fill metadata columns and to stamp source context into error logs. Its source type
-    // (KAFKA/PULSAR) selects the buffer meta type. row_delimiter is unused on this path.
-    Status append_json(const char* data, size_t size, char /*row_delimiter*/, const StreamMessageMeta* meta = nullptr) {
+    // (KAFKA/PULSAR) selects the buffer meta type.
+    Status append_json(const char* data, size_t size, const StreamMessageMeta* meta = nullptr) {
         ByteBufferMetaType meta_type = (meta != nullptr) ? meta->type() : ByteBufferMetaType::NONE;
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(size, simdjson::SIMDJSON_PADDING, meta_type));

@@ -89,8 +89,7 @@ TEST_F(KafkaConsumerPipeTest, append_read_json) {
     std::string msg2 = R"({"k2":2}")";
 
     Status st;
-    char row_delimiter = '\n';
-    st = k_pipe.append_json(msg1.c_str(), msg1.length(), row_delimiter);
+    st = k_pipe.append_json(msg1.c_str(), msg1.length());
     ASSERT_TRUE(st.ok());
     StreamMessageMeta src_meta(ByteBufferMetaType::KAFKA);
     src_meta.set_topic("t");
@@ -99,7 +98,7 @@ TEST_F(KafkaConsumerPipeTest, append_read_json) {
     src_meta.set_timestamp(99);
     src_meta.set_key("kk");
     src_meta.add_header("h1", "v1");
-    st = k_pipe.append_json(msg2.c_str(), msg2.length(), row_delimiter, &src_meta);
+    st = k_pipe.append_json(msg2.c_str(), msg2.length(), &src_meta);
     ASSERT_TRUE(st.ok());
     st = k_pipe.finish();
     ASSERT_TRUE(st.ok());

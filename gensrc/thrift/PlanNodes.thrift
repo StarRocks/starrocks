@@ -241,12 +241,11 @@ enum TFileScanType {
     FILES_QUERY
 }
 
-// Which per-message metadata field a routine-load source-metadata slot is bound to. The FE lowers
-// metadata functions in the COLUMNS clause (kafka_topic(), kafka_header('k'), pulsar_message_id(),
-// ...) into hidden source slots described by TRoutineLoadMetaColumn, so the BE scanner fills the slot
-// from the Kafka/Pulsar message rather than the payload. TIMESTAMP is the Kafka record timestamp /
-// Pulsar publish time; EVENT_TIME is the Pulsar event time. HEADER selects one header/property by key
-// (last-wins); HEADERS is the whole map.
+// Which per-message metadata field a routine-load source-metadata slot is bound to. The FE lowers the
+// INCLUDE METADATA (<KEY> AS <alias>, ...) clause into hidden source slots described by
+// TRoutineLoadMetaColumn, so the BE scanner fills the slot from the Kafka/Pulsar message rather than
+// the payload. TIMESTAMP is the Kafka record timestamp / Pulsar publish time; EVENT_TIME is the Pulsar
+// event time; HEADERS is the whole header/property map (a single value is read with element_at).
 enum TStreamSourceMetaKind {
     TOPIC = 0,
     PARTITION = 1,
@@ -255,15 +254,12 @@ enum TStreamSourceMetaKind {
     TIMESTAMP = 4,
     EVENT_TIME = 5,
     KEY = 6,
-    HEADER = 7,
-    HEADERS = 8
+    HEADERS = 7
 }
 
 struct TRoutineLoadMetaColumn {
     1: optional Types.TSlotId slot_id
     2: optional TStreamSourceMetaKind kind
-    // For HEADER: the header/property key to look up. Unused for the other kinds.
-    3: optional string key
 }
 
 struct TBrokerScanRangeParams {
@@ -331,7 +327,7 @@ struct TBrokerScanRangeParams {
     33: optional TFileScanType file_scan_type
     34: optional bool schema_sample_types = true
     // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
-    // field. Empty for non-routine-load and for jobs that use no metadata function.
+    // field. Empty for non-routine-load and for jobs without an INCLUDE METADATA clause.
     35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 

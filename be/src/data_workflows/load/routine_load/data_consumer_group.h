@@ -46,7 +46,7 @@ namespace starrocks {
 // Recover a Pulsar message's partition index from its topic name. The Pulsar C++ Message API exposes
 // no partition number at all -- only getTopicName() -- so the partition has to be parsed out of the
 // per-partition name Pulsar gives the Nth partition of a partitioned topic: "<topic>-partition-N".
-// (pulsar_topic() does not go through here; it is taken straight from the job's configured logical
+// (the TOPIC metadata does not go through here; it is taken straight from the job's configured logical
 // topic, so only the index is parsed below.)
 //
 // The "-partition-N" suffix on its own is ambiguous: Pulsar lets you create a standalone

@@ -267,7 +267,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                 exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
                 streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate(),
-                streamLoadInfo.getRoutineLoadSourceType());
+                streamLoadInfo.getRoutineLoadSourceType(), streamLoadInfo.getMetadata());
     }
 
     @Override

@@ -18,11 +18,12 @@ import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.load.routineload.RoutineLoadMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.LabelName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,11 +60,13 @@ public class CreateRoutineLoadAnalyzer {
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
             RoutineLoadDesc routineLoadDesc = statement.getRoutineLoadDesc();
-            List<ImportColumnDesc> metaColumnDescs =
+            List<ImportColumnDesc> columnDescs =
                     (routineLoadDesc != null && routineLoadDesc.getColumnsInfo() != null)
                             ? routineLoadDesc.getColumnsInfo().getColumns()
                             : null;
-            Load.validateStreamMetaFunctions(metaColumnDescs, statement.getTypeName(), statement.getFormat());
+            ImportMetadataStmt metadata = routineLoadDesc != null ? routineLoadDesc.getMetadata() : null;
+            RoutineLoadMetadata.validateIncludeMetadata(metadata, columnDescs, statement.getTypeName(),
+                    statement.getFormat());
         } catch (StarRocksException e) {
             LOG.error(e.getMessage(), e);
             throw new SemanticException(e.getMessage());

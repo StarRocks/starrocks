@@ -65,15 +65,14 @@ struct TKafkaLoadInfo {
     3: required map<i32, i64> partition_begin_offset;
     4: optional map<string, string> properties;
     5: optional string confluent_schema_registry_url;
-    // Whether the job's COLUMNS clause references any source-metadata function (kafka_topic(),
-    // kafka_partition(), ...). The consumer attaches the extended per-message metadata
-    // (topic/timestamp/key/headers) to the buffer only when this is set.
-    8: optional bool need_source_metadata;
+    // Whether the job's INCLUDE METADATA clause declares any source-metadata column. The consumer
+    // attaches the extended per-message metadata (topic/timestamp/key/headers) to the buffer only when
+    // this is set.
+    6: optional bool need_source_metadata;
     // Finer gates within need_source_metadata: only extract the (potentially large) message key/headers
-    // when the job references kafka_key() / kafka_header()/kafka_headers(). Scalar metadata is cheap and
-    // not separately gated.
-    6: optional bool need_message_key;
-    7: optional bool need_message_headers;
+    // when the clause declares a KEY / HEADERS column. Scalar metadata is cheap and not separately gated.
+    7: optional bool need_message_key;
+    8: optional bool need_message_headers;
 }
 
 struct TPulsarLoadInfo {
@@ -86,9 +85,9 @@ struct TPulsarLoadInfo {
     // Like TKafkaLoadInfo, except that for Pulsar need_source_metadata gates attaching per-message
     // metadata at all; the other two gate extraction of the message key (partition key) / headers
     // (properties).
-    9: optional bool need_source_metadata;
-    7: optional bool need_message_key;
-    8: optional bool need_message_headers;
+    7: optional bool need_source_metadata;
+    8: optional bool need_message_key;
+    9: optional bool need_message_headers;
 }
 
 struct TRoutineLoadTask {

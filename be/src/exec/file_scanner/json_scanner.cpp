@@ -500,8 +500,8 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     _parsed_columns.assign(chunk->num_columns(), false);
 
     // Hidden source-metadata columns are filled from the buffer's Kafka/Pulsar metadata (routine load),
-    // never from the payload. Their slots have generated names that cannot appear in the payload, so no
-    // payload field is ever shadowed.
+    // never from the payload. If a payload field uses the same name as a metadata alias, the by-name
+    // resolve below skips it so the metadata value wins.
     const StreamMessageMeta* meta = stream_source_meta_of(_file_stream_buffer);
 
     faststring buffer;
@@ -557,8 +557,8 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
 
                 column_index = chunk->get_index_by_slot_id(slot_desc->id());
                 // A hidden metadata slot is filled from the message meta in the null-fill pass, never
-                // from the payload; if a payload field happens to use its internal name, skip it (cache
-                // as a skip via column_index = -1) so the metadata value still wins.
+                // from the payload; if a payload field uses the same name as the metadata alias, skip it
+                // (cache as column_index = -1) so the metadata value still wins.
                 if (_meta_col_by_index.count(column_index) > 0) {
                     if (_prev_parsed_position.size() <= key_index) {
                         _prev_parsed_position.emplace_back(key);
@@ -621,7 +621,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 }
             } else if (auto it = _meta_col_by_index.find(i); it != _meta_col_by_index.end()) {
                 // Fill from meta (NULL when the buffer carries none).
-                RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+                RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, meta, column));
             } else {
                 column->append_nulls(1);
             }
@@ -652,7 +652,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         // advance meta_count, so a metadata slot stays transparent to the positional jsonpath mapping
         // regardless of whether meta is present.
         if (auto it = _meta_col_by_slot_id.find(_slot_descs[i]->id()); UNLIKELY(it != _meta_col_by_slot_id.end())) {
-            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, meta, column));
             meta_count++;
             continue;
         }

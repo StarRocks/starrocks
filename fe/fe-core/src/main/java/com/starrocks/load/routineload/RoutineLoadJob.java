@@ -92,6 +92,7 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
@@ -205,6 +206,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     //    protected RoutineLoadDesc routineLoadDesc; // optional
     protected PartitionNames partitions; // optional
     protected List<ImportColumnDesc> columnDescs; // optional
+    // INCLUDE METADATA clause; optional. Transient like columnDescs — not GSON-persisted; rebuilt from
+    // origStmt on restart via gsonPostProcess -> getLoadDesc -> setRoutineLoadDesc.
+    protected ImportMetadataStmt metadata; // optional
     protected Expr whereExpr; // optional
     protected ColumnSeparator columnSeparator; // optional
     protected RowDelimiter rowDelimiter; // optional
@@ -483,6 +487,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 columnDescs.addAll(columnsStmt.getColumns());
             }
         }
+        if (routineLoadDesc.getMetadata() != null) {
+            metadata = routineLoadDesc.getMetadata();
+        }
         if (routineLoadDesc.getWherePredicate() != null) {
             whereExpr = routineLoadDesc.getWherePredicate().getExpr();
         }
@@ -630,6 +637,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public List<ImportColumnDesc> getColumnDescs() {
         return columnDescs;
+    }
+
+    public ImportMetadataStmt getMetadata() {
+        return metadata;
     }
 
     public Expr getWhereExpr() {
@@ -1409,6 +1420,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             return;
         }
 
+        checkMetadataAliasCollision(table, routineLoadDesc.getMetadata());
+
         PartitionRef partitionNames = routineLoadDesc.getPartitionNames();
         if (partitionNames == null) {
             return;
@@ -1423,6 +1436,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // columns will be checked when planing
+    }
+
+    // Rejects an INCLUDE METADATA alias that collides with a destination-table column. The alias becomes
+    // a hidden source column, so a clash would shadow the table column; checked at CREATE and ALTER where
+    // the table is available, so the job fails fast instead of failing every task at planning.
+    private static void checkMetadataAliasCollision(Table table, ImportMetadataStmt metadata) throws DdlException {
+        if (metadata == null || metadata.getItems() == null || !(table instanceof OlapTable)) {
+            return;
+        }
+        for (ImportMetadataStmt.Item item : metadata.getItems()) {
+            if (((OlapTable) table).getColumn(item.getAlias()) != null) {
+                throw new DdlException("INCLUDE METADATA alias '" + item.getAlias()
+                        + "' collides with a column of table " + table.getName());
+            }
+        }
     }
 
     public void updateState(JobState jobState, ErrorReason reason) throws StarRocksException {
@@ -1915,14 +1943,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                           Map<String, String> jobProperties,
                           RoutineLoadDataSourceProperties dataSourceProperties,
                           OriginStatementInfo originStatement) throws DdlException {
-        // ALTER can replace the COLUMNS clause, so re-check that any metadata functions apply to this
-        // job's source (e.g. reject kafka_offset() on a Pulsar job). CREATE is validated in
-        // CreateRoutineLoadAnalyzer; this covers the ALTER path.
-        List<ImportColumnDesc> metaColumnDescs =
+        // ALTER can replace the COLUMNS / INCLUDE METADATA clauses, so re-validate the metadata against
+        // this job's source and format. A clause omitted by the ALTER keeps the job's existing one, so
+        // collisions are checked against the effective pair. CREATE is validated in CreateRoutineLoadAnalyzer.
+        List<ImportColumnDesc> columnDescsForCheck =
                 (routineLoadDesc != null && routineLoadDesc.getColumnsInfo() != null)
                         ? routineLoadDesc.getColumnsInfo().getColumns()
-                        : null;
-        Load.validateStreamMetaFunctions(metaColumnDescs, getDataSourceTypeName(), getFormat());
+                        : this.columnDescs;
+        ImportMetadataStmt metadataForCheck =
+                (routineLoadDesc != null && routineLoadDesc.getMetadata() != null)
+                        ? routineLoadDesc.getMetadata()
+                        : this.metadata;
+        RoutineLoadMetadata.validateIncludeMetadata(metadataForCheck, columnDescsForCheck, getDataSourceTypeName(),
+                getFormat());
+        // ALTER persists before planning, so check the alias/table-column collision here too (CREATE does
+        // it in unprotectedCheckMeta); otherwise an ALTER adding a colliding alias only fails every task.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db != null) {
+            checkMetadataAliasCollision(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId),
+                    metadataForCheck);
+        }
         if (jobProperties != null) {
             checkCommonJobProperties(jobProperties);
         }
@@ -2000,6 +2041,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
         if (routineLoadDesc.getPartitionNames() != null) {
             originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());
+        }
+        if (routineLoadDesc.getMetadata() != null) {
+            originLoadDesc.setMetadata(routineLoadDesc.getMetadata());
         }
 
         String tableName = null;

@@ -18,8 +18,8 @@
 
 #include "base/string/slice.h"
 #include "column/column.h"
+#include "runtime/byte_buffer.h"
 #include "types/datum.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -44,20 +44,7 @@ const StreamMessageMeta* stream_source_meta_of(const ByteBufferPtr& buf) {
     return nullptr;
 }
 
-// The last value for `key` among the message headers (Kafka headers are an ordered multimap; Pulsar
-// properties are unique). Returns nullptr if the key is absent.
-static const std::string* last_header_value(const StreamMessageMeta* meta, const std::string& key) {
-    const std::string* found = nullptr;
-    for (const auto& kv : meta->headers()) {
-        if (kv.first == key) {
-            found = &kv.second;
-        }
-    }
-    return found;
-}
-
-Status fill_stream_source_meta_column(TStreamSourceMetaKind::type kind, const std::string& key,
-                                      const StreamMessageMeta* meta, Column* column) {
+Status fill_stream_source_meta_column(TStreamSourceMetaKind::type kind, const StreamMessageMeta* meta, Column* column) {
     if (meta == nullptr) {
         column->append_nulls(1);
         return Status::OK();
@@ -113,15 +100,6 @@ Status fill_stream_source_meta_column(TStreamSourceMetaKind::type kind, const st
             column->append_datum(Datum(Slice(meta->key())));
         }
         break;
-    case TStreamSourceMetaKind::HEADER: {
-        const std::string* value = last_header_value(meta, key);
-        if (value == nullptr) {
-            column->append_nulls(1);
-        } else {
-            column->append_datum(Datum(Slice(*value)));
-        }
-        break;
-    }
     case TStreamSourceMetaKind::HEADERS: {
         // MAP<VARCHAR,VARCHAR>; duplicate keys collapse last-wins (DatumMap assignment overwrites).
         // Header values are raw bytes placed into VARCHAR as-is (no UTF-8 validation). Always present

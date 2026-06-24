@@ -161,7 +161,7 @@ Status AvroScanner::open() {
     }
     ++_counter->num_files_read;
 
-    _meta_cols = build_stream_source_meta_columns(_scan_range.params.stream_source_meta_columns);
+    _meta_col_by_slot_id = build_stream_source_meta_columns(_scan_range.params.stream_source_meta_columns);
     int column_index = 0;
     for (size_t i = 0; i < _src_slot_descriptors.size(); ++i) {
         const auto& desc = _src_slot_descriptors[i];
@@ -175,7 +175,7 @@ Status AvroScanner::open() {
         // A hidden metadata slot is filled from the message meta, not the payload. The by-name null-fill
         // path iterates chunk columns, so key its descriptor by chunk column index (the append order in
         // _create_src_chunk, which skips null slots just like this loop).
-        if (auto m = _meta_cols.find(desc->id()); m != _meta_cols.end()) {
+        if (auto m = _meta_col_by_slot_id.find(desc->id()); m != _meta_col_by_slot_id.end()) {
             _meta_col_by_index.emplace(column_index, m->second);
         }
         column_index++;
@@ -229,8 +229,9 @@ Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk,
         auto column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_src_slot_descriptors[i]->id()));
         // Hidden source-metadata slots are filled from the message meta (by slot id), not the payload,
         // before the jsonpath extraction below.
-        if (auto it = _meta_cols.find(_src_slot_descriptors[i]->id()); UNLIKELY(it != _meta_cols.end())) {
-            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+        if (auto it = _meta_col_by_slot_id.find(_src_slot_descriptors[i]->id());
+            UNLIKELY(it != _meta_col_by_slot_id.end())) {
+            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, meta, column));
             meta_count++;
             continue;
         }
@@ -390,6 +391,12 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
                 continue;
             }
             auto slot_desc = itr->second;
+            // A metadata alias is filled from the message meta in the null-fill pass, never from the
+            // payload; if a payload field uses the same name, skip it (cache as id = -1) so metadata wins.
+            if (_meta_col_by_slot_id.find(slot_desc->id()) != _meta_col_by_slot_id.end()) {
+                slot_info.id = -1;
+                continue;
+            }
             slot_info.id = slot_desc->id();
             // Store the intermediate avro type (not the destination type) so _construct_column
             // dispatches on the type the source column was built with. See _construct_row.
@@ -414,10 +421,10 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
     for (int i = 0; i < _found_columns.size(); i++) {
         if (UNLIKELY(!_found_columns[i])) {
             auto* column = chunk->get_column_raw_ptr_by_index(i);
-            // A hidden metadata slot is never a payload field, so it always lands here; fill it from the
-            // message meta (NULL when the buffer carries none) instead of a plain null.
+            // A hidden metadata slot always lands here (the by-name resolve above skips any same-named
+            // payload field); fill it from the message meta, NULL when the buffer carries none.
             if (auto it = _meta_col_by_index.find(i); it != _meta_col_by_index.end()) {
-                RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, it->second.key, meta, column));
+                RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, meta, column));
             } else {
                 column->append_nulls(1);
             }

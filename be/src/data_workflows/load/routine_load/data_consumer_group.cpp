@@ -188,10 +188,10 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             row_delimiter = static_cast<char>(params.row_delimiter);
         }
     }
-    // Attach the extended metadata (topic/timestamp/key/headers) only when the job's COLUMNS clause
-    // references a metadata column.
+    // Attach the extended metadata (topic/timestamp/key/headers) only when the INCLUDE METADATA clause
+    // declares a source-metadata column.
     const bool need_meta = ctx->kafka_info->need_source_metadata;
-    // Only copy the (potentially large) key/headers when the job references __key__ / __headers__.
+    // Only copy the (potentially large) key/headers when the clause declares a KEY / HEADERS column.
     const bool need_key = ctx->kafka_info->need_message_key;
     const bool need_headers = ctx->kafka_info->need_message_headers;
 
@@ -310,7 +310,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                         }
                     }
                     st = kafka_pipe->append_json(static_cast<const char*>(msg->payload()),
-                                                 static_cast<size_t>(msg->len()), row_delimiter, &meta);
+                                                 static_cast<size_t>(msg->len()), &meta);
                 } else {
                     st = kafka_pipe->append_with_row_delimiter(static_cast<const char*>(msg->payload()),
                                                                static_cast<size_t>(msg->len()), row_delimiter);
@@ -446,10 +446,10 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             row_delimiter = static_cast<char>(params.row_delimiter);
         }
     }
-    // Attach per-message source metadata only when the job references a metadata column; otherwise the
-    // buffer stays metadata-free and the scanner reads every field from the payload.
+    // Attach per-message source metadata only when the INCLUDE METADATA clause declares a column;
+    // otherwise the buffer stays metadata-free and the scanner reads every field from the payload.
     const bool need_meta = ctx->pulsar_info->need_source_metadata;
-    // Only copy the (potentially large) partition key/properties when the job references __key__ / __headers__.
+    // Only copy the (potentially large) partition key/properties when the clause declares a KEY / HEADERS column.
     const bool need_key = ctx->pulsar_info->need_message_key;
     const bool need_headers = ctx->pulsar_info->need_message_headers;
 
@@ -511,8 +511,8 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
                 const StreamMessageMeta* meta_ptr = nullptr;
                 if (need_meta) {
-                    // pulsar_topic() exposes the configured logical topic; pulsar_partition() surfaces
-                    // the index parsed out of the per-message "<topic>-partition-N" name. The full
+                    // The TOPIC metadata exposes the configured logical topic; PARTITION surfaces the
+                    // index parsed out of the per-message "<topic>-partition-N" name. The full
                     // per-partition name (`partition`) stays the ack key.
                     meta.set_topic(ctx->pulsar_info->topic);
                     int32_t partition_index = parse_pulsar_partition_index(ctx->pulsar_info->topic, partition);
@@ -535,7 +535,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     meta_ptr = &meta;
                 }
                 st = pulsar_pipe->append_json(static_cast<const char*>(msg->getData()), static_cast<size_t>(len),
-                                              row_delimiter, meta_ptr);
+                                              meta_ptr);
             } else {
                 st = pulsar_pipe->append_with_row_delimiter(static_cast<const char*>(msg->getData()),
                                                             static_cast<size_t>(len), row_delimiter);

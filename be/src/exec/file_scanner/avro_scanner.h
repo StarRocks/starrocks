@@ -104,9 +104,9 @@ private:
     // Maps each source slot id to its intermediate avro load type (see AvroScanner::_construct_avro_types).
     std::unordered_map<SlotId, TypeDescriptor> _slot_id_to_avro_type;
     // Hidden source-metadata slots (routine load), filled from the message's ByteBuffer meta rather than
-    // the avro payload. _meta_cols keys by source slot id (the jsonpath path iterates slots);
+    // the avro payload. _meta_col_by_slot_id keys by source slot id (the jsonpath path iterates slots);
     // _meta_col_by_index keys by chunk column index for the by-name null-fill path. Both empty otherwise.
-    StreamSourceMetaColumns _meta_cols;
+    StreamSourceMetaColumns _meta_col_by_slot_id;
     std::unordered_map<int, TRoutineLoadMetaColumn> _meta_col_by_index;
     std::vector<bool> _found_columns;
     std::vector<SlotInfo> _data_idx_to_slot;

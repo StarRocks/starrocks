@@ -25,9 +25,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TLoadSourceType;
@@ -134,15 +132,14 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
             tPulsarLoadInfo.setInitial_positions(getInitialPositions());
         }
         tPulsarLoadInfo.setProperties(routineLoadJob.getConvertedCustomProperties());
-        // Attach per-message source metadata only when the COLUMNS clause references a metadata column;
+        // Attach per-message source metadata only when the INCLUDE METADATA clause declares a column;
         // otherwise the BE leaves the buffer metadata-free and reads every field from the payload.
         // key/headers are gated more narrowly.
-        List<ImportColumnDesc> columnDescs = routineLoadJob.getColumnDescs();
-        Set<Load.StreamMetaKind> metaKinds = Load.collectStreamMetaKinds(columnDescs);
+        Set<RoutineLoadMetadata.StreamMetaKind> metaKinds = RoutineLoadMetadata.collectStreamMetaKinds(
+                routineLoadJob.getMetadata(), routineLoadJob.getDataSourceTypeName());
         tPulsarLoadInfo.setNeed_source_metadata(!metaKinds.isEmpty());
-        tPulsarLoadInfo.setNeed_message_key(metaKinds.contains(Load.StreamMetaKind.KEY));
-        tPulsarLoadInfo.setNeed_message_headers(
-                metaKinds.contains(Load.StreamMetaKind.HEADER) || metaKinds.contains(Load.StreamMetaKind.HEADERS));
+        tPulsarLoadInfo.setNeed_message_key(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.KEY));
+        tPulsarLoadInfo.setNeed_message_headers(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.HEADERS));
         tRoutineLoadTask.setPulsar_load_info(tPulsarLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.PULSAR);
         tRoutineLoadTask.setParams(plan(routineLoadJob));
