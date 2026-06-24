@@ -22,6 +22,7 @@
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "exec/exec_factory.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -29,7 +30,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "compute_env/load/stream_load_pipe.h"
 #include "storage/query/olap_morsel_queue.h"
 
 namespace starrocks {

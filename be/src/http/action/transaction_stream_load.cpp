@@ -39,6 +39,7 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -57,7 +58,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "compute_env/load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks {

@@ -18,10 +18,10 @@
 #include <utility>
 
 #include "column/nullable_column.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exprs/json_functions.h"
 #include "fs/fs.h"
-#include "compute_env/load/stream_load_pipe.h"
 #include "simdjson.h"
 
 namespace starrocks {

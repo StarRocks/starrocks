@@ -18,6 +18,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "compute_env/load_path/rejected_record_writer.h"
 #include "exprs/cast_expr.h"
@@ -28,7 +29,6 @@
 #include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "compute_env/load/stream_load_pipe.h"
 
 namespace starrocks {
 
