@@ -70,6 +70,8 @@ On average, Arrow Flight SQL achieved:
 
 These performance gains translate directly into faster dashboards, more responsive data science workflows, and the ability to analyze much larger datasets in real time.
 
+For a detailed breakdown of how to reach these numbers in your client code — JDBC accessor methods, raw `VectorSchemaRoot` consumption, Parquet writers — and the measured speedup of each tuning step over MySQL JDBC, see [Arrow Flight SQL Best Practices](./arrow_flight_best_practices.md).
+
 ## Usage
 
 Follow these steps to connect to and interact with StarRocks using Python ADBC Driver via Arrow Flight SQL protocol. Refer to [Appendix](#appendix) for the complete code example.
