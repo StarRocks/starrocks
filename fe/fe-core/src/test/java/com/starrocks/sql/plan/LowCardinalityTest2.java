@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeInfo;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -3081,6 +3082,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                             "  p int NULL, c varchar(50) NULL) " +
                             "ENGINE=OLAP DUPLICATE KEY(p) " +
                             "DISTRIBUTED BY HASH(p) BUCKETS 3 PROPERTIES (\"replication_num\"=\"1\");");
+        StatisticStorage prevStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         try {
             connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
             FeConstants.runningUnitTest = true;
@@ -3126,7 +3128,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
             FeConstants.runningUnitTest = false;
             starRocksAssert.dropTable("window_skew_lc");
             connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
-            connectContext.getGlobalStateMgr().setStatisticStorage(new CachedStatisticStorage());
+            connectContext.getGlobalStateMgr().setStatisticStorage(prevStorage);
         }
     }
 }

@@ -324,8 +324,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
                 c -> encodedUnionColumns.contains(c) ? context.stringRefToDictRefMap.get(c) : c).toList();
 
-        ColumnRefSet inputColumns = new ColumnRefSet();
-        inputColumns.union(finalInfo.inputStringColumns);
         ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), encodedUnionColumns);
         Projection newProjection = rewriteProjection(unionOp.getProjection(), encodedUnionColumns);
 
