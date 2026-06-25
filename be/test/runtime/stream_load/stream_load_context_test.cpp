@@ -113,9 +113,7 @@ TEST_F(StreamLoadContextTest, destructor_removes_pipe_from_injected_load_stream_
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
     ASSERT_NE(nullptr, load_stream_mgr.get(load_id));
 
-    {
-        StreamLoadContext ctx(_exec_env, load_id, &load_stream_mgr);
-    }
+    { StreamLoadContext ctx(_exec_env, load_id, &load_stream_mgr); }
 
     EXPECT_EQ(nullptr, load_stream_mgr.get(load_id));
 }
