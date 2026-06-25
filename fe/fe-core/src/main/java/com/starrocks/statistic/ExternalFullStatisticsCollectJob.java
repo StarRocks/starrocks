@@ -22,6 +22,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionInfo;
@@ -50,6 +51,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
@@ -62,6 +64,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -125,13 +129,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
                 jobId, catalogName, db.getOriginName(), table.getName(),
                 partitionNames.size(), columnNames.size());
-
         String tableSummary = table.getStatsCollectSummary();
         if (!tableSummary.isEmpty()) {
             LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
                     jobId, catalogName, db.getOriginName(), table.getName(), tableSummary);
         }
-
         String status = "SUCCESS";
         String failureReason = "";
         try {
@@ -165,14 +167,67 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             flushInsertStatisticsData(context, true);
         } catch (Exception e) {
             status = "FAILED";
-            failureReason = e.getMessage();
+            failureReason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             throw e;
         } finally {
+            long endMs = System.currentTimeMillis();
             LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
                             "durationMs={} partitions={} columns={} reason={}",
                     jobId, catalogName, db.getOriginName(), table.getName(),
-                    status, System.currentTimeMillis() - startMs,
+                    status, endMs - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
+            writeAnalyzeHistory(context, jobId, status, startMs, endMs, failureReason);
+        }
+    }
+
+    private void writeAnalyzeHistory(ConnectContext context, long jobId, String status,
+                                     long startMs, long endMs, String failureReason) {
+        try {
+            ZoneId zone = ZoneId.systemDefault();
+            LocalDateTime startTime = DateUtils.fromEpochMillis(startMs, zone);
+            LocalDateTime endTime = DateUtils.fromEpochMillis(endMs, zone);
+            String startStr = DateUtils.formatDateTimeUnix(startTime);
+            String endStr = DateUtils.formatDateTimeUnix(endTime);
+            String safeReason = failureReason.replace("'", "''");
+            if (safeReason.length() > 65530) {
+                safeReason = safeReason.substring(0, 65530);
+            }
+            // ARRAY<VARCHAR>: use array literal syntax
+            String columnsArrayLiteral = columnNames.stream()
+                    .map(c -> "'" + c.replace("'", "\\'") + "'")
+                    .collect(Collectors.joining(", ", "[", "]"));
+            // JSON: use parse_json(), or NULL if no extended info
+            String extendedJson = table.getStatsCollectJson();
+            String extendedInfoExpr = extendedJson.isEmpty()
+                    ? "NULL"
+                    : "parse_json('" + extendedJson.replace("'", "\\'") + "')";
+            String sql = String.format(
+                    "INSERT INTO _statistics_.external_analyze_history" +
+                            " (job_id, catalog_name, db_name, table_name, status," +
+                            " start_time, end_time, duration_ms, failure_reason," +
+                            " partitions_collected, columns_collected, extended_info) VALUES" +
+                            " (%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, '%s', %d, %s, %s)",
+                    jobId,
+                    catalogName.replace("'", "''"),
+                    db.getOriginName().replace("'", "''"),
+                    table.getName().replace("'", "''"),
+                    status,
+                    startStr,
+                    endStr,
+                    endMs - startMs,
+                    safeReason,
+                    partitionNames.size(),
+                    columnsArrayLiteral,
+                    extendedInfoExpr);
+            StatementBase stmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+            StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(context, stmt);
+            context.setExecutor(stmtExecutor);
+            context.setQueryId(UUIDUtil.genUUID());
+            context.setStartTime();
+            stmtExecutor.execute();
+        } catch (Exception e) {
+            LOG.warn("[ExternalStats] Failed to write analyze history | jobId={} table={}",
+                    jobId, table.getName(), e);
         }
     }
 

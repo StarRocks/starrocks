@@ -61,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+import static com.starrocks.statistic.StatsConstants.EXTERNAL_ANALYZE_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
@@ -139,6 +140,10 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private static final List<String> EXTERNAL_HISTOGRAM_KEY_COLUMNS = ImmutableList.of(
             "table_uuid", "column_name"
+    );
+
+    private static final List<String> EXTERNAL_ANALYZE_HISTORY_KEY_COLUMNS = ImmutableList.of(
+            "job_id"
     );
 
     private static final List<String> FULL_STATISTICS_COMPATIBLE_COLUMNS = ImmutableList.of(
@@ -328,6 +333,36 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return checkTableExist(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 
+    private boolean createExternalAnalyzeHistoryTable(ConnectContext context) {
+        LOG.info("create external analyze history table start");
+        KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, EXTERNAL_ANALYZE_HISTORY_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableRef,
+                    StatisticUtils.buildStatsColumnDef(EXTERNAL_ANALYZE_HISTORY_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, EXTERNAL_ANALYZE_HISTORY_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, EXTERNAL_ANALYZE_HISTORY_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create external analyze history table", e);
+            return false;
+        }
+        LOG.info("create external analyze history table done");
+        return checkTableExist(EXTERNAL_ANALYZE_HISTORY_TABLE_NAME);
+    }
+
     private boolean createMultiColumnStatisticsTable(ConnectContext context) {
         LOG.info("create multi column statistics table start");
         TableName tableName = new TableName(STATISTICS_DB_NAME, MULTI_COLUMN_STATISTICS_TABLE_NAME);
@@ -487,6 +522,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 return createSPMBaselinesTable(context);
             } else if (QUERY_HISTORY_TABLE_NAME.equals(tableName)) {
                 return createQueryHistoryTable(context);
+            } else if (EXTERNAL_ANALYZE_HISTORY_TABLE_NAME.equals(tableName)) {
+                return createExternalAnalyzeHistoryTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
@@ -608,6 +645,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
+        refreshStatisticsTable(EXTERNAL_ANALYZE_HISTORY_TABLE_NAME);
         if (isStopped()) {
             return;
         }

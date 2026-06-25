@@ -423,6 +423,22 @@ public class IcebergTable extends Table {
                 summary.getOrDefault("total-records", "0"));
     }
 
+    @Override
+    public String getStatsCollectJson() {
+        org.apache.iceberg.Snapshot snapshot = getNativeTable().currentSnapshot();
+        if (snapshot == null) {
+            return "";
+        }
+        java.util.Map<String, String> summary = snapshot.summary();
+        if (summary == null) {
+            summary = java.util.Collections.emptyMap();
+        }
+        return String.format("{\"snapshot_id\":%d,\"total_files\":%s,\"total_rows\":%s}",
+                snapshot.snapshotId(),
+                summary.getOrDefault("total-data-files", "0"),
+                summary.getOrDefault("total-records", "0"));
+    }
+
     public org.apache.iceberg.Table getNativeTable() {
         // For compatibility with the resource iceberg table. native table is lazy. Prevent failure during fe restarting.
         if (nativeTable == null) {

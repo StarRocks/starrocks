@@ -419,6 +419,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return "";
     }
 
+    public String getStatsCollectJson() {
+        return "";
+    }
+
     public boolean isDeltalakeTable() {
         return type == TableType.DELTALAKE;
     }
