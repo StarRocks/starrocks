@@ -780,7 +780,18 @@ public class SchemaChangeHandler extends AlterHandler {
                         modColumn.getName());
             }
             if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.REPLACE, true);
+                // backward compatibility: if the user does not restate the KEY attribute when modifying an
+                // existing key column (e.g. changing only its comment or type), preserve its keyness instead
+                // of silently demoting it to a value column. A keyness flip is not a supported MODIFY COLUMN
+                // operation (see the range-distribution guard below), and the implicit demotion would otherwise
+                // surface as a misleading "Can not change aggregation type" error. This mirrors the behavior of
+                // the primary key branch above.
+                Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+                if (baseColumn != null && baseColumn.isKey()) {
+                    modColumn.setIsKey(true);
+                } else {
+                    modColumn.setAggregationType(AggregateType.REPLACE, true);
+                }
             }
         } else {
             if (null != modColumn.getAggregationType()) {
@@ -788,7 +799,15 @@ public class SchemaChangeHandler extends AlterHandler {
                         modColumn.getName());
             }
             if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.NONE, true);
+                // backward compatibility: preserve the keyness of an existing key column when the KEY attribute
+                // is omitted, rather than silently demoting it to a value column. See the matching comment in the
+                // unique key branch above.
+                Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+                if (baseColumn != null && baseColumn.isKey()) {
+                    modColumn.setIsKey(true);
+                } else {
+                    modColumn.setAggregationType(AggregateType.NONE, true);
+                }
             }
         }
 
