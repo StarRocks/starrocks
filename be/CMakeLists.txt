@@ -552,13 +552,12 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    Storage
-    Rowset
     Runtime
     Udf
     Util
     Script
     ${WL_END_GROUP}
+    Storage
     FormatAvro
     FormatCsv
     FormatJson
