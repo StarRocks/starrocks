@@ -14,10 +14,10 @@
 
 #include "runtime/stream_load/stream_load_context_handle.h"
 
+#include "compute_env/load/stream_load_context.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/stream_load/stream_context_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks {
 

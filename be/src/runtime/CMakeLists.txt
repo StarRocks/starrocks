@@ -99,7 +99,6 @@ set(RUNTIME_FILES
     stream_load/stream_context_mgr.cpp
     stream_load/stream_load_context_handle.cpp
     stream_load/transaction_mgr.cpp
-    stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
     batch_write/isomorphic_batch_write.cpp
     batch_write/batch_write_mgr.cpp

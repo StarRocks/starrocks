@@ -21,12 +21,12 @@
 #include "base/time/time.h"
 #include "common/logging.h"
 #include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "fmt/format.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/message_body_sink.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks {
 

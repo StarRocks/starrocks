@@ -47,6 +47,7 @@
 #include "common/statusor.h"
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load/stream_load_context.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/walltime.h"
 #include "platform/thrift_rpc_helper.h"
@@ -54,7 +55,6 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_metrics.h"
 #include "storage/non_retryable_load_errors.h"
 

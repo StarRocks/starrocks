@@ -26,6 +26,7 @@
 #include "common/system/master_info.h"
 #include "common/util/bthreads/executor.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -33,7 +34,6 @@
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/merge_commit_trace.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks {
 
