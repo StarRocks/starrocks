@@ -17,11 +17,11 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "http/ev_http_server.h"
-#include "http/http_channel.h"
-#include "http/http_client.h"
-#include "http/http_handler.h"
-#include "http/http_request.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_client.h"
+#include "http/core/http_handler.h"
+#include "http/core/http_request.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

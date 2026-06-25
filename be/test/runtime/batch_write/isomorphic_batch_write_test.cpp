@@ -25,7 +25,7 @@
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/FrontendService.h"
-#include "http/http_common.h"
+#include "http/core/http_common.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/action/transaction_stream_load.h"
+#include "http/service/action/transaction_stream_load.h"
 
 #include <event2/buffer.h>
 #include <event2/http.h>
@@ -35,10 +35,10 @@
 #include "compute_env/load/stream_load_pipe.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/download_action.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_request.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_common.h"
+#include "http/core/http_request.h"
+#include "http/service/download_action.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_executor.h"

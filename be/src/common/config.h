@@ -277,7 +277,7 @@ CONF_Bool(sys_log_timezone, "false");
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
 
-// The maximum number of bytes to display on the debug webserver's log page.
+// The maximum number of bytes to display on the debug HTTP service's log page.
 CONF_Int64(web_log_bytes, "1048576");
 // The number of threads available to serve backend execution requests.
 CONF_Int32(be_service_threads, "64");
