@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
@@ -407,6 +408,20 @@ public class ProfilingExecPlan {
             if (scanNode instanceof OlapScanNode) {
                 OlapScanNode olapScanNode = (OlapScanNode) scanNode;
                 element.addInfo("Table: ", olapScanNode.getOlapTable().getName());
+            } else {
+                Table table = scanNode.getTable();
+                // FILES() table-function scans and some load-task planners build tuple
+                // descriptors without attaching a table, so getTable() is null.
+                if (table != null) {
+                    String tableName;
+                    if (table.isExternalTableWithFileSystem() || table.isOdpsTable() || table.isJDBCTable()) {
+                        String dbName = table.getCatalogDBName();
+                        tableName = dbName == null ? table.getName() : dbName + "." + table.getName();
+                    } else {
+                        tableName = table.getName();
+                    }
+                    element.addInfo("Table: ", tableName);
+                }
             }
         }
     }

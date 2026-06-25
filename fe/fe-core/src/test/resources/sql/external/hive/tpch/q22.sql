@@ -122,7 +122,7 @@ OutPut Exchange Id: 11
 |       cardinality: 1
 |
 2:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 NON-PARTITION PREDICATES: substring(5: c_phone, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 partitions=1/1
 avgRowSize=31.0
@@ -169,7 +169,7 @@ OutPut Exchange Id: 06
 |  * c_acctbal-->[0.0, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 |
 3:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 NON-PARTITION PREDICATES: 14: c_acctbal > 0.00, substring(13: c_phone, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 MIN/MAX PREDICATES: 14: c_acctbal > 0.00
 partitions=1/1
@@ -187,7 +187,7 @@ OutPut Partition: HASH_PARTITIONED: 20: o_custkey
 OutPut Exchange Id: 01
 
 0:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 partitions=1/1
 avgRowSize=8.0
 dataCacheOptions={populate: false}

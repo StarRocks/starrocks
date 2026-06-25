@@ -201,7 +201,7 @@ OutPut Exchange Id: 19
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 8:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 20: l_receiptdate > 19: l_commitdate
 partitions=1/1
 avgRowSize=20.0
@@ -248,7 +248,7 @@ OutPut Exchange Id: 16
 |       cardinality: 1
 |
 10:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
@@ -275,7 +275,7 @@ OutPut Exchange Id: 13
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 11:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 34: n_name = 'CANADA'
 MIN/MAX PREDICATES: 34: n_name <= 'CANADA', 34: n_name >= 'CANADA'
 partitions=1/1
@@ -300,7 +300,7 @@ OutPut Exchange Id: 07
 |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5.0E7] ESTIMATE
 |
 5:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 26: o_orderstatus = 'F'
 MIN/MAX PREDICATES: 26: o_orderstatus <= 'F', 26: o_orderstatus >= 'F'
 partitions=1/1
@@ -329,7 +329,7 @@ OutPut Exchange Id: 04
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 2:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 66: l_receiptdate > 65: l_commitdate
 partitions=1/1
 avgRowSize=20.0
@@ -350,7 +350,7 @@ OutPut Partition: HASH_PARTITIONED: 37: l_orderkey
 OutPut Exchange Id: 01
 
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 37: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0

@@ -138,7 +138,7 @@ OutPut Partition: HASH_PARTITIONED: 1: c_custkey
 OutPut Exchange Id: 19
 
 18:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
@@ -164,7 +164,7 @@ OutPut Exchange Id: 17
 |  * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
 15:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 13: o_orderdate >= '1995-01-01', 13: o_orderdate < '1996-01-01'
 MIN/MAX PREDICATES: 13: o_orderdate >= '1995-01-01', 13: o_orderdate < '1996-01-01'
 partitions=1/1
@@ -217,7 +217,7 @@ OutPut Exchange Id: 14
 |       cardinality: 200000
 |
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
@@ -267,7 +267,7 @@ OutPut Exchange Id: 11
 |       cardinality: 5
 |
 1:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 34: s_suppkey IS NOT NULL, 37: s_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
@@ -312,7 +312,7 @@ OutPut Exchange Id: 08
 |       cardinality: 1
 |
 2:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 41: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
@@ -339,7 +339,7 @@ OutPut Exchange Id: 05
 |  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 3:HdfsScanNode
-TABLE: region
+TABLE: tpch.region
 NON-PARTITION PREDICATES: 46: r_name = 'AFRICA'
 MIN/MAX PREDICATES: 46: r_name <= 'AFRICA', 46: r_name >= 'AFRICA'
 partitions=1/1

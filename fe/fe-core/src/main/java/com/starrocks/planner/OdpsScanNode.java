@@ -156,7 +156,7 @@ public class OdpsScanNode extends ScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        output.append(prefix).append("TABLE: ").append(table.getCatalogDBName()).append(".").append(table.getCatalogTableName())
+        output.append(prefix).append("TABLE: ").append(table.getCatalogDBName()).append(".").append(table.getName())
                 .append("\n");
         return output.toString();
     }

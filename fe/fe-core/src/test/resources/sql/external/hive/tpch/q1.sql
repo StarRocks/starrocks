@@ -111,7 +111,7 @@ OutPut Exchange Id: 03
 |  * expr-->[810.9, 113345.46, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 11: l_shipdate <= '1998-12-01'
 MIN/MAX PREDICATES: 11: l_shipdate <= '1998-12-01'
 partitions=1/1

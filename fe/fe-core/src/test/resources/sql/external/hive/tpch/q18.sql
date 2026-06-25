@@ -153,7 +153,7 @@ OutPut Exchange Id: 11
 |  * sum-->[1.0, 1.5E8, 0.0, 8.0, 50.0] ESTIMATE
 |
 9:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 34: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
@@ -216,7 +216,7 @@ OutPut Partition: HASH_PARTITIONED: 1: c_custkey
 OutPut Exchange Id: 05
 
 4:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
@@ -233,7 +233,7 @@ OutPut Partition: HASH_PARTITIONED: 10: o_custkey
 OutPut Exchange Id: 03
 
 2:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 10: o_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
@@ -254,7 +254,7 @@ OutPut Partition: HASH_PARTITIONED: 18: l_orderkey
 OutPut Exchange Id: 01
 
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0

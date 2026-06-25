@@ -88,7 +88,7 @@ OutPut Exchange Id: 07
 |       cardinality: 4661679
 |
 0:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 1: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=23.0
@@ -116,7 +116,7 @@ OutPut Exchange Id: 03
 |  * l_shipmode-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 |
 1:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 24: l_shipmode IN ('REG AIR', 'MAIL'), 21: l_commitdate < 22: l_receiptdate, 20: l_shipdate < 21: l_commitdate, 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01', 21: l_commitdate < '1998-01-01', 20: l_shipdate < '1998-01-01'
 MIN/MAX PREDICATES: 24: l_shipmode >= 'MAIL', 24: l_shipmode <= 'REG AIR', 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01', 21: l_commitdate < '1998-01-01', 20: l_shipdate < '1998-01-01'
 partitions=1/1

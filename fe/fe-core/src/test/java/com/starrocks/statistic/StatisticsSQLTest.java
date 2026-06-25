@@ -262,7 +262,7 @@ public class StatisticsSQLTest extends PlanTestBase {
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, " 0:HdfsScanNode\n" +
-                    "     TABLE: subfield");
+                    "     TABLE: subfield_db.subfield");
         }
 
         for (String col : columnNames) {

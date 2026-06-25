@@ -124,7 +124,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                 for (String query : sqls) {
                     logSysInfo(query);
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
+                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": partitioned_db.lineitem_par");
                 }
             }
         });
@@ -160,7 +160,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                 };
                 for (String query : sqls) {
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
+                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": partitioned_db.lineitem_par");
                 }
             }
         });
@@ -192,7 +192,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                 };
                 for (String query : sqls) {
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
+                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": partitioned_db.lineitem_par");
                 }
             }
         });
