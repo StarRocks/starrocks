@@ -1,0 +1,195 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/be/src/http/action/pprof_actions.cpp
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "http/service/action/pprof_actions.h"
+
+#include <gperftools/profiler.h>
+
+#ifdef __APPLE__
+#include <stdlib.h>
+#endif
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+
+#include "common/config_path_fwd.h"
+#include "common/status.h"
+#include "common/tracer.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_headers.h"
+#include "http/core/http_request.h"
+#include "io/io_profiler.h"
+#include "runtime/prof/heap_prof.h"
+
+namespace starrocks {
+
+// pprof default sample time in seconds.
+static const std::string SECOND_KEY = "seconds";
+static const int kPprofDefaultSampleSecs = 30;
+
+// Protect, only one thread can work
+#if !(defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER))
+static std::mutex kPprofActionMutex;
+#endif
+
+void HeapAction::handle(HttpRequest* req) {
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+    (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
+
+    std::string str = "Heap profiling is not available with address sanitizer builds.";
+
+    HttpChannel::send_reply(req, str);
+#else
+    std::lock_guard<std::mutex> lock(kPprofActionMutex);
+    std::string str = HeapProf::getInstance().snapshot();
+
+    if (str.empty()) {
+        str = "dump jemalloc prof file failed";
+    } else {
+        std::ifstream f(str);
+        str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
+    HttpChannel::send_reply(req, str);
+#endif
+}
+
+void GrowthAction::handle(HttpRequest* req) {
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+    std::string str = "Growth profiling is not available with address sanitizer builds.";
+    HttpChannel::send_reply(req, str);
+#else
+    std::string str =
+            "Growth profiling is not available with jemalloc builds.You can set the `--base` flag to jeprof to compare "
+            "the results of two Heap Profiling";
+    HttpChannel::send_reply(req, str);
+#endif
+}
+
+void ProfileAction::handle(HttpRequest* req) {
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+    std::string str = "CPU profiling is not available with address sanitizer builds.";
+    HttpChannel::send_reply(req, str);
+#else
+    std::lock_guard<std::mutex> lock(kPprofActionMutex);
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_profile"));
+
+    int seconds = kPprofDefaultSampleSecs;
+    const std::string& seconds_str = req->param(SECOND_KEY);
+    if (!seconds_str.empty()) {
+        seconds = std::atoi(seconds_str.c_str());
+    }
+
+    std::ostringstream tmp_prof_file_name;
+    // Build a temporary file name that is hopefully unique.
+    tmp_prof_file_name << config::pprof_profile_dir << "/starrocks_profile." << getpid() << "." << rand();
+    ProfilerStart(tmp_prof_file_name.str().c_str());
+    sleep(seconds);
+    ProfilerStop();
+    std::ifstream prof_file(tmp_prof_file_name.str().c_str(), std::ios::in);
+    std::stringstream ss;
+    if (!prof_file.is_open()) {
+        ss << "Unable to open cpu profile: " << tmp_prof_file_name.str();
+        std::string str = ss.str();
+        HttpChannel::send_reply(req, str);
+        return;
+    }
+    ss << prof_file.rdbuf();
+    prof_file.close();
+    std::string str = ss.str();
+
+    HttpChannel::send_reply(req, str);
+#endif
+}
+
+static std::mutex kIOPprofActionMutex;
+
+void IOProfileAction::handle(HttpRequest* req) {
+    std::lock_guard<std::mutex> lock(kIOPprofActionMutex);
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_io_profile"));
+
+    int seconds = 10;
+    const std::string& seconds_str = req->param(SECOND_KEY);
+    if (!seconds_str.empty()) {
+        seconds = std::atoi(seconds_str.c_str());
+    }
+    int topn = 10;
+    const std::string& topn_str = req->param("topn");
+    if (!topn_str.empty()) {
+        topn = std::atoi(topn_str.c_str());
+    }
+    topn = std::max(1, topn);
+
+    auto ret = IOProfiler::profile_and_get_topn_stats_str(req->param("mode"), seconds, topn);
+    HttpChannel::send_reply(req, ret);
+}
+
+void CmdlineAction::handle(HttpRequest* req) {
+#ifdef __APPLE__
+    const char* prog_name = getprogname();
+    if (prog_name == nullptr || prog_name[0] == '\0') {
+        HttpChannel::send_reply(req, "read cmdline failed");
+        return;
+    }
+    HttpChannel::send_reply(req, prog_name);
+#else
+    FILE* fp = fopen("/proc/self/cmdline", "r");
+    if (fp == nullptr) {
+        std::string str = "Unable to open file: /proc/self/cmdline";
+
+        HttpChannel::send_reply(req, str);
+        return;
+    }
+    char buf[1024];
+    if (fscanf(fp, "%1023s ", buf) != 1) {
+        strcpy(buf, "read cmdline failed");
+    }
+    fclose(fp);
+    std::string str = buf;
+
+    HttpChannel::send_reply(req, str);
+#endif
+}
+
+void SymbolAction::handle(HttpRequest* req) {
+    // Symbol resolution is not available. The binary needs to be passed
+    // to pprof to resolve all symbols.
+    std::string str = "Symbol resolution is not available. Please use pprof with the binary file to resolve symbols.";
+    HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, str);
+}
+} // namespace starrocks

@@ -38,7 +38,7 @@ CONF_String(log_buffer_level, "");
 // Whether to show timezone in log prefix.
 CONF_Bool(sys_log_timezone, "false");
 
-// The maximum number of bytes to display on the debug webserver's log page.
+// The maximum number of bytes to display on the debug HTTP service's log page.
 CONF_Int64(web_log_bytes, "1048576");
 
 // delta writer hang after this time, be will exit since storage is in error state

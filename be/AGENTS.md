@@ -113,10 +113,17 @@ Cache implementation module for DataCache facade, cache engines, scan read-buffe
 ### HttpCore (`httpcore`)
 Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.
 - Targets: `HttpCore`
-- Allowed internal include prefixes: `http/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `http/core/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Common`, `Base`, `Gutil`
 - Core tests: `http_core_test`
 - Remediation: Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward.
+
+### HttpService (`httpservice`)
+BE HTTP pages, admin actions, load actions, download helpers, and web handlers above HttpCore.
+- Targets: `HttpService`
+- Allowed internal include prefixes: `http/service/`, `http/core/`, `cache/`, `compute_env/`, `data_workflows/`, `exec/`, `exprs/`, `fs/`, `io/`, `platform/`, `runtime/`, `storage/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `HttpCore`, `Storage`, `DataWorkflows`, `Runtime`, `RuntimeCore`, `RuntimeEnv`, `ComputeEnv`, `Exec`, `ExecRuntime`, `Exprs`, `FSCore`, `IO`, `Platform`, `StoragePrimitive`, `Cache`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep HTTP service code above HttpCore; move reusable transport/request primitives down to HttpCore and keep service/bootstrap integration outside HttpService.
 
 ### IO (`io`)
 Minimal IO foundation used by FS and upper layers.
@@ -137,7 +144,7 @@ Minimal filesystem core on top of IO.
 ### Platform (`platform`)
 Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.
 - Targets: `Platform`
-- Allowed internal include prefixes: `platform/`, `http/`, `fs/`, `io/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `platform/`, `http/core/`, `fs/`, `io/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `HttpCore`, `FSCore`, `IO`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `platform_test`
 - Remediation: Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward.
@@ -217,7 +224,7 @@ Base storage algorithms and mask-buffer helpers above StoragePrimitive and Compu
 ### Storage (`storage`)
 Concrete storage engine: tablet/rowset/segment management, compaction, persistent index, lake (cloud-native) tablets, binlog, inverted/vector indexes, and sstable, depending only on ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and HttpCore for replication transport, without Exec/Service/Connector/Agent reach-up or ExecEnv singleton coupling.
 - Targets: `Storage`
-- Allowed internal include prefixes: `storage/`, `compute_env/`, `cache/`, `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `http/`
+- Allowed internal include prefixes: `storage/`, `compute_env/`, `cache/`, `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `http/core/`
 - Allowed target deps: `StorageBase`, `StoragePrimitive`, `ExecPrimitive`, `ComputeEnv`, `Cache`, `ExprCore`, `Serde`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `HttpCore`, `FSCore`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep Storage limited to the concrete storage engine over ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and HttpCore; move Exec, Service, Connector, Agent, and DataWorkflows orchestration upward and route ExecEnv access through injected dependencies.
 
@@ -317,8 +324,8 @@ Reusable exec join hash table algorithms without join nodes, pipeline, storage, 
 ### Service (`service`)
 Shared service-layer target above runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.
 - Targets: `Service`
-- Allowed internal include prefixes: `service/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/`, `io/`, `platform/`, `runtime/`, `serde/`, `storage/`, `types/`, `util/`
-- Allowed target deps: `Runtime`, `RuntimeEnv`, `RuntimeCore`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FSCore`, `FileSystem`, `IO`, `HttpCore`, `Webserver`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `Util`, `Serde`, `ChunkCore`, `ColumnCore`, `Types`
+- Allowed internal include prefixes: `service/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/core/`, `http/service/`, `io/`, `platform/`, `runtime/`, `serde/`, `storage/`, `types/`, `util/`
+- Allowed target deps: `Runtime`, `RuntimeEnv`, `RuntimeCore`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FSCore`, `FileSystem`, `IO`, `HttpCore`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `Util`, `Serde`, `ChunkCore`, `ColumnCore`, `Types`
 - Remediation: Keep shared Service below ServiceBE and depend on checked module targets such as AgentServer instead of ad hoc lower-layer reach-through.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 

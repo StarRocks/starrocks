@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/ev_http_server.h"
+#include "http/core/ev_http_server.h"
 
 #include <gtest/gtest.h>
 
@@ -23,11 +23,11 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "http/http_channel.h"
-#include "http/http_client.h"
-#include "http/http_handler.h"
-#include "http/http_method.h"
-#include "http/http_request.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_client.h"
+#include "http/core/http_handler.h"
+#include "http/core/http_method.h"
+#include "http/core/http_request.h"
 
 namespace starrocks {
 

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/action/pprof_actions.h"
+#include "http/service/action/pprof_actions.h"
 
 #include <event2/http.h>
 #include <gtest/gtest.h>
 
-#include "http/http_channel.h"
-#include "http/http_request.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_request.h"
 
 namespace starrocks {
 

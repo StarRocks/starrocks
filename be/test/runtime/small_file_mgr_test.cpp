@@ -25,10 +25,10 @@
 #include "common/logging.h"
 #include "common/system/master_info.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/ev_http_server.h"
-#include "http/http_channel.h"
-#include "http/http_handler.h"
-#include "http/http_request.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_handler.h"
+#include "http/core/http_request.h"
 
 int main(int argc, char* argv[]);
 

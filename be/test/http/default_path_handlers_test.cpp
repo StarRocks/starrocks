@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "http/default_path_handlers.h"
+#include "http/service/default_path_handlers.h"
 
 #include <gtest/gtest.h>
 

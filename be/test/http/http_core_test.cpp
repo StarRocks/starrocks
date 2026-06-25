@@ -17,14 +17,14 @@
 #include <string>
 
 #include "base/url_coding.h"
-#include "http/ev_http_server.h"
-#include "http/http_auth.h"
-#include "http/http_handler.h"
-#include "http/http_headers.h"
-#include "http/http_method.h"
-#include "http/http_parser.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_auth.h"
+#include "http/core/http_handler.h"
+#include "http/core/http_headers.h"
+#include "http/core/http_method.h"
+#include "http/core/http_parser.h"
+#include "http/core/http_request.h"
+#include "http/core/http_status.h"
 
 namespace starrocks {
 

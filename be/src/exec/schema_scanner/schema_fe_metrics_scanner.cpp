@@ -21,7 +21,7 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_client.h"
+#include "http/core/http_client.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

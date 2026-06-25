@@ -47,7 +47,7 @@
 #include "exec/catalog_scan_metrics.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/query_scan_metrics.h"
-#include "http/http_metrics.h"
+#include "http/core/http_metrics.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"

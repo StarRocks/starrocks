@@ -48,8 +48,8 @@
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "http/rest_monitor_iface.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/rest_monitor_iface.h"
 
 namespace starrocks {
 

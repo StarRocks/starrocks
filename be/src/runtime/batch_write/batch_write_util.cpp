@@ -16,8 +16,8 @@
 
 #include <vector>
 
-#include "http/http_common.h"
-#include "http/http_request.h"
+#include "http/core/http_common.h"
+#include "http/core/http_request.h"
 
 namespace starrocks {
 
