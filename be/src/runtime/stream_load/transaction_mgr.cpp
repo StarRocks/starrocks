@@ -92,7 +92,7 @@ std::string TransactionMgr::_build_reply(const std::string& txn_op, StreamLoadCo
 }
 
 std::string TransactionMgr::_build_reply(const std::string& label, const std::string& txn_op, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env, _exec_env->load_stream_mgr());
     ctx->label = label;
     return ctx->to_resp_json(txn_op, st);
 }
@@ -164,14 +164,14 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {
-        ctx = new StreamLoadContext(_exec_env,
+        ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr(),
                                     &StreamLoadMetrics::instance()->transaction_streaming_load_current_processing);
         ctx->ref();
         std::lock_guard<std::mutex> l(ctx->lock);
         st = _begin_transaction(req, ctx);
         if (!st.ok()) {
             ctx->status = st;
-            if (ctx->need_rollback) {
+            if (ctx->need_rollback()) {
                 (void)_rollback_transaction(ctx);
             }
         }
@@ -267,7 +267,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
         if (!st.ok()) {
             LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
-            if (ctx->need_rollback) {
+            if (ctx->need_rollback()) {
                 (void)_rollback_transaction(ctx);
             }
         }
@@ -385,6 +385,7 @@ Status TransactionMgr::_rollback_transaction(StreamLoadContext* ctx) {
 
     // 3. rollback transaction by send request to FE
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->rollback_txn(ctx));
+    ctx->clear_need_rollback();
 
     // 4. remove stream load context
     //    By remove context at the end, we can retry when the rollback FE fails

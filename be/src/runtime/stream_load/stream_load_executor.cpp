@@ -72,6 +72,7 @@ static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, s
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
                                    int64_t deadline);
+static void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env);
 
 Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
     if (process_exit_in_progress()) {
@@ -210,7 +211,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
         return status;
     }
     ctx->txn_id = result.txnId;
-    ctx->need_rollback = true;
+    set_need_rollback(ctx, _exec_env);
     ctx->load_deadline_sec = UnixSeconds() + result.timeout;
 
     return Status::OK();
@@ -245,10 +246,10 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         RETURN_IF_ERROR(commit_txn_internal(request, rpc_timeout_ms, &result));
         Status st(result.status);
         if (st.ok()) {
-            ctx->need_rollback = false;
+            ctx->clear_need_rollback();
             return st;
         } else if (st.is_publish_timeout()) {
-            ctx->need_rollback = false;
+            ctx->clear_need_rollback();
             bool visible =
                     wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
             return visible ? Status::OK() : st;
@@ -258,7 +259,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
             std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
         } else if (st.is_time_out()) {
             if (++retry > 1) {
-                ctx->need_rollback = true;
+                set_need_rollback(ctx, _exec_env);
                 return st;
             }
             LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
@@ -266,7 +267,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
                 rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
             }
         } else {
-            ctx->need_rollback = true;
+            set_need_rollback(ctx, _exec_env);
             return st;
         }
     }
@@ -375,7 +376,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
         return status;
     }
     // commit success, set need_rollback to false
-    ctx->need_rollback = false;
+    ctx->clear_need_rollback();
     return Status::OK();
 }
 
@@ -515,6 +516,12 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         return true;
     }
     return false;
+}
+
+void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env) {
+    ctx->set_need_rollback([exec_env](StreamLoadContext* rollback_ctx) {
+        return exec_env->stream_load_executor()->rollback_txn(rollback_ctx);
+    });
 }
 
 } // namespace starrocks

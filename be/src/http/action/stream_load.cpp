@@ -157,9 +157,9 @@ void StreamLoadAction::handle(HttpRequest* req) {
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
 
     if (!ctx->status.ok() && !ctx->status.is_publish_timeout()) {
-        if (ctx->need_rollback) {
+        if (ctx->need_rollback()) {
             (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
-            ctx->need_rollback = false;
+            ctx->clear_need_rollback();
         }
         if (ctx->body_sink != nullptr) {
             ctx->body_sink->cancel(ctx->status);
@@ -215,7 +215,8 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {
-    auto* ctx = new StreamLoadContext(_exec_env, &StreamLoadMetrics::instance()->streaming_load_current_processing);
+    auto* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr(),
+                                      &StreamLoadMetrics::instance()->streaming_load_current_processing);
     ctx->ref();
     req->set_handler_ctx(ctx);
 
@@ -262,9 +263,9 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;
-        if (ctx->need_rollback) {
+        if (ctx->need_rollback()) {
             (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
-            ctx->need_rollback = false;
+            ctx->clear_need_rollback();
         }
         if (ctx->body_sink != nullptr) {
             ctx->body_sink->cancel(st);
