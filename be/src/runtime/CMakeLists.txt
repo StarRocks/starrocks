@@ -91,9 +91,6 @@ set(RUNTIME_FILES
     runtime_state_helper.cpp
     rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
-    load_channel_mgr.cpp
-    load_channel.cpp
-    local_tablets_channel.cpp
     snapshot_loader.cpp
     stream_load/stream_load_context_handle.cpp
     stream_load/transaction_mgr.cpp
@@ -108,10 +105,8 @@ set(RUNTIME_FILES
     routine_load/routine_load_task_executor.cpp
     small_file_mgr.cpp
     external_scan_context_mgr.cpp
-    tablets_channel.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
-    lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     command_executor.cpp
     diagnose_daemon.cpp

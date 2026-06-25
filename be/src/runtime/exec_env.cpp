@@ -58,6 +58,7 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/primitives/driver_executor.h"
@@ -74,7 +75,6 @@
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
-#include "runtime/load_channel_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/pipeline_fragment_reporter.h"
@@ -348,8 +348,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
 
-    _load_channel_mgr =
-            new LoadChannelMgr(StorageEnv::GetInstance()->lake_tablet_manager(), process_metrics, _table_metrics_mgr);
+    _diagnose_daemon = new DiagnoseDaemon();
+    RETURN_IF_ERROR(_diagnose_daemon->init());
+
+    _load_channel_mgr = new LoadChannelMgr(StorageEnv::GetInstance()->lake_tablet_manager(), _diagnose_daemon,
+                                           platform_env->brpc_stub_cache(), process_metrics, _table_metrics_mgr);
 
     _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
@@ -363,8 +366,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_compute_env->init_spill(StorageEngine::instance()->get_store_paths(), process_metrics));
     StorageEnv::GetInstance()->set_spill_dir_mgr(_compute_env->spill_dir_mgr());
 
-    _diagnose_daemon = new DiagnoseDaemon();
-    RETURN_IF_ERROR(_diagnose_daemon->init());
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();

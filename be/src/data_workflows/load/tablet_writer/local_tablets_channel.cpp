@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/local_tablets_channel.h"
+#include "data_workflows/load/tablet_writer/local_tablets_channel.h"
 
 #include <fmt/format.h>
 
@@ -36,17 +36,17 @@
 #include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
+#include "data_workflows/load/tablet_writer/load_channel.h"
+#include "data_workflows/load/tablet_writer/tablets_channel.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
 #include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
-#include "runtime/load_channel.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
