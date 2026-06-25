@@ -126,22 +126,34 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long startMs = System.currentTimeMillis();
         long jobId = analyzeStatus.getId();
+        // Fetch connector-specific metadata best-effort — a snapshot access failure must not
+        // prevent the FAILED history row from being written (that row is the most valuable one).
+        Map<String, String> tableMeta;
+        try {
+            tableMeta = table.getStatsCollectMetadata();
+        } catch (Exception e) {
+            LOG.warn("[ExternalStats] Failed to get table metadata | catalog={} db={} table={}",
+                    catalogName, db.getOriginName(), table.getName(), e);
+            tableMeta = Collections.emptyMap();
+        }
+        int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+        List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
+        long totalCollectSQL = collectSQLList.size();
+
         LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
                 jobId, catalogName, db.getOriginName(), table.getName(),
                 partitionNames.size(), columnNames.size());
-        String tableSummary = table.getStatsCollectSummary();
-        if (!tableSummary.isEmpty()) {
+        if (!tableMeta.isEmpty()) {
+            String metaStr = tableMeta.entrySet().stream()
+                    .map(e -> e.getKey() + "=" + e.getValue())
+                    .collect(Collectors.joining(" "));
             LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
-                    jobId, catalogName, db.getOriginName(), table.getName(), tableSummary);
+                    jobId, catalogName, db.getOriginName(), table.getName(), metaStr);
         }
         String status = "SUCCESS";
         String failureReason = "";
         try {
             long finishedSQLNum = 0;
-            int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-            List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
-            long totalCollectSQL = collectSQLList.size();
-
             // First, the collection task is divided into several small tasks according to the column name and partition,
             // and then the multiple small tasks are aggregated into several tasks
             // that will actually be run according to the configured parallelism, and are connected by union all
@@ -176,12 +188,20 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                     jobId, catalogName, db.getOriginName(), table.getName(),
                     status, endMs - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
-            writeAnalyzeHistory(context, jobId, status, startMs, endMs, failureReason);
+            // Build extended_info: execution params + column/partition lists + connector metadata
+            Map<String, Object> extended = new java.util.LinkedHashMap<>();
+            extended.put("parallelism", parallelism);
+            extended.put("sql_count", totalCollectSQL);
+            extended.put("partitions_collected", partitionNames.size());
+            extended.put("columns_collected", columnNames);
+            extended.putAll(tableMeta);
+            writeAnalyzeHistory(context, jobId, status, startMs, endMs, failureReason, extended);
         }
     }
 
     private void writeAnalyzeHistory(ConnectContext context, long jobId, String status,
-                                     long startMs, long endMs, String failureReason) {
+                                     long startMs, long endMs, String failureReason,
+                                     Map<String, Object> extended) {
         try {
             ZoneId zone = ZoneId.systemDefault();
             LocalDateTime startTime = DateUtils.fromEpochMillis(startMs, zone);
@@ -192,21 +212,14 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             if (safeReason.length() > 65530) {
                 safeReason = safeReason.substring(0, 65530);
             }
-            // ARRAY<VARCHAR>: use array literal syntax
-            String columnsArrayLiteral = columnNames.stream()
-                    .map(c -> "'" + c.replace("'", "\\'") + "'")
-                    .collect(Collectors.joining(", ", "[", "]"));
-            // JSON: use parse_json(), or NULL if no extended info
-            String extendedJson = table.getStatsCollectJson();
-            String extendedInfoExpr = extendedJson.isEmpty()
-                    ? "NULL"
-                    : "parse_json('" + extendedJson.replace("'", "\\'") + "')";
+            // JSON: serialize extended map, or NULL if empty
+            String extendedInfoExpr = extended.isEmpty() ? "NULL"
+                    : "parse_json('" + new com.google.gson.Gson().toJson(extended).replace("'", "\\'") + "')";
             String sql = String.format(
                     "INSERT INTO _statistics_.external_analyze_history" +
                             " (job_id, catalog_name, db_name, table_name, status," +
-                            " start_time, end_time, duration_ms, failure_reason," +
-                            " partitions_collected, columns_collected, extended_info) VALUES" +
-                            " (%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, '%s', %d, %s, %s)",
+                            " start_time, end_time, duration_ms, failure_reason, extended_info) VALUES" +
+                            " (%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, '%s', %s)",
                     jobId,
                     catalogName.replace("'", "''"),
                     db.getOriginName().replace("'", "''"),
@@ -216,8 +229,6 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                     endStr,
                     endMs - startMs,
                     safeReason,
-                    partitionNames.size(),
-                    columnsArrayLiteral,
                     extendedInfoExpr);
             StatementBase stmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(context, stmt);

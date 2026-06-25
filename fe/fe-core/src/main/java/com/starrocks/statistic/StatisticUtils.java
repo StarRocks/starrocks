@@ -60,7 +60,6 @@ import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
@@ -453,8 +452,6 @@ public class StatisticUtils {
                     new ColumnDef("end_time", new TypeDef(DateType.DATETIME)),
                     new ColumnDef("duration_ms", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("failure_reason", new TypeDef(failureReasonType)),
-                    new ColumnDef("partitions_collected", new TypeDef(IntegerType.INT)),
-                    new ColumnDef("columns_collected", new TypeDef(ArrayType.ARRAY_VARCHAR)),
                     new ColumnDef("extended_info", new TypeDef(JsonType.JSON))
             );
         } else {

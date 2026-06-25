@@ -408,35 +408,20 @@ public class IcebergTable extends Table {
     }
 
     @Override
-    public String getStatsCollectSummary() {
+    public java.util.Map<String, String> getStatsCollectMetadata() {
         org.apache.iceberg.Snapshot snapshot = getNativeTable().currentSnapshot();
         if (snapshot == null) {
-            return "";
+            return java.util.Collections.emptyMap();
         }
         java.util.Map<String, String> summary = snapshot.summary();
         if (summary == null) {
             summary = java.util.Collections.emptyMap();
         }
-        return String.format("snapshotId=%d totalFiles=%s totalRows=%s",
-                snapshot.snapshotId(),
-                summary.getOrDefault("total-data-files", "0"),
-                summary.getOrDefault("total-records", "0"));
-    }
-
-    @Override
-    public String getStatsCollectJson() {
-        org.apache.iceberg.Snapshot snapshot = getNativeTable().currentSnapshot();
-        if (snapshot == null) {
-            return "";
-        }
-        java.util.Map<String, String> summary = snapshot.summary();
-        if (summary == null) {
-            summary = java.util.Collections.emptyMap();
-        }
-        return String.format("{\"snapshot_id\":%d,\"total_files\":%s,\"total_rows\":%s}",
-                snapshot.snapshotId(),
-                summary.getOrDefault("total-data-files", "0"),
-                summary.getOrDefault("total-records", "0"));
+        java.util.Map<String, String> meta = new java.util.LinkedHashMap<>();
+        meta.put("snapshot_id", String.valueOf(snapshot.snapshotId()));
+        meta.put("total_files", summary.getOrDefault("total-data-files", "0"));
+        meta.put("total_rows", summary.getOrDefault("total-records", "0"));
+        return meta;
     }
 
     public org.apache.iceberg.Table getNativeTable() {
