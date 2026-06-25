@@ -219,7 +219,8 @@ std::string get_txn_ids_string(const PublishVersionRequest* request) {
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
-LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) : _env(env), _tablet_mgr(tablet_mgr) {}
+LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr, LoadChannelMgr* load_channel_mgr)
+        : _env(env), _tablet_mgr(tablet_mgr), _load_channel_mgr(load_channel_mgr) {}
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
@@ -972,7 +973,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     LOG(INFO) << "Aborting transactions. request=" << request->DebugString();
 
     // Cancel active tasks.
-    if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
+    if (LoadChannelMgr* load_mgr = _load_channel_mgr; load_mgr != nullptr) {
         for (auto& txn_id : request->txn_ids()) { // For request sent by and older version FE
             load_mgr->abort_txn(txn_id, reason);
         }

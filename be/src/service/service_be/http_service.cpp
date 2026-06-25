@@ -90,11 +90,13 @@
 namespace starrocks {
 
 HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, const GlobalEnv& global_env,
-                             ProcessMetricsRegistry* process_metrics_registry, int port, int num_threads)
+                             ProcessMetricsRegistry* process_metrics_registry, LoadChannelMgr* load_channel_mgr,
+                             int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
           _global_env(global_env),
           _process_metrics_registry(process_metrics_registry),
+          _load_channel_mgr(load_channel_mgr),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
@@ -114,7 +116,7 @@ void HttpServiceBE::join() {
 }
 
 Status HttpServiceBE::start() {
-    register_config_update_hooks(_env, _global_env);
+    register_config_update_hooks(_env, _global_env, _load_channel_mgr);
     ConfigUpdateRegistry::instance()->set_ready();
 
     add_default_path_handlers(_web_page_handler.get(), _global_env);

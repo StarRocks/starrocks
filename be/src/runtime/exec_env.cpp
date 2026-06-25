@@ -57,7 +57,6 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
-#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/primitives/driver_executor.h"
@@ -159,7 +158,6 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.result_queue_mgr = result_queue_mgr();
     _runtime_services.fragment_mgr = _fragment_mgr;
     _runtime_services.load_path_mgr = load_path_mgr();
-    _runtime_services.load_channel_mgr = _load_channel_mgr;
     _runtime_services.load_stream_mgr = load_stream_mgr();
     _runtime_services.stream_context_mgr = stream_context_mgr();
     _runtime_services.transaction_mgr = _transaction_mgr;
@@ -340,13 +338,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());
 
-    _load_channel_mgr = new LoadChannelMgr(StorageEnv::GetInstance()->lake_tablet_manager(), _diagnose_daemon,
-                                           platform_env->brpc_stub_cache(), process_metrics, _table_metrics_mgr);
-
     _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
-
-    RETURN_IF_ERROR(_load_channel_mgr->init(global_env->load_mem_tracker()));
 
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
@@ -427,15 +420,6 @@ void ExecEnv::stop() {
     std::vector<std::pair<std::string, int64_t>> component_times;
     auto* global_env = _global_env;
     DCHECK(global_env != nullptr);
-
-    if (_load_channel_mgr) {
-        start = MonotonicMillis();
-        // Clear load channel should be executed before stopping the storage engine,
-        // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
-        // so when the ThreadPool is destroyed, it will crash.
-        _load_channel_mgr->close();
-        component_times.emplace_back("load_channel_mgr", MonotonicMillis() - start);
-    }
 
     if (_compute_env != nullptr && _compute_env->load_stream_mgr() != nullptr) {
         start = MonotonicMillis();
@@ -629,7 +613,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
-    SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
     if (_rejected_record_sync_daemon != nullptr) {
         _rejected_record_sync_daemon->stop();

@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/data_workflows")
 
 set(DATA_WORKFLOWS_FILES
+    data_workflows_env.cpp
     clone/engine_clone_task.cpp
     compaction/engine_compaction_control_task.cpp
     compaction/engine_manual_compaction_task.cpp
