@@ -17,6 +17,7 @@
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spiller_factory.h"
+#include "storage/chunk_iterator.h"
 #include "storage/memtable_sink.h"
 #include "util/runtime_profile.h"
 
@@ -28,6 +29,13 @@ namespace lake {
 
 class LoadSpillBlockManager;
 class TabletWriter;
+
+struct SpillBlockInputTasks {
+    std::vector<ChunkIteratorPtr> iterators;
+    size_t total_blocks = 0;
+    size_t total_block_bytes = 0;
+    size_t group_count = 0;
+};
 
 class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
 public:
@@ -71,9 +79,17 @@ public:
 
     Status merge_blocks_to_segments();
 
+    // Parallel merge spill blocks to segments when config enable_load_spill_parallel_merge is true
+    Status merge_blocks_to_segments_parallel(bool do_agg);
+    Status merge_blocks_to_segments_serial(bool do_agg);
+
     spill::Spiller* get_spiller() { return _spiller.get(); }
 
+    RuntimeProfile* profile() const { return _profile; }
+
 private:
+    StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
+                                                                    bool do_sort, bool do_agg);
     Status _prepare(const ChunkPtr& chunk_ptr);
     Status _do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output);
 
