@@ -99,23 +99,27 @@ public class TransactionState implements Writable, GsonPreProcessable {
     public static final TxnStateComparator TXN_ID_COMPARATOR = new TxnStateComparator();
 
     public enum LoadJobSourceType {
-        FRONTEND(1),                    // old dpp load, mini load, insert stmt(not streaming type) use this type
-        BACKEND_STREAMING(2),           // streaming load use this type
-        INSERT_STREAMING(3),            // insert stmt (streaming type) use this type
-        ROUTINE_LOAD_TASK(4),           // routine load task use this type
-        BATCH_LOAD_JOB(5),              // load job v2 for broker load
-        DELETE(6),                     // synchronization delete job use this type
-        LAKE_COMPACTION(7),            // compaction of LakeTable
-        FRONTEND_STREAMING(8),          // FE streaming load use this type
-        MV_REFRESH(9),                  // Refresh MV
-        REPLICATION(10),                // Replication
-        BYPASS_WRITE(11),               // Bypass BE, and write data file directly
-        MULTI_STATEMENT_STREAMING(12);  // multi statement streaming load
+        // The second argument marks whether the source type is a loading transaction, which is used to decide
+        // combined txn log support. When adding a new type, set it explicitly so the classification is not missed.
+        FRONTEND(1, false),                    // old dpp load, mini load, insert stmt(not streaming type) use this type
+        BACKEND_STREAMING(2, true),            // streaming load use this type
+        INSERT_STREAMING(3, true),             // insert stmt (streaming type) use this type
+        ROUTINE_LOAD_TASK(4, true),            // routine load task use this type
+        BATCH_LOAD_JOB(5, true),               // load job v2 for broker load
+        DELETE(6, false),                      // synchronization delete job use this type
+        LAKE_COMPACTION(7, false),             // compaction of LakeTable
+        FRONTEND_STREAMING(8, true),           // FE streaming load use this type
+        MV_REFRESH(9, false),                  // Refresh MV
+        REPLICATION(10, false),                // Replication
+        BYPASS_WRITE(11, false),               // Bypass BE, and write data file directly
+        MULTI_STATEMENT_STREAMING(12, false);  // multi statement streaming load
 
         private final int flag;
+        private final boolean loadingTransaction;
 
-        LoadJobSourceType(int flag) {
+        LoadJobSourceType(int flag, boolean loadingTransaction) {
             this.flag = flag;
+            this.loadingTransaction = loadingTransaction;
         }
 
         public int value() {
@@ -131,6 +135,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
         public int getFlag() {
             return flag;
+        }
+
+        public boolean isLoadingTransaction() {
+            return loadingTransaction;
         }
     }
 

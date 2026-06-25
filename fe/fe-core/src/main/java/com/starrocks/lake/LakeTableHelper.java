@@ -274,19 +274,12 @@ public class LakeTableHelper {
     }
 
     public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
-        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && isLoadingTransaction(sourceType);
-    }
-
-    private static boolean isLoadingTransaction(TransactionState.LoadJobSourceType sourceType) {
-        return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
-                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
-                sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
-                sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && sourceType.isLoadingTransaction();
     }
 
     // for now, only loading txn and compaction txn support combined txn log
     public static boolean isTransactionSupportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
-        return isLoadingTransaction(sourceType) || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION;
+        return sourceType.isLoadingTransaction() || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION;
     }
 
     // if one of the tables in tableIdList is LakeTable with file bundling, return true
