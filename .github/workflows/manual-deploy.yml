@@ -28,6 +28,12 @@ on:
         default: ubuntu
         type: choice
         options: [ubuntu, centos7]
+      CLUSTER_MODE:
+        description: "Deploy mode (shared_nothing = ci-admit, shared_data = ci-admit-cloud)"
+        required: true
+        default: shared_nothing
+        type: choice
+        options: [shared_nothing, shared_data]
       KEEP_HOURS:
         description: "Extra hours to keep the cluster alive after deploy (0 = no renew)"
         required: false
@@ -42,7 +48,7 @@ env:
   BRANCH: ${{ inputs.BRANCH }}
   BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
   LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
-  CLUSTER_NAME: ci-admit
+  CLUSTER_NAME: ${{ inputs.CLUSTER_MODE == 'shared_data' && 'ci-admit-cloud' || 'ci-admit' }}
   FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR }}
   BE_OUTPUT_TAR: ${{ inputs.BE_OUTPUT_TAR }}
   PR_NUMBER: manual-${{ github.run_id }}
