@@ -317,6 +317,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
+    @SerializedName(value = "enableStatisticCollectOnFirstLoadSet")
+    private boolean enableStatisticCollectOnFirstLoadSet = false;
+
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -334,6 +337,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
         newTableProperty.hasDelete = this.hasDelete;
         newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
+        newTableProperty.enableStatisticCollectOnFirstLoad = this.enableStatisticCollectOnFirstLoad;
+        newTableProperty.enableStatisticCollectOnFirstLoadSet = this.enableStatisticCollectOnFirstLoadSet;
         if (this.storageInfo != null) {
             newTableProperty.storageInfo =
                     new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());
@@ -992,8 +997,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableStatisticCollectOnFirstLoad;
     }
 
+    public boolean isSetEnableStatisticCollectOnFirstLoad() {
+        // Older versions persisted "false" only when the user explicitly disabled this table property,
+        // but also wrote the default "true" on table creation. Preserve explicit false while avoiding
+        // treating old default true as a table-level override.
+        return enableStatisticCollectOnFirstLoadSet ||
+                (properties != null &&
+                        "false".equalsIgnoreCase(properties.get(
+                                PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)));
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enableStatisticCollectOnFirstLoad) {
         this.enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad;
+        this.enableStatisticCollectOnFirstLoadSet = true;
     }
 
     public TWriteQuorumType writeQuorum() {
