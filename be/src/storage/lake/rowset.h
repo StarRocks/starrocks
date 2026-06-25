@@ -151,12 +151,23 @@ public:
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
 
+    // Pairs a loaded segment with its position in _metadata->segment_metas(). load_segments() packs
+    // its result densely (segment-range start, partial-compaction trim, lost segments), so an
+    // element's index there is NOT its metadata position; consult per-segment metadata (e.g. shared())
+    // via `segment_meta_pos` -- the segment_metas() array position, not Segment::id()/segment_idx.
+    struct LoadedSegment {
+        SegmentPtr segment;           // nullptr if the segment was skipped, filtered out, or lost
+        int32_t segment_meta_pos = 0; // position in _metadata->segment_metas()
+    };
+
     // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
+    Status load_segments(std::vector<LoadedSegment>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
-                                       const std::unordered_set<int>* skip_segment_idxs = nullptr);
+    [[nodiscard]] Status load_segments(
+            std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
+            std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,
+            const std::unordered_set<int>* skip_segment_idxs = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
