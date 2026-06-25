@@ -1525,10 +1525,10 @@ CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
 // a file has it, regardless of this flag; the flag only controls the write format. Defaults to
-// false: enable it only after the whole cluster has been upgraded to a version that understands
-// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses
-// the legacy reader and cannot parse files written in the new format.
-CONF_mBool(lake_enable_protobuf_file_checksum, "false");
+// true. Set it to false only while the cluster may still be downgraded to a version that predates
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
+// legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
