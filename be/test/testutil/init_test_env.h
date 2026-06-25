@@ -32,6 +32,7 @@
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "connector/connector_bootstrap.h"
+#include "data_workflows/data_workflows_env.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
@@ -147,6 +148,18 @@ int init_test_env(int argc, char** argv) {
     CHECK(st.ok()) << st;
     st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
+
+    auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
+    DataWorkflowsEnvOptions data_workflows_env_options;
+    data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
+    data_workflows_env_options.diagnose_daemon = exec_env->diagnose_daemon();
+    data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
+    data_workflows_env_options.metrics = process_metrics_registry->root_registry();
+    data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
+    data_workflows_env_options.load_mem_tracker = global_env->load_mem_tracker();
+    st = data_workflows_env->init(data_workflows_env_options);
+    CHECK(st.ok()) << st;
+
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
     exec_env->set_agent_server(agent_server.get());
     st = agent_server->start();
@@ -165,11 +178,14 @@ int init_test_env(int argc, char** argv) {
     // Stop AgentServer before StorageEngine drains storage cleanup work its pools may submit.
     agent_server->stop();
     exec_env->set_agent_server(nullptr);
+    data_workflows_env->stop();
     exec_env->stop();
     engine->stop();
 #ifdef USE_STAROS
     StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
     delete engine;
     exec_env->destroy();
     agent_server.reset();

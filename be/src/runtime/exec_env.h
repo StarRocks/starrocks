@@ -75,7 +75,6 @@ class ThreadPool;
 class PriorityThreadPool;
 class ResultBufferMgr;
 class ResultQueueMgr;
-class LoadChannelMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
@@ -151,7 +150,6 @@ public:
     BaseLoadPathMgr* load_path_mgr();
     RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
-    LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
     LoadStreamMgr* load_stream_mgr();
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr();
@@ -215,7 +213,6 @@ private:
     RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;
 
     BrokerMgr* _broker_mgr = nullptr;
-    LoadChannelMgr* _load_channel_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
     BatchWriteMgr* _batch_write_mgr = nullptr;
 
