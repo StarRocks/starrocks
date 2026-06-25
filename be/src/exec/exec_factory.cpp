@@ -368,7 +368,6 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         CREATE_NODE(ConnectorScanNode, pool, new_node, descs);
         return Status::OK();
     }
-<<<<<<< HEAD
     case TPlanNodeType::CHANGES_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
@@ -377,11 +376,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
         return Status::OK();
     }
-=======
     case TPlanNodeType::ENFORCE_UNIQUE_ROW_LOCATOR_NODE:
         CREATE_NODE(EnforceUniqueRowLocatorNode, pool, tnode, descs);
         return Status::OK();
->>>>>>> cc38557d877... [Feature] Add MERGE INTO planner, EnforceUniqueRowLocator check, and Iceberg row-delta commit path (#74725)
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }

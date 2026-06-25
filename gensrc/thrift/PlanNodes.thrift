@@ -90,11 +90,8 @@ enum TPlanNodeType {
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
-<<<<<<< HEAD
-  CHANGES_SCAN_NODE
-=======
+  CHANGES_SCAN_NODE,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE
->>>>>>> cc38557d877... [Feature] Add MERGE INTO planner, EnforceUniqueRowLocator check, and Iceberg row-delta commit path (#74725)
 }
 
 // phases of an execution node
@@ -1614,11 +1611,9 @@ struct TPlanNode {
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
-<<<<<<< HEAD
   86: optional TChangesScanNode changes_scan_node;
-=======
-  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
->>>>>>> cc38557d877... [Feature] Add MERGE INTO planner, EnforceUniqueRowLocator check, and Iceberg row-delta commit path (#74725)
+
+  87: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
