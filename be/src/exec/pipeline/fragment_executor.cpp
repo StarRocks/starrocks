@@ -27,6 +27,8 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
@@ -69,8 +71,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/stream_context_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_context_handle.h"
 
 namespace starrocks::pipeline {

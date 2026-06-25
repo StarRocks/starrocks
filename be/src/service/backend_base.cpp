@@ -44,6 +44,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/result/result_queue_mgr.h"
 #include "gutil/strings/substitute.h"
@@ -51,7 +52,6 @@
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
-#include "runtime/stream_load/stream_context_mgr.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
 

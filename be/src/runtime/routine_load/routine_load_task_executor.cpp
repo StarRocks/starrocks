@@ -43,6 +43,7 @@
 #include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_context.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
@@ -50,7 +51,6 @@
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {

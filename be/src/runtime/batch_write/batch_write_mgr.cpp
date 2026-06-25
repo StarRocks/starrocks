@@ -22,6 +22,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_merge_commit_fwd.h"
 #include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"

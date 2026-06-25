@@ -264,18 +264,18 @@ set(EXEC_FILES
         ./runtime/load_channel_mgr_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
         ./runtime/runtime_metrics_test.cpp
-        ./runtime/stream_load_metrics_test.cpp
+        ./compute_env/load/stream_load_metrics_test.cpp
         ./runtime/rejected_record_sync_daemon_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
         ./runtime/batch_write/isomorphic_batch_write_test.cpp
         ./runtime/batch_write/txn_state_cache_test.cpp
-        ./runtime/stream_load/stream_load_context_test.cpp
+        ./runtime/stream_load/stream_load_context_handle_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
-        ./runtime/time_bounded_stream_load_pipe_test.cpp
+        ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
         ./exec/data_sinks/memory_scratch_sink_test.cpp

@@ -33,6 +33,7 @@ class MetricRegistry;
 class ProfileReportWorker;
 class ResultBufferMgr;
 class ResultQueueMgr;
+class StreamContextMgr;
 struct ProfileReportWorkerOptions;
 
 namespace pipeline {
@@ -82,6 +83,7 @@ public:
     void stop_profile_report_worker();
     Status start_result_mgr();
     void stop_result_mgr();
+    void destroy_stream_context_mgr();
     void destroy_profile_report_worker();
     void destroy_load_path();
     void destroy();
@@ -92,6 +94,7 @@ public:
     ResultBufferMgr* result_mgr() const { return _result_mgr.get(); }
     ResultQueueMgr* result_queue_mgr() const { return _result_queue_mgr.get(); }
     LoadStreamMgr* load_stream_mgr() const { return _load_stream_mgr.get(); }
+    StreamContextMgr* stream_context_mgr() const { return _stream_context_mgr.get(); }
     workgroup::WorkGroupManager* workgroup_manager() const { return _workgroup_manager.get(); }
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
     spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
@@ -108,6 +111,7 @@ private:
     std::unique_ptr<ResultBufferMgr> _result_mgr;
     std::unique_ptr<ResultQueueMgr> _result_queue_mgr;
     std::unique_ptr<LoadStreamMgr> _load_stream_mgr;
+    std::unique_ptr<StreamContextMgr> _stream_context_mgr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;

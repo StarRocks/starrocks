@@ -68,7 +68,10 @@ add_executable(compute_env_test
         data_stream_mgr_test.cpp
         fragment_dict_state_test.cpp
         load/load_stream_mgr_test.cpp
+        load/stream_load_context_test.cpp
+        load/stream_load_metrics_test.cpp
         load/stream_load_pipe_test.cpp
+        load/time_bounded_stream_load_pipe_test.cpp
         load_path_state_helper_test.cpp
         load_path_mgr_test.cpp
         profile_report_worker_test.cpp
