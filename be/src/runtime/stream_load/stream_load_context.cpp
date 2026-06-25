@@ -37,8 +37,8 @@
 #include <fmt/format.h>
 
 #include "common/system/master_info.h"
+#include "compute_env/load/load_stream_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {

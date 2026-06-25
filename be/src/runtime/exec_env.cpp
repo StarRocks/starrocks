@@ -83,7 +83,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/small_file_mgr.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
@@ -163,7 +162,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.fragment_mgr = _fragment_mgr;
     _runtime_services.load_path_mgr = load_path_mgr();
     _runtime_services.load_channel_mgr = _load_channel_mgr;
-    _runtime_services.load_stream_mgr = _load_stream_mgr;
+    _runtime_services.load_stream_mgr = load_stream_mgr();
     _runtime_services.stream_context_mgr = _stream_context_mgr;
     _runtime_services.transaction_mgr = _transaction_mgr;
     _runtime_services.batch_write_mgr = _batch_write_mgr;
@@ -252,7 +251,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _broker_mgr = new BrokerMgr(process_metrics);
 
-    _load_stream_mgr = new LoadStreamMgr(process_metrics);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -421,6 +419,10 @@ BaseLoadPathMgr* ExecEnv::load_path_mgr() {
     return _compute_env == nullptr ? nullptr : _compute_env->load_path_mgr();
 }
 
+LoadStreamMgr* ExecEnv::load_stream_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->load_stream_mgr();
+}
+
 ProfileReportWorker* ExecEnv::profile_report_worker() {
     return _compute_env == nullptr ? nullptr : _compute_env->profile_report_worker();
 }
@@ -441,9 +443,9 @@ void ExecEnv::stop() {
         component_times.emplace_back("load_channel_mgr", MonotonicMillis() - start);
     }
 
-    if (_load_stream_mgr) {
+    if (_compute_env != nullptr && _compute_env->load_stream_mgr() != nullptr) {
         start = MonotonicMillis();
-        _load_stream_mgr->close();
+        _compute_env->stop_stream_load_pipes();
         component_times.emplace_back("load_stream_mgr", MonotonicMillis() - start);
     }
 
@@ -637,7 +639,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
-    SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
     if (_rejected_record_sync_daemon != nullptr) {
