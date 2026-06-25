@@ -45,7 +45,7 @@ set(STARROCKS_LIBS
     Util
     Script
     StarRocksGen
-    Webserver
+    HttpService
     Cache
     ${WL_END_GROUP}
     FormatOrc

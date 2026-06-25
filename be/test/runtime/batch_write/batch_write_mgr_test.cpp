@@ -27,8 +27,8 @@
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "http/http_common.h"
-#include "http/http_headers.h"
+#include "http/core/http_common.h"
+#include "http/core/http_headers.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context_handle.h"
 

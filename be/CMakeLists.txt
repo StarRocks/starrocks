@@ -539,7 +539,7 @@ endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Webserver
+    HttpService
     Tools
     AgentServer
     ${WL_START_GROUP}
