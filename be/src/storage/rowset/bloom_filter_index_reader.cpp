@@ -109,8 +109,8 @@ Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_
     // Returning an error lets ColumnReader::bloom_filter degrade to no-pruning
     // instead of crashing when an ordinal has no backing bloom filter.
     if (num_read != num_to_read) {
-        return Status::Corruption(strings::Substitute(
-                "bloom filter ordinal $0 has no value (read $1 of $2)", ordinal, num_read, num_to_read));
+        return Status::Corruption(strings::Substitute("bloom filter ordinal $0 has no value (read $1 of $2)", ordinal,
+                                                      num_read, num_to_read));
     }
 
     ColumnViewer<TYPE_VARCHAR> viewer(std::move(column));
