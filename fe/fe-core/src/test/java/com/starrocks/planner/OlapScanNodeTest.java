@@ -105,4 +105,21 @@ public class OlapScanNodeTest {
         Assertions.assertNotNull(msg.lake_scan_node);
         Assertions.assertFalse(msg.lake_scan_node.isSetVector_search_options());
     }
+
+    @Test
+    public void testGetBucketNumsWhenSelectedPartitionConcurrentlyRemoved() {
+        // Regression test for the coordinator-preprocessing NPE on colocate / local-bucket-shuffle
+        // joins. The selected partition id is captured at planning time; a concurrent
+        // INSERT OVERWRITE can swap/remove that partition before the scheduler builds the
+        // colocate assignment, so OlapTable.getPartition(pid) returns null.
+        // getBucketNums() must fall back to the table's default bucket number rather than
+        // dereferencing null and throwing NullPointerException.
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.OLAP);
+        // 999L is a partition id that does not exist in the table (concurrently removed).
+        scanNode.setSelectedPartitionIds(Collections.singletonList(999L));
+
+        int bucketNum = Assertions.assertDoesNotThrow(scanNode::getBucketNums);
+        // Falls back to the default distribution bucket number (3, see createOlapScanNode).
+        Assertions.assertEquals(3, bucketNum);
+    }
 }

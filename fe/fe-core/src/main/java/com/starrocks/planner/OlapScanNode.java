@@ -337,7 +337,16 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int bucketNum = distInfo.getBucketNum();
         if (getSelectedPartitionIds().size() <= 1) {
             for (Long pid : getSelectedPartitionIds()) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+                // The selected partition id is captured at planning time. It may be concurrently
+                // removed (e.g. by INSERT OVERWRITE swapping partitions) before the scheduler
+                // builds the colocate/local-bucket-shuffle assignment, in which case
+                // getPartition() returns null. Fall back to the table's default bucket number
+                // instead of throwing NPE, so the query fails gracefully (or succeeds) rather
+                // than crashing the coordinator preprocessing.
+                Partition partition = olapTable.getPartition(pid);
+                if (partition != null) {
+                    bucketNum = partition.getDistributionInfo().getBucketNum();
+                }
             }
         }
         return bucketNum;
