@@ -43,8 +43,8 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
-        <jackson.version>2.21.1</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.1 version released -->
+        <jackson.version>2.21.4</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
