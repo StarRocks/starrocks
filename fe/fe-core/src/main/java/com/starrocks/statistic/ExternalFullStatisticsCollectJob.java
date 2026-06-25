@@ -132,27 +132,30 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         try {
             tableMeta = table.getStatsCollectMetadata();
         } catch (Exception e) {
-            LOG.warn("[ExternalStats] Failed to get table metadata | catalog={} db={} table={}",
-                    catalogName, db.getOriginName(), table.getName(), e);
+            LOG.warn("[ExternalStats] Failed to get table metadata | table={}",
+                    table.getQualifiedTableName(), e);
             tableMeta = Collections.emptyMap();
         }
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
-        long totalCollectSQL = collectSQLList.size();
+        // Initialized to safe defaults so the finally block can record a FAILED row even if
+        // buildCollectSQLList() throws before the try/finally is entered.
+        List<List<String>> collectSQLList = Collections.emptyList();
+        long totalCollectSQL = 0;
 
-        LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
-                jobId, catalogName, db.getOriginName(), table.getName(),
-                partitionNames.size(), columnNames.size());
+        LOG.info("[ExternalStats] collect start | jobId={} table={} partitions={} columns={}",
+                jobId, table.getQualifiedTableName(), partitionNames.size(), columnNames.size());
         if (!tableMeta.isEmpty()) {
             String metaStr = tableMeta.entrySet().stream()
                     .map(e -> e.getKey() + "=" + e.getValue())
                     .collect(Collectors.joining(" "));
-            LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
-                    jobId, catalogName, db.getOriginName(), table.getName(), metaStr);
+            LOG.info("[ExternalStats] table info | jobId={} table={} {}",
+                    jobId, table.getQualifiedTableName(), metaStr);
         }
         String status = "SUCCESS";
         String failureReason = "";
         try {
+            collectSQLList = buildCollectSQLList(parallelism);
+            totalCollectSQL = collectSQLList.size();
             long finishedSQLNum = 0;
             // First, the collection task is divided into several small tasks according to the column name and partition,
             // and then the multiple small tasks are aggregated into several tasks
@@ -183,9 +186,9 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             throw e;
         } finally {
             long endMs = System.currentTimeMillis();
-            LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
-                            "durationMs={} partitions={} columns={} reason={}",
-                    jobId, catalogName, db.getOriginName(), table.getName(),
+            LOG.info("[ExternalStats] collect end | jobId={} table={} status={} durationMs={} " +
+                            "partitions={} columns={} reason={}",
+                    jobId, table.getQualifiedTableName(),
                     status, endMs - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
             // Build extended_info: execution params + column/partition lists + connector metadata
@@ -236,9 +239,13 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
             stmtExecutor.execute();
+            if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                LOG.warn("[ExternalStats] Failed to write analyze history | jobId={} table={} error={}",
+                        jobId, table.getQualifiedTableName(), context.getState().getErrorMessage());
+            }
         } catch (Exception e) {
             LOG.warn("[ExternalStats] Failed to write analyze history | jobId={} table={}",
-                    jobId, table.getName(), e);
+                    jobId, table.getQualifiedTableName(), e);
         }
     }
 
