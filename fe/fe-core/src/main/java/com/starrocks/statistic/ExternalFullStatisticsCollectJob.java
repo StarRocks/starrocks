@@ -121,34 +121,59 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-        long finishedSQLNum = 0;
-        int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
-        long totalCollectSQL = collectSQLList.size();
+        long startMs = System.currentTimeMillis();
+        long jobId = analyzeStatus.getId();
+        LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
+                jobId, catalogName, db.getOriginName(), table.getName(),
+                partitionNames.size(), columnNames.size());
 
-        // First, the collection task is divided into several small tasks according to the column name and partition,
-        // and then the multiple small tasks are aggregated into several tasks
-        // that will actually be run according to the configured parallelism, and are connected by union all
-        // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
-        // dop will be set to 1 to meet the requirements of the degree of parallelism.
-        // If the number of unions is less than the degree of parallelism,
-        // dop should be adjusted appropriately to use enough cpu cores
-        for (List<String> sqlUnion : collectSQLList) {
-            if (sqlUnion.size() < parallelism) {
-                context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
-            } else {
-                context.getSessionVariable().setPipelineDop(1);
-            }
-
-            String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
-
-            collectStatisticSync(sql, context, analyzeStatus);
-            finishedSQLNum++;
-            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+        String tableSummary = table.getStatsCollectSummary();
+        if (!tableSummary.isEmpty()) {
+            LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
+                    jobId, catalogName, db.getOriginName(), table.getName(), tableSummary);
         }
 
-        flushInsertStatisticsData(context, true);
+        String status = "SUCCESS";
+        String failureReason = "";
+        try {
+            long finishedSQLNum = 0;
+            int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+            List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
+            long totalCollectSQL = collectSQLList.size();
+
+            // First, the collection task is divided into several small tasks according to the column name and partition,
+            // and then the multiple small tasks are aggregated into several tasks
+            // that will actually be run according to the configured parallelism, and are connected by union all
+            // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
+            // dop will be set to 1 to meet the requirements of the degree of parallelism.
+            // If the number of unions is less than the degree of parallelism,
+            // dop should be adjusted appropriately to use enough cpu cores
+            for (List<String> sqlUnion : collectSQLList) {
+                if (sqlUnion.size() < parallelism) {
+                    context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
+                } else {
+                    context.getSessionVariable().setPipelineDop(1);
+                }
+
+                String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
+
+                collectStatisticSync(sql, context, analyzeStatus);
+                finishedSQLNum++;
+                analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+            }
+
+            flushInsertStatisticsData(context, true);
+        } catch (Exception e) {
+            status = "FAILED";
+            failureReason = e.getMessage();
+            throw e;
+        } finally {
+            LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} durationMs={} partitions={} columns={} reason={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(),
+                    status, System.currentTimeMillis() - startMs,
+                    partitionNames.size(), columnNames.size(), failureReason);
+        }
     }
 
     protected List<List<String>> buildCollectSQLList(int parallelism) {
