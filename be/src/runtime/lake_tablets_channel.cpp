@@ -47,6 +47,7 @@
 #include "storage/lake/async_delta_writer.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/primitive/tablet_info.h"
@@ -150,7 +151,18 @@ private:
         void add_txn_logs(const std::vector<TxnLogPtr>& logs) {
             _response->mutable_lake_tablet_data()->mutable_txn_logs()->Reserve(logs.size());
             for (auto& log : logs) {
-                _response->mutable_lake_tablet_data()->add_txn_logs()->CopyFrom(*log);
+                // Dual-write the deprecated legacy arrays into the txn log shipped back to the load
+                // coordinator, so a coordinator BE that lacks the segment_metas refactor (mixed-version)
+                // still persists a combined txn log an old reader can resolve. DeltaWriter emits only the
+                // structured segment_metas; before-save adds the legacy dual-write. Mirrors the compaction
+                // worker. On the (practically unreachable) normalize failure, fail the load rather than
+                // ship a non-dual-written log.
+                TxnLogPB normalized(*log);
+                if (auto st = starrocks::lake::normalize_txn_log_before_save(&normalized); st.ok()) {
+                    _response->mutable_lake_tablet_data()->add_txn_logs()->Swap(&normalized);
+                } else {
+                    update_status(st);
+                }
             }
         }
 

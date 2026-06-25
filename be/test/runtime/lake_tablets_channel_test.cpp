@@ -1323,6 +1323,18 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
                     << finish_response.status().error_msgs(0);
             ASSERT_TRUE(finish_response.has_lake_tablet_data());
             ASSERT_EQ(4, finish_response.lake_tablet_data().txn_logs_size());
+            // The txn logs shipped back to the coordinator must be dual-written (the deprecated legacy
+            // arrays rebuilt from segment_metas), so a mixed-version coordinator that lacks the
+            // segment_metas refactor still persists a combined txn log an old reader can resolve.
+            for (const auto& txn_log : finish_response.lake_tablet_data().txn_logs()) {
+                const auto& rowset = txn_log.op_write().rowset();
+                ASSERT_GT(rowset.segment_metas_size(), 0);
+                ASSERT_EQ(rowset.segment_metas_size(), rowset.deprecated_segments_size());
+                for (int i = 0; i < rowset.segment_metas_size(); i++) {
+                    EXPECT_FALSE(rowset.segment_metas(i).filename().empty());
+                    EXPECT_EQ(rowset.segment_metas(i).filename(), rowset.deprecated_segments(i));
+                }
+            }
             auto metacache = _tablet_manager->metacache();
             for (auto tablet_id : {10086, 10087, 10088, 10089}) {
                 auto txn_log_path = _tablet_manager->txn_log_location(tablet_id, kTxnId);

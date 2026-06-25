@@ -593,6 +593,12 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     // tablet page and the footer use the same decision, even if the flag is flipped concurrently.
     const bool enable_checksum = config::lake_enable_protobuf_file_checksum;
     for (auto& [tablet_id, meta] : tablet_metas) {
+        // Normalize RPC-received metadata on entry exactly like S3-loaded metadata: after-load
+        // (extend + back-fill segment_metas from the legacy arrays) BEFORE before-save rebuilds those
+        // arrays. During a mixed-version upgrade an old worker can send legacy-shaped metadata whose
+        // segment names live only in deprecated_segments; without this after-load the no-extend
+        // before-save would drop them. Idempotent for already-normalized (new-worker) metadata.
+        normalize_tablet_metadata_after_load(&meta);
         RETURN_IF_ERROR(normalize_tablet_metadata_before_save(&meta));
         meta.clear_schema();
         meta.mutable_historical_schemas()->clear();
@@ -1229,9 +1235,15 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
     }
 #endif
     auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
-    // Dual-write the deprecated legacy parallel arrays from the structured fields for rollback compat.
+    // put_combined_txn_log persists txn logs COLLECTED FROM OTHER NODES over RPC (aggregate compaction
+    // and the normal combined-txn write path), so a log can be legacy-shaped if produced by a pre-feature
+    // BE during a mixed-version upgrade. Normalize each received log on entry exactly like a disk-loaded
+    // one (after-load extends + back-fills segment_metas from the legacy arrays), which also makes the
+    // subsequent no-extend before-save safe; before-save then dual-writes the legacy arrays back from the
+    // structured fields for version-rollback compat.
     CombinedTxnLogPB normalized_logs = logs;
     for (auto& log : *normalized_logs.mutable_txn_logs()) {
+        normalize_txn_log_after_load(&log);
         RETURN_IF_ERROR(normalize_txn_log_before_save(&log));
     }
     return save_lake_protobuf(path, normalized_logs);
