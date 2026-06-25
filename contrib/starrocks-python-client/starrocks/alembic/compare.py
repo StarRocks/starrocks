@@ -14,7 +14,7 @@
 
 from functools import wraps
 import logging
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union, Sequence
 import warnings
 
 from alembic.autogenerate import comparators
@@ -311,7 +311,11 @@ def _autogen_for_views(
     Scan views in database and compare with metadata.
     """
     inspector: Inspector = autogen_context.inspector
+    
     metadata = autogen_context.metadata
+    if not isinstance(autogen_context.metadata, Sequence):
+        metadata = [autogen_context.metadata]
+
     default_schema = inspector.bind.dialect.default_schema_name
 
     conn_view_names: Set[Tuple[Optional[str], str]] = set()
@@ -330,7 +334,8 @@ def _autogen_for_views(
     # Get all views from metadata and apply name filters, normalize schema (default -> None)
     all_normed_metadata_view_names = set(
         (table.schema if table.schema != default_schema else None, table.name)
-        for table in metadata.tables.values()
+        for m in metadata
+        for table in m.tables.values()
         if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.VIEW
         and autogen_context.run_name_filters(
             table.name, "view", {"schema_name": table.schema}
@@ -371,6 +376,8 @@ def _compare_views(
 ) -> None:
     """Compare views between database and metadata, generating add/drop/alter operations."""
     metadata = autogen_context.metadata
+    if not isinstance(metadata, Sequence):
+        metadata = [metadata]
     logger.debug("start to compare views, conn_view_names (from DB): %s, metadata_view_names (from metadata): %s",
         conn_view_names, metadata_view_names)
 
@@ -385,7 +392,8 @@ def _compare_views(
     # Build a lookup from (schema, name) to Table object for metadata views (using normalized schema)
     view_name_to_table = {
         (table.schema if table.schema != default_schema else None, table.name): table
-        for table in metadata.tables.values()
+        for m in metadata
+        for table in m.tables.values()
         if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.VIEW
     }
     metadata_view_names = metadata_view_names_no_dflt
@@ -806,6 +814,8 @@ def _autogen_for_mvs(
     """
     inspector: Inspector = autogen_context.inspector
     metadata = autogen_context.metadata
+    if not isinstance(metadata, Sequence):
+        metadata = [metadata]
     default_schema = inspector.bind.dialect.default_schema_name
 
     conn_mv_names: Set[Tuple[Optional[str], str]] = set()
@@ -825,7 +835,8 @@ def _autogen_for_mvs(
     # Get all MVs from metadata and apply name filters, normalize schema (default -> None)
     all_normed_metadata_mv_names = set(
         (table.schema if table.schema != default_schema else None, table.name)
-        for table in metadata.tables.values()
+        for m in metadata
+        for table in m.tables.values()
         if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.MATERIALIZED_VIEW
         and autogen_context.run_name_filters(
             table.name, "materialized_view", {"schema_name": table.schema}
@@ -866,6 +877,8 @@ def _compare_mvs(
 ) -> None:
     """Compare materialized views between database and metadata, generating add/drop/alter operations."""
     metadata = autogen_context.metadata
+    if not isinstance(metadata, Sequence):
+        metadata = [metadata]
     logger.debug("Start to compare mvs, conn_mv_names (from DB): %s, metadata_mv_names (from metadata): %s",
         conn_mv_names, metadata_mv_names)
 
@@ -880,7 +893,8 @@ def _compare_mvs(
     # Build a lookup from (schema, name) to Table object for metadata MVs (using normalized schema)
     mv_name_to_table = {
         (table.schema if table.schema != default_schema else None, table.name): table
-        for table in metadata.tables.values()
+        for m in metadata
+        for table in m.tables.values()
         if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.MATERIALIZED_VIEW
     }
     metadata_mv_names = metadata_mv_names_no_dflt
