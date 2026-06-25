@@ -98,6 +98,17 @@ public class IcebergStatisticProvider {
         return statisticsBuilder.build();
     }
 
+    // Build row-count-only statistics from a pre-computed cardinality (e.g. manifest-pruned row count),
+    // without enumerating DataFiles. Column statistics are left UNKNOWN here; NDV estimation is handled
+    // separately by the column-statistics path.
+    public Statistics buildRowCountStatistics(
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap, long rowCount) {
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        statisticsBuilder.setOutputRowCount(Math.max(rowCount, 1));
+        statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
+        return statisticsBuilder.build();
+    }
+
     public Statistics getTableStatistics(IcebergTable icebergTable,
                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                          OptimizerContext session,
