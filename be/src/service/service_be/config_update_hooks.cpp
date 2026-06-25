@@ -77,7 +77,7 @@
 
 namespace starrocks {
 
-void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env) {
+void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env, LoadChannelMgr* load_channel_mgr) {
     auto* registry = ConfigUpdateRegistry::instance();
     const auto* global_env_ptr = &global_env;
 
@@ -422,8 +422,10 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
     });
     registry->register_callback("load_channel_rpc_thread_pool_num", [=]() -> Status {
         LOG(INFO) << "set load_channel_rpc_thread_pool_num:" << config::load_channel_rpc_thread_pool_num;
-        return ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(
-                config::load_channel_rpc_thread_pool_num);
+        if (load_channel_mgr == nullptr) {
+            return Status::InternalError("LoadChannelMgr is not initialized");
+        }
+        return load_channel_mgr->async_rpc_pool()->update_max_threads(config::load_channel_rpc_thread_pool_num);
     });
     registry->register_callback("exec_state_report_max_threads", [=]() -> Status {
         LOG(INFO) << "set exec_state_report_max_threads:" << config::exec_state_report_max_threads;
