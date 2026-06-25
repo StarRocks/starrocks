@@ -16,8 +16,8 @@
 
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/message_body_sink.h"
+#include "runtime/stream_load/stream_context_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks {
 

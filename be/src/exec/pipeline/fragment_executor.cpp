@@ -69,9 +69,9 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state_helper.h"
+#include "runtime/stream_load/stream_context_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_context_handle.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks::pipeline {
 

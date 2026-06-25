@@ -39,6 +39,8 @@
 #include "http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
+#include "runtime/stream_load/stream_context_mgr.h"
+#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 

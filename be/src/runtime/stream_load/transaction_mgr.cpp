@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <future>
+#include <memory>
 #include <sstream>
 
 // use string iequal
@@ -32,11 +33,11 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "common/thread/thread.h"
 #include "common/util/debug_util.h"
 #include "common/util/misc.h"
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/load/load_stream_mgr.h"
-#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -52,11 +53,12 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/stream_load/stream_context_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks {
 
