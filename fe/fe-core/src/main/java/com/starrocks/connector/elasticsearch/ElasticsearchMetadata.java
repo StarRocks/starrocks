@@ -102,7 +102,8 @@ public class ElasticsearchMetadata
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange tableVersionRange) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator col : columns.keySet()) {
             builder.addColumnStatistic(col, ColumnStatistic.unknown());
         }

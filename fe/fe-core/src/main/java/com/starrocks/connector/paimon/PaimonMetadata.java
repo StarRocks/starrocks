@@ -723,7 +723,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                 return StatisticsUtils.buildDefaultStatistics(columns.keySet());
             }
 
-            Statistics.Builder builder = Statistics.builder();
+            Statistics.Builder builder = Statistics.builder()
+                    .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
             if (!session.getSessionVariable().enablePaimonColumnStatistics()) {
                 return defaultStatistics(columns, table, predicate, limit, versionRange);
             }
@@ -745,7 +746,8 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     private Statistics defaultStatistics(Map<ColumnRefOperator, Column> columns, Table table, ScalarOperator predicate,
                                          long limit, TvrVersionRange versionRange) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }

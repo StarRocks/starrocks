@@ -32,6 +32,12 @@ import java.util.Set;
 import static java.lang.Double.NaN;
 
 public class Statistics {
+    public enum StatsSource {
+        NONE,
+        TABLE_METADATA,
+        ANALYZE
+    }
+
     private final double outputRowCount;
     private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
     // This flag set true if get table row count from GlobalStateMgr LE 1
@@ -39,6 +45,7 @@ public class Statistics {
     // this causes the table row count stored in FE to be inaccurate.
     private final boolean tableRowCountMayInaccurate;
     private final Collection<ColumnRefOperator> shadowColumns;
+    private final StatsSource statsSource;
 
     private final Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
@@ -58,6 +65,7 @@ public class Statistics {
         this.columnStatistics = Collections.unmodifiableMap(builder.columnStatistics);
         this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
         this.shadowColumns = Collections.unmodifiableCollection(builder.shadowColumns);
+        this.statsSource = builder.statsSource;
         this.multiColumnCombinedStats = Collections.unmodifiableMap(builder.multiColumnCombinedStats);
     }
 
@@ -65,11 +73,13 @@ public class Statistics {
                        Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
                        boolean tableRowCountMayInaccurate,
                        Collection<ColumnRefOperator> shadowColumns,
+                       StatsSource statsSource,
                        Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats) {
         this.outputRowCount = outputRowCount;
         this.columnStatistics = Collections.unmodifiableMap(columnStatistics);
         this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
         this.shadowColumns = Collections.unmodifiableCollection(shadowColumns);
+        this.statsSource = statsSource;
         this.multiColumnCombinedStats = Collections.unmodifiableMap(multiColumnCombinedStats);
     }
 
@@ -82,7 +92,8 @@ public class Statistics {
         if (Double.compare(this.outputRowCount, clamped) == 0) {
             return this;
         }
-        return new Statistics(clamped, columnStatistics, tableRowCountMayInaccurate, shadowColumns, multiColumnCombinedStats);
+        return new Statistics(clamped, columnStatistics, tableRowCountMayInaccurate, shadowColumns, statsSource,
+                multiColumnCombinedStats);
     }
 
     public double getOutputSize(ColumnRefSet outputColumns) {
@@ -151,6 +162,10 @@ public class Statistics {
 
     public boolean isTableRowCountMayInaccurate() {
         return this.tableRowCountMayInaccurate;
+    }
+
+    public StatsSource getStatsSource() {
+        return statsSource;
     }
 
     public ColumnRefSet getUsedColumns() {
@@ -226,6 +241,7 @@ public class Statistics {
                 other.columnStatistics,
                 other.tableRowCountMayInaccurate,
                 other.shadowColumns,
+                other.statsSource,
                 other.multiColumnCombinedStats);
     }
 
@@ -240,6 +256,7 @@ public class Statistics {
         // columns not used to compute costs
         // which is used by mv rewrite to make the cost accurate
         private Collection<ColumnRefOperator> shadowColumns;
+        private StatsSource statsSource = StatsSource.NONE;
         private final Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
 
@@ -249,18 +266,21 @@ public class Statistics {
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
                         boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns,
+                        StatsSource statsSource,
                         Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats) {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
             this.shadowColumns = shadowColumns;
+            this.statsSource = statsSource;
             this.multiColumnCombinedStats = (multiColumnCombinedStats == null || multiColumnCombinedStats.isEmpty()) ?
                     new HashMap<>() : new HashMap<>(multiColumnCombinedStats);
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
                         boolean tableRowCountMayInaccurate) {
-            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList(), new HashMap<>());
+            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList(),
+                    StatsSource.NONE, new HashMap<>());
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
@@ -317,6 +337,11 @@ public class Statistics {
 
         public Builder setShadowColumns(Collection<ColumnRefOperator> shadowColumns) {
             this.shadowColumns = shadowColumns;
+            return this;
+        }
+
+        public Builder setStatsSource(StatsSource statsSource) {
+            this.statsSource = statsSource;
             return this;
         }
 

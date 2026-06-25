@@ -29,7 +29,6 @@ import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
-import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
@@ -101,6 +100,7 @@ public class ProfilingExecPlan {
 
         private String displayName;
         private Statistics statistics;
+        private Statistics.StatsSource statsSource;
         private CostEstimate costEstimate;
         private double totalCost;
 
@@ -162,6 +162,10 @@ public class ProfilingExecPlan {
             return statistics;
         }
 
+        public Statistics.StatsSource getStatsSource() {
+            return statsSource;
+        }
+
         public CostEstimate getCostEstimate() {
             return costEstimate;
         }
@@ -194,6 +198,7 @@ public class ProfilingExecPlan {
 
         private void setEstimation(Statistics statistics, CostEstimate costEstimate, double totalCost) {
             this.statistics = statistics;
+            this.statsSource = statistics != null ? statistics.getStatsSource() : Statistics.StatsSource.NONE;
             this.costEstimate = costEstimate;
             this.totalCost = totalCost;
         }
@@ -393,9 +398,8 @@ public class ProfilingExecPlan {
             }
         } else if (node instanceof ScanNode) {
             ScanNode scanNode = (ScanNode) node;
-            if (scanNode instanceof OlapScanNode) {
-                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
-                element.addInfo("Table: ", olapScanNode.getOlapTable().getName());
+            if (scanNode.getDesc().getTable() != null) {
+                element.addInfo("Table", scanNode.getDesc().getTable().getQualifiedTableName());
             }
         }
     }
