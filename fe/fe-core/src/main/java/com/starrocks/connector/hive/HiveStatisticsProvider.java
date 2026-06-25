@@ -71,7 +71,7 @@ public class HiveStatisticsProvider {
             Table table,
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder().setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         if (table.isUnPartitioned()) {
             HivePartitionStats tableStats = hmsOps.getTableStatistics(table.getCatalogDBName(), table.getCatalogTableName());
             return createUnpartitionedStats(tableStats, columns, builder, table);
@@ -171,7 +171,8 @@ public class HiveStatisticsProvider {
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys,
             double presentRowNums) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }

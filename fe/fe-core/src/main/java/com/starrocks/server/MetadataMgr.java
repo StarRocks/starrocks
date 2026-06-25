@@ -739,7 +739,7 @@ public class MetadataMgr {
                 }
             }
         }
-        return statistics.build();
+        return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -784,7 +784,8 @@ public class MetadataMgr {
                     });
 
                     return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
-                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount())
+                            .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
                     return connectorBasicStats;
                 }
