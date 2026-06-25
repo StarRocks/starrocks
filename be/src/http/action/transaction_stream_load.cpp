@@ -214,7 +214,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
     ctx->last_active_ts = MonotonicNanos();
 
     if (!ctx->status.ok()) {
-        if (ctx->need_rollback) {
+        if (ctx->need_rollback()) {
             (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
         }
     }
@@ -297,7 +297,7 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;
-        if (ctx->need_rollback) {
+        if (ctx->need_rollback()) {
             (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
         }
         auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);

@@ -36,10 +36,11 @@
 
 #include <fmt/format.h>
 
+#include <utility>
+
+#include "common/logging.h"
 #include "common/system/master_info.h"
 #include "compute_env/load/load_stream_mgr.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -56,9 +57,12 @@ StreamLoadContext::StreamLoadContext(ExecEnv* exec_env, UniqueId id, LoadStreamM
 }
 
 StreamLoadContext::~StreamLoadContext() noexcept {
-    if (need_rollback) {
-        (void)_exec_env->stream_load_executor()->rollback_txn(this);
-        need_rollback = false;
+    if (_need_rollback) {
+        DCHECK(_rollback_txn_callback);
+        if (_rollback_txn_callback) {
+            (void)_rollback_txn_callback(this);
+        }
+        clear_need_rollback();
     }
 
     if (_load_stream_mgr != nullptr) {
@@ -347,6 +351,17 @@ std::string StreamLoadContext::brief(bool detail) const {
 bool StreamLoadContext::check_and_set_http_limiter(ConcurrentLimiter* limiter) {
     _http_limiter_guard = std::make_unique<ConcurrentLimiterGuard>();
     return _http_limiter_guard->set_limiter(limiter);
+}
+
+void StreamLoadContext::set_need_rollback(RollbackTxnCallback callback) {
+    CHECK(callback);
+    _need_rollback = true;
+    _rollback_txn_callback = std::move(callback);
+}
+
+void StreamLoadContext::clear_need_rollback() {
+    _need_rollback = false;
+    _rollback_txn_callback = nullptr;
 }
 
 void StreamLoadContext::release(StreamLoadContext* context) {

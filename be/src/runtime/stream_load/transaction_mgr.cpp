@@ -171,7 +171,7 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
         st = _begin_transaction(req, ctx);
         if (!st.ok()) {
             ctx->status = st;
-            if (ctx->need_rollback) {
+            if (ctx->need_rollback()) {
                 (void)_rollback_transaction(ctx);
             }
         }
@@ -267,7 +267,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
         if (!st.ok()) {
             LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
-            if (ctx->need_rollback) {
+            if (ctx->need_rollback()) {
                 (void)_rollback_transaction(ctx);
             }
         }
@@ -385,6 +385,7 @@ Status TransactionMgr::_rollback_transaction(StreamLoadContext* ctx) {
 
     // 3. rollback transaction by send request to FE
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->rollback_txn(ctx));
+    ctx->clear_need_rollback();
 
     // 4. remove stream load context
     //    By remove context at the end, we can retry when the rollback FE fails

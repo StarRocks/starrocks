@@ -109,7 +109,6 @@ Status StreamContextMgr::create_channel_context(ExecEnv* exec_env, const std::st
 
     ctx->start_nanos = UnixSeconds();
     ctx->last_active_ts = ctx->start_nanos;
-    ctx->need_rollback = false;
     ctx->format = static_cast<TFileFormatType::type>(format);
 
     ctx->body_sink = pipe;
