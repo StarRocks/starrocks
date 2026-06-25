@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include <memory>
-#include <string>
 
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
@@ -114,7 +113,9 @@ TEST_F(StreamLoadContextTest, destructor_removes_pipe_from_injected_load_stream_
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
     ASSERT_NE(nullptr, load_stream_mgr.get(load_id));
 
-    { StreamLoadContext ctx(_exec_env, load_id, &load_stream_mgr); }
+    {
+        StreamLoadContext ctx(_exec_env, load_id, &load_stream_mgr);
+    }
 
     EXPECT_EQ(nullptr, load_stream_mgr.get(load_id));
 }
@@ -157,10 +158,6 @@ TEST_F(StreamLoadContextTest, clear_need_rollback_prevents_destructor_rollback_c
 
 TEST_F(StreamLoadContextTest, set_need_rollback_rejects_empty_callback) {
     StreamLoadContext ctx(nullptr, nullptr);
-    std::string old_death_test_style = GTEST_FLAG_GET(death_test_style);
-    GTEST_FLAG_SET(death_test_style, "threadsafe");
-    DeferOp restore_death_test_style([&] { GTEST_FLAG_SET(death_test_style, old_death_test_style); });
-
     ASSERT_DEATH(ctx.set_need_rollback(nullptr), "callback");
 }
 
