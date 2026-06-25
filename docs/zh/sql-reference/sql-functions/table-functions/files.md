@@ -111,7 +111,10 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
   :::note
 
-  要通过 `file://` 协议访问 NFS 中的文件，您需要将 NAS 设备挂载为 NFS，并放置在每个 BE 或 CN 节点的相同目录下。
+  要通过 `file://` 协议访问 NFS(NAS)，请将同一 NAS 设备作为 NFS 挂载到需要访问该路径的节点上的相同目录下：
+
+  - 对于读操作，需要挂载到每个 FE 节点以及每个 BE 或 CN 节点。FE 节点会列举文件并推断文件 Schema，BE/CN 节点会读取数据。
+  - 对于写操作，需要挂载到每个 BE 或 CN 节点。
 
   :::
 
