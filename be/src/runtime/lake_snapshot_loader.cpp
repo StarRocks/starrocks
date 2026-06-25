@@ -21,6 +21,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/tablet.h"
 #include "util/network_util.h"
 #include "util/raw_container.h"
@@ -307,6 +308,12 @@ Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* r
                 return Status::Corruption(fmt::format("failed to parse tablet meta {}", full_remote_file));
             }
             meta->set_id(restore_info.tablet_id());
+            // The snapshot blob is parsed directly (it never went through a load path), so a backup taken
+            // on a pre-feature BE is legacy-shaped. Normalize it on entry exactly like a disk-loaded one
+            // (after-load back-fills segment_metas from the legacy arrays) so both the cached object and
+            // put_tablet_metadata's dual-write before-save carry the segment filenames. put_tablet_metadata
+            // caches the original object, so this must run here on the cached object, not on a copy inside.
+            lake::normalize_tablet_metadata_after_load(meta.get());
             RETURN_IF_ERROR(_env->lake_tablet_manager()->put_tablet_metadata(meta));
         }
 

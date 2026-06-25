@@ -35,7 +35,9 @@ namespace starrocks::lake {
 // Walk every nested RowsetMetadataPB / OpWrite carrier in a TabletMetadataPB or TxnLogPB
 // and normalize it. After-load merges the legacy arrays into the structured fields (structured
 // wins; never errors). Before-save rebuilds the legacy arrays from the structured fields; it
-// returns Status only to propagate failures and currently always succeeds.
+// returns an error if it cannot do so without losing data: Corruption on a mix of bundled and
+// standalone segments, or when un-normalized input (legacy arrays longer than the structured
+// fields, i.e. after-load was skipped) would otherwise be silently truncated.
 void normalize_tablet_metadata_after_load(TabletMetadataPB* tablet_metadata);
 Status normalize_tablet_metadata_before_save(TabletMetadataPB* tablet_metadata);
 
