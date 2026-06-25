@@ -39,7 +39,7 @@ set(EXEC_FILES
         ./fs/azure/fs_azblob_test.cpp
         ./fs/azure/utils_test.cpp
         ./fs/credential/cloud_configuration_factory_test.cpp
-        ./fs/fs_broker_test.cpp
+        ./platform/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -270,7 +270,6 @@ set(EXEC_FILES
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
-        ./runtime/snapshot_loader_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp

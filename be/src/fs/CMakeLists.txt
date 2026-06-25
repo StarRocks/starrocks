@@ -40,7 +40,6 @@ target_link_libraries(FSCore PUBLIC IO)
 set(EXEC_FILES
     fs_provider_bootstrap.cpp
     fs_options_helper.cpp
-    fs_broker.cpp
     fs_s3.cpp
     azure/azblob_uri.cpp
     azure/fs_azblob.cpp

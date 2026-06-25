@@ -160,7 +160,6 @@
       "allowed_include_prefixes": ["fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
       "forbidden_includes": [
-        "fs/fs_broker.h",
         "fs/fs_options_helper.h",
         "fs/fs_s3.h",
         "fs/key_cache.h",
@@ -307,7 +306,6 @@
         "runtime/hive_table_sink.h",
         "runtime/iceberg_table_sink.h",
         "runtime/jdbc_driver_manager.h",
-        "runtime/lake_snapshot_loader.h",
         "runtime/lake_tablets_channel.h",
         "runtime/load_channel.h",
         "runtime/load_channel_mgr.h",
@@ -324,7 +322,6 @@
         "runtime/result_sink.h",
         "runtime/schema_table_sink.h",
         "runtime/small_file_mgr.h",
-        "runtime/snapshot_loader.h",
         "runtime/table_function_table_sink.h",
         "runtime/tablets_channel.h",
         "runtime/variable_result_writer.h"

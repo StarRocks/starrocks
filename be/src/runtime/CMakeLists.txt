@@ -90,7 +90,6 @@ set(RUNTIME_FILES
     runtime_state_helper.cpp
     rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
-    snapshot_loader.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_executor.cpp
     batch_write/isomorphic_batch_write.cpp
@@ -105,7 +104,6 @@ set(RUNTIME_FILES
     external_scan_context_mgr.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
-    lake_snapshot_loader.cpp
     command_executor.cpp
     diagnose_daemon.cpp
 )
