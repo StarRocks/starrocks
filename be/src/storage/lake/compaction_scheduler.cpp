@@ -33,6 +33,7 @@
 #include "runtime/exec_env.h"
 #include "service/service_be/lake_service.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -130,7 +131,18 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
     if (context->skip_write_txnlog && context->txn_log != nullptr) {
         // context->txn_log could be nullptr if the task is failed before writing txn log.
-        _response->add_txn_logs()->CopyFrom(*context->txn_log);
+        // Dual-write the legacy arrays into the RPC payload so an aggregator without the segment_metas
+        // refactor (not-yet-upgraded or rolled-back) persists old-readable metadata. Normalize a temp
+        // copy and only return it on success; never put a non-dual-written / bad txn log in the response.
+        TxnLogPB normalized(*context->txn_log);
+        if (auto st = normalize_txn_log_before_save(&normalized); st.ok()) {
+            _response->add_txn_logs()->Swap(&normalized);
+        } else {
+            LOG(WARNING) << "Fail to normalize aggregate-compact txn log: " << st
+                         << " tablet_id=" << context->tablet_id;
+            _response->add_failed_tablets(context->tablet_id);
+            _status.update(st);
+        }
     }
     DCHECK(_request != nullptr);
     _status.update(context->status);

@@ -33,6 +33,7 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
@@ -371,6 +372,21 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         TabletMetadataPB local_metadata;
                         if (skip_write_tablet_metadata) {
                             local_metadata.CopyFrom(*metadata);
+                            // Dual-write the legacy arrays into the RPC payload so an aggregator that
+                            // lacks the segment_metas refactor (a node not yet upgraded, or one rolled
+                            // back below this version) still persists metadata an old BE can read.
+                            // Mirrors the dual-write that every on-disk save performs.
+                            if (auto st = lake::normalize_tablet_metadata_before_save(&local_metadata); !st.ok()) {
+                                g_publish_version_failed_tasks << 1;
+                                LOG(WARNING) << "Fail to normalize aggregate-publish metadata: " << st
+                                             << " tablet_id=" << metadata->id();
+                                std::lock_guard l(response_mtx);
+                                response->mutable_failed_tablets()->Add(
+                                        tablet_info.get_tablet_ids_in_txn_logs().begin(),
+                                        tablet_info.get_tablet_ids_in_txn_logs().end());
+                                st.to_protobuf(response->mutable_status());
+                                return;
+                            }
                         }
                         {
                             std::lock_guard l(response_mtx);
@@ -468,6 +484,21 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 std::unordered_map<int64_t, TabletMetadataPB> copied_tablet_metas;
                                 for (auto& pair : tablet_metadatas) {
                                     copied_tablet_metas[pair.first].CopyFrom(*pair.second);
+                                }
+                                // Dual-write the legacy arrays into the RPC payload (see the non-reshard
+                                // publish path above) so an aggregator without the segment_metas refactor
+                                // persists old-readable metadata. If any fails, fail the whole reshard
+                                // task rather than publish a partial tablet_metas map.
+                                for (auto& pair : copied_tablet_metas) {
+                                    if (auto st = lake::normalize_tablet_metadata_before_save(&pair.second); !st.ok()) {
+                                        g_publish_version_failed_tasks << 1;
+                                        LOG(WARNING) << "Fail to normalize aggregate reshard metadata: " << st
+                                                     << " tablet_id=" << pair.first;
+                                        std::lock_guard l(response_mtx);
+                                        add_failed_tablets(response, resharding_tablet_info);
+                                        st.to_protobuf(response->mutable_status());
+                                        return;
+                                    }
                                 }
 
                                 std::lock_guard l(response_mtx);
@@ -1396,6 +1427,9 @@ struct AggregateCompactContext {
             auto* next_txn_log = combined_txn_log.add_txn_logs();
             next_txn_log->CopyFrom(log);
             next_txn_log->set_partition_id(partition_id);
+            // These collected logs are persisted by put_combined_txn_log, which normalizes each received
+            // log on entry (after-load) before its dual-write before-save -- so an old compaction worker's
+            // legacy-shaped op_compaction output rowset keeps its segment names. No need to after-load here.
         }
     }
 
@@ -2066,7 +2100,14 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
             auto task = std::make_shared<CancellableRunnable>(
                     [&, metadata_pb, repair_status] {
                         DeferOp defer([&] { latch.count_down(); });
-                        auto metadata_ptr = std::make_shared<const TabletMetadataPB>(metadata_pb);
+                        // The repaired metadata arrives over RPC and may be legacy-shaped (produced by a
+                        // pre-feature BE during a mixed-version upgrade); normalize it on entry like every
+                        // other foreign-metadata persist path (after-load extends + back-fills segment_metas
+                        // from the legacy arrays) so put_tablet_metadata's no-extend dual-write before-save
+                        // cannot drop segment names. (The bundling branch above gets this via
+                        // put_bundle_tablet_metadata.)
+                        auto metadata_ptr = std::make_shared<TabletMetadataPB>(metadata_pb);
+                        lake::normalize_tablet_metadata_after_load(metadata_ptr.get());
                         auto st = _tablet_mgr->put_tablet_metadata(metadata_ptr);
                         st.to_protobuf(repair_status->mutable_status());
                     },
