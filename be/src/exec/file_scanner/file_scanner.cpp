@@ -25,6 +25,7 @@
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
@@ -40,7 +41,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 
 namespace starrocks {
 

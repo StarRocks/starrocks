@@ -28,6 +28,7 @@ namespace starrocks {
 class BaseLoadPathMgr;
 class DataStreamMgr;
 class DictionaryCacheManager;
+class LoadStreamMgr;
 class MetricRegistry;
 class ProfileReportWorker;
 class ResultBufferMgr;
@@ -76,6 +77,7 @@ public:
     Status init_query_cache(size_t capacity);
     Status init_profile_report_worker(ProfileReportWorkerOptions options);
     void stop();
+    void stop_stream_load_pipes();
     void stop_workgroup();
     void stop_profile_report_worker();
     Status start_result_mgr();
@@ -89,6 +91,7 @@ public:
     DataStreamMgr* stream_mgr() const { return _stream_mgr.get(); }
     ResultBufferMgr* result_mgr() const { return _result_mgr.get(); }
     ResultQueueMgr* result_queue_mgr() const { return _result_queue_mgr.get(); }
+    LoadStreamMgr* load_stream_mgr() const { return _load_stream_mgr.get(); }
     workgroup::WorkGroupManager* workgroup_manager() const { return _workgroup_manager.get(); }
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
     spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
@@ -104,6 +107,7 @@ private:
     std::unique_ptr<DataStreamMgr> _stream_mgr;
     std::unique_ptr<ResultBufferMgr> _result_mgr;
     std::unique_ptr<ResultQueueMgr> _result_queue_mgr;
+    std::unique_ptr<LoadStreamMgr> _load_stream_mgr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;

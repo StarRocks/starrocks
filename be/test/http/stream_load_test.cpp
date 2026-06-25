@@ -50,6 +50,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
@@ -57,7 +58,6 @@
 #include "http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
@@ -101,7 +101,6 @@ public:
             _owns_platform_env = true;
         }
         _env._refresh_service_contexts();
-        _env._load_stream_mgr = new LoadStreamMgr();
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
@@ -109,8 +108,6 @@ public:
         _limiter.reset(new ConcurrentLimiter(1000));
     }
     void TearDown() override {
-        delete _env._load_stream_mgr;
-        _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
         if (_owns_platform_env) {
