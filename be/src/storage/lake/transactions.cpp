@@ -175,6 +175,76 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
     return txn_logs_vector;
 }
 
+// Build the op_schema_change@W log that anchors a TXN_SHADOW_REWRITE flip publish. The shadow tablet's
+// source op_write is transformed in place into op_schema_change@alter_version (W); the post-watershed
+// double-write vlogs W+1..commitVersion then replay as plain op_write (convert_txn_log is a passthrough
+// for the now-PUBLISH_NORMAL shadow tablet). The returned log is handed to publish_version()'s shared
+// apply path as a single (tablet, log) pair.
+//
+// W == 1 means the base partition was empty at the watershed (lake invariant: PARTITION_INIT_VERSION == 1,
+// the first load publishes version 2), so the rewrite produced no source op_write: an empty
+// op_schema_change@1 is synthesized and returned WITHOUT any object-storage access (a source load would 404).
+// For W > 1 the source op_write MUST exist (the rewrite INSERT opens and finishes a delta writer for every
+// shadow tablet, even 0-row ones), so it is loaded and its status propagates as-is -- a not-found is NOT
+// turned into an empty log (that would silently drop the partition's data by advancing the version). The
+// caller routes any error through new_version_metadata_or_error, which hands back an idempotent retry whose
+// source was already consumed by a prior successful publish (new_version already published) and otherwise
+// fails the publish (which then retries).
+static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletManager* tablet_mgr,
+                                                                        const PublishTabletInfo& tablet_info,
+                                                                        const TxnInfoPB& txn, size_t txns_size,
+                                                                        int64_t base_version, int64_t new_version) {
+    const int64_t alter_version = txn.shadow_rewrite_alter_version();
+    // Release-mode validation: a malformed request must fail loudly, not corrupt the flip. A missing
+    // shadow_rewrite_alter_version reads back as 0 (proto2 implicit zero for an unset optional), which would
+    // anchor the op_schema_change at version 0. The watershed W is always < the reserved commitVersion
+    // (new_version), since commitVersion is reserved AFTER the watershed drain.
+    if (alter_version < 1 || alter_version >= new_version) {
+        return Status::InvalidArgument(
+                fmt::format("shadow rewrite: invalid alter_version {} (new_version {})", alter_version, new_version));
+    }
+    if (base_version != 1) {
+        return Status::InvalidArgument(fmt::format("shadow rewrite: base_version must be 1, got {}", base_version));
+    }
+    if (txns_size != 1) {
+        return Status::InvalidArgument(fmt::format("shadow rewrite: expected exactly one txn, got {}", txns_size));
+    }
+    if (tablet_info.get_tablet_ids_in_txn_logs().size() != 1) {
+        return Status::InvalidArgument("shadow rewrite: expected exactly one source tablet");
+    }
+    // W == 1: the base partition was empty at the watershed (lake invariant: PARTITION_INIT_VERSION == 1,
+    // the first load publishes version 2), so the rewrite produced no source op_write. Synthesize an empty
+    // op_schema_change@1 and return WITHOUT any object-storage access -- no source load (would 404) and no
+    // already-published probe (which also 404s on the common first publish). Idempotent retries of a W == 1
+    // publish are handled upstream in publish_version (the metacache short-circuit and the base-version
+    // read); a cold-cache retry that reaches here re-applies, which is idempotent (vacuum reclaims
+    // oldest-first, so base_version 1 being present implies the post-watershed vlogs are too).
+    if (alter_version == 1) {
+        auto schema_change_log = std::make_shared<TxnLog>();
+        schema_change_log->set_tablet_id(tablet_info.get_tablet_id_in_metadata());
+        schema_change_log->set_txn_id(txn.txn_id());
+        convert_op_write_to_op_schema_change(schema_change_log.get(), alter_version); // no op_write => empty
+        return schema_change_log;
+    }
+
+    // W > 1: a non-empty partition's rewrite INSERT opens and finishes a delta writer for EVERY shadow tablet
+    // (LakeTabletsChannel::_create_delta_writers + finish-all-on-EOS), so even a 0-row shadow tablet gets an
+    // (empty) op_write -- the source MUST exist. A not-found (lost source) is NOT turned into an empty log
+    // here (that would silently drop the partition's pre-watershed data by advancing the version); it
+    // propagates so the caller's new_version_metadata_or_error hands back an idempotent retry whose source
+    // was already consumed (new_version already published) or otherwise fails the publish (which retries).
+    ASSIGN_OR_RETURN(auto source_log, load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txn));
+
+    // Source present: anchor it as op_schema_change@W.
+    DCHECK(!source_log.empty() && !source_log[0].empty());
+    auto schema_change_log = std::make_shared<TxnLog>();
+    schema_change_log->set_tablet_id(tablet_info.get_tablet_id_in_metadata());
+    schema_change_log->set_txn_id(txn.txn_id());
+    *schema_change_log->mutable_op_write() = source_log[0][0]->op_write();
+    convert_op_write_to_op_schema_change(schema_change_log.get(), alter_version);
+    return schema_change_log;
+}
+
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
                                             bool skip_write_tablet_metadata, int64_t fe_built_version) {
@@ -325,6 +395,18 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             // advances the partition version without producing any data changes.
             ignore_txn_log = true;
             LOG(INFO) << "txn " << txns[i].txn_id() << " marked as no-op publish on tablet " << tablet_info;
+        } else if (txns[i].txn_type() == TXN_SHADOW_REWRITE) {
+            // Anchor the historical rewrite at the watershed version W during the flip publish: build the
+            // op_schema_change@W (from the shadow tablet's source op_write, or empty for an empty partition)
+            // and hand it to the apply path below as one tablet / one log. On any error -- a lost source at
+            // W > 1, or a malformed/load failure -- new_version_metadata_or_error still returns the metadata
+            // of an idempotent retry whose target version is already published; otherwise it surfaces the error.
+            auto schema_change_log_or = make_shadow_rewrite_schema_change_log(tablet_mgr, tablet_info, txns[i],
+                                                                              txns.size(), base_version, new_version);
+            if (!schema_change_log_or.ok()) {
+                return new_version_metadata_or_error(schema_change_log_or.status());
+            }
+            txn_log_st = std::vector<TxnLogVector>{{std::move(schema_change_log_or).value()}};
         } else {
             txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
 

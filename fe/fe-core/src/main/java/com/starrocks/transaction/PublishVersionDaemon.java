@@ -1078,7 +1078,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
-            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+            // A shadow-rewrite txn allocates no partition version (txnVersion is the sentinel -1),
+            // so the visibleVersion+1 adjacency guard does not apply; it only converts shadow logs.
+            if (!txnState.isShadowRewrite() &&
+                    txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                     partition.getVisibleVersion() + 1 != txnVersion) {
                 return false;
             }
@@ -1104,6 +1107,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         long rpcStartMs = System.currentTimeMillis();
         try {
+            if (txnState.isShadowRewrite()) {
+                // Conversion-only no-op: the rewrite txn commits its op_write at shadowRewriteWatershedTxnId
+                // without advancing any partition version. The flip publish later anchors that op_write as
+                // op_schema_change@W via the TXN_SHADOW_REWRITE publish txn; nothing to publish here.
+                return true;
+            }
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }

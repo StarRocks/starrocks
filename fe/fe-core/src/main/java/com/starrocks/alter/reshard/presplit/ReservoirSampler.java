@@ -46,6 +46,17 @@ public final class ReservoirSampler implements Sampler {
         this.executor = Objects.requireNonNull(executor, "executor");
     }
 
+    /**
+     * Production sampler for a single partition of an internal (OLAP) table, sampling
+     * by a (possibly new) sort key. Wraps the package-private
+     * {@link InternalPartitionSampleSubqueryExecutor} so callers outside this package
+     * (e.g. the range-rewrite schema-change job) can obtain a ready-to-use {@link Sampler}
+     * without reaching into the executor directly.
+     */
+    public static ReservoirSampler forInternalPartition() {
+        return new ReservoirSampler(new InternalPartitionSampleSubqueryExecutor());
+    }
+
     @Override
     public SampleSet sample(SampleRequest request) throws StarRocksException {
         Objects.requireNonNull(request, "request");
