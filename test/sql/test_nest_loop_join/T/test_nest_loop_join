@@ -174,3 +174,18 @@ insert into t2 select generate_series, generate_series from table(generate_serie
 select t1.c1 from t1 join t2 on t1.c1 <= t2.c1;
 -- apply to exchange
 with L as ( select  c1 lk from  t1),R as ( select  c1 rk from  t1),DIM as ( select 1000000 as mx_lo_orderkey, 999999 as mn_lo_orderkey)select count(*)from  L join [shuffle] R on lk = rk join DIM where rk >= mn_lo_orderkey and rk <= mx_lo_orderkey;
+
+
+-- nestloop join with nullable build-side data under a non-nullable slot
+CREATE TABLE `t5` (
+  `c1` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t5 values (1);
+truncate table t1;
+insert into t1 select generate_series, generate_series from table(generate_series(1, 20000));
+select count(*), min(k) from (select s.c1 as k, b.c1 as bv from t5 s left join t1 b on b.c1 > s.c1 left join t1 c on c.c1 > s.c1 order by bv limit 100) z;

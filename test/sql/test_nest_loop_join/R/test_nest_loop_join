@@ -499,3 +499,26 @@ with L as ( select  c1 lk from  t1),R as ( select  c1 rk from  t1),DIM as ( sele
 -- result:
 2
 -- !result
+CREATE TABLE `t5` (
+  `c1` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t5 values (1);
+-- result:
+-- !result
+truncate table t1;
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), min(k) from (select s.c1 as k, b.c1 as bv from t5 s left join t1 b on b.c1 > s.c1 left join t1 c on c.c1 > s.c1 order by bv limit 100) z;
+-- result:
+100	1
+-- !result
