@@ -111,7 +111,10 @@ Wildcards can also be used to specify intermediate paths.
 
   :::note
 
-  To access the files in NFS via the `file://` protocol, you need to mount a NAS device as NFS under the same directory of each BE or CN node.
+  To access NFS(NAS) via the `file://` protocol, mount the same NAS device as NFS under the same directory on the nodes that need to access the path:
+
+  - For read/write operations, mount it on each FE node and each BE or CN node. FE nodes list the files and infer the file schema, and BE/CN nodes read the data.
+  - For write only operations, mount it on each BE or CN node.
 
   :::
 
