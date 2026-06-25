@@ -65,14 +65,9 @@
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
-<<<<<<< HEAD
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
-#include "storage/lake/tablet_warmup_manager.h"
-=======
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
->>>>>>> d2369a95f86... [Refactor] Move StarOS integration into ComputeEnv (#75307)
+#include "storage/lake/tablet_warmup_manager.h"
 #endif
 
 namespace starrocks::lake {

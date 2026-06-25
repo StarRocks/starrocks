@@ -25,15 +25,11 @@
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "common/util/table_metrics.h"
+#include "compute_env/staros/staros_status.h"
 #include "compute_env/staros/staros_worker.h"
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
-<<<<<<< HEAD:be/src/staros_integration/staros_worker_runtime.cpp
-#include "staros_integration/staros_status.h"
-#include "staros_integration/staros_worker.h"
-=======
->>>>>>> d2369a95f86... [Refactor] Move StarOS integration into ComputeEnv (#75307):be/src/compute_env/staros/staros_worker_runtime.cpp
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);

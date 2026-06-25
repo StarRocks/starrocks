@@ -38,7 +38,9 @@
 
 namespace starrocks::lake {
 
+#ifndef __APPLE__
 constexpr int64_t kSnapshotRpcTimeoutMs = 60 * 1000; // 1 minute
+#endif
 
 void ClusterSnapshotRpcCtx::add_rpc_context(std::unique_ptr<BackendSnapshotRpcCtx> rpc_ctx) {
     std::lock_guard<bthread::Mutex> l(mutex);
@@ -102,6 +104,11 @@ void cluster_snapshot_rpc_cb(brpc::Controller* cntl, UploadSnapshotFilesResponse
 
 void send_snapshot_rpc_to_backend(const TBackend& backend, const std::vector<int64_t>& tablet_ids,
                                   const UploadSnapshotFilesRequestPB& node_req, ClusterSnapshotRpcCtx& rpc_ctx) {
+#ifdef __APPLE__
+    rpc_ctx.handle_failure("LakeService snapshot RPC is not supported on macOS builds", tablet_ids);
+    rpc_ctx.count_down();
+    return;
+#else
     // Get BRPC stub for backend
     auto stub_result = LakeServiceBrpcStubCache::getInstance()->get_stub(backend.host, backend.be_port);
     if (!stub_result.ok()) {
@@ -133,6 +140,7 @@ void send_snapshot_rpc_to_backend(const TBackend& backend, const std::vector<int
     // Send async RPC (ownership already transferred to rpc_ctx)
     stub->upload_snapshot_files(cntl_raw, &ctx_raw->request, resp_raw,
                                 brpc::NewCallback(cluster_snapshot_rpc_cb, cntl_raw, resp_raw, ctx_raw));
+#endif
 }
 
 Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id, int64_t pre_version,
