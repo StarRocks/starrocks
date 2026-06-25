@@ -21,6 +21,8 @@
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "runtime/exec_env.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/stream_load/stream_context_mgr.h"
@@ -92,7 +94,7 @@ TEST_F(StreamLoadContextTest, calc_put_and_commit_rpc_timeout_ms) {
 
     for (const auto& tc : test_cases) {
         SCOPED_TRACE(tc.description);
-        StreamLoadContext ctx(_exec_env);
+        StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
         ctx.timeout_second = tc.timeout_second;
 
         int32_t original_timeout_second = ctx.timeout_second;
@@ -101,6 +103,60 @@ TEST_F(StreamLoadContextTest, calc_put_and_commit_rpc_timeout_ms) {
         EXPECT_EQ(tc.expected_rpc_timeout_ms, result) << "Failed for timeout_second=" << tc.timeout_second;
         EXPECT_EQ(original_timeout_second, ctx.timeout_second) << "Method should not modify timeout_second";
     }
+}
+
+TEST_F(StreamLoadContextTest, destructor_removes_pipe_from_injected_load_stream_mgr) {
+    LoadStreamMgr load_stream_mgr;
+    UniqueId load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<StreamLoadPipe>();
+
+    ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+    ASSERT_NE(nullptr, load_stream_mgr.get(load_id));
+
+    { StreamLoadContext ctx(_exec_env, load_id, &load_stream_mgr); }
+
+    EXPECT_EQ(nullptr, load_stream_mgr.get(load_id));
+}
+
+TEST_F(StreamLoadContextTest, destructor_runs_rollback_callback_when_needed) {
+    int rollback_count = 0;
+    StreamLoadContext* expected_ctx = nullptr;
+
+    {
+        StreamLoadContext ctx(nullptr, nullptr);
+        expected_ctx = &ctx;
+        ctx.set_need_rollback([&](StreamLoadContext* callback_ctx) {
+            EXPECT_EQ(expected_ctx, callback_ctx);
+            ++rollback_count;
+            return Status::OK();
+        });
+
+        EXPECT_TRUE(ctx.need_rollback());
+    }
+
+    EXPECT_EQ(1, rollback_count);
+}
+
+TEST_F(StreamLoadContextTest, clear_need_rollback_prevents_destructor_rollback_callback) {
+    int rollback_count = 0;
+
+    {
+        StreamLoadContext ctx(nullptr, nullptr);
+        ctx.set_need_rollback([&](StreamLoadContext* /*callback_ctx*/) {
+            ++rollback_count;
+            return Status::OK();
+        });
+        ctx.clear_need_rollback();
+
+        EXPECT_FALSE(ctx.need_rollback());
+    }
+
+    EXPECT_EQ(0, rollback_count);
+}
+
+TEST_F(StreamLoadContextTest, set_need_rollback_rejects_empty_callback) {
+    StreamLoadContext ctx(nullptr, nullptr);
+    ASSERT_DEATH(ctx.set_need_rollback(nullptr), "callback");
 }
 
 TEST_F(StreamLoadContextTest, stream_load_context_handle_cancel_and_close_channel_context) {

@@ -861,7 +861,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
 
 TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->db = "db";
     ctx->table = "tbl";
     ctx->label = "huge_malloc";
@@ -936,7 +936,7 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -998,7 +998,7 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -1055,7 +1055,7 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
 
 TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -1093,7 +1093,7 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";

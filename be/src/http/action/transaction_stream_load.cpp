@@ -99,7 +99,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
 }
 
 void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env, _exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(req->param(HTTP_TXN_OP_KEY), st);
@@ -180,7 +180,7 @@ TransactionStreamLoadAction::TransactionStreamLoadAction(ExecEnv* exec_env) : _e
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
 
 void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env, _exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(TXN_LOAD, st);
@@ -214,7 +214,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
     ctx->last_active_ts = MonotonicNanos();
 
     if (!ctx->status.ok()) {
-        if (ctx->need_rollback) {
+        if (ctx->need_rollback()) {
             (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
         }
     }
@@ -297,7 +297,7 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;
-        if (ctx->need_rollback) {
+        if (ctx->need_rollback()) {
             (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
         }
         auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);

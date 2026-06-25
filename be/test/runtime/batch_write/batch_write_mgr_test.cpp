@@ -63,7 +63,7 @@ public:
     }
 
     StreamLoadContext* build_data_context(const BatchWriteId& batch_write_id, const std::string& data) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;

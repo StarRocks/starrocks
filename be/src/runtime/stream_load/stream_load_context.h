@@ -37,6 +37,7 @@
 #include <rapidjson/prettywriter.h>
 
 #include <cstdint>
+#include <functional>
 #include <future>
 #include <vector>
 
@@ -58,6 +59,7 @@
 
 namespace starrocks {
 
+class LoadStreamMgr;
 class RuntimeProfile;
 
 // kafka related info
@@ -146,16 +148,12 @@ const std::string DEFAULT_WAREHOUSE = "default_warehouse";
 
 class StreamLoadContext {
 public:
-    explicit StreamLoadContext(ExecEnv* exec_env, IntGauge* running_loads = nullptr)
-            : StreamLoadContext(exec_env, UniqueId::gen_uid(), running_loads) {}
+    using RollbackTxnCallback = std::function<Status(StreamLoadContext*)>;
 
-    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id, IntGauge* running_loads = nullptr)
-            : id(id), _exec_env(exec_env), _refs(0), _running_loads(running_loads) {
-        start_nanos = MonotonicNanos();
-        if (_running_loads != nullptr) {
-            _running_loads->increment(1);
-        }
-    }
+    StreamLoadContext(ExecEnv* exec_env, LoadStreamMgr* load_stream_mgr, IntGauge* running_loads = nullptr);
+
+    StreamLoadContext(ExecEnv* exec_env, UniqueId id, LoadStreamMgr* load_stream_mgr,
+                      IntGauge* running_loads = nullptr);
 
     ~StreamLoadContext() noexcept;
 
@@ -175,6 +173,10 @@ public:
     int num_refs() { return _refs.load(); }
 
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
+
+    void set_need_rollback(RollbackTxnCallback callback);
+    void clear_need_rollback();
+    bool need_rollback() const { return _need_rollback; }
 
     static void release(StreamLoadContext* context);
 
@@ -295,7 +297,6 @@ public:
     std::mutex lock;
 
     std::shared_ptr<MessageBodySink> body_sink;
-    bool need_rollback = false;
     int64_t txn_id = -1;
 
     std::promise<Status> promise;
@@ -361,8 +362,11 @@ public:
 
 private:
     ExecEnv* _exec_env;
+    LoadStreamMgr* _load_stream_mgr;
     std::atomic<int> _refs;
     IntGauge* _running_loads;
+    bool _need_rollback = false;
+    RollbackTxnCallback _rollback_txn_callback;
 };
 
 } // namespace starrocks
