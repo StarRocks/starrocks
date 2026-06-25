@@ -77,13 +77,13 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
       sh build.sh <flink_version>
       ```
 
-   例えば、環境の Flink バージョンが 1.15 の場合、以下のコマンドを実行する必要があります。
+   例えば、環境の Flink バージョンが 1.16 の場合、以下のコマンドを実行する必要があります。
 
       ```bash
-      sh build.sh 1.15
+      sh build.sh 1.16
       ```
 
-3. `target/` ディレクトリに移動し、コンパイルによって生成された Flink コネクタ JAR ファイル（例: `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`）を見つけます。
+3. `target/` ディレクトリに移動し、コンパイルによって生成された Flink コネクタ JAR ファイル（例: `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`）を見つけます。
 
 > **注意**
 >
