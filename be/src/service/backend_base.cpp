@@ -51,7 +51,7 @@
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
-#include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/stream_load/stream_context_mgr.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
 

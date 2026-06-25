@@ -59,8 +59,8 @@
 #include "runtime/message_body_sink.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/stream_load/stream_context_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks {
 

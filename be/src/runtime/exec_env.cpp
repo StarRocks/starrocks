@@ -82,6 +82,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/small_file_mgr.h"
+#include "runtime/stream_load/stream_context_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
