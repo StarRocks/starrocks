@@ -215,7 +215,8 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {
-    auto* ctx = new StreamLoadContext(_exec_env, &StreamLoadMetrics::instance()->streaming_load_current_processing);
+    auto* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr(),
+                                      &StreamLoadMetrics::instance()->streaming_load_current_processing);
     ctx->ref();
     req->set_handler_ctx(ctx);
 

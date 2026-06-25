@@ -58,6 +58,7 @@
 
 namespace starrocks {
 
+class LoadStreamMgr;
 class RuntimeProfile;
 
 // kafka related info
@@ -146,16 +147,10 @@ const std::string DEFAULT_WAREHOUSE = "default_warehouse";
 
 class StreamLoadContext {
 public:
-    explicit StreamLoadContext(ExecEnv* exec_env, IntGauge* running_loads = nullptr)
-            : StreamLoadContext(exec_env, UniqueId::gen_uid(), running_loads) {}
+    StreamLoadContext(ExecEnv* exec_env, LoadStreamMgr* load_stream_mgr, IntGauge* running_loads = nullptr);
 
-    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id, IntGauge* running_loads = nullptr)
-            : id(id), _exec_env(exec_env), _refs(0), _running_loads(running_loads) {
-        start_nanos = MonotonicNanos();
-        if (_running_loads != nullptr) {
-            _running_loads->increment(1);
-        }
-    }
+    StreamLoadContext(ExecEnv* exec_env, UniqueId id, LoadStreamMgr* load_stream_mgr,
+                      IntGauge* running_loads = nullptr);
 
     ~StreamLoadContext() noexcept;
 
@@ -361,6 +356,7 @@ public:
 
 private:
     ExecEnv* _exec_env;
+    LoadStreamMgr* _load_stream_mgr;
     std::atomic<int> _refs;
     IntGauge* _running_loads;
 };

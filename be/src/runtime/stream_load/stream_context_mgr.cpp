@@ -91,8 +91,9 @@ Status StreamContextMgr::create_channel_context(ExecEnv* exec_env, const std::st
                                                 int32_t format, StreamLoadContext*& ctx, const TUniqueId& load_id,
                                                 long txn_id) {
     auto pipe = std::make_shared<StreamLoadPipe>(true);
-    RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
-    ctx = new StreamLoadContext(exec_env, load_id);
+    auto* load_stream_mgr = exec_env->load_stream_mgr();
+    RETURN_IF_ERROR(load_stream_mgr->put(load_id, pipe));
+    ctx = new StreamLoadContext(exec_env, load_id, load_stream_mgr);
     if (ctx == nullptr) {
         return Status::InternalError("allocate stream load context fail");
     }

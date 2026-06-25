@@ -127,7 +127,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::KAFKA;
     ctx.label = "NaN";
@@ -170,7 +170,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::KAFKA;
     ctx.label = "NaN";
@@ -220,7 +220,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxy
     DCHECK(request.has_pulsar_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::PULSAR;
     ctx.label = "NaN";
@@ -257,7 +257,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
     DCHECK(request.has_pulsar_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::PULSAR;
     ctx.label = "NaN";
@@ -314,7 +314,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     }
 
     // create the context
-    auto* ctx = new StreamLoadContext(_exec_env);
+    auto* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr());
     ctx->load_type = TLoadType::ROUTINE_LOAD;
     ctx->load_src_type = task.type;
     ctx->job_id = task.job_id;
