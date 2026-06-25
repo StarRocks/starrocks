@@ -40,9 +40,9 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/uid_util.h"
+#include "compute_env/load/stream_load_context.h"
 #include "librdkafka/rdkafkacpp.h"
 #include "pulsar/Client.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks {
 

@@ -35,6 +35,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/system/disk_info.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "fs/fs.h"
@@ -44,7 +45,6 @@
 #include "platform/key_cache.h"
 #include "platform/platform_metrics.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_metrics.h"
 #include "service/service_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__

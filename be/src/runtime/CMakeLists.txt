@@ -35,7 +35,6 @@ set(RUNTIME_CORE_FILES
     bucket_aware_partition.cpp
     query_statistics.cpp
     runtime_metrics.cpp
-    stream_load/stream_load_metrics.cpp
     time_guard.cpp
     type_pack.cpp
     load_fail_point.cpp
@@ -96,10 +95,8 @@ set(RUNTIME_FILES
     load_channel.cpp
     local_tablets_channel.cpp
     snapshot_loader.cpp
-    stream_load/stream_context_mgr.cpp
     stream_load/stream_load_context_handle.cpp
     stream_load/transaction_mgr.cpp
-    stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
     batch_write/isomorphic_batch_write.cpp
     batch_write/batch_write_mgr.cpp

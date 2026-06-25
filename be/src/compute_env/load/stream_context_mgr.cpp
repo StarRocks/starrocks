@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/stream_load/stream_context_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
 
 #include <iterator>
 #include <memory>
@@ -21,14 +21,15 @@
 #include "base/time/time.h"
 #include "common/logging.h"
 #include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "fmt/format.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/exec_env.h"
 #include "runtime/message_body_sink.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks {
+
+StreamContextMgr::StreamContextMgr(LoadStreamMgr* load_stream_mgr) : _load_stream_mgr(load_stream_mgr) {}
 
 StreamContextMgr::~StreamContextMgr() {
     std::lock_guard<std::mutex> l(_lock);
@@ -90,10 +91,12 @@ Status StreamContextMgr::create_channel_context(ExecEnv* exec_env, const std::st
                                                 const std::string& db_name, const std::string& table_name,
                                                 int32_t format, StreamLoadContext*& ctx, const TUniqueId& load_id,
                                                 long txn_id) {
+    if (_load_stream_mgr == nullptr) {
+        return Status::InternalError("load stream manager is not initialized");
+    }
     auto pipe = std::make_shared<StreamLoadPipe>(true);
-    auto* load_stream_mgr = exec_env->load_stream_mgr();
-    RETURN_IF_ERROR(load_stream_mgr->put(load_id, pipe));
-    ctx = new StreamLoadContext(exec_env, load_id, load_stream_mgr);
+    RETURN_IF_ERROR(_load_stream_mgr->put(load_id, pipe));
+    ctx = new StreamLoadContext(exec_env, load_id, _load_stream_mgr);
     if (ctx == nullptr) {
         return Status::InternalError("allocate stream load context fail");
     }

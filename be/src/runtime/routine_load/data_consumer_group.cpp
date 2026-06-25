@@ -34,11 +34,11 @@
 #include "runtime/routine_load/data_consumer_group.h"
 
 #include "base/utility/defer_op.h"
+#include "compute_env/load/stream_load_context.h"
 #include "librdkafka/rdkafka.h"
 #include "librdkafka/rdkafkacpp.h"
 #include "runtime/routine_load/data_consumer.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks {
 

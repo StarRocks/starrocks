@@ -32,14 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/stream_load/stream_load_context.h"
-
-#include <fmt/format.h>
+#include "compute_env/load/stream_load_context.h"
 
 #include <utility>
 
 #include "common/logging.h"
-#include "common/system/master_info.h"
 #include "compute_env/load/load_stream_mgr.h"
 
 namespace starrocks {

@@ -90,6 +90,9 @@ set(COMPUTE_ENV_LOAD_PATH_FILES
 )
 
 set(COMPUTE_ENV_LOAD_FILES
+    load/stream_context_mgr.cpp
+    load/stream_load_context.cpp
+    load/stream_load_metrics.cpp
     load/stream_load_pipe.cpp
     load/time_bounded_stream_load_pipe.cpp
 )

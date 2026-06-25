@@ -25,13 +25,14 @@
 namespace starrocks {
 
 class ExecEnv;
+class LoadStreamMgr;
 class StreamLoadContext;
 class TUniqueId;
 
 // Used to register all streams in process so that other modules can get them.
 class StreamContextMgr {
 public:
-    StreamContextMgr() = default;
+    explicit StreamContextMgr(LoadStreamMgr* load_stream_mgr);
     ~StreamContextMgr();
 
     Status put(const std::string& id, StreamLoadContext* stream);
@@ -49,6 +50,7 @@ public:
     Status finish_body_sink(const std::string& label, const std::string& table_name, int channel_id);
 
 private:
+    LoadStreamMgr* _load_stream_mgr;
     std::mutex _lock;
     std::unordered_map<std::string, StreamLoadContext*> _stream_map;
     std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<int, StreamLoadContext*>>>

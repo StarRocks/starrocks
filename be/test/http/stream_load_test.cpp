@@ -50,6 +50,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
+#include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -58,7 +59,6 @@
 #include "http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
 class mg_connection;
