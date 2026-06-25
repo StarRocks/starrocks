@@ -49,6 +49,7 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
+#include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/profile_report_worker.h"
 #include "compute_env/workgroup/scan_executor.h"
@@ -82,7 +83,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/small_file_mgr.h"
-#include "runtime/stream_load/stream_context_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
@@ -161,7 +161,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.load_path_mgr = load_path_mgr();
     _runtime_services.load_channel_mgr = _load_channel_mgr;
     _runtime_services.load_stream_mgr = load_stream_mgr();
-    _runtime_services.stream_context_mgr = _stream_context_mgr;
+    _runtime_services.stream_context_mgr = stream_context_mgr();
     _runtime_services.transaction_mgr = _transaction_mgr;
     _runtime_services.batch_write_mgr = _batch_write_mgr;
     _runtime_services.stream_load_executor = _stream_load_executor;
@@ -250,7 +250,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _broker_mgr = new BrokerMgr(process_metrics);
 
     _stream_load_executor = new StreamLoadExecutor(this);
-    _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
 
     std::unique_ptr<ThreadPool> batch_write_thread_pool;
@@ -411,6 +410,10 @@ BaseLoadPathMgr* ExecEnv::load_path_mgr() {
 
 LoadStreamMgr* ExecEnv::load_stream_mgr() {
     return _compute_env == nullptr ? nullptr : _compute_env->load_stream_mgr();
+}
+
+StreamContextMgr* ExecEnv::stream_context_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->stream_context_mgr();
 }
 
 ProfileReportWorker* ExecEnv::profile_report_worker() {
@@ -616,7 +619,9 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_heartbeat_flags);
     SAFE_DELETE(_small_file_mgr);
     SAFE_DELETE(_transaction_mgr);
-    SAFE_DELETE(_stream_context_mgr);
+    if (_compute_env != nullptr) {
+        _compute_env->destroy_stream_context_mgr();
+    }
 #ifndef __APPLE__
     SAFE_DELETE(_routine_load_task_executor);
 #endif

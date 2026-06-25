@@ -22,10 +22,10 @@
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/message_body_sink.h"
-#include "runtime/stream_load/stream_context_mgr.h"
 
 namespace starrocks {
 
@@ -55,7 +55,7 @@ protected:
 };
 
 TEST_F(StreamLoadContextHandleTest, cancel_and_close_channel_context) {
-    StreamContextMgr stream_context_mgr;
+    StreamContextMgr stream_context_mgr(_exec_env->load_stream_mgr());
     StreamLoadContext* ctx = nullptr;
     const std::string label = "stream_load_context_handle_label";
     const std::string db = "db";

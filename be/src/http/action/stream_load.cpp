@@ -62,6 +62,7 @@
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/FrontendService.h"
@@ -82,7 +83,6 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/stream_load_metrics.h"
 #include "simdjson.h"
 
 namespace starrocks {
