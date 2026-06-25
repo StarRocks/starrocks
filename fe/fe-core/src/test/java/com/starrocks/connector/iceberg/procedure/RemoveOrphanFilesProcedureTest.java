@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -547,6 +548,203 @@ public class RemoveOrphanFilesProcedureTest {
 
             assertTrue(ex.getMessage().contains("Unable to read manifests for snapshot"));
             assertTrue(ex.getMessage().contains(String.valueOf(snapshotId)));
+        }
+    }
+
+    @Test
+    void testExecuteDeletesOrphansAndFillsStats() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.manifestListLocation()).thenReturn(null);
+        when(snapshot.allManifests(any(FileIO.class))).thenReturn(Collections.emptyList());
+
+        FileIO fileIO = Mockito.mock(FileIO.class);
+        Table table = Mockito.mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
+        when(table.io()).thenReturn(fileIO);
+
+        LocatedFileStatus orphan1 = Mockito.mock(LocatedFileStatus.class);
+        when(orphan1.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/orphan1.parquet"));
+        when(orphan1.getModificationTime()).thenReturn(1L);
+        when(orphan1.getLen()).thenReturn(100L);
+        LocatedFileStatus orphan2 = Mockito.mock(LocatedFileStatus.class);
+        when(orphan2.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/orphan2.parquet"));
+        when(orphan2.getModificationTime()).thenReturn(1L);
+        when(orphan2.getLen()).thenReturn(200L);
+
+        try (MockedStatic<org.apache.iceberg.ReachableFileUtil> reachableUtil =
+                        mockStatic(org.apache.iceberg.ReachableFileUtil.class);
+                MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
+
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
+                    .thenReturn(Collections.emptySet());
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations(any(Table.class)))
+                    .thenReturn(Collections.emptyList());
+
+            FileSystem mockFs = Mockito.mock(FileSystem.class);
+            java.util.Iterator<LocatedFileStatus> it = java.util.List.of(orphan1, orphan2).iterator();
+            RemoteIterator<LocatedFileStatus> orphanIterator = new RemoteIterator<LocatedFileStatus>() {
+                @Override
+                public boolean hasNext() {
+                    return it.hasNext();
+                }
+
+                @Override
+                public LocatedFileStatus next() {
+                    return it.next();
+                }
+            };
+            when(mockFs.listFiles(any(Path.class), eq(true))).thenReturn(orphanIterator);
+            when(mockFs.delete(any(Path.class), eq(false))).thenReturn(true);
+            fsStatic.when(() -> FileSystem.get(any(), any())).thenReturn(mockFs);
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+            verify(mockFs, Mockito.times(2)).delete(any(Path.class), eq(false));
+            assertEquals(com.starrocks.connector.iceberg.IcebergTableOperation.REMOVE_ORPHAN_FILES,
+                    context.stats().getOperation());
+            assertEquals(2, context.stats().getOrphanFilesDetected());
+            assertEquals(2, context.stats().getOrphanFilesRemoved());
+            assertEquals(300, context.stats().getOrphanBytesRemoved());
+            assertTrue(context.stats().isExecuted());
+            assertFalse(context.stats().isPartiallyApplied());
+            assertTrue(context.stats().hasMaterialChange());
+        }
+    }
+
+    @Test
+    void testExecuteSkipsStatsWhenDeleteReturnsFalse() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.manifestListLocation()).thenReturn(null);
+        when(snapshot.allManifests(any(FileIO.class))).thenReturn(Collections.emptyList());
+
+        FileIO fileIO = Mockito.mock(FileIO.class);
+        Table table = Mockito.mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
+        when(table.io()).thenReturn(fileIO);
+
+        LocatedFileStatus orphan1 = Mockito.mock(LocatedFileStatus.class);
+        when(orphan1.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/orphan1.parquet"));
+        when(orphan1.getModificationTime()).thenReturn(1L);
+        when(orphan1.getLen()).thenReturn(100L);
+        LocatedFileStatus orphan2 = Mockito.mock(LocatedFileStatus.class);
+        when(orphan2.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/orphan2.parquet"));
+        when(orphan2.getModificationTime()).thenReturn(1L);
+        when(orphan2.getLen()).thenReturn(200L);
+
+        try (MockedStatic<org.apache.iceberg.ReachableFileUtil> reachableUtil =
+                        mockStatic(org.apache.iceberg.ReachableFileUtil.class);
+                MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
+
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
+                    .thenReturn(Collections.emptySet());
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations(any(Table.class)))
+                    .thenReturn(Collections.emptyList());
+
+            FileSystem mockFs = Mockito.mock(FileSystem.class);
+            java.util.Iterator<LocatedFileStatus> it = java.util.List.of(orphan1, orphan2).iterator();
+            RemoteIterator<LocatedFileStatus> orphanIterator = new RemoteIterator<LocatedFileStatus>() {
+                @Override
+                public boolean hasNext() {
+                    return it.hasNext();
+                }
+
+                @Override
+                public LocatedFileStatus next() {
+                    return it.next();
+                }
+            };
+            when(mockFs.listFiles(any(Path.class), eq(true))).thenReturn(orphanIterator);
+            // orphan1 reports a failed delete (returns false), orphan2 is actually deleted
+            when(mockFs.delete(eq(orphan1.getPath()), eq(false))).thenReturn(false);
+            when(mockFs.delete(eq(orphan2.getPath()), eq(false))).thenReturn(true);
+            fsStatic.when(() -> FileSystem.get(any(), any())).thenReturn(mockFs);
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+            // both detected, but only the successfully deleted file is counted as removed
+            assertEquals(2, context.stats().getOrphanFilesDetected());
+            assertEquals(1, context.stats().getOrphanFilesRemoved());
+            assertEquals(200, context.stats().getOrphanBytesRemoved());
+            assertTrue(context.stats().isExecuted());
+            assertFalse(context.stats().isPartiallyApplied());
+            assertTrue(context.stats().hasMaterialChange());
+        }
+    }
+
+    @Test
+    void testExecuteDeleteFailureMarksPartial() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.manifestListLocation()).thenReturn(null);
+        when(snapshot.allManifests(any(FileIO.class))).thenReturn(Collections.emptyList());
+
+        FileIO fileIO = Mockito.mock(FileIO.class);
+        Table table = Mockito.mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
+        when(table.io()).thenReturn(fileIO);
+
+        LocatedFileStatus orphan1 = Mockito.mock(LocatedFileStatus.class);
+        when(orphan1.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/orphan1.parquet"));
+        when(orphan1.getModificationTime()).thenReturn(1L);
+        when(orphan1.getLen()).thenReturn(100L);
+        LocatedFileStatus orphan2 = Mockito.mock(LocatedFileStatus.class);
+        when(orphan2.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/orphan2.parquet"));
+        when(orphan2.getModificationTime()).thenReturn(1L);
+        when(orphan2.getLen()).thenReturn(200L);
+
+        try (MockedStatic<org.apache.iceberg.ReachableFileUtil> reachableUtil =
+                        mockStatic(org.apache.iceberg.ReachableFileUtil.class);
+                MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
+
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
+                    .thenReturn(Collections.emptySet());
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations(any(Table.class)))
+                    .thenReturn(Collections.emptyList());
+
+            FileSystem mockFs = Mockito.mock(FileSystem.class);
+            java.util.Iterator<LocatedFileStatus> it = java.util.List.of(orphan1, orphan2).iterator();
+            RemoteIterator<LocatedFileStatus> orphanIterator = new RemoteIterator<LocatedFileStatus>() {
+                @Override
+                public boolean hasNext() {
+                    return it.hasNext();
+                }
+
+                @Override
+                public LocatedFileStatus next() {
+                    return it.next();
+                }
+            };
+            when(mockFs.listFiles(any(Path.class), eq(true))).thenReturn(orphanIterator);
+            // first delete succeeds, second throws
+            when(mockFs.delete(any(Path.class), eq(false)))
+                    .thenReturn(true)
+                    .thenThrow(new IOException("delete failed"));
+            fsStatic.when(() -> FileSystem.get(any(), any())).thenReturn(mockFs);
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            assertThrows(StarRocksConnectorException.class,
+                    () -> procedure.execute(context, Collections.emptyMap()));
+
+            assertEquals(1, context.stats().getOrphanFilesRemoved());
+            assertEquals(100, context.stats().getOrphanBytesRemoved());
+            assertTrue(context.stats().isPartiallyApplied());
+            assertFalse(context.stats().isExecuted());
         }
     }
 

@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -260,6 +261,67 @@ public class RewriteManifestsProcedureTest {
         verify(rewriteManifests, never()).scanManifestsWith(any());
         verify(rewriteManifests).clusterBy(any());
         verify(rewriteManifests).commit();
+    }
+
+    @Test
+    void testStatsFilledOnRewrite() {
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+
+        ManifestFile m1 = Mockito.mock(ManifestFile.class);
+        ManifestFile m2 = Mockito.mock(ManifestFile.class);
+        when(m1.length()).thenReturn(10 * 1024 * 1024L);
+        when(m2.length()).thenReturn(10 * 1024 * 1024L);
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
+
+        Table table = Mockito.mock(Table.class);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.properties()).thenReturn(Collections.emptyMap());
+        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
+
+        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
+        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
+        doNothing().when(rewriteManifests).commit();
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
+
+        IcebergTableProcedureContext context = createContext(table, txn);
+        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+        assertEquals(IcebergTableOperation.REWRITE_MANIFESTS, context.stats().getOperation());
+        assertEquals(2, context.stats().getManifestCountInput());
+        assertEquals(20 * 1024 * 1024L, context.stats().getManifestBytesInput());
+        assertTrue(context.stats().getManifestTargetSizeBytes() > 0);
+        assertTrue(context.stats().isExecuted());
+        assertTrue(context.stats().hasMaterialChange());
+    }
+
+    @Test
+    void testStatsNotExecutedOnEarlyReturn() {
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+        ManifestFile smallManifest = Mockito.mock(ManifestFile.class);
+        when(smallManifest.length()).thenReturn(100L);
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.allManifests(any())).thenReturn(List.of(smallManifest));
+
+        Table table = Mockito.mock(Table.class);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.properties()).thenReturn(Collections.emptyMap());
+        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        IcebergTableProcedureContext context = createContext(table, txn);
+
+        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+        assertEquals(IcebergTableOperation.REWRITE_MANIFESTS, context.stats().getOperation());
+        assertEquals(1, context.stats().getManifestCountInput());
+        assertFalse(context.stats().isExecuted());
+        // single small manifest is a no-op: no material change, not recorded
+        assertFalse(context.stats().hasMaterialChange());
     }
 
     private IcebergTableProcedureContext createContext(Table table, Transaction transaction) {

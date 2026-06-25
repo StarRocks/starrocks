@@ -21,6 +21,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
+import com.starrocks.connector.iceberg.procedure.IcebergMaintenanceTaskStats;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedureContext;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
@@ -31,6 +32,9 @@ import org.apache.iceberg.Transaction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
+import java.nio.channels.ClosedByInterruptException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -41,6 +45,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 /**
  * Standalone processor for Iceberg catalog metadata auto maintenance (expire_snapshots,
@@ -155,13 +160,13 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
         ConnectContext ctx = new ConnectContext();
         for (IcebergMaintenanceInfo info : maintenanceInfoMap.values()) {
             List<Pair<String, String>> tableNames = listTablesForMaintenance(info.catalog, ctx);
-            if (tableNames.isEmpty()) {
-                continue;
-            }
             boolean cleanupDue = info.cleanupIntervalHours > 0
                     && (now - info.lastCleanupTimeMillis) >= info.cleanupIntervalHours * 3600L * 1000L;
             boolean rewriteDue = info.rewriteIntervalHours > 0
                     && (now - info.lastRewriteTimeMillis) >= info.rewriteIntervalHours * 3600L * 1000L;
+            if (tableNames.isEmpty()) {
+                continue;
+            }
             if (!cleanupDue && !rewriteDue) {
                 continue;
             }
@@ -256,18 +261,11 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
         for (Pair<String, String> name : tableNames) {
             try {
                 futures.add(maintenanceExecutor.submit(() -> {
-                    ConnectContext taskCtx = new ConnectContext();
-                    try {
-                        org.apache.iceberg.Table table = info.catalog.getTable(taskCtx, name.first, name.second);
-                        if (table == null || table.currentSnapshot() == null) {
-                            return;
-                        }
-                        runExpireSnapshots(info.catalog, table, info.hdfsEnvironment);
-                        runRemoveOrphanFiles(info.catalog, table, info.hdfsEnvironment);
-                    } catch (Exception e) {
-                        LOG.warn("Auto maintenance cleanup failed on {}.{}.{}: {}",
-                                info.catalogName, name.first, name.second, e.getMessage(), e);
+                    org.apache.iceberg.Table table = getTableForMaintenance(info, name.first, name.second);
+                    if (table == null) {
+                        return;
                     }
+                    runTableCleanup(info, table, name.first, name.second);
                 }));
                 submittedTables.add(name);
             } catch (RejectedExecutionException e) {
@@ -285,17 +283,13 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
         for (Pair<String, String> name : tableNames) {
             try {
                 futures.add(maintenanceExecutor.submit(() -> {
-                    ConnectContext taskCtx = new ConnectContext();
-                    try {
-                        org.apache.iceberg.Table table = info.catalog.getTable(taskCtx, name.first, name.second);
-                        if (table == null || table.currentSnapshot() == null) {
-                            return;
-                        }
-                        runRewriteManifests(info.catalog, table, info.hdfsEnvironment);
-                    } catch (Exception e) {
-                        LOG.warn("Auto maintenance rewrite_manifests failed on {}.{}.{}: {}",
-                                info.catalogName, name.first, name.second, e.getMessage(), e);
+                    org.apache.iceberg.Table table = getTableForMaintenance(info, name.first, name.second);
+                    if (table == null) {
+                        return;
                     }
+                    runMaintenanceTask(info.catalogName, name.first, name.second,
+                            "rewrite_manifests",
+                            stats -> runRewriteManifests(info.catalog, table, info.hdfsEnvironment, stats));
                 }));
                 submittedTables.add(name);
             } catch (RejectedExecutionException e) {
@@ -305,6 +299,83 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
             }
         }
         waitForFutures(futures, submittedTables, info.catalogName, "rewrite_manifests");
+    }
+
+    private org.apache.iceberg.Table getTableForMaintenance(IcebergMaintenanceInfo info, String db, String tbl) {
+        try {
+            org.apache.iceberg.Table table = info.catalog.getTable(new ConnectContext(), db, tbl);
+            if (table == null || table.currentSnapshot() == null) {
+                return null;
+            }
+            return table;
+        } catch (Exception e) {
+            LOG.warn("Get iceberg table for maintenance failed on {}.{}.{}: {}",
+                    info.catalogName, db, tbl, e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Run expire_snapshots then remove_orphan_files on one table. The two actions are independent:
+     * a normal expire failure does not block orphan-file removal on the same table. But if the
+     * maintenance thread was cancelled (Future.cancel(true) on a per-table or total deadline), the
+     * interrupt flag is re-asserted by {@link #runMaintenanceTask}; we honor it and skip orphan
+     * removal instead of scanning/deleting files past the deadline.
+     */
+    private void runTableCleanup(IcebergMaintenanceInfo info, org.apache.iceberg.Table table,
+                                 String db, String tbl) {
+        runMaintenanceTask(info.catalogName, db, tbl, "expire_snapshots",
+                stats -> runExpireSnapshots(info.catalog, table, info.hdfsEnvironment, stats));
+        if (Thread.currentThread().isInterrupted()) {
+            LOG.warn("Cleanup on {}.{}.{} was cancelled after expire_snapshots, skipping remove_orphan_files",
+                    info.catalogName, db, tbl);
+            return;
+        }
+        runMaintenanceTask(info.catalogName, db, tbl, "remove_orphan_files",
+                stats -> runRemoveOrphanFiles(info.catalog, table, info.hdfsEnvironment, stats));
+    }
+
+    /**
+     * Run one maintenance action on one table, threading a fresh {@link IcebergMaintenanceTaskStats}
+     * into the procedure. Exceptions are swallowed (logged) so the remaining actions of the same
+     * table can proceed. If the failure was caused by cancellation (Future.cancel(true) interrupts
+     * the worker thread), catching the interrupt-derived exception clears the interrupt flag, so we
+     * re-assert it and let the caller decide whether to skip the remaining actions.
+     */
+    private void runMaintenanceTask(String catalog, String db, String tbl, String action,
+                                    Consumer<IcebergMaintenanceTaskStats> body) {
+        IcebergMaintenanceTaskStats stats = new IcebergMaintenanceTaskStats();
+        try {
+            body.accept(stats);
+        } catch (Exception e) {
+            if (isInterruption(e)) {
+                Thread.currentThread().interrupt();
+            }
+            LOG.warn("Auto maintenance {} failed on {}.{}.{}: {}",
+                    action, catalog, db, tbl, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Whether a swallowed exception was caused by a thread interrupt (cancellation), in which case
+     * the JDK typically clears the interrupt flag when the interrupt-derived exception is thrown.
+     * The interrupt may surface through the concurrency, classic-IO, or NIO blocking-call surface,
+     * and iceberg/Hadoop often wrap it, so we walk the cause chain.
+     */
+    private static boolean isInterruption(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof InterruptedException || t instanceof ClosedByInterruptException) {
+                return true;
+            }
+            // a genuine interrupt during a Hadoop/classic-IO call can surface as
+            // InterruptedIOException (e.g. Hadoop IPC converts InterruptedException to it and
+            // clears the interrupt flag); but its SocketTimeoutException subclass is an ordinary
+            // I/O timeout, not a cancellation, and must not be treated as one
+            if (t instanceof InterruptedIOException && !(t instanceof SocketTimeoutException)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void waitForFutures(List<Future<?>> futures, List<Pair<String, String>> tableNames,
@@ -345,26 +416,43 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
     }
 
     private void runExpireSnapshots(IcebergCatalog catalog, org.apache.iceberg.Table table,
-                                    HdfsEnvironment hdfsEnvironment) {
+                                    HdfsEnvironment hdfsEnvironment, IcebergMaintenanceTaskStats stats) {
         Transaction txn = table.newTransaction();
         IcebergTableProcedureContext procedureContext = new IcebergTableProcedureContext(
-                catalog, table, null, txn, hdfsEnvironment, null, null, icebergPlanWorkerExecutor);
+                catalog, table, null, txn, hdfsEnvironment, null, null, icebergPlanWorkerExecutor, stats);
         ExpireSnapshotsProcedure.getInstance().execute(procedureContext, Collections.emptyMap());
+        commitAndCollectOutputs(txn, stats);
     }
 
     private void runRemoveOrphanFiles(IcebergCatalog catalog, org.apache.iceberg.Table table,
-                                      HdfsEnvironment hdfsEnvironment) {
-        Transaction txn = table.newTransaction();
+                                      HdfsEnvironment hdfsEnvironment, IcebergMaintenanceTaskStats stats) {
+        // remove_orphan_files deletes files directly and never touches a transaction
         IcebergTableProcedureContext procedureContext = new IcebergTableProcedureContext(
-                catalog, table, null, txn, hdfsEnvironment, null, null, null);
+                catalog, table, null, null, hdfsEnvironment, null, null, null, stats);
         RemoveOrphanFilesProcedure.getInstance().execute(procedureContext, Collections.emptyMap());
     }
 
     private void runRewriteManifests(IcebergCatalog catalog, org.apache.iceberg.Table table,
-                                    HdfsEnvironment hdfsEnvironment) {
+                                    HdfsEnvironment hdfsEnvironment, IcebergMaintenanceTaskStats stats) {
         Transaction txn = table.newTransaction();
         IcebergTableProcedureContext procedureContext = new IcebergTableProcedureContext(
-                catalog, table, null, txn, hdfsEnvironment, null, null, icebergPlanWorkerExecutor);
+                catalog, table, null, txn, hdfsEnvironment, null, null, icebergPlanWorkerExecutor, stats);
         RewriteManifestsProcedure.getInstance().execute(procedureContext, Collections.emptyMap());
+        commitAndCollectOutputs(txn, stats);
+    }
+
+    /**
+     * Publish the staged changes and collect output-side stats.
+     * Gated on stats.isExecuted() so that no-op early returns do not commit an empty transaction.
+     * The committed flag is set only after a successful publish: it gates the expire/rewrite effect
+     * metrics, which must not be reported when the publication fails.
+     */
+    private void commitAndCollectOutputs(Transaction txn, IcebergMaintenanceTaskStats stats) {
+        if (!stats.isExecuted()) {
+            return;
+        }
+        txn.commitTransaction();
+        stats.setCommitted(true);
+        stats.collectOutputs(txn.table());
     }
 }

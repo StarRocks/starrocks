@@ -36,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -186,6 +187,24 @@ public class ExpireSnapshotsProcedureTest {
 
         verify(expireSnapshots, never()).planWith(any());
         verify(expireSnapshots).commit();
+    }
+
+    @Test
+    void testStatsFilledOnExecute() {
+        ExpireSnapshotsProcedure procedure = ExpireSnapshotsProcedure.getInstance();
+        ExpireSnapshots expireSnapshots = Mockito.mock(ExpireSnapshots.class);
+        doNothing().when(expireSnapshots).commit();
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.expireSnapshots()).thenReturn(expireSnapshots);
+
+        IcebergTableProcedureContext context = createContextWithTransaction(txn);
+
+        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+        assertEquals(com.starrocks.connector.iceberg.IcebergTableOperation.EXPIRE_SNAPSHOTS,
+                context.stats().getOperation());
+        assertTrue(context.stats().isExecuted());
     }
 
     private IcebergTableProcedureContext createContextWithTransaction() {

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
+import com.google.common.collect.Iterables;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
@@ -22,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import org.apache.iceberg.ExpireSnapshots;
+import org.apache.iceberg.Snapshot;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -58,6 +60,13 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
                     "invalid args. only support `older_than` and `retain_last` in the expire snapshot operation");
         }
 
+        IcebergMaintenanceTaskStats stats = context.stats();
+        stats.setOperation(IcebergTableOperation.EXPIRE_SNAPSHOTS);
+        Iterable<Snapshot> snapshots = context.table() == null ? null : context.table().snapshots();
+        if (snapshots != null) {
+            stats.setSnapshotCountInput(Iterables.size(snapshots));
+        }
+
         long olderThanMillis;
         ConstantOperator olderThanArg = args.get(OLDER_THAN);
         if (olderThanArg == null) {
@@ -92,6 +101,7 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
             expireSnapshots = expireSnapshots.retainLast(retainLast);
         }
         expireSnapshots.commit();
+        stats.setExecuted(true);
         return null;
     }
 }

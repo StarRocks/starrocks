@@ -29,17 +29,12 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.ContentFile;
-import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.GenericManifestFile;
-import org.apache.iceberg.InternalData;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.ManifestReader;
-import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.CloseableIterable;
-import org.apache.iceberg.io.FileIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,6 +89,9 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                     "`older_than` and `location` in the remove orphan files operation");
         }
 
+        IcebergMaintenanceTaskStats stats = context.stats();
+        stats.setOperation(IcebergTableOperation.REMOVE_ORPHAN_FILES);
+
         long olderThanMillis;
         ConstantOperator olderThanArg = args.get(OLDER_THAN);
         if (olderThanArg == null) {
@@ -130,7 +128,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                 validFileNames.add(fileName(snapshot.manifestListLocation()));
             }
 
-            try (CloseableIterable<ManifestFile> manifests = readManifests(snapshot, table.io())) {
+            try (CloseableIterable<ManifestFile> manifests = IcebergUtil.readManifests(snapshot, table.io())) {
                 for (ManifestFile manifest : manifests) {
                     if (!processedManifestFilePaths.add(manifest.path())) {
                         continue;
@@ -160,35 +158,9 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
         validFileNames.add("version-hint.text");
 
-        scanAndDeleteInvalidFiles(location, olderThanMillis, validFileNames, context.hdfsEnvironment());
+        scanAndDeleteInvalidFiles(location, olderThanMillis, validFileNames, context.hdfsEnvironment(), stats);
+        stats.setExecuted(true);
         return null;
-    }
-
-    /**
-     * Reads manifest files for a snapshot. When the snapshot has a manifest list file,
-     * reads from it directly (AVRO) for better efficiency; otherwise falls back to
-     * snapshot.allManifests(). Aligned with Iceberg FileCleanupStrategy.readManifests().
-     */
-    private static final Schema MANIFEST_PROJECTION =
-            ManifestFile.schema().select(
-                    "manifest_path",
-                    "manifest_length",
-                    "content",
-                    "partition_spec_id",
-                    "added_snapshot_id",
-                    "deleted_data_files_count");
-
-    private static CloseableIterable<ManifestFile> readManifests(Snapshot snapshot, FileIO fileIO) {
-        if (snapshot.manifestListLocation() != null) {
-            return InternalData.read(
-                            FileFormat.AVRO, fileIO.newInputFile(snapshot.manifestListLocation()))
-                    .setRootType(GenericManifestFile.class)
-                    .project(MANIFEST_PROJECTION)
-                    .reuseContainers()
-                    .build();
-        } else {
-            return CloseableIterable.withNoopClose(snapshot.allManifests(fileIO));
-        }
     }
 
     /**
@@ -235,42 +207,55 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
     }
 
     private void scanAndDeleteInvalidFiles(String tableLocation, long expiration, Set<String> validFiles,
-                                           HdfsEnvironment hdfsEnvironment) {
+                                           HdfsEnvironment hdfsEnvironment, IcebergMaintenanceTaskStats stats) {
         try {
             URI uri = new Path(tableLocation).toUri();
             FileSystem fileSystem = FileSystem.get(uri, hdfsEnvironment.getConfiguration());
             RemoteIterator<LocatedFileStatus> allFiles = fileSystem.listFiles(new Path(tableLocation), true);
-            List<Path> filesToDelete = new ArrayList<>();
+            List<FileStatus> filesToDelete = new ArrayList<>();
             while (allFiles.hasNext()) {
                 LocatedFileStatus entry = allFiles.next();
-                FileStatus status = fileSystem.getFileStatus(entry.getPath());
-                if (status.getModificationTime() < expiration && !validFiles.contains(entry.getPath().getName())) {
-                    filesToDelete.add(entry.getPath());
+                if (entry.getModificationTime() < expiration && !validFiles.contains(entry.getPath().getName())) {
+                    filesToDelete.add(entry);
+                    stats.addOrphanDetected(1);
                     if (filesToDelete.size() >= DELETE_BATCH_SIZE) {
-                        deleteFiles(fileSystem, filesToDelete);
+                        deleteFiles(fileSystem, filesToDelete, stats);
                         filesToDelete.clear();
                     }
                 }
             }
             if (!filesToDelete.isEmpty()) {
-                deleteFiles(fileSystem, filesToDelete);
+                deleteFiles(fileSystem, filesToDelete, stats);
                 filesToDelete.clear();
             }
         } catch (IOException e) {
             String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
+            markPartialIfStarted(stats);
             throw new StarRocksConnectorException("Failed accessing data: " + msg, e);
         }
     }
 
-    private void deleteFiles(FileSystem fs, List<Path> files) {
+    private void deleteFiles(FileSystem fs, List<FileStatus> files, IcebergMaintenanceTaskStats stats) {
         files.forEach(file -> {
             try {
-                fs.delete(file, false);
-                LOGGER.debug("Deleted file {}", file);
+                if (fs.delete(file.getPath(), false)) {
+                    stats.addOrphanRemoved(1, file.getLen());
+                    LOGGER.debug("Deleted file {}", file.getPath());
+                } else {
+                    LOGGER.warn("Delete returned false for orphan file {}, not counting it as removed",
+                            file.getPath());
+                }
             } catch (IOException e) {
-                LOGGER.error("Failed to delete file {}", file, e);
-                throw new StarRocksConnectorException("Failed to delete file " + file, e);
+                LOGGER.error("Failed to delete file {}", file.getPath(), e);
+                markPartialIfStarted(stats);
+                throw new StarRocksConnectorException("Failed to delete file " + file.getPath(), e);
             }
         });
+    }
+
+    private static void markPartialIfStarted(IcebergMaintenanceTaskStats stats) {
+        if (stats.getOrphanFilesRemoved() > 0) {
+            stats.setPartiallyApplied(true);
+        }
     }
 }

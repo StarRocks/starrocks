@@ -31,7 +31,25 @@ public record IcebergTableProcedureContext(IcebergCatalog icebergCatalog,
                                            HdfsEnvironment hdfsEnvironment,
                                            AlterTableStmt stmt,
                                            AlterTableOperationClause clause,
-                                           ExecutorService executorService) {
+                                           ExecutorService executorService,
+                                           IcebergMaintenanceTaskStats stats) {
+
+    public IcebergTableProcedureContext {
+        if (stats == null) {
+            stats = new IcebergMaintenanceTaskStats();
+        }
+    }
+
+    public IcebergTableProcedureContext(IcebergCatalog icebergCatalog,
+                                        Table table,
+                                        ConnectContext context,
+                                        Transaction transaction,
+                                        HdfsEnvironment hdfsEnvironment,
+                                        AlterTableStmt stmt,
+                                        AlterTableOperationClause clause,
+                                        ExecutorService executorService) {
+        this(icebergCatalog, table, context, transaction, hdfsEnvironment, stmt, clause, executorService, null);
+    }
 
     public IcebergTableProcedureContext(IcebergCatalog icebergCatalog,
                                         Table table,
@@ -40,6 +58,6 @@ public record IcebergTableProcedureContext(IcebergCatalog icebergCatalog,
                                         HdfsEnvironment hdfsEnvironment,
                                         AlterTableStmt stmt,
                                         AlterTableOperationClause clause) {
-        this(icebergCatalog, table, context, transaction, hdfsEnvironment, stmt, clause, null);
+        this(icebergCatalog, table, context, transaction, hdfsEnvironment, stmt, clause, null, null);
     }
 }

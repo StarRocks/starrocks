@@ -16,18 +16,20 @@ package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.RewriteManifests;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
 
+import java.io.IOException;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -59,14 +61,30 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
                     "invalid args. rewrite_manifests operation does not support any arguments");
         }
 
+        IcebergMaintenanceTaskStats stats = context.stats();
+        stats.setOperation(IcebergTableOperation.REWRITE_MANIFESTS);
+
         Table icebergTable = context.table();
         Snapshot currentSnapshot = icebergTable.currentSnapshot();
         if (currentSnapshot == null) {
             return null;
         }
 
-        List<ManifestFile> manifests = currentSnapshot.allManifests(icebergTable.io());
-        if (manifests.isEmpty()) {
+        // stream the manifest list instead of materializing it via allManifests():
+        // only the count and lengths are needed to decide whether to rewrite
+        long manifestCount = 0;
+        long totalManifestsSize = 0;
+        try (CloseableIterable<ManifestFile> manifests =
+                IcebergUtil.readManifests(currentSnapshot, icebergTable.io())) {
+            for (ManifestFile manifest : manifests) {
+                manifestCount++;
+                totalManifestsSize += manifest.length();
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException(
+                    "Unable to read manifests for snapshot " + currentSnapshot.snapshotId(), e);
+        }
+        if (manifestCount == 0) {
             return null;
         }
 
@@ -75,12 +93,13 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
         if (manifestTargetSizeBytes <= 0) {
             manifestTargetSizeBytes = MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
         }
+        stats.setManifestCountInput(manifestCount);
+        stats.setManifestTargetSizeBytes(manifestTargetSizeBytes);
+        stats.setManifestBytesInput(totalManifestsSize);
 
-        if (manifests.size() == 1 && manifests.get(0).length() < manifestTargetSizeBytes) {
+        if (manifestCount == 1 && totalManifestsSize < manifestTargetSizeBytes) {
             return null;
         }
-
-        long totalManifestsSize = manifests.stream().mapToLong(ManifestFile::length).sum();
         // Having too many open manifest writers can potentially cause OOM on the coordinator
         // Floor to at least 1 to avoid modulo-by-zero when totalManifestsSize is 0 (e.g., manifests report length 0)
         long targetManifestClusters = Math.max(1, Math.min(
@@ -101,6 +120,7 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
                     return Integer.toUnsignedLong(Objects.hash(partitionWrapper)) % targetManifestClusters;
                 })
                 .commit();
+        stats.setExecuted(true);
         return null;
     }
 }

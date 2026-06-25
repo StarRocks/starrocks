@@ -16,8 +16,11 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.iceberg.procedure.IcebergMaintenanceTaskStats;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -26,13 +29,16 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.io.InterruptedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.SocketTimeoutException;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -43,8 +49,18 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class IcebergMaintenanceProcessorTest extends TableTestBase {
+
+    @BeforeAll
+    public static void setUpMetrics() {
+        // initialize the metric registry against the real GlobalStateMgr before any
+        // test mocks it: MetricRepo.addMetric() lazily calls init(), which dereferences
+        // GlobalStateMgr managers eagerly and would NPE on a bare mock
+        FeConstants.runningUnitTest = true;
+        MetricRepo.init();
+    }
 
     @Test
     public void testIsRecentlyWrittenTableWithinWindow() throws Exception {
@@ -434,19 +450,87 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
 
         IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
         Method expire = IcebergMaintenanceProcessor.class.getDeclaredMethod(
-                "runExpireSnapshots", IcebergCatalog.class, Table.class, HdfsEnvironment.class);
+                "runExpireSnapshots", IcebergCatalog.class, Table.class, HdfsEnvironment.class,
+                IcebergMaintenanceTaskStats.class);
         expire.setAccessible(true);
-        expire.invoke(processor, catalog, icebergTable, hdfs);
+        IcebergMaintenanceTaskStats expireStats = new IcebergMaintenanceTaskStats();
+        expire.invoke(processor, catalog, icebergTable, hdfs, expireStats);
+        Assertions.assertEquals(IcebergTableOperation.EXPIRE_SNAPSHOTS, expireStats.getOperation());
+        Assertions.assertEquals(1, expireStats.getSnapshotCountInput());
+        Assertions.assertTrue(expireStats.isExecuted());
+        Assertions.assertEquals(1, expireStats.getSnapshotCountOutput());
 
         Method orphan = IcebergMaintenanceProcessor.class.getDeclaredMethod(
-                "runRemoveOrphanFiles", IcebergCatalog.class, Table.class, HdfsEnvironment.class);
+                "runRemoveOrphanFiles", IcebergCatalog.class, Table.class, HdfsEnvironment.class,
+                IcebergMaintenanceTaskStats.class);
         orphan.setAccessible(true);
-        orphan.invoke(processor, catalog, icebergTable, hdfs);
+        IcebergMaintenanceTaskStats orphanStats = new IcebergMaintenanceTaskStats();
+        orphan.invoke(processor, catalog, icebergTable, hdfs, orphanStats);
+        Assertions.assertEquals(IcebergTableOperation.REMOVE_ORPHAN_FILES, orphanStats.getOperation());
+        Assertions.assertTrue(orphanStats.isExecuted());
 
         Method rewrite = IcebergMaintenanceProcessor.class.getDeclaredMethod(
-                "runRewriteManifests", IcebergCatalog.class, Table.class, HdfsEnvironment.class);
+                "runRewriteManifests", IcebergCatalog.class, Table.class, HdfsEnvironment.class,
+                IcebergMaintenanceTaskStats.class);
         rewrite.setAccessible(true);
-        rewrite.invoke(processor, catalog, icebergTable, hdfs);
+        IcebergMaintenanceTaskStats rewriteStats = new IcebergMaintenanceTaskStats();
+        rewrite.invoke(processor, catalog, icebergTable, hdfs, rewriteStats);
+        Assertions.assertEquals(IcebergTableOperation.REWRITE_MANIFESTS, rewriteStats.getOperation());
+    }
+
+    @Test
+    public void testRunRewriteManifestsCommitsTransaction() throws Exception {
+        TestTables.TestTable icebergTable = create(SCHEMA_A, SPEC_A, "maint_commit_rewrite", 2);
+        // two separate appends produce two manifests, making rewrite_manifests do real work
+        icebergTable.newFastAppend().appendFile(FILE_A).commit();
+        icebergTable.newFastAppend().appendFile(FILE_A_1).commit();
+        Assertions.assertEquals(2, icebergTable.currentSnapshot().allManifests(icebergTable.io()).size());
+
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
+        HdfsEnvironment hdfs = Mockito.mock(HdfsEnvironment.class);
+        Mockito.when(hdfs.getConfiguration()).thenReturn(new Configuration());
+
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Method rewrite = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runRewriteManifests", IcebergCatalog.class, Table.class, HdfsEnvironment.class,
+                IcebergMaintenanceTaskStats.class);
+        rewrite.setAccessible(true);
+        IcebergMaintenanceTaskStats stats = new IcebergMaintenanceTaskStats();
+        rewrite.invoke(processor, catalog, icebergTable, hdfs, stats);
+
+        Assertions.assertTrue(stats.isExecuted());
+        Assertions.assertEquals(2, stats.getManifestCountInput());
+        // the rewritten manifest list must be published (commitTransaction), so the
+        // refreshed table now has a single compacted manifest
+        icebergTable.refresh();
+        Assertions.assertEquals(1, icebergTable.currentSnapshot().allManifests(icebergTable.io()).size());
+        Assertions.assertEquals(1, stats.getManifestCountOutput());
+        Assertions.assertTrue(stats.getManifestBytesOutput() > 0);
+    }
+
+    @Test
+    public void testRunRewriteManifestsNoopDoesNotCommit() throws Exception {
+        TestTables.TestTable icebergTable = create(SCHEMA_A, SPEC_A, "maint_noop_rewrite", 2);
+        icebergTable.newFastAppend().appendFile(FILE_A).commit();
+        long snapshotId = icebergTable.currentSnapshot().snapshotId();
+
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
+        HdfsEnvironment hdfs = Mockito.mock(HdfsEnvironment.class);
+        Mockito.when(hdfs.getConfiguration()).thenReturn(new Configuration());
+
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Method rewrite = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runRewriteManifests", IcebergCatalog.class, Table.class, HdfsEnvironment.class,
+                IcebergMaintenanceTaskStats.class);
+        rewrite.setAccessible(true);
+        IcebergMaintenanceTaskStats stats = new IcebergMaintenanceTaskStats();
+        rewrite.invoke(processor, catalog, icebergTable, hdfs, stats);
+
+        // single small manifest: the procedure early-returns, no transaction commit,
+        // so no new snapshot is created
+        Assertions.assertFalse(stats.isExecuted());
+        icebergTable.refresh();
+        Assertions.assertEquals(snapshotId, icebergTable.currentSnapshot().snapshotId());
     }
 
     @Test
@@ -656,9 +740,10 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
         Assertions.assertNotNull(planExecutor);
 
         Method expire = IcebergMaintenanceProcessor.class.getDeclaredMethod(
-                "runExpireSnapshots", IcebergCatalog.class, Table.class, HdfsEnvironment.class);
+                "runExpireSnapshots", IcebergCatalog.class, Table.class, HdfsEnvironment.class,
+                IcebergMaintenanceTaskStats.class);
         expire.setAccessible(true);
-        expire.invoke(processor, catalog, icebergTable, hdfs);
+        expire.invoke(processor, catalog, icebergTable, hdfs, new IcebergMaintenanceTaskStats());
     }
 
     @Test
@@ -671,9 +756,106 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
 
         IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
         Method rewrite = IcebergMaintenanceProcessor.class.getDeclaredMethod(
-                "runRewriteManifests", IcebergCatalog.class, Table.class, HdfsEnvironment.class);
+                "runRewriteManifests", IcebergCatalog.class, Table.class, HdfsEnvironment.class,
+                IcebergMaintenanceTaskStats.class);
         rewrite.setAccessible(true);
-        rewrite.invoke(processor, catalog, icebergTable, hdfs);
+        rewrite.invoke(processor, catalog, icebergTable, hdfs, new IcebergMaintenanceTaskStats());
+    }
+
+    @Test
+    public void testRunMaintenanceTaskReassertsInterruptFlagOnCancellation() throws Exception {
+        Thread.interrupted(); // start from a clean interrupt state
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Method run = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runMaintenanceTask", String.class, String.class, String.class, String.class, Consumer.class);
+        run.setAccessible(true);
+
+        // a cancellation surfaces as an interrupt-derived exception; catching it clears the
+        // interrupt flag, so runMaintenanceTask must re-assert it (it never rethrows)
+        Consumer<IcebergMaintenanceTaskStats> cancelled = stats -> {
+            throw new RuntimeException(new InterruptedException("cancelled"));
+        };
+        run.invoke(processor, "c", "db", "t", "expire_snapshots", cancelled);
+        Assertions.assertTrue(Thread.interrupted(), "interrupt flag must be re-asserted after cancellation");
+
+        // a normal failure must NOT set the interrupt flag, so the next action still runs
+        Consumer<IcebergMaintenanceTaskStats> normalFailure = stats -> {
+            throw new RuntimeException("boom");
+        };
+        run.invoke(processor, "c", "db", "t", "expire_snapshots", normalFailure);
+        Assertions.assertFalse(Thread.currentThread().isInterrupted(),
+                "a normal failure must not leave the thread interrupted");
+    }
+
+    @Test
+    public void testCleanupSkipsOrphanWhenExpireCancelled() throws Exception {
+        Thread.interrupted(); // start from a clean interrupt state
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
+        HdfsEnvironment hdfs = Mockito.mock(HdfsEnvironment.class);
+        Table table = Mockito.mock(Table.class);
+        // expire's first table call; make it surface a cancellation (interrupt-derived)
+        Mockito.when(table.newTransaction()).thenThrow(new RuntimeException(new InterruptedException("cancelled")));
+
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Method cleanup = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runTableCleanup", getMaintenanceInfoClass(), Table.class, String.class, String.class);
+        cleanup.setAccessible(true);
+        Object info = buildMaintenanceInfo("c", catalog, hdfs, 1, 1);
+
+        try {
+            cleanup.invoke(processor, info, table, "db", "t");
+            // remove_orphan_files must not have started — it would call table.currentSnapshot() first
+            Mockito.verify(table, Mockito.never()).currentSnapshot();
+        } finally {
+            Thread.interrupted(); // clear the flag we deliberately set; don't leak to other tests
+        }
+    }
+
+    @Test
+    public void testCleanupSkipsOrphanOnInterruptedIOException() throws Exception {
+        Thread.interrupted(); // start from a clean interrupt state
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
+        HdfsEnvironment hdfs = Mockito.mock(HdfsEnvironment.class);
+        Table table = Mockito.mock(Table.class);
+        // a Hadoop/classic-IO call interrupted by cancel(true) can surface as InterruptedIOException
+        // (flag already cleared); this must be recognized as cancellation
+        Mockito.when(table.newTransaction()).thenThrow(new RuntimeException(new InterruptedIOException("interrupted")));
+
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Method cleanup = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runTableCleanup", getMaintenanceInfoClass(), Table.class, String.class, String.class);
+        cleanup.setAccessible(true);
+        Object info = buildMaintenanceInfo("c", catalog, hdfs, 1, 1);
+
+        try {
+            cleanup.invoke(processor, info, table, "db", "t");
+            Mockito.verify(table, Mockito.never()).currentSnapshot();
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    public void testCleanupRunsOrphanOnSocketTimeout() throws Exception {
+        Thread.interrupted(); // start from a clean interrupt state
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
+        HdfsEnvironment hdfs = Mockito.mock(HdfsEnvironment.class);
+        Table table = Mockito.mock(Table.class);
+        // a transient SocketTimeoutException (extends InterruptedIOException) is NOT a cancellation:
+        // orphan removal must still run. currentSnapshot()==null lets orphan early-return cleanly.
+        Mockito.when(table.newTransaction()).thenThrow(new RuntimeException(new SocketTimeoutException("read timed out")));
+        Mockito.when(table.currentSnapshot()).thenReturn(null);
+
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Method cleanup = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runTableCleanup", getMaintenanceInfoClass(), Table.class, String.class, String.class);
+        cleanup.setAccessible(true);
+        Object info = buildMaintenanceInfo("c", catalog, hdfs, 1, 1);
+
+        cleanup.invoke(processor, info, table, "db", "t");
+        // orphan removal was attempted (it reads currentSnapshot() first), and the thread is not interrupted
+        Mockito.verify(table, Mockito.atLeastOnce()).currentSnapshot();
+        Assertions.assertFalse(Thread.currentThread().isInterrupted());
     }
 
     @SuppressWarnings("unchecked")
