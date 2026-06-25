@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.api.client.util.Lists;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -24,7 +25,6 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
@@ -766,45 +766,60 @@ public class MetadataMgr {
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (internalStatistics == null ||
-                internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
-            // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
-            // Avoid `analyze table` to collect table statistics from metadata.
-            if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
-                return internalStatistics;
-            } else if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
-                    session.getSourceTablesCount() == 1) {
-                return StatisticsUtils.buildDefaultStatistics(columns.keySet());
-            } else {
-                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
-                        session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
-                if (connectorBasicStats != null && internalStatistics != null &&
-                        internalStatistics.getColumnStatistics().values().stream().anyMatch(
-                                columnStatistic -> columnStatistic.getHistogram() != null)) {
-                    // combine connector metadata basic stats and histogram from internal stats
-                    Map<ColumnRefOperator, ColumnStatistic> internalColumnStatsMap = internalStatistics.getColumnStatistics();
-                    Map<ColumnRefOperator, ColumnStatistic> combinedColumnStatsMap = Maps.newHashMap();
-                    connectorBasicStats.getColumnStatistics().forEach((key, value) -> {
-                        if (internalColumnStatsMap.containsKey(key)) {
-                            combinedColumnStatsMap.put(key, ColumnStatistic.buildFrom(value).
-                                    setHistogram(internalColumnStatsMap.get(key).getHistogram()).build());
-                        } else {
-                            combinedColumnStatsMap.put(key, value);
-                        }
-                    });
+        boolean hasInternalStats = internalStatistics != null &&
+                internalStatistics.getColumnStatistics().values().stream().anyMatch(stat -> !stat.isUnknown());
+        session.setObtainedFromInternalStatistics(hasInternalStats);
 
-                    return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
-                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
-                } else {
-                    return connectorBasicStats;
-                }
-            }
-        } else {
-            session.setObtainedFromInternalStatistics(true);
+        // Fast path: every requested column is covered by internal stats, no need to touch connector metadata.
+        if (hasInternalStats && internalStatistics.getColumnStatistics().values().stream()
+                .noneMatch(ColumnStatistic::isUnknown)) {
             return internalStatistics;
         }
+
+        // Some or all columns are unknown: pull connector/manifest stats and backfill the unknown columns.
+        // Avoid `analyze table` collecting table statistics from metadata.
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return internalStatistics;
+        }
+        if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
+                session.getSourceTablesCount() == 1) {
+            return hasInternalStats ? internalStatistics : StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
+        if (connectorBasicStats == null) {
+            return hasInternalStats ? internalStatistics : null;
+        }
+        if (internalStatistics == null) {
+            return connectorBasicStats;
+        }
+        return backfillUnknownColumnsFromConnector(internalStatistics, connectorBasicStats);
+    }
+
+    // Partial ANALYZE leaves uncollected columns as unknown in the internal stats. Without backfill they carry
+    // no min/max, which is worse than the connector/manifest min/max they would inherit with no internal stats
+    // at all. Take the row count and the unknown columns from the connector stats (the queried snapshot), keep
+    // collected columns as-is, and preserve any histogram already attached to a backfilled column.
+    @VisibleForTesting
+    static Statistics backfillUnknownColumnsFromConnector(Statistics internalStatistics,
+                                                          Statistics connectorStatistics) {
+        Map<ColumnRefOperator, ColumnStatistic> connectorColumnStats = connectorStatistics.getColumnStatistics();
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(connectorStatistics.getOutputRowCount());
+        internalStatistics.getColumnStatistics().forEach((columnRef, columnStatistic) -> {
+            ColumnStatistic connectorStat = connectorColumnStats.get(columnRef);
+            if (columnStatistic.isUnknown() && connectorStat != null) {
+                if (columnStatistic.getHistogram() != null) {
+                    connectorStat = ColumnStatistic.buildFrom(connectorStat)
+                            .setHistogram(columnStatistic.getHistogram()).build();
+                }
+                builder.addColumnStatistic(columnRef, connectorStat);
+            } else {
+                builder.addColumnStatistic(columnRef, columnStatistic);
+            }
+        });
+        return builder.build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
