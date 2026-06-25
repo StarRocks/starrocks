@@ -115,7 +115,7 @@ CONF_String(mem_limit, "90%");
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
 // The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
-// process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak).
+// process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
 // jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so this config does not
 // reconfigure jemalloc at runtime; it is exported by bin/start_backend.sh and surfaced here purely
 // for observability via information_schema.be_configs. It is ignored under the jemalloc_debug and
