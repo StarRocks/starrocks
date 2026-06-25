@@ -203,12 +203,16 @@ public class ColocateChecker {
         List<Long> packGroupIds = expectedRanges.stream()
                 .map(ColocateRange::getShardGroupId)
                 .collect(Collectors.toList());
-        long workerGroupId = resolveWorkerGroupId(colocateTableIndex, peers);
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-        for (int batchStart = 0; batchStart < packGroupIds.size(); batchStart += QUERY_SHARD_GROUP_STABLE_BATCH_SIZE) {
-            List<Long> batch = packGroupIds.subList(batchStart,
-                    Math.min(batchStart + QUERY_SHARD_GROUP_STABLE_BATCH_SIZE, packGroupIds.size()));
-            try {
+        // Both expected failures on this path fail closed (group stays unstable, retried next tick):
+        // resolving the worker group can throw ErrorReportException (warehouse has no available compute
+        // nodes) and the StarOS query can throw StarClientException. Anything unexpected propagates to
+        // runOneCycle, which logs it with a stack trace rather than masking it as "not converged".
+        try {
+            long workerGroupId = resolveWorkerGroupId(colocateTableIndex, peers);
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            for (int batchStart = 0; batchStart < packGroupIds.size(); batchStart += QUERY_SHARD_GROUP_STABLE_BATCH_SIZE) {
+                List<Long> batch = packGroupIds.subList(batchStart,
+                        Math.min(batchStart + QUERY_SHARD_GROUP_STABLE_BATCH_SIZE, packGroupIds.size()));
                 List<Boolean> stable = starOSAgent.queryShardGroupStable(batch, workerGroupId);
                 // A size mismatch would let allMatch pass on a subset and flip the group stable while a
                 // group is still migrating — fail closed so placement convergence is never faked.
@@ -222,13 +226,13 @@ public class ColocateChecker {
                             colocateGroupId);
                     return false;
                 }
-            } catch (StarClientException e) {
-                LOG.warn("placement-convergence query failed for colocate group {}; staying unstable: {}",
-                        colocateGroupId, e.getMessage());
-                return false;
             }
+            return true;
+        } catch (Exception e) {
+            LOG.warn("placement-convergence check failed for colocate group {}; staying unstable",
+                    colocateGroupId, e);
+            return false;
         }
-        return true;
     }
 
     /**

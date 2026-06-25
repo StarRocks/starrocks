@@ -34,17 +34,21 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -506,6 +510,33 @@ public class ColocateCheckerTest {
 
         Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
                 "a short convergence response must leave the group unstable");
+    }
+
+    @Test
+    public void testStaysUnstableWhenWorkerGroupResolutionFails() throws Exception {
+        // Resolving the worker group calls WarehouseManager.getBackgroundComputeResource, which throws
+        // ErrorReportException when the warehouse has no available compute nodes. The gate must fail
+        // closed locally (group stays unstable) rather than letting the exception escape. Convergence
+        // is stubbed converged so the worker-group throw is the only thing keeping the group unstable.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, "mocked: warehouse unavailable");
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "a worker-group resolution failure must leave the group unstable for retry");
     }
 
     @Test
