@@ -26,9 +26,9 @@
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "platform/broker_mgr.h"
+#include "platform/platform_env.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/broker_mgr.h"
-#include "runtime/exec_env.h"
 
 using namespace fmt::literals;
 
@@ -50,7 +50,7 @@ const std::string& get_client_id(const TNetworkAddress& /*broker_addr*/) {
 }
 #else
 const std::string& get_client_id(const TNetworkAddress& broker_addr) {
-    return ExecEnv::GetInstance()->broker_mgr()->get_client_id(broker_addr);
+    return PlatformEnv::GetInstance()->broker_mgr()->get_client_id(broker_addr);
 }
 #endif
 

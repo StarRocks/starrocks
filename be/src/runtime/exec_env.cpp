@@ -65,10 +65,10 @@
 #include "exec/runtime/query_context_manager.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "platform/broker_mgr.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/broker_mgr.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
@@ -137,7 +137,7 @@ void ExecEnv::_refresh_service_contexts() {
     _rpc_services.backend_client_cache = platform_env->backend_client_cache();
     _rpc_services.frontend_client_cache = platform_env->frontend_client_cache();
     _rpc_services.broker_client_cache = platform_env->broker_client_cache();
-    _rpc_services.broker_mgr = _broker_mgr;
+    _rpc_services.broker_mgr = platform_env->broker_mgr();
     _rpc_services.brpc_stub_cache = platform_env->brpc_stub_cache();
 
     auto* storage_env = StorageEnv::GetInstance();
@@ -205,7 +205,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _global_env = global_env;
     auto* platform_env = PlatformEnv::GetInstance();
     if (platform_env->backend_client_cache() == nullptr || platform_env->frontend_client_cache() == nullptr ||
-        platform_env->broker_client_cache() == nullptr || platform_env->brpc_stub_cache() == nullptr) {
+        platform_env->broker_client_cache() == nullptr || platform_env->broker_mgr() == nullptr ||
+        platform_env->brpc_stub_cache() == nullptr) {
         return Status::InternalError("PlatformEnv is not initialized");
     }
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
@@ -219,6 +220,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
     RETURN_IF_ERROR(global_env->init_execution_thread_pools(process_metrics));
     _fragment_mgr = new FragmentMgr(this, process_metrics);
+
+    REGISTER_GAUGE_RUNTIME_METRIC(process_metrics, broker_count, []() -> uint64_t {
+        auto* broker_mgr = PlatformEnv::GetInstance()->broker_mgr();
+        return broker_mgr == nullptr ? 0 : broker_mgr->broker_count();
+    });
 
     // register the metrics to monitor the task queue len
     pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
@@ -244,8 +250,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
     workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
     RETURN_IF_ERROR(_compute_env->init_workgroup(workgroup_options));
-
-    _broker_mgr = new BrokerMgr(process_metrics);
 
     _stream_load_executor = new StreamLoadExecutor(this);
     _transaction_mgr = new TransactionMgr(this);
@@ -338,7 +342,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());
 
-    _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
 
     _heartbeat_flags = new HeartbeatFlags();
@@ -380,6 +383,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
 std::string ExecEnv::token() const {
     return get_master_token();
+}
+
+BrokerMgr* ExecEnv::broker_mgr() const {
+    return PlatformEnv::GetInstance()->broker_mgr();
 }
 
 DataStreamMgr* ExecEnv::stream_mgr() {
@@ -613,7 +620,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
-    SAFE_DELETE(_broker_mgr);
     if (_rejected_record_sync_daemon != nullptr) {
         _rejected_record_sync_daemon->stop();
     }

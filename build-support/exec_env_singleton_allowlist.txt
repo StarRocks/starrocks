@@ -4,7 +4,6 @@ src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
 src/exec/pipeline/fragment_executor.cpp
 src/exec/pipeline/pipeline_driver_poller.cpp
-src/fs/fs_broker.cpp
 src/service/service_be/config_update_hooks.cpp
 src/runtime/exec_env.cpp
 src/runtime/fragment_mgr.cpp

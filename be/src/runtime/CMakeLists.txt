@@ -82,7 +82,6 @@ target_link_libraries(RuntimeEnv PUBLIC
 )
 
 set(RUNTIME_FILES
-    broker_mgr.cpp
     lookup_stream_mgr.cpp
     exec_env.cpp
     jdbc_driver_manager.cpp
@@ -92,7 +91,6 @@ set(RUNTIME_FILES
     rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
     snapshot_loader.cpp
-    stream_load/stream_load_context_handle.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_executor.cpp
     batch_write/isomorphic_batch_write.cpp

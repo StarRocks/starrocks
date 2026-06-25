@@ -51,7 +51,7 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
-#include "runtime/broker_mgr.h"
+#include "platform/broker_mgr.h"
 #include "runtime/exec_env.h"
 #include "storage/index/index_descriptor.h"
 #ifndef __APPLE__

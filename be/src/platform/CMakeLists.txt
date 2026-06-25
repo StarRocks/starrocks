@@ -22,6 +22,7 @@ set(PLATFORM_FILES
   aws/poco_common.cpp
   aws/poco_http_client.cpp
   aws/poco_http_client_factory.cpp
+  broker_mgr.cpp
   download_util.cpp
   key_cache.cpp
   llm/llm_cache.cpp
