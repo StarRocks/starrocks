@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.elasticsearch.EsMajorVersion;
@@ -510,5 +511,9 @@ public class EsTable extends Table implements GsonPostProcessable {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
     }
 }
