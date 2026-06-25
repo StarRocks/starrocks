@@ -570,11 +570,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectBucketsWithoutNdv",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v6", IntegerType.BIGINT);
-        Assertions.assertEquals(normalize.apply("select cast(2 as int) as version, cast(10009 as bigint), " +
-                        "cast(10060 as bigint), 'v6', histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "select cast(2 as int) as version, cast(%d as bigint), " +
+                        "cast(%d as bigint), 'v6', histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
                         "from " +
                         "(select `v6` as column_key from `test`.`t0_stats` where rand() <= 0.1 and `v6` is not null and " +
-                        "`v6` not in (1,2) order by `v6` limit 10000000) t"),
+                        "`v6` not in (1,2) order by `v6` limit 10000000) t",
+                        dbid, t0StatsTableId)),
                 normalize.apply(sql));
 
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogramWithHllNdv",
