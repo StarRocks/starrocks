@@ -3,6 +3,7 @@
 import glob
 import sys
 import os
+import re
 import shutil
 import subprocess
 
@@ -79,6 +80,41 @@ def get_pom_files():
     return pom_files
 
 
+def read_pom_property_version(properties_path):
+    """Return the value of the `version=` line in a pom.properties file, or None."""
+    try:
+        with open(properties_path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("version="):
+                    return line[len("version="):]
+    except OSError:
+        pass
+    return None
+
+
+def mask_pom_xml_version(xml_path, old_version, clean_version):
+    """Rewrite <version>old</version> -> <version>clean</version> in a jar's pom.xml.
+
+    This masks the project's own version (and its parent version, when they share
+    the same literal) so scanners that read pom.xml -- not just pom.properties --
+    see the clean version. It is a textual replace scoped to <version> elements,
+    so it is namespace-agnostic and leaves the rest of the pom untouched.
+    """
+    with open(xml_path, encoding="utf-8") as f:
+        content = f.read()
+    pattern = re.compile(r"(<version>)\s*" + re.escape(old_version) + r"\s*(</version>)")
+    new_content, n = pattern.subn(r"\g<1>" + clean_version + r"\g<2>", content)
+    if n == 0:
+        print(
+            f"  WARN: version {old_version} not found in {xml_path}; left unchanged"
+        )
+        return
+    with open(xml_path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print(f"  Masked {n} <version> occurrence(s): {old_version} -> {clean_version}")
+
+
 def patch_jar_file(jar_exec_path, jar_file, pom_files):
     jar_file = os.path.abspath(jar_file)
     new_jar_file = jar_file.replace(".jar", "-cve-patched.jar")
@@ -98,14 +134,26 @@ def patch_jar_file(jar_exec_path, jar_file, pom_files):
         for pom_file in pom_files:
             pom_in_jar = os.path.join("META-INF", "maven", pom_file)
             if os.path.exists(pom_in_jar):
+                # Capture the original (vulnerable) version before we overwrite it,
+                # and the clean version we are masking to.
+                old_version = read_pom_property_version(pom_in_jar)
+                clean_version = read_pom_property_version(
+                    os.path.join(cwd, "pom", pom_file)
+                )
+
                 print(f"Copy {pom_file} to {pom_in_jar}")
                 shutil.copy(os.path.join(cwd, "pom", pom_file), pom_in_jar)
 
                 xml_file = pom_file.replace("pom.properties", "pom.xml")
                 xml_in_jar = os.path.join("META-INF", "maven", xml_file)
-                if os.path.exists(os.path.join(cwd, "pom", xml_file)):
+                xml_override = os.path.join(cwd, "pom", xml_file)
+                if os.path.exists(xml_override):
+                    # Hand-crafted pom.xml override takes precedence.
                     print(f"Copy {xml_file} to {xml_in_jar}")
-                    shutil.copy(os.path.join(cwd, "pom", xml_file), xml_in_jar)
+                    shutil.copy(xml_override, xml_in_jar)
+                elif os.path.exists(xml_in_jar) and old_version and clean_version:
+                    # Mask the version inside the jar's own pom.xml in place.
+                    mask_pom_xml_version(xml_in_jar, old_version, clean_version)
 
         ret = subprocess.run(
             [jar_exec_path, "cf", new_jar_file, "."], stdout=None, stderr=None
