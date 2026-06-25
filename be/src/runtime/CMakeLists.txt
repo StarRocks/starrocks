@@ -96,6 +96,7 @@ set(RUNTIME_FILES
     load_channel.cpp
     local_tablets_channel.cpp
     snapshot_loader.cpp
+    stream_load/stream_context_mgr.cpp
     stream_load/stream_load_context_handle.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
