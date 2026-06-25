@@ -61,6 +61,8 @@ class Controller;
 namespace starrocks {
 
 class Cache;
+class BrpcStubCache;
+class DiagnoseDaemon;
 class StatusPB;
 class MetricRegistry;
 class TableMetricsManager;
@@ -106,7 +108,8 @@ class TableMetricsManager;
 //
 class LoadChannelMgr {
 public:
-    explicit LoadChannelMgr(lake::TabletManager* lake_tablet_manager, MetricRegistry* metrics = nullptr,
+    explicit LoadChannelMgr(lake::TabletManager* lake_tablet_manager, DiagnoseDaemon* diagnose_daemon,
+                            BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics = nullptr,
                             TableMetricsManager* table_metrics_mgr = nullptr);
     ~LoadChannelMgr();
 
@@ -184,6 +187,8 @@ private:
     // Thread pool used to handle rpc request asynchronously
     std::unique_ptr<ThreadPool> _async_rpc_pool;
     lake::TabletManager* _lake_tablet_manager;
+    DiagnoseDaemon* _diagnose_daemon;
+    BrpcStubCache* _brpc_stub_cache;
     MetricRegistry* _metrics = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
 };

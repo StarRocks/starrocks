@@ -45,9 +45,7 @@
 #include "common/thread/thread.h"
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
-#include "platform/platform_env.h"
 #include "runtime/closure_guard.h"
-#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
@@ -110,9 +108,14 @@ static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
     return load_channel_timeout_s;
 }
 
-LoadChannelMgr::LoadChannelMgr(lake::TabletManager* lake_tablet_manager, MetricRegistry* metrics,
+LoadChannelMgr::LoadChannelMgr(lake::TabletManager* lake_tablet_manager, DiagnoseDaemon* diagnose_daemon,
+                               BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
                                TableMetricsManager* table_metrics_mgr)
-        : _lake_tablet_manager(lake_tablet_manager), _metrics(metrics), _table_metrics_mgr(table_metrics_mgr) {
+        : _lake_tablet_manager(lake_tablet_manager),
+          _diagnose_daemon(diagnose_daemon),
+          _brpc_stub_cache(brpc_stub_cache),
+          _metrics(metrics),
+          _table_metrics_mgr(table_metrics_mgr) {
     if (_metrics != nullptr) {
         REGISTER_GAUGE_RUNTIME_METRIC(_metrics, load_channel_count, [this]() {
             std::lock_guard l(_lock);
@@ -219,11 +222,8 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
-            auto* exec_env = ExecEnv::GetInstance();
-            auto* platform_env = PlatformEnv::GetInstance();
-            channel = std::make_shared<LoadChannel>(this, _lake_tablet_manager, exec_env->diagnose_daemon(),
-                                                    platform_env->brpc_stub_cache(), load_id, txn_id,
-                                                    request.txn_trace_parent(), job_timeout_s,
+            channel = std::make_shared<LoadChannel>(this, _lake_tablet_manager, _diagnose_daemon, _brpc_stub_cache,
+                                                    load_id, txn_id, request.txn_trace_parent(), job_timeout_s,
                                                     std::move(job_mem_tracker), _metrics, _table_metrics_mgr);
             if (request.has_load_channel_profile_config()) {
                 channel->set_profile_config(request.load_channel_profile_config());

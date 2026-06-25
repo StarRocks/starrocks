@@ -69,9 +69,10 @@ protected:
 
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr);
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         auto* platform_env = PlatformEnv::GetInstance();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
+                                                             platform_env->brpc_stub_cache());
         _load_channel = std::make_shared<LoadChannel>(
                 _load_channel_mgr.get(), nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
                 platform_env->brpc_stub_cache(), _load_id, _txn_id, string(), 1000, std::move(load_mem_tracker));

@@ -61,7 +61,9 @@ public:
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
 
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>(_tablet_manager.get());
+        _load_channel_mgr =
+                std::make_unique<LoadChannelMgr>(_tablet_manager.get(), ExecEnv::GetInstance()->diagnose_daemon(),
+                                                 PlatformEnv::GetInstance()->brpc_stub_cache());
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(metadata->schema());

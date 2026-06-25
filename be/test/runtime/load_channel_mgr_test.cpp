@@ -21,6 +21,8 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
+#include "platform/platform_env.h"
+#include "runtime/exec_env.h"
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
@@ -37,7 +39,8 @@ public:
 protected:
     void SetUp() override {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr);
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
+                                                             PlatformEnv::GetInstance()->brpc_stub_cache());
         _node_id = 100;
         _db_id = 100;
         _table_id = 101;
