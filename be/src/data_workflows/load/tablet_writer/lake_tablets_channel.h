@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "runtime/tablets_channel.h"
+#include "data_workflows/load/tablet_writer/tablets_channel.h"
 
 namespace starrocks {
 

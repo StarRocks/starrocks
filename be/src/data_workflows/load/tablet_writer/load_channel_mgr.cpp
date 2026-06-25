@@ -12,27 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/load_channel_mgr.cpp
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-#include "runtime/load_channel_mgr.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 
 #include <brpc/controller.h>
 #include <butil/endpoint.h>
@@ -43,15 +23,13 @@
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/thread.h"
+#include "data_workflows/load/tablet_writer/load_channel.h"
+#include "data_workflows/load/tablet_writer/tablets_channel.h"
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
-#include "platform/platform_env.h"
 #include "runtime/closure_guard.h"
-#include "runtime/exec_env.h"
-#include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/tablets_channel.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/utils.h"
 
@@ -110,9 +88,14 @@ static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
     return load_channel_timeout_s;
 }
 
-LoadChannelMgr::LoadChannelMgr(lake::TabletManager* lake_tablet_manager, MetricRegistry* metrics,
+LoadChannelMgr::LoadChannelMgr(lake::TabletManager* lake_tablet_manager, DiagnoseDaemon* diagnose_daemon,
+                               BrpcStubCache* brpc_stub_cache, MetricRegistry* metrics,
                                TableMetricsManager* table_metrics_mgr)
-        : _lake_tablet_manager(lake_tablet_manager), _metrics(metrics), _table_metrics_mgr(table_metrics_mgr) {
+        : _lake_tablet_manager(lake_tablet_manager),
+          _diagnose_daemon(diagnose_daemon),
+          _brpc_stub_cache(brpc_stub_cache),
+          _metrics(metrics),
+          _table_metrics_mgr(table_metrics_mgr) {
     if (_metrics != nullptr) {
         REGISTER_GAUGE_RUNTIME_METRIC(_metrics, load_channel_count, [this]() {
             std::lock_guard l(_lock);
@@ -219,11 +202,8 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
-            auto* exec_env = ExecEnv::GetInstance();
-            auto* platform_env = PlatformEnv::GetInstance();
-            channel = std::make_shared<LoadChannel>(this, _lake_tablet_manager, exec_env->diagnose_daemon(),
-                                                    platform_env->brpc_stub_cache(), load_id, txn_id,
-                                                    request.txn_trace_parent(), job_timeout_s,
+            channel = std::make_shared<LoadChannel>(this, _lake_tablet_manager, _diagnose_daemon, _brpc_stub_cache,
+                                                    load_id, txn_id, request.txn_trace_parent(), job_timeout_s,
                                                     std::move(job_mem_tracker), _metrics, _table_metrics_mgr);
             if (request.has_load_channel_profile_config()) {
                 channel->set_profile_config(request.load_channel_profile_config());

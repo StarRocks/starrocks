@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/local_tablets_channel.h"
+#include "data_workflows/load/tablet_writer/local_tablets_channel.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -29,12 +29,12 @@
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
+#include "data_workflows/load/tablet_writer/load_channel.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/walltime.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/load_channel.h"
-#include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
@@ -69,9 +69,10 @@ protected:
 
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr);
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         auto* platform_env = PlatformEnv::GetInstance();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
+                                                             platform_env->brpc_stub_cache());
         _load_channel = std::make_shared<LoadChannel>(
                 _load_channel_mgr.get(), nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
                 platform_env->brpc_stub_cache(), _load_id, _txn_id, string(), 1000, std::move(load_mem_tracker));

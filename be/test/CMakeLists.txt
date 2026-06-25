@@ -258,10 +258,6 @@ set(EXEC_FILES
         ./exec/data_sinks/http_result_writer_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
-        ./runtime/local_tablets_channel_test.cpp
-        ./runtime/lake_tablets_channel_test.cpp
-        ./runtime/load_channel_test.cpp
-        ./runtime/load_channel_mgr_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
         ./runtime/runtime_metrics_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp

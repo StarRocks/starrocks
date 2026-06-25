@@ -23,7 +23,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
 #include "common/system/backend_options.h"
-#include "runtime/tablets_channel.h"
+#include "data_workflows/load/tablet_writer/tablets_channel.h"
 #include "storage/async_delta_writer.h"
 
 namespace brpc {
