@@ -39,7 +39,6 @@ set(STARROCKS_LIBS
     Platform
     Serde
     Storage
-    Rowset
     Runtime
     RuntimeCore
     Types

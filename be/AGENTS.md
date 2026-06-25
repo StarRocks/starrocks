@@ -214,6 +214,13 @@ Base storage algorithms and mask-buffer helpers above StoragePrimitive and Compu
 - Core tests: `storage_base_test`
 - Remediation: Keep StorageBase limited to reusable storage algorithms and helpers that may depend on ComputeEnv; move concrete storage engine, tablet, rowset, lake, service, connector, cache, and full Exec integration upward.
 
+### Storage (`storage`)
+Concrete storage engine: tablet/rowset/segment management, compaction, persistent index, lake (cloud-native) tablets, binlog, inverted/vector indexes, and sstable, depending only on ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and HttpCore for replication transport, without Exec/Service/Connector/Agent reach-up or ExecEnv singleton coupling.
+- Targets: `Storage`
+- Allowed internal include prefixes: `storage/`, `compute_env/`, `cache/`, `exec/runtime_filter/`, `exec/pipeline/pipeline_fwd.h`, `exec/pipeline/operator.h`, `exec/pipeline/primitives/`, `exec/pipeline/runtime_filter_core_types.h`, `exec/pipeline/scan/scan_morsel.h`, `exec/pipeline/scan/morsel_queue.h`, `exec/pipeline/scan/morsel_queue_builder.h`, `exec/pipeline/scan/fixed_morsel_queue.h`, `exec/pipeline/scan/fixed_morsel_queue_builder.h`, `exec/pipeline/scan/dynamic_morsel_queue.h`, `exec/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec/pipeline/scan/ticketed_morsel_queue.h`, `storage/primitive/`, `exprs/`, `serde/`, `runtime/env/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `http/`
+- Allowed target deps: `StorageBase`, `StoragePrimitive`, `ExecPrimitive`, `ComputeEnv`, `Cache`, `ExprCore`, `Serde`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `HttpCore`, `FSCore`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep Storage limited to the concrete storage engine over ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and HttpCore; move Exec, Service, Connector, Agent, and DataWorkflows orchestration upward and route ExecEnv access through injected dependencies.
+
 ### ComputeEnv (`computeenv`)
 Shared compute-side BE environment boundary for process-scoped compute resources, StarOS/Starlet worker runtime, load-path management, query-scoped scan coordination helpers, query-cache primitives, WorkGroup scheduling/executor resources, StarCache coordination, and pipeline controls below full Exec/Storage and above RuntimeEnv.
 - Targets: `ComputeEnv`
@@ -233,7 +240,7 @@ FE-agent task orchestration, heartbeat handling, agent metrics, and agent worker
 Data-plane workflow orchestration above concrete Storage and Exec for load, delete, schema-change, and tablet-write workflows without service/bootstrap ownership.
 - Targets: `DataWorkflows`
 - Allowed internal include prefixes: `data_workflows/`, `storage/`, `exec/`, `runtime/`, `compute_env/`, `serde/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Storage`, `Rowset`, `Exec`, `Runtime`, `StorageBase`, `StoragePrimitive`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `Serde`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `HttpCore`, `FSCore`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `Storage`, `Exec`, `Runtime`, `StorageBase`, `StoragePrimitive`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `Serde`, `RuntimeEnv`, `RuntimeCore`, `Platform`, `HttpCore`, `FSCore`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `data_workflows_test`
 - Remediation: Keep DataWorkflows limited to data-plane orchestration over concrete Storage and Exec; move service/bootstrap, agent scheduling, connector registration, and lower reusable primitives to their owning layers.
 
