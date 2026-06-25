@@ -22,7 +22,6 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <regex>
 #include <set>
 #include <string>
 
@@ -125,7 +124,6 @@ inline bool parse_key_value_pairs(std::istream& input) {
     std::string line;
     std::string key;
     std::string value;
-    std::regex doris_start("^doris_");
     line.reserve(512);
     std::set<Field*> assigned_fields;
     while (input) {
@@ -144,9 +142,6 @@ inline bool parse_key_value_pairs(std::istream& input) {
         std::pair<std::string, std::string> kv = strings::Split(line, strings::delimiter::Limit("=", 1));
         StripWhiteSpace(&kv.first);
 
-        // compatible with doris_config
-        kv.first = std::regex_replace(kv.first, doris_start, "");
-
         auto op_field = Field::get(kv.first);
         if (!op_field.has_value()) {
             // A valid env var name should be: [A-Z_][A-Z0-9_]*
@@ -158,7 +153,7 @@ inline bool parse_key_value_pairs(std::istream& input) {
             continue;
         }
         auto field = op_field.value();
-        if (assigned_fields.count(field) > 0) {
+        if (assigned_fields.contains(field)) {
             std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignment will be ignored\n",
                                      field->name());
         }
