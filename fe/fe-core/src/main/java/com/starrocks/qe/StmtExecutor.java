@@ -1570,11 +1570,7 @@ public class StmtExecutor {
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
-<<<<<<< HEAD
-=======
-        maybeEmbedExplainPlanInProfile(profile, plan);
         appendStatsSourceToProfile(profile, plan);
->>>>>>> 59943f7059 ([Enhancement] Surface stats source (TABLE_METADATA / ANALYZE / NONE) per-table in query runtime profile (#75253))
         // Capture the session timezone now so that the async profile task uses the same zone
         // as START_TIME (the context may change before the async task runs).
         java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
@@ -1624,8 +1620,6 @@ public class StmtExecutor {
         return coord.tryProcessProfileAsync(task);
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Traverse scan operators in the profiled plan and record per-table StatsSource
      * into a dedicated section of the runtime profile.
@@ -1660,45 +1654,6 @@ public class StmtExecutor {
         }
     }
 
-    /**
-     * When the {@code enable_explain_in_profile} session variable is true and an executed plan is
-     * available, render its {@link TExplainLevel#COSTS} text and embed it into the profile's
-     * {@code Summary} section under {@link ProfileKeyDictionary#EXPLAIN_PLAN}. Honors the existing
-     * SQL desensitization signals so the embedded plan does not reintroduce sensitive values.
-     * Any failure here is swallowed and logged so it never prevents the rest of profile processing.
-     */
-    private void maybeEmbedExplainPlanInProfile(RuntimeProfile profile, ExecPlan plan) {
-        SessionVariable sv = context.getSessionVariable();
-        if (plan == null || sv == null || !sv.isEnableExplainInProfile()) {
-            return;
-        }
-        try {
-            RuntimeProfile summaryProfile = profile.getChild(ProfileKeyDictionary.SUMMARY);
-            // Honor both the cluster-wide FE config `enable_sql_desensitize_in_log` (which
-            // already governs the sibling "Sql Statement" info-string in this same Summary)
-            // and the session variable `enable_desensitize_explain` (which governs literal
-            // digesting in EXPLAIN output via PlanNode.explainExpr). Temporarily force-on
-            // `enable_desensitize_explain` while rendering when either signal is set, then
-            // restore the previous value.
-            boolean prevDesensitize = sv.isEnableDesensitizeExplain();
-            boolean forceDesensitize = Config.enable_sql_desensitize_in_log || prevDesensitize;
-            String explainPlan;
-            try {
-                sv.setEnableDesensitizeExplain(forceDesensitize);
-                explainPlan = plan.getExplainString(TExplainLevel.COSTS);
-            } finally {
-                sv.setEnableDesensitizeExplain(prevDesensitize);
-            }
-            // Defense in depth: also strip credential-bearing literals (e.g. FILES("...")
-            // properties) that the digest pass does not specifically target.
-            summaryProfile.addInfoString(ProfileKeyDictionary.EXPLAIN_PLAN,
-                    SqlCredentialRedactor.redact(explainPlan));
-        } catch (Exception e) {
-            LOG.warn("Failed to embed explain plan in profile", e);
-        }
-    }
-
->>>>>>> 59943f7059 ([Enhancement] Surface stats source (TABLE_METADATA / ANALYZE / NONE) per-table in query runtime profile (#75253))
     public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
         if (subStmtExecutors == null) {
             subStmtExecutors = Lists.newArrayList();
