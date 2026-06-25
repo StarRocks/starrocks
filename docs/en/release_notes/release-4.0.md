@@ -26,7 +26,7 @@ description: "StarRocks 4.0 release notes: DECIMAL256 type, File Bundling for sh
 
 ## 4.0.12
 
-Release Date: June 16, 2026
+Release Date: June 25, 2026
 
 ### Behavior Changes
 

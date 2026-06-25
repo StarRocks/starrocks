@@ -27,7 +27,7 @@ description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、
 
 ## 4.0.12
 
-リリース日：2026 年 6 月 16 日
+リリース日：2026 年 6 月 25 日
 
 ### 動作変更
 
