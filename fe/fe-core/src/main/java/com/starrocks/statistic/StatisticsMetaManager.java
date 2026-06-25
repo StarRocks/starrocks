@@ -669,14 +669,19 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
             boolean existsSample = false;
             boolean existsFull = false;
-            while (!existsSample || !existsFull) {
+            boolean existsHistory = false;
+            while (!existsSample || !existsFull || !existsHistory) {
                 existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
                 existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
+                existsHistory = checkTableExist(EXTERNAL_ANALYZE_HISTORY_TABLE_NAME);
                 if (!existsSample) {
                     createTable(SAMPLE_STATISTICS_TABLE_NAME);
                 }
                 if (!existsFull) {
                     createTable(FULL_STATISTICS_TABLE_NAME);
+                }
+                if (!existsHistory) {
+                    createTable(EXTERNAL_ANALYZE_HISTORY_TABLE_NAME);
                 }
                 trySleep(1);
             }
