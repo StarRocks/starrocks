@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/load_channel.h"
+#include "data_workflows/load/tablet_writer/load_channel.h"
 
 #include <gtest/gtest.h>
 
@@ -26,13 +26,13 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
+#include "data_workflows/load/tablet_writer/lake_tablets_channel.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
+#include "data_workflows/load/tablet_writer/local_tablets_channel.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/lake_tablets_channel.h"
-#include "runtime/load_channel_mgr.h"
-#include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"

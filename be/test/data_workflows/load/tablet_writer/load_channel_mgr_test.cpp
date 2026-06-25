@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/load_channel_mgr.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 
 #include <brpc/controller.h>
 #include <gtest/gtest.h>

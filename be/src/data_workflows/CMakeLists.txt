@@ -23,6 +23,11 @@ set(DATA_WORKFLOWS_FILES
     load/lake_spark_load_handler.cpp
     load/push_broker_reader.cpp
     load/push_handler.cpp
+    load/tablet_writer/lake_tablets_channel.cpp
+    load/tablet_writer/load_channel.cpp
+    load/tablet_writer/load_channel_mgr.cpp
+    load/tablet_writer/local_tablets_channel.cpp
+    load/tablet_writer/tablets_channel.cpp
     migration/engine_storage_migration_task.cpp
     schema_change/engine_alter_tablet_task.cpp
 )

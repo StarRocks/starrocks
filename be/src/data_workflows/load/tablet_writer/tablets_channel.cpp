@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/tablets_channel.h"
+#include "data_workflows/load/tablet_writer/tablets_channel.h"
 
 #include "base/concurrency/await.h"
 #include "glog/logging.h"
