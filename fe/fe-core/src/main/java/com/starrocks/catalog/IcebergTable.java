@@ -414,6 +414,9 @@ public class IcebergTable extends Table {
             return "";
         }
         java.util.Map<String, String> summary = snapshot.summary();
+        if (summary == null) {
+            summary = java.util.Collections.emptyMap();
+        }
         return String.format("snapshotId=%d totalFiles=%s totalRows=%s",
                 snapshot.snapshotId(),
                 summary.getOrDefault("total-data-files", "0"),

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
@@ -169,7 +168,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             failureReason = e.getMessage();
             throw e;
         } finally {
-            LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} durationMs={} partitions={} columns={} reason={}",
+            LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
+                            "durationMs={} partitions={} columns={} reason={}",
                     jobId, catalogName, db.getOriginName(), table.getName(),
                     status, System.currentTimeMillis() - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
