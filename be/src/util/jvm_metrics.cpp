@@ -106,8 +106,9 @@ void JVMMetrics::install(MetricRegistry* registry) {
         return;
     }
 
-#define REGISTER_JVM_METRIC(name, type) \
-    registry->register_metric("jvm_" #name "_size_bytes{type=\"" #type "\"}", &jvm_##name##_##type##_bytes)
+#define REGISTER_JVM_METRIC(name, type)                                                      \
+    registry->register_metric("jvm_" #name "_size_bytes", MetricLabels().add("type", #type), \
+                              &jvm_##name##_##type##_bytes)
 
     REGISTER_JVM_METRIC(heap, used);
     REGISTER_JVM_METRIC(heap, committed);
