@@ -92,7 +92,7 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
 }
 
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
-                                      size_t* num_found, int64_t version, uint32_t rowset_id) {
+                                      size_t* num_found, int64_t version, uint32_t del_rssid) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_erase_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
@@ -109,14 +109,15 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
             update_index_value(&old_index_value_ver, version, IndexValue(NullIndexValue));
         }
     }
-    // Delete is after upsert, so using UINT32_MAX as it's rowid
-    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
+    // A delete sorts after the segment at its rssid (del_rssid = rowset_id + op_offset), hence the
+    // UINT32_MAX rowid.
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)del_rssid) << 32 | (uint64_t)UINT32_MAX);
     *num_found = nfound;
     return Status::OK();
 }
 
 Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter,
-                                                  int64_t version, uint32_t rowset_id) {
+                                                  int64_t version, uint32_t del_rssid) {
     for (size_t i = 0; i < n; ++i) {
         if (filter[i]) {
             // skip
@@ -130,8 +131,9 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
             update_index_value(&old_index_value_ver, version, IndexValue(NullIndexValue));
         }
     }
-    // Delete is after upsert, so using UINT32_MAX as it's rowid
-    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
+    // A delete sorts after the segment at its rssid (del_rssid = rowset_id + op_offset), hence the
+    // UINT32_MAX rowid.
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)del_rssid) << 32 | (uint64_t)UINT32_MAX);
     return Status::OK();
 }
 

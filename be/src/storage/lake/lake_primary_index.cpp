@@ -304,7 +304,7 @@ static void old_values_to_deletes(const std::vector<uint64_t>& old_values, Delet
 }
 
 Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
-                               uint32_t rowset_id) {
+                               uint32_t del_rssid) {
     // No need to setup rebuild point for in-memory index and local persistent index,
     // so keep using previous erase interface.
     if (!_enable_persistent_index) {
@@ -321,9 +321,9 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
             Buffer<Slice> keys;
             std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
             ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
-            // Cloud native index need to setup rowset id as rebuild point when erase.
+            // Cloud native index needs the delete's rssid as the rebuild point when erasing.
             RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
-                                                         reinterpret_cast<IndexValue*>(old_values.data()), rowset_id));
+                                                         reinterpret_cast<IndexValue*>(old_values.data()), del_rssid));
             old_values_to_deletes(old_values, deletes);
             return Status::OK();
         } else {

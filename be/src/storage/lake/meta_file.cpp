@@ -73,6 +73,15 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
     return rowset_meta.id() + get_segment_idx(rowset_meta, segment_pos);
 }
 
+uint32_t resolve_del_op_offset(const FileMetaPB& del_meta, const RowsetMetadataPB& rowset_meta) {
+    if (del_meta.has_op_offset()) {
+        // op_offset is a local segment position; map it to the segment index used for rssid so it is
+        // consistent with the get_max_segment_idx() fallback (handles segment_idx remapping/bundles).
+        return get_segment_idx(rowset_meta, static_cast<int32_t>(del_meta.op_offset()));
+    }
+    return get_max_segment_idx(rowset_meta);
+}
+
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
@@ -215,13 +224,21 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
 
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
+    // Column-mode partial update applies del files in a separate phase (not interleaved with the
+    // column upserts), so the persisted op_offset must stay at the max segment id to keep the rebuild
+    // path consistent with that apply. Only the row-mode path interleaves by op_offset.
+    const bool column_mode = op_write.has_txn_meta() &&
+                             (op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+                              op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE);
     // collect del files
     for (const auto& del_meta : op_write.dels_meta()) {
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del_meta.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
-        // For now, op_offset is always max segment's id
-        del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
+        // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
+        // fall back to the max segment id (delete after all upserts).
+        del_file_with_rid.set_op_offset(column_mode ? get_max_segment_idx(*rowset)
+                                                    : resolve_del_op_offset(del_meta, *rowset));
         if (del_meta.has_encryption_meta()) {
             del_file_with_rid.set_encryption_meta(del_meta.encryption_meta());
         }
@@ -1242,8 +1259,19 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     _pending_rowset_data.orphan_files.insert(_pending_rowset_data.orphan_files.end(), orphan_files.begin(),
                                              orphan_files.end());
 
-    // Merge delete files (each entry already carries name + shared + encryption_meta).
-    _pending_rowset_data.dels.insert(_pending_rowset_data.dels.end(), dels.begin(), dels.end());
+    // Merge delete files (each entry already carries name + shared + encryption_meta). This op_write's
+    // segments are appended into the merged rowset at base `assigned_segment_idx` (see above), so each
+    // del's op_offset (recorded in this op_write's local segment space) must shift by the same base to
+    // stay in the merged rowset's space. Without this, a later statement's del would resolve to an
+    // earlier statement's segment at persist time and diverge from apply (which uses
+    // assigned_global_segments) on rebuild/recover.
+    const uint32_t seg_base = _pending_rowset_data.assigned_segment_idx;
+    for (const auto& del : dels) {
+        auto& merged_del = _pending_rowset_data.dels.emplace_back(del);
+        if (merged_del.has_op_offset()) {
+            merged_del.set_op_offset(merged_del.op_offset() + seg_base);
+        }
+    }
 
     // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
     _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
@@ -1297,8 +1325,9 @@ Status MetaFileBuilder::set_final_rowset() {
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
-        // For now, op_offset is always max segment's id
-        del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
+        // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
+        // fall back to the max segment id (delete after all upserts).
+        del_file_with_rid.set_op_offset(resolve_del_op_offset(del, *rowset));
         if (!del.encryption_meta().empty()) {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }

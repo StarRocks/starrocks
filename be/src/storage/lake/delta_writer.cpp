@@ -92,7 +92,15 @@ public:
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override {
-        RETURN_IF_ERROR(_writer->flush_del_file(deletes));
+        // Serial flush: write() below produces this flush's own segment (even a delete-only flush
+        // writes a 0-row segment for the empty upsert chunk), which will occupy index
+        // segments().size() since flush_del_file() runs before it. The delete logically follows that
+        // segment (delete rssid = rowset_id + op_offset), so it sorts after this flush's own upserts
+        // and before any later-flush re-upsert of the same key, preserving the in-transaction order.
+        // A leading delete-only flush is handled the same way: its empty segment takes this slot and
+        // the re-upsert lands in a later segment that correctly wins.
+        const uint32_t op_offset = static_cast<uint32_t>(_writer->segments().size());
+        RETURN_IF_ERROR(_writer->flush_del_file(deletes, op_offset));
         RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
@@ -817,8 +825,19 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         uint32_t segment_idx = op_write->rowset().segment_metas_size();
         f.to_proto(segment_idx, op_write->mutable_rowset()->add_segment_metas());
     }
-    for (const auto& f : _tablet_writer->dels()) {
-        to_file_meta_pb(f, op_write->add_dels_meta());
+    {
+        const auto& del_op_offsets = _tablet_writer->del_op_offsets();
+        size_t del_idx = 0;
+        for (const auto& f : _tablet_writer->dels()) {
+            auto* del_meta = op_write->add_dels_meta();
+            to_file_meta_pb(f, del_meta);
+            // Carry the per-del op_offset so the apply/persist path can preserve upsert/delete
+            // ordering. Left unset when unknown (spill path), which falls back to the max segment id.
+            if (del_idx < del_op_offsets.size() && del_op_offsets[del_idx] != kUnknownDelOpOffset) {
+                del_meta->set_op_offset(del_op_offsets[del_idx]);
+            }
+            ++del_idx;
+        }
     }
     for (const auto& sst : _tablet_writer->ssts()) {
         to_file_meta_pb(sst, op_write->add_ssts());

@@ -46,6 +46,13 @@ uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta);
 uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 
+// Resolve the segment index a del file logically follows (the delete's rssid is
+// `rowset_id + <returned index>`), preserving the in-transaction upsert/delete order.
+// Uses the writer-provided op_offset (a local segment position) when present, mapped through
+// get_segment_idx() so it lands in the same index space as segment rssids; otherwise falls back to
+// the max segment index, i.e. the legacy "apply all deletes after all upserts" behavior.
+uint32_t resolve_del_op_offset(const FileMetaPB& del_meta, const RowsetMetadataPB& rowset_meta);
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);

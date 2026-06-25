@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <map>
 #include <random>
 
 #include "base/testutil/assert.h"
@@ -425,6 +426,193 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
     config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize * 3, read_rows(tablet_id, version));
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+}
+
+// Within a single transaction, a key may be deleted and then re-upserted across different memtable
+// flushes (segments / del files). The upsert/delete order must be preserved: the trailing upsert
+// wins, so all keys remain present with the last value. Before the op_offset interleaving fix, the
+// delete file was always applied after all segments, so it wrongly erased the re-upserted rows and
+// the read returned 0 rows. Runs across in-memory / LOCAL / CLOUD_NATIVE index types via TEST_P.
+TEST_P(LakePrimaryKeyPublishTest, test_interleaved_delete_then_reupsert) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    // Build a 3-column chunk (c0=key, c1=value, __op) for the given keys/values and op type.
+    auto make_chunk = [&](int value_shift, bool upsert) {
+        std::vector<int> keys(n), vals(n);
+        std::vector<uint8_t> ops(n);
+        for (int i = 0; i < n; i++) {
+            keys[i] = i;
+            vals[i] = i + value_shift;
+            ops[i] = upsert ? TOpType::UPSERT : TOpType::DELETE;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int8Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        c2->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
+    };
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+
+    auto upsert_first = make_chunk(/*value_shift=*/0, /*upsert=*/true);
+    auto delete_keys = make_chunk(/*value_shift=*/0, /*upsert=*/false);
+    auto upsert_last = make_chunk(/*value_shift=*/1000, /*upsert=*/true);
+
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    // Force every write() to flush separately so the upsert/delete/re-upsert land in distinct
+    // segments and del files (segment0, del-after-segment0, segment1) within one transaction. Force
+    // the serial (non-spill) flush path: the spill/merge path collapses flushes into a single merged
+    // segment and orders deletes differently (handled separately), so it would not exercise the
+    // per-flush op_offset interleaving this test targets.
+    config::write_buffer_size = 1;
+    config::enable_load_spill = false;
+    DeferOp reset_cfg([&]() {
+        config::write_buffer_size = old_size;
+        config::enable_load_spill = old_spill;
+    });
+    int64_t txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*upsert_first, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(*delete_keys, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(*upsert_last, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+
+    // All keys must survive (the trailing upsert wins) with the last value.
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 2));
+    ASSERT_EQ(n, chunk->num_rows());
+    std::map<int, int> kv;
+    for (size_t i = 0; i < chunk->num_rows(); i++) {
+        kv[chunk->get(i)[0].get_int32()] = chunk->get(i)[1].get_int32();
+    }
+    ASSERT_EQ(static_cast<size_t>(n), kv.size());
+    for (int i = 0; i < n; i++) {
+        ASSERT_TRUE(kv.count(i) > 0) << "key " << i << " missing";
+        EXPECT_EQ(i + 1000, kv[i]) << "key " << i << " has stale value";
+    }
+}
+
+// A transaction whose FIRST flush is delete-only (empty upsert chunk) must still produce a real
+// (0-row) segment for that flush. That empty segment takes the leading rssid slot so the delete
+// (op_offset = its index) is ordered before a later-flush re-upsert of the same key, which then
+// wins. This verifies both the behavior AND that the tablet metadata actually records the empty
+// segment (if it didn't, the delete would share the re-upsert's rssid and erase it).
+TEST_P(LakePrimaryKeyPublishTest, test_delete_only_first_flush_creates_segment) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    auto tablet_id = _tablet_metadata->id();
+    auto make_chunk = [&](int value_shift, bool upsert) {
+        std::vector<int> keys(n), vals(n);
+        std::vector<uint8_t> ops(n);
+        for (int i = 0; i < n; i++) {
+            keys[i] = i;
+            vals[i] = i + value_shift;
+            ops[i] = upsert ? TOpType::UPSERT : TOpType::DELETE;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int8Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        c2->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
+    };
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](int64_t new_version, const std::vector<ChunkPtr>& chunks) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (const auto& c : chunks) {
+            ASSERT_OK(delta_writer->write(*c, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, new_version, txn_id).status());
+    };
+
+    // v2: pre-populate keys 0..n-1 with value=key, so the later delete has existing rows to remove.
+    write_one_txn(2, {make_chunk(/*value_shift=*/0, /*upsert=*/true)});
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    // v3: one transaction; write_buffer_size=1 forces each write() into its own flush:
+    //   flush0 = delete-only -> a 0-row (empty) segment + a del file
+    //   flush1 = re-upsert   -> a segment
+    // Force the serial (non-spill) flush path: the empty segment for a delete-only flush is produced
+    // by the serial writer; the spill/merge path collapses flushes into one merged segment (its
+    // ordering is handled separately), so it would not exercise this mechanism.
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    config::write_buffer_size = 1;
+    config::enable_load_spill = false;
+    write_one_txn(3,
+                  {make_chunk(/*value_shift=*/0, /*upsert=*/false), make_chunk(/*value_shift=*/1000, /*upsert=*/true)});
+    config::write_buffer_size = old_size;
+    config::enable_load_spill = old_spill;
+
+    // Correctness: all keys survive with the re-upserted value (the trailing upsert wins).
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 3));
+    ASSERT_EQ(n, chunk->num_rows());
+    std::map<int, int> kv;
+    for (size_t i = 0; i < chunk->num_rows(); i++) {
+        kv[chunk->get(i)[0].get_int32()] = chunk->get(i)[1].get_int32();
+    }
+    for (int i = 0; i < n; i++) {
+        ASSERT_TRUE(kv.count(i) > 0) << "key " << i << " missing";
+        EXPECT_EQ(i + 1000, kv[i]) << "key " << i << " has stale value";
+    }
+
+    // Metadata: the v3 rowset must hold 2 segments (the empty one from the delete-only flush + the
+    // re-upsert segment) and 1 del file whose op_offset points at the first (empty) segment.
+    ASSIGN_OR_ABORT(auto meta_v3, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    int v3_segments = -1;
+    int v3_delfiles = -1;
+    uint32_t v3_del_op_offset = 0;
+    for (const auto& rs : meta_v3->rowsets()) {
+        if (rs.version() == 3) {
+            v3_segments = rs.segment_metas_size();
+            v3_delfiles = rs.del_files_size();
+            if (rs.del_files_size() == 1) {
+                v3_del_op_offset = rs.del_files(0).op_offset();
+            }
+        }
+    }
+    ASSERT_NE(-1, v3_segments) << "no rowset produced at version 3";
+    EXPECT_EQ(2, v3_segments) << "delete-only first flush did not create an empty segment";
+    EXPECT_EQ(1, v3_delfiles);
+    EXPECT_EQ(0u, v3_del_op_offset);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
