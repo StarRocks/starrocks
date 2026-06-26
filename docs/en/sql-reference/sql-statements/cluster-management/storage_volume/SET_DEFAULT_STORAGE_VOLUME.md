@@ -8,7 +8,7 @@ SET DEFAULT STORAGE VOLUME sets a storage volume as the default storage volume. 
 
 > **CAUTION**
 >
-> - Only users with the USAGE privilege on a specific storage volume can perform this operation.
+> - Only users with the ALTER privilege on a specific storage volume can perform this operation.
 > - The default storage volume cannot be dropped or disabled.
 > - You must set the default storage volume for a shared-data StarRocks cluster because StarRocks stores the system statistics information in the default storage volume.
 
