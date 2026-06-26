@@ -171,4 +171,40 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
               "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
 }
 
+// NOLINTNEXTLINE
+TEST_F(BinaryPlainPageTest, test_max_value_length_is_cached_and_correct) {
+    auto build_decoder = [](const std::vector<Slice>& slices, OwnedSlice* keep_alive) {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options);
+        size_t count = slices.size();
+        builder.add(reinterpret_cast<const uint8_t*>(slices.data()), count);
+        *keep_alive = builder.finish()->build();
+        return BinaryPlainPageDecoder<TYPE_VARCHAR>(keep_alive->slice());
+    };
+
+    // Longest value is "StarRocks" (9 bytes); repeated calls must be stable and equal to the
+    // freshly-recomputed value (memoization must not change the answer).
+    {
+        std::vector<Slice> slices{"Hello", ",", "StarRocks", "ab"};
+        OwnedSlice owned;
+        auto decoder = build_decoder(slices, &owned);
+        ASSERT_OK(decoder.init());
+        EXPECT_EQ(9U, decoder.max_value_length());
+        EXPECT_EQ(9U, decoder.max_value_length());
+        EXPECT_EQ(9U, decoder.max_value_length());
+    }
+
+    // All-empty dictionary: max length is the legitimate value 0; the -1 "not computed" sentinel
+    // must not be confused with a cached 0.
+    {
+        std::vector<Slice> slices{"", "", ""};
+        OwnedSlice owned;
+        auto decoder = build_decoder(slices, &owned);
+        ASSERT_OK(decoder.init());
+        EXPECT_EQ(0U, decoder.max_value_length());
+        EXPECT_EQ(0U, decoder.max_value_length());
+    }
+}
+
 } // namespace starrocks

@@ -263,6 +263,13 @@ public:
     }
 
     uint32_t max_value_length() const {
+        // The max value length is an invariant of the (immutable) dictionary/page, but it is
+        // O(_num_elems) to compute. As a dict decoder this is re-queried on every data page via
+        // BinaryDictPageDecoder::set_dict_decoder, so memoize the first computation. The decoder
+        // object is owned by a single ScalarColumnIterator, so the mutable cache needs no locking.
+        if (_max_value_length_cache >= 0) {
+            return static_cast<uint32_t>(_max_value_length_cache);
+        }
         uint32_t max_length = 0;
         for (int i = 0; i < _num_elems; ++i) {
             uint32_t length = offset(i + 1) - offset_uncheck(i);
@@ -270,6 +277,7 @@ public:
                 max_length = length;
             }
         }
+        _max_value_length_cache = max_length;
         return max_length;
     }
 
@@ -300,6 +308,9 @@ private:
     uint32_t _cur_idx;
 
     std::optional<std::vector<Slice>> _parsed_datas;
+
+    // Lazily-computed cache for max_value_length(); -1 means "not yet computed".
+    mutable int64_t _max_value_length_cache = -1;
 };
 
 } // namespace starrocks
