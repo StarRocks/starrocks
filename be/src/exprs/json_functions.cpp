@@ -327,6 +327,9 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
 
         auto json = JsonValue::parse(slice);
         if (!json.ok()) {
+            if (context != nullptr && context->allow_throw_exception()) {
+                return json.status();
+            }
             result.append_null();
         } else {
             result.append(std::move(json.value()));
