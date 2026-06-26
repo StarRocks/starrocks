@@ -45,7 +45,6 @@
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService.h"
-#include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
@@ -107,11 +106,6 @@ public:
                                          std::vector<int32_t>& cur_batch_report_indexes,
                                          std::vector<TUniqueId>& fragment_instance_ids_to_unregister);
 
-    // input: TScanOpenParams fragment_instance_id
-    // output: selected_columns, query_id parsed from params
-    // execute external query, all query info are packed in TScanOpenParams
-    Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
-                                       std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id);
     size_t running_fragment_count() const {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();
