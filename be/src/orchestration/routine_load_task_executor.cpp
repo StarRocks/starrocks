@@ -41,9 +41,11 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/logging.h"
 #include "common/status.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
@@ -93,6 +95,8 @@ void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env) {
 } // namespace
 
 Status RoutineLoadTaskExecutor::init(MetricRegistry* metrics) {
+    DCHECK(_stream_load_orchestrator != nullptr);
+
     if (metrics != nullptr) {
         REGISTER_GAUGE_RUNTIME_METRIC(metrics, routine_load_task_count, [this]() {
             std::lock_guard<std::mutex> l(_lock);
@@ -468,7 +472,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     HANDLE_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe), "failed to add pipe")
 
     // execute plan fragment, async
-    HANDLE_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx), "failed to execute plan fragment")
+    HANDLE_ERROR(_stream_load_orchestrator->execute_plan_fragment(ctx), "failed to execute plan fragment")
 
     // start to consume, this may block a while
     HANDLE_ERROR(consumer_grp->start_all(ctx), "consuming failed")

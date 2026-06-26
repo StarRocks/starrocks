@@ -111,6 +111,7 @@
         "exprs/",
         "fs/",
         "io/",
+        "orchestration/",
         "platform/",
         "runtime/",
         "storage/",
@@ -121,7 +122,7 @@
       ],
       "forbidden_include_prefixes": ["service/", "service_be/", "agent/", "connector/"],
       "forbidden_includes": [],
-      "allowed_target_deps": ["HttpCore", "Storage", "DataWorkflows", "Runtime", "RuntimeCore", "RuntimeEnv", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FSCore", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["HttpCore", "Storage", "DataWorkflows", "Orchestration", "Runtime", "RuntimeCore", "RuntimeEnv", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FSCore", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep HTTP service code above HttpCore; move reusable transport/request primitives down to HttpCore and keep service/bootstrap integration outside HttpService."

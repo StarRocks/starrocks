@@ -18,6 +18,7 @@
 
 #include "common/logging.h"
 #include "orchestration/routine_load_task_executor.h"
+#include "orchestration/stream_load_orchestrator.h"
 
 namespace starrocks::orchestration {
 
@@ -30,7 +31,9 @@ OrchestrationEnv::~OrchestrationEnv() {
 Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
     DCHECK(exec_env != nullptr);
 
-    _routine_load_task_executor = std::make_unique<RoutineLoadTaskExecutor>(exec_env);
+    _stream_load_orchestrator = std::make_unique<StreamLoadOrchestrator>(exec_env);
+
+    _routine_load_task_executor = std::make_unique<RoutineLoadTaskExecutor>(exec_env, _stream_load_orchestrator.get());
     RETURN_IF_ERROR(_routine_load_task_executor->init(metrics));
     _routine_load_task_executor_started = true;
 
@@ -47,6 +50,7 @@ void OrchestrationEnv::stop() {
 void OrchestrationEnv::destroy() {
     stop();
     _routine_load_task_executor.reset();
+    _stream_load_orchestrator.reset();
 }
 
 } // namespace starrocks::orchestration

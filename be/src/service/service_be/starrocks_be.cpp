@@ -300,14 +300,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server =
-            std::make_unique<HttpServiceBE>(cache_env, exec_env, *global_env, process_metrics_registry,
-                                            load_channel_mgr, config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, orchestration_env.get(), *global_env,
+                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
+                                                       config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server =
-            std::make_unique<HttpServiceBE>(nullptr, exec_env, *global_env, process_metrics_registry, load_channel_mgr,
-                                            config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, orchestration_env.get(), *global_env,
+                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
+                                                       config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();

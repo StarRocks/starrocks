@@ -26,6 +26,7 @@ class MetricRegistry;
 namespace orchestration {
 
 class RoutineLoadTaskExecutor;
+class StreamLoadOrchestrator;
 
 class OrchestrationEnv {
 public:
@@ -38,8 +39,11 @@ public:
 
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor.get(); }
     const RoutineLoadTaskExecutor* routine_load_task_executor() const { return _routine_load_task_executor.get(); }
+    StreamLoadOrchestrator* stream_load_orchestrator() { return _stream_load_orchestrator.get(); }
+    const StreamLoadOrchestrator* stream_load_orchestrator() const { return _stream_load_orchestrator.get(); }
 
 private:
+    std::unique_ptr<StreamLoadOrchestrator> _stream_load_orchestrator;
     std::unique_ptr<RoutineLoadTaskExecutor> _routine_load_task_executor;
     bool _routine_load_task_executor_started = false;
 };

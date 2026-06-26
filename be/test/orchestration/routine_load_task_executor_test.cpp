@@ -42,6 +42,7 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
@@ -78,6 +79,7 @@ public:
 
 private:
     ExecEnv _env;
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env};
 };
 
 TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
@@ -104,7 +106,7 @@ TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
 
     task.__set_kafka_load_info(k_info);
 
-    orchestration::RoutineLoadTaskExecutor executor(&_env);
+    orchestration::RoutineLoadTaskExecutor executor(&_env, &_stream_load_orchestrator);
 
     // submit task
     Status st;

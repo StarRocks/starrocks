@@ -19,6 +19,7 @@ set(ORCHESTRATION_FILES
     orchestration_env.cpp
     query_orchestrator.cpp
     routine_load_task_executor.cpp
+    stream_load_orchestrator.cpp
 )
 
 ADD_BE_LIB(Orchestration

@@ -21,6 +21,7 @@ add_executable(orchestration_test
     ${BE_TEST_MACOS_LINK_STUBS}
     fragment_executor_test.cpp
     query_orchestrator_test.cpp
+    stream_load_orchestrator_test.cpp
 )
 target_link_libraries(orchestration_test Orchestration ${TEST_LINK_LIBS} gtest_main)
 set_target_properties(orchestration_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

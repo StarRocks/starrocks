@@ -74,14 +74,13 @@
 #include "http/core/http_headers.h"
 #include "http/core/http_request.h"
 #include "http/core/http_response.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "simdjson.h"
 
@@ -128,8 +127,11 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
 static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,
                                        TStreamLoadPutResult* result);
 
-StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
-        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {}
+StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
+                                   ConcurrentLimiter* limiter)
+        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _http_concurrent_limiter(limiter) {
+    DCHECK(_stream_load_orchestrator != nullptr);
+}
 
 StreamLoadAction::~StreamLoadAction() = default;
 
@@ -187,7 +189,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         // then execute_plan_fragment here
         // this will close file
         ctx->body_sink.reset();
-        RETURN_IF_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx));
+        RETURN_IF_ERROR(_stream_load_orchestrator->execute_plan_fragment(ctx));
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip_to_read();
@@ -682,7 +684,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
-    return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
+    return _stream_load_orchestrator->execute_plan_fragment(ctx);
 }
 
 Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,

@@ -121,8 +121,8 @@ Reusable HTTP transport and request primitives above Common without BE admin or 
 ### HttpService (`httpservice`)
 BE HTTP pages, admin actions, load actions, download helpers, and web handlers above HttpCore.
 - Targets: `HttpService`
-- Allowed internal include prefixes: `http/service/`, `http/core/`, `cache/`, `compute_env/`, `data_workflows/`, `exec/`, `exprs/`, `fs/`, `io/`, `platform/`, `runtime/`, `storage/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `HttpCore`, `Storage`, `DataWorkflows`, `Runtime`, `RuntimeCore`, `RuntimeEnv`, `ComputeEnv`, `Exec`, `ExecRuntime`, `Exprs`, `FSCore`, `IO`, `Platform`, `StoragePrimitive`, `Cache`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `http/service/`, `http/core/`, `cache/`, `compute_env/`, `data_workflows/`, `exec/`, `exprs/`, `fs/`, `io/`, `orchestration/`, `platform/`, `runtime/`, `storage/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `HttpCore`, `Storage`, `DataWorkflows`, `Orchestration`, `Runtime`, `RuntimeCore`, `RuntimeEnv`, `ComputeEnv`, `Exec`, `ExecRuntime`, `Exprs`, `FSCore`, `IO`, `Platform`, `StoragePrimitive`, `Cache`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep HTTP service code above HttpCore; move reusable transport/request primitives down to HttpCore and keep service/bootstrap integration outside HttpService.
 
 ### IO (`io`)
