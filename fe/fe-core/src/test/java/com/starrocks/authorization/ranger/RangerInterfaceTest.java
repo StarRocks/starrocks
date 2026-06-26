@@ -44,6 +44,8 @@ import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -674,6 +676,7 @@ public class RangerInterfaceTest {
             TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     "db", "test_security_view_mv");
             Assertions.assertDoesNotThrow(() ->
+
                     ColumnPrivilege.checkViewPrivilege(ctx, tableName, secView));
 
             // For a security view referencing a materialized view, Ranger must be invoked
@@ -692,5 +695,211 @@ public class RangerInterfaceTest {
         } finally {
             provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
         }
+    }
+
+    /**
+     * Regression test for the should-fix item: when a security view's underlying base
+     * table is denied, the error must be reported against the base object (TABLE or,
+     * since the fix routes security-view refs through column-level checks, COLUMN of
+     * the base table) — never as ObjectType.VIEW with the security view's name.
+     */
+    @Test
+    public void testCheckViewPrivilegeSecurityViewBaseTableDeniedReportsAsTable() {
+        // Ranger denies every request -> base table t1 access will be denied
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        AccessControlProvider provider = Authorizer.getInstance();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new RangerStarRocksAccessController());
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("denied_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+            View secView = (View) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_security_view");
+            Assertions.assertTrue(secView.isSecurity());
+
+            TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    "db", "test_security_view");
+
+            ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () ->
+                    ColumnPrivilege.checkViewPrivilege(ctx, tableName, secView));
+
+            // The base failure must surface against the base object (TABLE or COLUMN of
+            // the base table) — never as VIEW <security_view>. Under the column-level
+            // unification fix, a security view's refs are checked via
+            // ColumnPrivilege.check(view.getQueryStatement()), so the first deny lands
+            // on a base column (e.g. "on COLUMN v4").
+            String msg = ex.getMessage();
+            Assertions.assertTrue(msg.contains("on TABLE") || msg.contains("on COLUMN"),
+                    "base failure must be reported against the base object (TABLE or COLUMN), got: " + msg);
+            Assertions.assertFalse(msg.contains("on VIEW test_security_view"),
+                    "base failure must NOT be misreported as VIEW <security_view>, got: " + msg);
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    /**
+     * Regression test for the should-fix item: when a security view's underlying
+     * materialized view is denied, the error must be reported as
+     * ObjectType.MATERIALIZED_VIEW, not ObjectType.VIEW.
+     */
+    @Test
+    public void testCheckViewPrivilegeSecurityViewBaseMvDeniedReportsAsMaterializedView() {
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        AccessControlProvider provider = Authorizer.getInstance();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new RangerStarRocksAccessController());
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("denied_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+            View secView = (View) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_security_view_mv");
+            Assertions.assertTrue(secView.isSecurity());
+
+            TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    "db", "test_security_view_mv");
+
+            ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () ->
+                    ColumnPrivilege.checkViewPrivilege(ctx, tableName, secView));
+
+            // ObjectType.MATERIALIZED_VIEW is rendered as "MATERIALIZED VIEW" (with a
+            // space, no underscore) in user-facing error messages; see ObjectType.java.
+            String msg = ex.getMessage();
+            Assertions.assertTrue(msg.contains("on MATERIALIZED VIEW"),
+                    "base MV failure must be reported with ObjectType.MATERIALIZED_VIEW, got: " + msg);
+            Assertions.assertTrue(msg.contains("test_mv"),
+                    "base MV failure must mention the base MV name 'test_mv', got: " + msg);
+            Assertions.assertFalse(msg.contains("on VIEW test_security_view_mv"),
+                    "base MV failure must NOT be misreported as VIEW <security_view>, got: " + msg);
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    /**
+     * Cover the {@code isConnectorView()} branch of checkViewPrivilege without
+     * requiring a real Hive/Iceberg/Paimon catalog. We mock View#isConnectorView to
+     * return true and verify that:
+     *   1) the call routes through the TABLE path (Authorizer.checkTableAction),
+     *      consistent with the Hive Ranger service type which models views as TABLE;
+     *   2) on deny, the error is reported as ObjectType.TABLE, not VIEW.
+     */
+    @Test
+    public void testCheckViewPrivilegeConnectorViewGoesThroughTablePath() {
+        // Ranger denies every request so we can observe how the failure is reported
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(false);
+                return result;
+            }
+        };
+
+        // Force the existing internal view to behave like a connector (Hive/Iceberg/Paimon) view
+        new MockUp<View>() {
+            @Mock
+            public boolean isConnectorView() {
+                return true;
+            }
+
+            @Mock
+            public boolean isSecurity() {
+                // Connector view branch returns early; security must not interfere.
+                return false;
+            }
+        };
+
+        AccessControlProvider provider = Authorizer.getInstance();
+        provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new RangerStarRocksAccessController());
+
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(new UserIdentity("denied_user", "%"));
+            ctx.setDatabase("db");
+            ctx.setThreadLocalInfo();
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+            View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_view");
+            Assertions.assertTrue(view.isConnectorView(),
+                    "MockUp must make isConnectorView() return true");
+
+            TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    "db", "test_view");
+
+            ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () ->
+                    ColumnPrivilege.checkViewPrivilege(ctx, tableName, view));
+
+            // Connector view must surface as TABLE (Hive Ranger service type consistency),
+            // not as VIEW.
+            String msg = ex.getMessage();
+            Assertions.assertTrue(msg.contains("on TABLE"),
+                    "connector view failure must be reported with ObjectType.TABLE, got: " + msg);
+            Assertions.assertTrue(msg.contains("test_view"),
+                    "connector view failure must mention the view name 'test_view', got: " + msg);
+            Assertions.assertFalse(msg.contains("on VIEW"),
+                    "connector view must NOT be reported as ObjectType.VIEW, got: " + msg);
+        } finally {
+            provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
+        }
+    }
+
+    /**
+     * Regression test for the silent-drop minor item: when ScanColumnCollector hits a
+     * scan node whose Table is not present in tableObjToTableName (which happens after
+     * a view/MV is expanded by the optimizer), it must skip silently instead of
+     * inserting a {@code null} key into scanColumns or throwing NPE. Privilege for
+     * views/MVs is handled separately by checkViewPrivilege / checkMaterializedViewAction.
+     */
+    @Test
+    public void testScanColumnCollectorSkipsNullTableName() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        Table t1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+
+        // Empty mapping — simulates the case where the scan table was expanded from a
+        // view/MV and was therefore never recorded by TableNameCollector.
+        Map<Table, TableName> emptyTableObjToTableName = new HashMap<>();
+        Map<TableName, Set<String>> scanColumns = new HashMap<>();
+
+        ColumnPrivilege.ScanColumnCollector collector =
+                new ColumnPrivilege.ScanColumnCollector(emptyTableObjToTableName, scanColumns);
+
+        OptExpression scanExpr = new OptExpression(new LogicalOlapScanOperator(t1));
+
+        Assertions.assertDoesNotThrow(() -> collector.visitLogicalTableScan(scanExpr, null));
+
+        Assertions.assertTrue(scanColumns.isEmpty(),
+                "scanColumns must stay empty when tableObjToTableName has no entry; "
+                        + "must NOT silently insert a null key. Got: " + scanColumns);
+        Assertions.assertFalse(scanColumns.containsKey(null),
+                "scanColumns must NOT contain a null key (silent drop guard). Got: " + scanColumns);
     }
 }

@@ -15,7 +15,6 @@
 package com.starrocks.authorization;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
@@ -24,7 +23,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
@@ -50,6 +48,8 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -58,6 +58,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class ColumnPrivilege {
+    private static final Logger LOG = LogManager.getLogger(ColumnPrivilege.class);
+
     public static void check(ConnectContext context, QueryStatement stmt, List<TableName> excludeTables) {
         if (stmt == null) {
             return;
@@ -190,34 +192,53 @@ public class ColumnPrivilege {
      * For a security view, the user must have SELECT privilege on the view itself AND
      * all the underlying tables/views referenced by the view. This rule applies to
      * both internal access controllers and external access controllers (e.g. Ranger).
-     * Connector views are treated as tables for privilege checking.
+     *
+     * Note on Ranger service type consistency:
+     *   - With the StarRocks Ranger service type, views are a first-class object and
+     *     are checked via {@code checkViewAction} (object-level on VIEW).
+     *   - With the Hive Ranger service type, Hive views are modeled as TABLE objects,
+     *     so a connector view is treated as a table for privilege checking
+     *     (see the {@code isConnectorView()} branch below).
+     * This keeps the privilege model aligned with the underlying Ranger object type.
+     *
+     * Note on column-level granularity for security views:
+     *   For a security view we re-check the view's underlying query statement so that
+     *   every base table reached through the view is checked at the same granularity
+     *   it would be if it were referenced directly (i.e. column-level under Ranger).
+     *   Otherwise the granularity would drift with reference depth and a user without
+     *   column access on t1.c1 but with table access on t1 could read t1.c1 indirectly
+     *   through a security view, effectively bypassing column-level policies.
      */
     public static void checkViewPrivilege(ConnectContext context, TableName tableName, View view) {
-        try {
-            // for privilege checking, treat connector view as table
-            if (view.isConnectorView()) {
+        // For privilege checking, treat connector view as table to stay consistent with
+        // the Hive Ranger service type, where Hive views are modeled as TABLE objects.
+        if (view.isConnectorView()) {
+            try {
                 Authorizer.checkTableAction(context, tableName, PrivilegeType.SELECT);
-                return;
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
             }
+            return;
+        }
 
-            if (view.isSecurity()) {
-                List<TableName> allTables = view.getTableRefs();
-                for (TableName t : allTables) {
-                    BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .getBasicTable(context, t.getCatalog(), t.getDb(), t.getTbl());
-                    if (basicTable.isOlapView()) {
-                        View subView = (View) basicTable;
-                        QueryStatement queryStatement = subView.getQueryStatement();
-                        Analyzer.analyze(queryStatement, context);
-                        Authorizer.check(queryStatement, context);
-                    } else if (basicTable.isMaterializedView()) {
-                        Authorizer.checkMaterializedViewAction(context, t, PrivilegeType.SELECT);
-                    } else {
-                        Authorizer.checkTableAction(context, t, PrivilegeType.SELECT);
-                    }
-                }
-            }
+        // For a security view, recursively check the view's query statement so all base
+        // tables (direct refs and transitive refs through intermediate views) are
+        // verified at column granularity uniformly. Failures from base objects will be
+        // reported by the recursive checks themselves with the correct ObjectType
+        // (TABLE / MATERIALIZED_VIEW / VIEW), so we deliberately do NOT wrap this call
+        // in a catch that re-reports as VIEW.
+        if (view.isSecurity()) {
+            QueryStatement queryStatement = view.getQueryStatement();
+            Analyzer.analyze(queryStatement, context);
+            Authorizer.check(queryStatement, context);
+        }
 
+        // Finally check SELECT privilege on the view object itself. Only failures here
+        // should be reported as ObjectType.VIEW.
+        try {
             Authorizer.checkViewAction(context, tableName, PrivilegeType.SELECT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -251,6 +272,21 @@ public class ColumnPrivilege {
             LogicalScanOperator operator = (LogicalScanOperator) node.getOp();
             Table table = operator.getTable();
             TableName tableName = tableObjToTableName.get(table);
+
+            // Views and materialized views are intentionally not validated through
+            // scanColumns: their base tables are expanded by the optimizer, so the
+            // scan node's table is the underlying base table rather than the
+            // view/MV that appeared in the original AST. In that case
+            // tableObjToTableName.get(...) returns null because TableNameCollector
+            // only records tables/views referenced directly in the AST. View/MV
+            // privileges are handled via checkViewPrivilege /
+            // checkMaterializedViewAction instead, so we silently skip here.
+            if (tableName == null) {
+                LOG.debug("skip column privilege collection for scan table {} that is not " +
+                        "directly referenced in the AST (likely expanded from a view or MV)",
+                        table == null ? "null" : table.getName());
+                return null;
+            }
 
             if (!scanColumns.containsKey(tableName)) {
                 scanColumns.put(tableName, new HashSet<>());
