@@ -23,7 +23,6 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -461,7 +460,7 @@ public class HiveMetaClient {
                 partitionStats.putAll(client.hiveClient.getPartitionColumnStatistics(dbName, tableName, parts, columnNames));
             }
             LOG.info("Succeed to getPartitionColumnStatistics on [{}.{}] with {} times retry, slice size is {}," +
-                            " partName size is {}", dbName, tableName, retryNum, subListSize, partNames.size());
+                    " partName size is {}", dbName, tableName, retryNum, subListSize, partNames.size());
             return partitionStats;
         } catch (TTransportException te) {
             if (subListNum > 1) {
