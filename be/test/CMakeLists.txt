@@ -84,6 +84,11 @@ set(EXEC_FILES
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/pipeline/nljoin_probe_operator_test.cpp
+        ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
+>>>>>>> 78f3c0c02a ([BugFix] Fix NLJoin crash from build-side column nullability mismatch (#75343))
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
