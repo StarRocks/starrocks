@@ -345,7 +345,7 @@ public class MaterializedViewHandler extends AlterHandler {
         // get short key column count
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
         // get timeout
-        long timeoutMs = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second) * 1000;
+        long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
 
         // create rollup job
         long dbId = db.getId();
@@ -384,7 +384,7 @@ public class MaterializedViewHandler extends AlterHandler {
             AlterJobV2 mvJob = mvJobBuilder
                     .withJobId(jobId)
                     .withDbId(dbId)
-                    .withTimeoutSeconds(timeoutMs * 1000)
+                    .withTimeoutSeconds(timeoutSecond)
                     .withBaseIndexMetaId(baseIndexMetaId)
                     .withMvIndexMetaId(mvIndexMetaId)
                     .withBaseIndexName(baseIndexName)
