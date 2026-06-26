@@ -15,12 +15,17 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeInfo;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -30,6 +35,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 public class LowCardinalityTest2 extends PlanTestBase {
@@ -2811,5 +2817,62 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  16 <-> DictDefine(15: c_user, [upper(<place-holder>)])\n" +
                 "  |  cardinality: 1", plan);
+    }
+
+    @Test
+    void testWindowSkewWithLowCardStringPassthrough() throws Exception {
+        starRocksAssert.withTable(
+                    "CREATE TABLE IF NOT EXISTS window_skew_lc (" +
+                            "  p int NULL, c varchar(50) NULL) " +
+                            "ENGINE=OLAP DUPLICATE KEY(p) " +
+                            "DISTRIBUTED BY HASH(p) BUCKETS 3 PROPERTIES (\"replication_num\"=\"1\");");
+        StatisticStorage prevStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        try {
+            connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
+            FeConstants.runningUnitTest = true;
+            if (!starRocksAssert.databaseExist("_statistics_")) {
+                StatisticsMetaManager m = new StatisticsMetaManager();
+                m.createStatisticsTablesForTest();
+            }
+            final OlapTable t = getOlapTable("window_skew_lc");
+            setTableStatistics(t, 1000);
+            CachedStatisticStorage storage = new CachedStatisticStorage();
+            final List<String> cols = List.of("p", "c");
+            storage.refreshColumnStatistics(t, cols, true);
+            storage.addColumnStatistic(t, "c", ColumnStatistic.builder().setNullsFraction(0.3).build());
+            storage.addColumnStatistic(t, "p", ColumnStatistic.builder().setNullsFraction(0.3).build());
+            storage.getColumnStatistics(t, cols);
+            connectContext.getGlobalStateMgr().setStatisticStorage(storage);
+
+            String sql = """
+                    WITH T AS (
+                      SELECT
+                        c,
+                        ROW_NUMBER()  over (PARTITION BY (CASE WHEN p IS NULL THEN 1 ELSE 0 END) ORDER BY p DESC )
+                      FROM
+                        window_skew_lc
+                    )
+                    SELECT c FROM T
+                    UNION ALL
+                    SELECT NULL FROM T
+                    """;
+
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "24:Decode\n" +
+                    "  |  <dict id 36> : <string id 21>\n" +
+                    "  |  cardinality: 2000\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [36, INT, true]\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [37: c, INT, true]\n" +
+                    "  |      [39: expr, INT, true]");
+        } finally {
+            FeConstants.runningUnitTest = false;
+            starRocksAssert.dropTable("window_skew_lc");
+            connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
+            connectContext.getGlobalStateMgr().setStatisticStorage(prevStorage);
+        }
     }
 }
