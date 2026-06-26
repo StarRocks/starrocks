@@ -10,8 +10,8 @@ import subprocess
 io_netty_clean_version = "4.1.135.Final"
 
 fixed_poms = [
-    ("com.fasterxml.jackson.core:jackson-core", "2.21.1"),
-    ("com.fasterxml.jackson.core:jackson-databind", "2.21.1"),
+    ("com.fasterxml.jackson.core:jackson-core", "2.21.4"),
+    ("com.fasterxml.jackson.core:jackson-databind", "2.21.4"),
     ("io.netty:netty-handler", io_netty_clean_version),
     ("io.netty:netty-codec", io_netty_clean_version),
     ("io.netty:netty-codec-dns", io_netty_clean_version),
