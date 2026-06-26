@@ -34,28 +34,17 @@
 
 #include "service/backend_base.h"
 
-#include <arrow/record_batch.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include <memory>
-
-#include "base/concurrency/blocking_queue.hpp"
-#include "base/uid_util.h"
-#include "column/arrow/record_batch_converter.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/result/result_buffer_mgr.h"
-#include "compute_env/result/result_queue_mgr.h"
-#include "gutil/strings/substitute.h"
+#include "orchestration/external_scan_orchestrator.h"
 #include "orchestration/orchestration_env.h"
-#include "orchestration/query_orchestrator.h"
 #include "orchestration/routine_load_task_executor.h"
 #include "runtime/exec_env.h"
-#include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks {
 
@@ -132,95 +121,22 @@ void BackendServiceBase::finish_stream_load_channel(TStatus& t_status, const TSt
     return Status::OK().to_thrift(&t_status);
 }
 
-/*
- * 1. validate user privilege (todo)
- * 2. QueryOrchestrator#exec_external_plan_fragment
- */
 void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) {
-    TStatus t_status;
-    TUniqueId fragment_instance_id = generate_uuid();
-    std::shared_ptr<ScanContext> p_context;
-    (void)_exec_env->external_scan_context_mgr()->create_scan_context(&p_context);
-    p_context->fragment_instance_id = fragment_instance_id;
-    p_context->offset = 0;
-    p_context->last_access_time = time(nullptr);
-    if (params.__isset.keep_alive_min) {
-        p_context->keep_alive_min = params.keep_alive_min;
-    } else {
-        p_context->keep_alive_min = 5;
-    }
-    std::vector<TScanColumnDesc> selected_columns;
-    // start the scan procedure
-    orchestration::QueryOrchestrator query_orchestrator(_exec_env);
-    Status exec_st = query_orchestrator.exec_external_plan_fragment(params, fragment_instance_id, &selected_columns,
-                                                                    &(p_context->query_id));
-    exec_st.to_thrift(&t_status);
-    //return status
-    // t_status.status_code = TStatusCode::OK;
-    result_.status = t_status;
-    result_.__set_context_id(p_context->context_id);
-    result_.__set_selected_columns(selected_columns);
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->external_scan_orchestrator() != nullptr);
+    _orchestration_env->external_scan_orchestrator()->open_scanner(result_, params);
 }
 
-// fetch result from polling the queue, should always maintaince the context offset, otherwise inconsistent result
 void BackendServiceBase::get_next(TScanBatchResult& result_, const TScanNextBatchParams& params) {
-    std::string context_id = params.context_id;
-    u_int64_t offset = params.offset;
-    TStatus t_status;
-    std::shared_ptr<ScanContext> context;
-    Status st = _exec_env->external_scan_context_mgr()->get_scan_context(context_id, &context);
-    if (!st.ok()) {
-        st.to_thrift(&t_status);
-        result_.status = t_status;
-        return;
-    }
-    if (offset != context->offset) {
-        LOG(ERROR) << "getNext error: context offset [" << context->offset << " ]"
-                   << " ,client offset [ " << offset << " ]";
-        // invalid offset
-        std::string error_msg = strings::Substitute("context_id=$0, send_offset=$1, context_offset=$2", context_id,
-                                                    offset, context->offset);
-        Status st = Status::NotFound(error_msg);
-        st.to_thrift(&t_status);
-        result_.status = t_status;
-    } else {
-        // during accessing, should disabled last_access_time
-        context->last_access_time = -1;
-        TUniqueId fragment_instance_id = context->fragment_instance_id;
-        std::shared_ptr<arrow::RecordBatch> record_batch;
-        bool eos;
-
-        st = _exec_env->result_queue_mgr()->fetch_result(fragment_instance_id, &record_batch, &eos);
-        if (st.ok()) {
-            result_.__set_eos(eos);
-            if (!eos) {
-                std::string record_batch_str;
-                st = serialize_record_batch(*record_batch, &record_batch_str);
-                st.to_thrift(&t_status);
-                if (st.ok()) {
-                    // avoid copy large string
-                    result_.rows = std::move(record_batch_str);
-                    // set __isset
-                    result_.__isset.rows = true;
-                    context->offset += record_batch->num_rows();
-                }
-            }
-        } else {
-            LOG(WARNING) << "fragment_instance_id [" << print_id(fragment_instance_id) << "] fetch result status ["
-                         << st.to_string() + "]";
-            st.to_thrift(&t_status);
-            result_.status = t_status;
-        }
-    }
-    context->last_access_time = time(nullptr);
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->external_scan_orchestrator() != nullptr);
+    _orchestration_env->external_scan_orchestrator()->get_next(result_, params);
 }
 
 void BackendServiceBase::close_scanner(TScanCloseResult& result_, const TScanCloseParams& params) {
-    std::string context_id = params.context_id;
-    TStatus t_status;
-    Status st = _exec_env->external_scan_context_mgr()->clear_scan_context(context_id);
-    st.to_thrift(&t_status);
-    result_.status = t_status;
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->external_scan_orchestrator() != nullptr);
+    _orchestration_env->external_scan_orchestrator()->close_scanner(result_, params);
 }
 
 } // namespace starrocks

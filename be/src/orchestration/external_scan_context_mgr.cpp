@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/external_scan_context_mgr.h"
+#include "orchestration/external_scan_context_mgr.h"
 
 #include <chrono>
 #include <functional>
@@ -52,7 +52,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/runtime_metrics.h"
 
-namespace starrocks {
+namespace starrocks::orchestration {
 
 ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics) : _exec_env(exec_env) {
     // start the reaper thread for gc the expired context
@@ -184,4 +184,4 @@ void ExternalScanContextMgr::gc_expired_context() {
     }
 #endif
 }
-} // namespace starrocks
+} // namespace starrocks::orchestration

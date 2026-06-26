@@ -71,7 +71,6 @@
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/diagnose_daemon.h"
-#include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/lookup_stream_mgr.h"
@@ -149,7 +148,6 @@ void ExecEnv::_refresh_service_contexts() {
     _lake_services.pk_index_memtable_flush_thread_pool = global_env->pk_index_memtable_flush_thread_pool();
     _lake_services.lake_partial_update_thread_pool = global_env->lake_partial_update_thread_pool();
 
-    _runtime_services.external_scan_context_mgr = _external_scan_context_mgr;
     _runtime_services.stream_mgr = stream_mgr();
     _runtime_services.lookup_dispatcher_mgr = _lookup_dispatcher_mgr;
     _runtime_services.result_mgr = result_mgr();
@@ -210,7 +208,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _process_metrics_registry = process_metrics_registry;
     auto* process_metrics = process_metrics_registry->root_registry();
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
-    _external_scan_context_mgr = new ExternalScanContextMgr(this, process_metrics);
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
@@ -600,7 +597,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
-    SAFE_DELETE(_external_scan_context_mgr);
     StorageEnv::GetInstance()->destroy();
     SAFE_DELETE(_diagnose_daemon);
     DCHECK(_global_env != nullptr);

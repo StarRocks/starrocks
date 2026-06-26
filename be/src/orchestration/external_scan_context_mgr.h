@@ -51,6 +51,8 @@ namespace starrocks {
 
 class MetricRegistry;
 
+namespace orchestration {
+
 struct ScanContext {
 public:
     TUniqueId query_id;
@@ -87,4 +89,5 @@ private:
     bool _closing = false;
 };
 
+} // namespace orchestration
 } // namespace starrocks
