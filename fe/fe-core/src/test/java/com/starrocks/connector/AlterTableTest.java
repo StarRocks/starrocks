@@ -282,6 +282,80 @@ public class AlterTableTest extends TableTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCombinedAddAndDropColumn() throws Exception {
+        // Regression test for StarRocksTest issue #11315: a single ALTER carrying multiple
+        // schema clauses (e.g. ADD a, ADD b, DROP c) previously failed with
+        // "Cannot add column, name already exists: ..." because the executor re-ran every
+        // previously appended action on each subsequent visit() call.
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableH;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        // Use a unique table name so we don't share the IcebergMetadata.tables cache
+        // with the other tests in this class (which all reuse "srTableName" backed by
+        // mockedNativeTableB).
+        String sql = "alter table iceberg_catalog.db.combinedAlterTestTable "
+                + "add column multi_col_a varchar(32), "
+                + "add column multi_col_b int, "
+                + "drop column k5";
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assertions.assertEquals(3, stmt.getAlterClauseList().size());
+
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
+
+        mockedNativeTableH.refresh();
+        org.apache.iceberg.Schema schema = mockedNativeTableH.schema();
+        Assertions.assertNotNull(schema.findField("multi_col_a"));
+        Assertions.assertNotNull(schema.findField("multi_col_b"));
+        Assertions.assertNull(schema.findField("k5"));
+    }
+
+    @Test
+    public void testReplacePartitionColumn() throws Exception {
+        String sql = "alter table iceberg_catalog.db.srTableName replace partition column day(dt) with month(dt)";
+        AlterTableStmt stmt =
+                (AlterTableStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, starRocksAssert.getCtx());
+        Assertions.assertEquals(1, stmt.getAlterClauseList().size());
+        Assertions.assertTrue(stmt.getAlterClauseList().get(0) instanceof ReplacePartitionColumnClause);
+        ReplacePartitionColumnClause clause = (ReplacePartitionColumnClause) stmt.getAlterClauseList().get(0);
+        Assertions.assertTrue(clause.getOldPartitionExpr() instanceof FunctionCallExpr);
+        Assertions.assertTrue(clause.getNewPartitionExpr() instanceof FunctionCallExpr);
+        Assertions.assertEquals("day", ((FunctionCallExpr) clause.getOldPartitionExpr()).getFunctionName());
+        Assertions.assertEquals("month", ((FunctionCallExpr) clause.getNewPartitionExpr()).getFunctionName());
+    }
+
+    @Test
+    public void testReplacePartitionColumnByFieldName() throws Exception {
+        String sql = "alter table iceberg_catalog.db.srTableName replace partition column dt_day with month(dt)";
+        AlterTableStmt stmt =
+                (AlterTableStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, starRocksAssert.getCtx());
+        Assertions.assertEquals(1, stmt.getAlterClauseList().size());
+        Assertions.assertTrue(stmt.getAlterClauseList().get(0) instanceof ReplacePartitionColumnClause);
+        ReplacePartitionColumnClause clause = (ReplacePartitionColumnClause) stmt.getAlterClauseList().get(0);
+        // field name "dt_day" is parsed as a SlotRef
+        Assertions.assertTrue(clause.getOldPartitionExpr() instanceof SlotRef);
+        Assertions.assertEquals("dt_day", ((SlotRef) clause.getOldPartitionExpr()).getColumnName());
+        Assertions.assertTrue(clause.getNewPartitionExpr() instanceof FunctionCallExpr);
+        Assertions.assertEquals("month", ((FunctionCallExpr) clause.getNewPartitionExpr()).getFunctionName());
+    }
+
+    @Test
+>>>>>>> 4c1536df23 ([BugFix] Fix combined ALTER TABLE on external Iceberg re-executing queued actions (#74036))
     public void testAlterView() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
