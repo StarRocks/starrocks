@@ -58,15 +58,15 @@ class TTransmitDataResult;
 class TExportTaskRequest;
 class TExportStatusResult;
 
-namespace query_orchestration {
-class QueryOrchestrationEnv;
+namespace orchestration {
+class OrchestrationEnv;
 }
 
 // This class just forward rpc requests to actual handlers, used
 // to bind multiple services on single port.
 class BackendServiceBase : public BackendServiceIf {
 public:
-    BackendServiceBase(ExecEnv* exec_env, query_orchestration::QueryOrchestrationEnv* query_orchestration_env);
+    BackendServiceBase(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env);
 
     ~BackendServiceBase() override = default;
 
@@ -130,7 +130,7 @@ public:
 private:
     Status start_plan_fragment_execution(const TExecPlanFragmentParams& exec_params);
     ExecEnv* _exec_env;
-    [[maybe_unused]] query_orchestration::QueryOrchestrationEnv* _query_orchestration_env;
+    [[maybe_unused]] orchestration::OrchestrationEnv* _orchestration_env;
 };
 
 } // namespace starrocks

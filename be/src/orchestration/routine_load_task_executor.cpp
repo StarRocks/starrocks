@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "query_orchestration/routine_load_task_executor.h"
+#include "orchestration/routine_load_task_executor.h"
 
 #include <functional>
 #include <memory>
@@ -53,7 +53,7 @@
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
-namespace starrocks::query_orchestration {
+namespace starrocks::orchestration {
 
 namespace {
 
@@ -560,4 +560,4 @@ void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& 
     }
 }
 
-} // namespace starrocks::query_orchestration
+} // namespace starrocks::orchestration

@@ -266,7 +266,7 @@ set(EXEC_FILES
         ./runtime/batch_write/isomorphic_batch_write_test.cpp
         ./runtime/batch_write/txn_state_cache_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
-        #./query_orchestration/routine_load_task_executor_test.cpp
+        #./orchestration/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
@@ -345,7 +345,7 @@ add_subdirectory(storage_primitive)
 add_subdirectory(storage_base)
 add_subdirectory(runtime)
 add_subdirectory(compute_env)
-add_subdirectory(query_orchestration)
+add_subdirectory(orchestration)
 add_subdirectory(data_workflows)
 add_subdirectory(exprs)
 add_subdirectory(io)

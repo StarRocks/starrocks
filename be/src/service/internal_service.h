@@ -54,14 +54,14 @@ namespace starrocks {
 class TExecPlanFragmentParams;
 class ExecEnv;
 
-namespace query_orchestration {
-class QueryOrchestrationEnv;
+namespace orchestration {
+class OrchestrationEnv;
 }
 
 template <typename T>
 class PInternalServiceImplBase : public T {
 public:
-    PInternalServiceImplBase(ExecEnv* exec_env, query_orchestration::QueryOrchestrationEnv* query_orchestration_env);
+    PInternalServiceImplBase(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env);
     ~PInternalServiceImplBase() override;
 
     void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
@@ -256,7 +256,7 @@ private:
 
 protected:
     ExecEnv* _exec_env;
-    query_orchestration::QueryOrchestrationEnv* _query_orchestration_env;
+    orchestration::OrchestrationEnv* _orchestration_env;
 };
 
 } // namespace starrocks

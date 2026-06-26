@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "query_orchestration/fragment_executor.h"
+#include "orchestration/fragment_executor.h"
 
 #include <gtest/gtest.h>
 
@@ -29,7 +29,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
-namespace starrocks::query_orchestration {
+namespace starrocks::orchestration {
 
 using pipeline::QueryContext;
 
@@ -144,4 +144,4 @@ TEST_F(FragmentExecutorPartitionTest, PartitionDescriptorOutlivesFragmentPool) {
     (void)partition->thrift_partition_key_exprs().size();
 }
 
-} // namespace starrocks::query_orchestration
+} // namespace starrocks::orchestration

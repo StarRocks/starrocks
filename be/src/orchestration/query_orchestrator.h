@@ -14,35 +14,28 @@
 
 #pragma once
 
-#include <memory>
+#include <vector>
 
 #include "common/status.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 
 class ExecEnv;
-class MetricRegistry;
 
-namespace query_orchestration {
+namespace orchestration {
 
-class RoutineLoadTaskExecutor;
-
-class QueryOrchestrationEnv {
+class QueryOrchestrator {
 public:
-    QueryOrchestrationEnv();
-    ~QueryOrchestrationEnv();
+    explicit QueryOrchestrator(ExecEnv* exec_env);
 
-    Status init(ExecEnv* exec_env, MetricRegistry* metrics);
-    void stop();
-    void destroy();
-
-    RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor.get(); }
-    const RoutineLoadTaskExecutor* routine_load_task_executor() const { return _routine_load_task_executor.get(); }
+    Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
+                                       std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id);
 
 private:
-    std::unique_ptr<RoutineLoadTaskExecutor> _routine_load_task_executor;
-    bool _routine_load_task_executor_started = false;
+    ExecEnv* _exec_env;
 };
 
-} // namespace query_orchestration
+} // namespace orchestration
 } // namespace starrocks

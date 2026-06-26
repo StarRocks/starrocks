@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "query_orchestration/query_orchestration_env.h"
+#include "orchestration/orchestration_env.h"
 
 #include <memory>
 
 #include "common/logging.h"
-#include "query_orchestration/routine_load_task_executor.h"
+#include "orchestration/routine_load_task_executor.h"
 
-namespace starrocks::query_orchestration {
+namespace starrocks::orchestration {
 
-QueryOrchestrationEnv::QueryOrchestrationEnv() = default;
+OrchestrationEnv::OrchestrationEnv() = default;
 
-QueryOrchestrationEnv::~QueryOrchestrationEnv() {
+OrchestrationEnv::~OrchestrationEnv() {
     destroy();
 }
 
-Status QueryOrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
+Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
     DCHECK(exec_env != nullptr);
 
     _routine_load_task_executor = std::make_unique<RoutineLoadTaskExecutor>(exec_env);
@@ -37,16 +37,16 @@ Status QueryOrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
     return Status::OK();
 }
 
-void QueryOrchestrationEnv::stop() {
+void OrchestrationEnv::stop() {
     if (_routine_load_task_executor != nullptr && _routine_load_task_executor_started) {
         _routine_load_task_executor->stop();
         _routine_load_task_executor_started = false;
     }
 }
 
-void QueryOrchestrationEnv::destroy() {
+void OrchestrationEnv::destroy() {
     stop();
     _routine_load_task_executor.reset();
 }
 
-} // namespace starrocks::query_orchestration
+} // namespace starrocks::orchestration
