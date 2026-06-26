@@ -284,13 +284,63 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void pre1970DateFallsBackToDataTier() throws Exception {
-        // epochDay -1 = 1969-12-31 < 1970-01-01: outside the safe window (pre-1970 +
-        // pre-1582 + year-0 parity traps). Meta tier must defer to data tier.
+    void pre1970DateIsAccepted() throws Exception {
+        // epochDay -1 = 1969-12-31. A DATE has no sub-second part and BE's day-of-epoch load is
+        // proleptic-Gregorian end to end, so a pre-1970 DATE boundary is FE/BE-identical and stays
+        // on the meta tier (only DATETIME keeps the 1970 lower bound).
         Path parquetPath = writeParquet(
                 "message schema { required int32 event_day (DATE); }",
                 /*rowCount=*/ 2,
                 (group, rowIndex) -> group.append("event_day", -1 - rowIndex));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("1969-12-31",
+                rowGroupStatistics.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void pre1582DateIsAccepted() throws Exception {
+        // epochDay -171499 = 1500-06-15, before the 1582 Gregorian cutover. BE's calendar is
+        // proleptic Gregorian (no Julian switch), so this still aligns and stays on the meta tier.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", -171499));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("1500-06-15",
+                rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void minSupportedDateIsAccepted() throws Exception {
+        // epochDay -719162 = 0001-01-01, the lower edge of the DATE window — accepted.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", -719162));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("0001-01-01",
+                rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void belowMinSupportedDateFallsBackToDataTier() throws Exception {
+        // epochDay -719163 = 0000-12-31, below 0001-01-01: outside the DATE window → data tier.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", -719163));
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
