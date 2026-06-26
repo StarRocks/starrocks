@@ -274,11 +274,15 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(size_t chunk_size) const {
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
     }
+    // A null _curr_build_chunk means the previous round just consumed all build chunks, so use the
+    // first build chunk to decide column nullability.
+    // NOTE: this can still be wrong if column info differs between build chunks.
+    Chunk* ref_build_chunk = _num_build_chunks() > 0 ? _cross_join_context->get_build_chunk(0) : _curr_build_chunk;
     for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
         SlotDescriptor* slot = _col_types[i];
         bool nullable = right_to_nullable | _col_types[i]->is_nullable();
-        if (_curr_build_chunk) {
-            nullable |= _curr_build_chunk->is_column_nullable(slot->id());
+        if (ref_build_chunk) {
+            nullable |= ref_build_chunk->is_column_nullable(slot->id());
         }
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
