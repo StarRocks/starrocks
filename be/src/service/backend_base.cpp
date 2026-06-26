@@ -41,6 +41,7 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/uid_util.h"
+#include "column/arrow/record_batch_converter.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
@@ -55,7 +56,6 @@
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "storage/storage_engine.h"
-#include "util/arrow/row_batch.h"
 
 namespace starrocks {
 

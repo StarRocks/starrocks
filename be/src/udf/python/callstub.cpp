@@ -24,6 +24,7 @@
 #include "base/base64.h"
 #include "base/utility/arrow_utils.h"
 #include "base/utility/defer_op.h"
+#include "column/arrow/type_to_arrow_converter.h"
 #include "common/config_udf_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -33,7 +34,6 @@
 #include "rapidjson/writer.h"
 #include "types/type_descriptor.h"
 #include "udf/python/env.h"
-#include "util/arrow/row_batch.h"
 
 #define RETURN_IF_ARROW_ERROR(expr)    \
     do {                               \

@@ -51,6 +51,8 @@ ADD_BE_LIB(ColumnCore
         arrow/arrow_to_starrocks_converter.cpp
         arrow/arrow_to_json_converter.cpp
         arrow/column_to_arrow_converter.cpp
+        arrow/type_to_arrow_converter.cpp
+        arrow/record_batch_converter.cpp
         datum_convert.cpp
         logical_type_size.cpp
         runtime_type_traits.cpp
