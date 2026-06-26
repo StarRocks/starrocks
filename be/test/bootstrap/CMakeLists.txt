@@ -30,4 +30,5 @@ set(BOOTSTRAP_TEST_LINK_LIBS
 
 add_executable(bootstrap_test bootstrap_test.cpp)
 target_link_libraries(bootstrap_test ${BOOTSTRAP_TEST_LINK_LIBS} gtest_main)
+target_link_be_test_cxa_throw_wrap(bootstrap_test)
 set_target_properties(bootstrap_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
