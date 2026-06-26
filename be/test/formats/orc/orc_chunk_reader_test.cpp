@@ -30,6 +30,7 @@
 #include "exprs/is_null_predicate.h"
 #include "formats/orc/memory_stream/MemoryInputStream.hh"
 #include "formats/orc/memory_stream/MemoryOutputStream.hh"
+#include "formats/orc/orc_min_max_decoder.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
@@ -848,7 +849,8 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
 
 Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
                                                           const std::string& reader_tz, const std::string& write_tz,
-                                                          const Buffer<int64_t>& values, const bool isInstant) {
+                                                          const Buffer<int64_t>& values, const bool isInstant,
+                                                          const Buffer<int64_t>& nanos = {}) {
     const char* filename = "orc_scanner_test_timestamp.orc";
     std::filesystem::remove(filename);
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(filename);
@@ -870,7 +872,7 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
 
     for (int i = 0; i < values.size(); i++) {
         c0->data[i] = values[i];
-        c0->nanoseconds[i] = 0;
+        c0->nanoseconds[i] = nanos.empty() ? 0 : nanos[i];
     }
 
     root->numElements = values.size();
@@ -972,6 +974,85 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
             EXPECT_EQ(o, exp_values[i]);
         }
     }
+}
+
+// A pre-1970 ORC TIMESTAMP carries a sub-second component: liborc hands the reader a floored
+// seconds plus nanoseconds in [0, 1e9). The before-epoch conversion used to drop it (passed 0
+// microseconds); verify it is now preserved on both the plain and the instant (timestamp with
+// local time zone) read paths, while whole-second negatives and post-1970 values are unchanged.
+TEST_F(OrcChunkReaderTest, TestTimestampPreEpochSubSecond) {
+    // clang-format off
+    const Buffer<int64_t> orc_values = {
+            -152539200,  // 1965-03-02 12:00:00 UTC (pre-1970), half-second
+            -152539200,  // 1965-03-02 12:00:00 UTC (pre-1970), microsecond precision
+            -8444232248, // 1702-05-31 19:55:52 UTC (pre-1970), whole second
+            1621905520,  // 2021-05-25 01:18:40 UTC (post-1970, after-epoch path)
+    };
+    const Buffer<int64_t> orc_nanos = {500000000, 123456000, 0, 123456000};
+    // clang-format on
+    {
+        // Plain TIMESTAMP; reader == writer == UTC for a deterministic wall clock.
+        const Buffer<std::string> exp_values = {
+                "1965-03-02 12:00:00.500000",
+                "1965-03-02 12:00:00.123456",
+                "1702-05-31 19:55:52",
+                "2021-05-25 01:18:40.123456",
+        };
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "UTC", "UTC", orc_values, false,
+                                                      orc_nanos);
+        EXPECT_EQ(res.size(), orc_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            EXPECT_EQ(res[i].to_string(), exp_values[i]) << "index " << i;
+        }
+    }
+    {
+        // INSTANT (timestamp with local time zone): the reader-tz shift must compose with the
+        // preserved sub-second. Reuses the wall clock from TestTimestamp's instant case.
+        const Buffer<int64_t> instant_values = {-8444232248};
+        const Buffer<int64_t> instant_nanos = {500000000};
+        const Buffer<std::string> exp_values = {"1702-06-01 04:01:35.500000"};
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC",
+                                                      instant_values, true, instant_nanos);
+        EXPECT_EQ(res.size(), instant_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            EXPECT_EQ(res[i].to_string(), exp_values[i]) << "index " << i;
+        }
+    }
+}
+
+// The ORC stripe min/max statistics decoder shares the conversion helper with the data load path.
+// For a pre-1970 (negative-epoch) bound it intentionally drops the sub-second, keeping predicate
+// pushdown bounds identical to before the load-path sub-second fix. Verify a pre-1970 timestamp
+// stat with a sub-second decodes to its whole second.
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderPreEpochTimestampDropsSubSecond) {
+    ORC_UNIQUE_PTR<orc::Type> orc_type = orc::createPrimitiveType(orc::TypeKind::TIMESTAMP);
+    orc::proto::ColumnStatistics stats;
+    auto* ts = stats.mutable_timestampstatistics();
+    ts->set_minimumutc(-152539200000); // 1965-03-02 12:00:00.000 UTC (pre-1970), whole second
+    ts->set_maximumutc(-152539200000);
+    ts->set_minimumnanos(500000); // 500us sub-second that the before-epoch bound must drop
+    ts->set_maximumnanos(500000);
+
+    TypeDescriptor type(TYPE_DATETIME);
+    TDescriptorTableBuilder builder;
+    TTupleDescriptorBuilder tuple;
+    TSlotDescriptorBuilder slot_builder;
+    slot_builder.column_name("c0").type(type).id(0).nullable(false);
+    tuple.add_slot(slot_builder.build());
+    tuple.build(&builder);
+    DescriptorTbl* tbl = nullptr;
+    ASSERT_TRUE(DescriptorTbl::create(_runtime_state.get(), &_pool, builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                        .ok());
+    SlotDescriptor* slot = tbl->get_slot_descriptor(0);
+
+    auto min_col = ColumnHelper::create_column(type, false);
+    auto max_col = ColumnHelper::create_column(type, false);
+    ASSERT_TRUE(OrcMinMaxDecoder::decode(slot, orc_type.get(), stats, min_col.get(), max_col.get(), 0).ok());
+
+    EXPECT_EQ(down_cast<TimestampColumn*>(min_col.get())->get_data()[0].to_string(), "1965-03-02 12:00:00");
+    EXPECT_EQ(down_cast<TimestampColumn*>(max_col.get())->get_data()[0].to_string(), "1965-03-02 12:00:00");
 }
 
 /**
