@@ -155,7 +155,36 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         Assertions.assertTrue(k1Stat.getDistinctValuesCount() > 1.0,
                 "NDV must be > 1 even without Puffin or column stats");
         Assertions.assertEquals(ColumnStatistic.StatisticType.ESTIMATE, k1Stat.getType());
+        // type-fraction for INT: max(1, min(10000, 10000 * 0.3)) = 3000
         Assertions.assertEquals(3000.0, k1Stat.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testNdvFallback_singleRowTable_ndvNotExceedsRowCount() {
+        // rowCount=1: type-fraction gives max(1, min(1, 1*0.3))=1, not 2 (the old Math.max(2.0,...) bug)
+        IcebergFileStats fileStats = new IcebergFileStats(1);
+
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(mockedNativeTableB.currentSnapshot().snapshotId()));
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(version).build();
+
+        PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName(), params);
+        statisticProvider.putIcebergFileStats(key, fileStats);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        ColumnRefOperator k1Ref = new ColumnRefOperator(3, IntegerType.INT, "k1", true);
+        colRefToColumnMetaMap.put(k1Ref, new Column("k1", IntegerType.INT));
+
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
+        ColumnStatistic k1Stat = statistics.getColumnStatistic(k1Ref);
+
+        Assertions.assertTrue(k1Stat.getDistinctValuesCount() <= 1.0,
+                "NDV must not exceed rowCount=1");
     }
 
     @Test

@@ -344,7 +344,9 @@ public class IcebergStatisticProvider {
         Optional<Double> minVal = icebergStats.getMinValue(fieldId);
         Optional<Double> maxVal = icebergStats.getMaxValue(fieldId);
         if (minVal.isPresent() && maxVal.isPresent() && isRangeEstimableType(fieldId, icebergStats)) {
-            long range = Math.max(0L, (long) (maxVal.get() - minVal.get())) + 1;
+            double diff = maxVal.get() - minVal.get();
+            // Guard against overflow: very wide BIGINT ranges may exceed Long.MAX_VALUE as a double
+            long range = (diff >= (double) Long.MAX_VALUE) ? Long.MAX_VALUE : Math.max(0L, (long) diff) + 1;
             double rangeNdv = Math.min(rowCount, range);
             // Take min with size-based to stay conservative when range >> actual NDV
             double sizeNdv = estimateSizeBasedNdv(fieldId, icebergStats, rowCount);
@@ -365,8 +367,13 @@ public class IcebergStatisticProvider {
             return Math.max(1.0, Math.min(rowCount, sizeNdv));
         }
         // Tier 3: type-fraction last resort
+        Map<Integer, Type.PrimitiveType> typeMapping = icebergStats.getIdToTypeMapping();
+        Type.PrimitiveType type = typeMapping != null ? typeMapping.get(fieldId) : null;
+        if (type instanceof Types.BooleanType) {
+            return Math.min(2.0, rowCount);  // BOOLEAN has at most 2 distinct values
+        }
         double fraction = typeNdvFraction(fieldId, icebergStats);
-        return Math.max(2.0, rowCount * fraction);
+        return Math.max(1.0, Math.min(rowCount, rowCount * fraction));
     }
 
     private boolean isRangeEstimableType(Integer fieldId, IcebergFileStats icebergStats) {
@@ -375,7 +382,8 @@ public class IcebergStatisticProvider {
             return false;
         }
         Type.PrimitiveType type = typeMapping.get(fieldId);
-        return type instanceof Types.IntegerType
+        return type instanceof Types.BooleanType
+                || type instanceof Types.IntegerType
                 || type instanceof Types.LongType
                 || type instanceof Types.DateType
                 || type instanceof Types.TimestampType
