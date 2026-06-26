@@ -566,4 +566,95 @@ public class LocalMetaStoreTest {
 
         starRocksAssert.dropTable("test.add_pp_err");
     }
+
+    @Test
+    public void testAddPhysicalPartitionBatch() throws Exception {
+        // Create a non-partitioned table with random distribution
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_batch(k1 INT, k2 VARCHAR(50), v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_batch");
+        Assertions.assertEquals(1, table.getPhysicalPartitions().size());
+
+        long originalMutableBucketNum = table.getMutableBucketNum();
+        Partition partition = table.getPartitions().iterator().next();
+
+        // Batch-add 3 physical partitions, each with bucketNum = 4, in a single call
+        metastore.addPhysicalPartition("test", "add_pp_batch", null, 4, 3);
+        Assertions.assertEquals(4, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(4, partition.getSubPartitions().size());
+
+        // The 3 newly added (non-default) physical partitions should each have bucketNum = 4
+        int newPartitionCount = 0;
+        for (PhysicalPartition p : partition.getSubPartitions()) {
+            if (p.getId() != partition.getDefaultPhysicalPartition().getId()) {
+                newPartitionCount++;
+                Assertions.assertEquals(4, p.getBucketNum());
+            }
+        }
+        Assertions.assertEquals(3, newPartitionCount);
+
+        // The original table's mutableBucketNum must not be modified (concurrency-safe)
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_batch");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBatchCountOne() throws Exception {
+        // The 5-arg overload with count = 1 must behave exactly like the 4-arg form
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_one(k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_one");
+        Partition partition = table.getPartitions().iterator().next();
+
+        metastore.addPhysicalPartition("test", "add_pp_one", null, 6, 1);
+        Assertions.assertEquals(2, table.getPhysicalPartitions().size());
+
+        PhysicalPartition newPartition = partition.getSubPartitions().stream()
+                .filter(p -> p.getId() != partition.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(6, newPartition.getBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_one");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBatchCountValidation() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_count(k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 4 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+
+        // count < 1 is rejected
+        DdlException zeroEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_count", null, 0, 0));
+        Assertions.assertTrue(zeroEx.getMessage().contains("at least 1"));
+        Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_count", null, 0, -1));
+
+        // count > max_partitions_in_one_batch is rejected; the message names the config and value
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 2;
+            DdlException overEx = Assertions.assertThrows(DdlException.class, () ->
+                    metastore.addPhysicalPartition("test", "add_pp_count", null, 0, 3));
+            Assertions.assertTrue(overEx.getMessage().contains("max_partitions_in_one_batch"));
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_pp_count");
+    }
 }
