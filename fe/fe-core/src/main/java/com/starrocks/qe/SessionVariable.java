@@ -1141,6 +1141,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TOPN_FILTER_BACK_PRESSURE_MODE = "topn_filter_back_pressure_mode";
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
+    // TopN runtime-filter back-pressure tuning knobs for the lake/connector self-enabled path.
+    public static final String TOPN_FILTER_BACK_PRESSURE_IO_TASKS = "topn_filter_back_pressure_io_tasks";
+    public static final String ENABLE_TOPN_FILTER_BACK_PRESSURE =
+            "enable_topn_filter_back_pressure";
+    public static final String TOPN_BACK_PRESSURE_MAX_ROUNDS = "topn_back_pressure_max_rounds";
+    public static final String TOPN_BACK_PRESSURE_NUM_ROWS = "topn_back_pressure_num_rows";
+    public static final String TOPN_BACK_PRESSURE_THROTTLE_TIME_MS = "topn_back_pressure_throttle_time_ms";
+    public static final String TOPN_BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND_MS =
+            "topn_back_pressure_throttle_time_upper_bound_ms";
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
 
@@ -2260,6 +2269,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int backPressureMaxRounds = 3;
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
     private long backPressureThrottleTimeUpperBound = 300;
+
+    // Read-ahead IO-task cap while a TopN runtime filter is still pending; <=0 disables the clamp.
+    @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_IO_TASKS)
+    private int topnFilterBackPressureIoTasks = 1;
+    // Whether scans (both shared-nothing olap and shared-data lake/connector) self-enable TopN
+    // back-pressure even when the FE topn_filter_back_pressure_mode flag is 0.
+    @VarAttr(name = ENABLE_TOPN_FILTER_BACK_PRESSURE)
+    private boolean enableTopnFilterBackPressure = true;
+    // Throttle window parameters for the lake/connector self-enabled back-pressure path (tuned defaults).
+    @VarAttr(name = TOPN_BACK_PRESSURE_MAX_ROUNDS)
+    private int topnBackPressureMaxRounds = 8;
+    @VarAttr(name = TOPN_BACK_PRESSURE_NUM_ROWS)
+    private long topnBackPressureNumRows = 1024;
+    @VarAttr(name = TOPN_BACK_PRESSURE_THROTTLE_TIME_MS)
+    private long topnBackPressureThrottleTimeMs = 8;
+    @VarAttr(name = TOPN_BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND_MS)
+    private long topnBackPressureThrottleTimeUpperBoundMs = 100;
 
     // Determines whether the upper/lower function supports utf8,
     // introduced by https://github.com/StarRocks/starrocks/pull/56192
@@ -6130,6 +6156,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.backPressureThrottleTimeUpperBound = value;
     }
 
+    public int getTopnFilterBackPressureIoTasks() {
+        return this.topnFilterBackPressureIoTasks;
+    }
+
+    public boolean isEnableTopnFilterBackPressure() {
+        return this.enableTopnFilterBackPressure;
+    }
+
+    public int getTopnBackPressureMaxRounds() {
+        return this.topnBackPressureMaxRounds;
+    }
+
+    public long getTopnBackPressureNumRows() {
+        return this.topnBackPressureNumRows;
+    }
+
+    public long getTopnBackPressureThrottleTimeMs() {
+        return this.topnBackPressureThrottleTimeMs;
+    }
+
+    public long getTopnBackPressureThrottleTimeUpperBoundMs() {
+        return this.topnBackPressureThrottleTimeUpperBoundMs;
+    }
+
     public boolean isEnableDataCacheSharing() {
         return enableDataCacheSharing;
     }
@@ -6505,6 +6555,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setTopn_filter_back_pressure_io_tasks(topnFilterBackPressureIoTasks);
+        tResult.setEnable_topn_filter_back_pressure(enableTopnFilterBackPressure);
+        tResult.setTopn_back_pressure_max_rounds(topnBackPressureMaxRounds);
+        tResult.setTopn_back_pressure_num_rows(topnBackPressureNumRows);
+        tResult.setTopn_back_pressure_throttle_time_ms(topnBackPressureThrottleTimeMs);
+        tResult.setTopn_back_pressure_throttle_time_upper_bound_ms(topnBackPressureThrottleTimeUpperBoundMs);
         tResult.setEnable_dynamic_prune_scan_range(enableDynamicPruneScanRange);
         tResult.setUse_page_cache(usePageCache);
 

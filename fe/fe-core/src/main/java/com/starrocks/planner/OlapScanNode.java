@@ -215,6 +215,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     int backPressureMaxRounds = -1;
     long backPressureThrottleTime = -1;
     long backPressureNumRows = -1;
+    // Set when a TopN RF reaches this scan only across a non-aggregation deterministic pipeline breaker
+    // (blocking sort, analytic/window). Sent to BE to suppress TopN back-pressure on this scan for BOTH
+    // the FE-driven and the lake/connector self-enable paths (the RF cannot arrive while the scan reads).
+    boolean topnFilterBackPressureDisabled = false;
 
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long selectedIndexId) {
         super(id, desc, planNodeName, (OlapTable) desc.getTable(), selectedIndexId);
@@ -1179,6 +1183,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
                 msg.lake_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
             }
+            if (topnFilterBackPressureDisabled) {
+                msg.lake_scan_node.setTopn_filter_back_pressure_disabled(true);
+            }
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
             }
@@ -1239,6 +1246,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.olap_scan_node.setBack_pressure_num_rows(backPressureNumRows);
                 msg.olap_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
                 msg.olap_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
+            }
+            if (topnFilterBackPressureDisabled) {
+                msg.olap_scan_node.setTopn_filter_back_pressure_disabled(true);
             }
             if (!conjuncts.isEmpty()) {
                 msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -1800,18 +1810,26 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         boolean accept = super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
         if (accept && context.getDescription().runtimeFilterType()
                 .equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
-            boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
-            int backPressureMode = Optional.ofNullable(ConnectContext.get())
-                    .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
-                    .orElse(0);
-            if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
-                this.enableTopnFilterBackPressure = true;
-                this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
-                this.backPressureThrottleTimeUpperBound =
-                        ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
-                this.backPressureNumRows = 10 * context.getDescription().getTopN();
-                this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
-                        Math.max(this.backPressureMaxRounds, 1);
+            if (context.crossedNonAggPipelineBreaker()) {
+                // The TopN RF reaches this scan only across a deterministic non-aggregation pipeline
+                // breaker (blocking sort, analytic/window), so it cannot arrive while the scan is still
+                // reading. Suppress back-pressure for this scan (the flag is sent to BE so the
+                // lake/connector self-enable path honors it too); throttling would only stall the scan.
+                this.topnFilterBackPressureDisabled = true;
+            } else {
+                boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
+                int backPressureMode = Optional.ofNullable(ConnectContext.get())
+                        .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
+                        .orElse(0);
+                if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
+                    this.enableTopnFilterBackPressure = true;
+                    this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
+                    this.backPressureThrottleTimeUpperBound =
+                            ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
+                    this.backPressureNumRows = 10 * context.getDescription().getTopN();
+                    this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
+                            Math.max(this.backPressureMaxRounds, 1);
+                }
             }
         }
         return accept;

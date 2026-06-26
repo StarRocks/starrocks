@@ -399,6 +399,24 @@ struct TQueryOptions {
   // hardcoded "stream-load-pipe" filename. Optional and unused for
   // non-routine-load query paths.
   218: optional string routine_load_source_info;
+
+  // ---- TopN runtime-filter back-pressure tuning (lake/connector self-enabled path) ----
+  // Max concurrent IO tasks a scan may submit while a TopN runtime filter is still pending.
+  // Caps read-ahead so concurrent readers cannot overshoot the (non-concurrency-aware) row
+  // budget before the filter arrives. Full DOP resumes once the filter lands. <=0 disables
+  // the clamp (legacy overshoot behavior). Default 1.
+  219: optional i32 topn_filter_back_pressure_io_tasks = 1;
+  // Master switch for scans (both shared-nothing olap and shared-data lake/connector) to
+  // self-enable TopN back-pressure even when the FE-side topn_filter_back_pressure_mode is 0.
+  // Default true.
+  220: optional bool enable_topn_filter_back_pressure = true;
+  // Back-pressure throttle window parameters used by the lake/connector self-enabled path
+  // (the FE-driven olap path keeps using the per-scan-node thrift values). Defaults match the
+  // tuned values: finer, exponentially-backing-off throttle quanta.
+  221: optional i32 topn_back_pressure_max_rounds = 8;
+  222: optional i64 topn_back_pressure_num_rows = 1024;
+  223: optional i64 topn_back_pressure_throttle_time_ms = 8;
+  224: optional i64 topn_back_pressure_throttle_time_upper_bound_ms = 100;
 }
 
 // A scan range plus the parameters needed to execute that scan.

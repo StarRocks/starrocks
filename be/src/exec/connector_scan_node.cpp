@@ -101,6 +101,8 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
             _back_pressure_throttle_time = tnode.lake_scan_node.back_pressure_throttle_time;
             _back_pressure_throttle_time_upper_bound = tnode.lake_scan_node.back_pressure_throttle_time_upper_bound;
         }
+        _topn_filter_back_pressure_disabled = tnode.lake_scan_node.__isset.topn_filter_back_pressure_disabled &&
+                                              tnode.lake_scan_node.topn_filter_back_pressure_disabled;
     }
 
     return Status::OK();

@@ -224,7 +224,11 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeMembershipFil
         if ((skip_topn && rf_desc->is_stream_build_filter()) || filter == nullptr || filter->always_true()) {
             continue;
         }
-        if (rf_desc->has_push_down_to_storage()) {
+        // TopN/stream-build RFs push down ONLY as zonemap page-range pruning; they are NOT
+        // applied as row-level ColumnPredicates in storage, so they must still be evaluated
+        // per-chunk to trim within-page survivors (e.g. ORDER BY ... LIMIT over a wide segment).
+        if (rf_desc->has_push_down_to_storage() &&
+            (!rf_desc->is_stream_build_filter() || rf_desc->probe_expr_ctx() == nullptr)) {
             continue;
         }
 
@@ -426,7 +430,11 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
             continue;
         }
 
-        if (rf_desc->has_push_down_to_storage()) {
+        // TopN/stream-build RFs push down ONLY as zonemap page-range pruning; they are NOT
+        // applied as row-level ColumnPredicates in storage, so they must still be evaluated
+        // per-chunk to trim within-page survivors (e.g. ORDER BY ... LIMIT over a wide segment).
+        if (rf_desc->has_push_down_to_storage() &&
+            (!rf_desc->is_stream_build_filter() || rf_desc->probe_expr_ctx() == nullptr)) {
             continue;
         }
         auto& selection = eval_context.running_context.use_merged_selection

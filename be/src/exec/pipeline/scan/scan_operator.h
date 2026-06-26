@@ -34,6 +34,7 @@ class ScanNode;
 
 namespace pipeline {
 
+class RFScanWaitTimeout;
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 class ScanOperator : public SourceOperator, public DriverScanOperator {
@@ -292,6 +293,21 @@ private:
 
     RuntimeMembershipFilterEvalContext _topn_filter_eval_context;
     std::unique_ptr<TopnRfBackPressure> _topn_filter_back_pressure = nullptr;
+    // Scans self-enable TopN back-pressure whenever a TopN RF targets them, even when the FE flag is
+    // off (e.g. topn_filter_back_pressure_mode=0). Gated by the enable_topn_filter_back_pressure
+    // session variable (read from TQueryOptions, default true); applies to both shared-nothing olap
+    // and shared-data lake/connector scans.
+    bool _self_enable_topn_back_pressure(RuntimeState* state) const;
+    // Arm/refresh the event-scheduler wakeup timer for the current back-pressure throttle window.
+    void _arm_back_pressure_throttle_timer() const;
+    // True once a TopN (stream-build) runtime filter has been received by this scan probe collector.
+    // Back-pressure releases on this: throttling only exists to wait for the filter to arrive, and the
+    // selectivity-based release goes stale once storage zonemap pruning empties the pulled chunks.
+    bool _topn_runtime_filter_arrived() const;
+    // Wakes this driver when the throttle window ends; without it a throttled driver is only re-checked
+    // by the fallback poller (the throttle was never wired into the event scheduler). Re-armed per window.
+    mutable std::shared_ptr<RFScanWaitTimeout> _bp_throttle_timer;
+    mutable int64_t _bp_throttle_timer_deadline = -1;
 
     DECLARE_RACE_DETECTOR(race_pull_chunk)
 };
