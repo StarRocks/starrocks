@@ -1843,6 +1843,18 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
     case TYPE_STRUCT: {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
+        // Validate that every struct field name is a parseable JSON path before constructing
+        // CastJsonToStruct, whose ctor would otherwise throw an uncaught std::runtime_error.
+        // The throw propagates out of create_expr_tree (no try/catch on that path) and aborts
+        // the BE at fragment prepare. Returning nullptr surfaces a clean Status::NotSupported.
+        for (const auto& field_name : cast_to.field_names) {
+            std::string path_string = "$." + field_name;
+            if (!JsonPath::parse(Slice(path_string)).ok()) {
+                LOG(WARNING) << "Cannot cast json to struct: field name is not a valid JSON path: " << field_name;
+                return nullptr;
+            }
+        }
+
         std::vector<Expr*> field_casts(cast_to.children.size());
         for (int i = 0; i < cast_to.children.size(); ++i) {
             TypeDescriptor json_type = TypeDescriptor::create_json_type();
@@ -1976,6 +1988,18 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
     }
     case TYPE_STRUCT: {
         TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+
+        // Validate that every struct field name is a parseable variant path before constructing
+        // CastVariantToStruct, whose ctor would otherwise throw an uncaught std::runtime_error
+        // that propagates out of create_expr_tree and aborts the BE at fragment prepare.
+        // Returning nullptr surfaces a clean Status::NotSupported instead.
+        for (const auto& field_name : expected_type.field_names) {
+            std::string path_string = "$." + field_name;
+            if (!VariantPathParser::parse(Slice(path_string)).ok()) {
+                LOG(WARNING) << "Cannot cast variant to struct: field name is not a valid variant path: " << field_name;
+                return nullptr;
+            }
+        }
 
         std::vector<Expr*> field_casts(expected_type.children.size());
         for (int i = 0; i < expected_type.children.size(); ++i) {
