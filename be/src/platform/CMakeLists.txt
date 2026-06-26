@@ -46,3 +46,4 @@ ADD_BE_LIB(Platform
 )
 
 target_link_libraries(Platform PUBLIC HttpCore FSCore IO Types Common Base Gutil StarRocksGen)
+target_link_libraries(Platform PRIVATE ${Poco_LIBRARIES})
