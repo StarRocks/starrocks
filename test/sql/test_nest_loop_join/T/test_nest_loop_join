@@ -174,3 +174,15 @@ insert into t2 select generate_series, generate_series from table(generate_serie
 select t1.c1 from t1 join t2 on t1.c1 <= t2.c1;
 -- apply to exchange
 with L as ( select  c1 lk from  t1),R as ( select  c1 rk from  t1),DIM as ( select 1000000 as mx_lo_orderkey, 999999 as mn_lo_orderkey)select count(*)from  L join [shuffle] R on lk = rk join DIM where rk >= mn_lo_orderkey and rk <= mx_lo_orderkey;
+
+
+-- nestloop join with nullable build-side data under a non-nullable slot
+create table t5 (x int null, v double null)
+duplicate key(x) distributed by hash(x) buckets 4 properties("replication_num"="1");
+insert into t5 select g%100000, cast(g%500 as double)
+from table(generate_series(1,20000)) t(g);
+with scd as (select 'test' as type, 0 as lo, 100000 as hi)
+select a.*, b.v from scd a
+left join t5 b on b.x between a.lo and a.hi
+left join t5 c on c.x between a.lo and a.hi
+order by b.v limit 5;
