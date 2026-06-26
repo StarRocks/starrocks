@@ -666,8 +666,14 @@ public class LowCardinalityStructTest extends PlanTestBase {
         IDictManager dictManager = IDictManager.getInstance();
         new Expectations(dictManager) {
             {
+                // Explicitly model: VARCHAR_COL has no dict; other columns keep the default behavior.
                 dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
                 result = false;
+                minTimes = 0;
+
+                dictManager.hasGlobalDict(anyLong, (ColumnId) any, anyLong);
+                result = true;
+                minTimes = 0;
             }
         };
 
