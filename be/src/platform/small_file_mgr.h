@@ -24,9 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/metrics.h"
 #include "common/status.h"
-#include "common/util/thrift_client_cache.h"
-#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 
@@ -67,6 +66,8 @@ private:
 private:
     std::mutex _lock;
     std::string _local_path;
+    MetricRegistry* _metrics = nullptr;
+    UIntGauge _small_file_cache_count{MetricUnit::NOUNIT};
     // file id -> small file
     std::unordered_map<int64_t, CacheEntry> _file_cache;
 };
