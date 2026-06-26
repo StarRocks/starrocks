@@ -45,6 +45,11 @@ public class ConnectorAlterTableExecutor implements AstVisitor<Void, ConnectCont
             for (AlterClause c : alterClauses) {
                 visit(c, null);
             }
+            // Run queued actions only after every clause is visited; running inside the
+            // loop above would re-execute every previously queued action on each pass.
+            for (Runnable r : actions) {
+                r.run();
+            }
         } catch (StarRocksConnectorException e) {
             throw new DdlException(e.getMessage(), e.getCause());
         }
@@ -53,15 +58,6 @@ public class ConnectorAlterTableExecutor implements AstVisitor<Void, ConnectCont
     public ShowResultSet execute() throws DdlException {
         applyClauses();
         return resultSet;
-    }
-
-    @Override
-    public Void visit(ParseNode node, ConnectContext context) {
-        node.accept(this, context);
-        for (Runnable r : actions) {
-            r.run();
-        }
-        return null;
     }
 
     @Override
