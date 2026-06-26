@@ -411,6 +411,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
             array_col->check_or_die();
             auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
+            // result_null_column may be shorter than num_rows when the nullable input is a
+            // const/single-row column that has not been materialized to chunk size; align the
+            // per-row null mask to the empty-array column (padded rows are non-null, since the
+            // all-null case already returned above) so the NullableColumn stays consistent.
+            result_null_mut->resize(chunk->num_rows());
             auto result = NullableColumn::create(std::move(array_col), std::move(result_null_mut));
             result->check_or_die();
             return result;
