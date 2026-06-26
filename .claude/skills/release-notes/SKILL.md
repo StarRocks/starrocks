@@ -18,11 +18,13 @@ complete, accurate draft with uncertain items flagged over silent guessing.
 ## Inputs
 
 - `$ARGUMENTS` = the new patch version, e.g. `3.5.19`. If absent, ask for it.
-- Derive once and reuse:
-  - minor = `3.5`, **branch** = `branch-3.5`
-  - **file** = `docs/en/release_notes/release-3.5.md`
-  - **prev tag** = the previous patch, `3.5.18` (the newest `## X.Y.Z` already in the file;
-    read it to confirm rather than assuming).
+- Derive once and reuse (examples shown for `3.5.19`):
+  - **minor** = `<MAJOR>.<MINOR>` (e.g. `3.5`), **branch** = `branch-<minor>` (e.g. `branch-3.5`)
+  - **file** = `docs/en/release_notes/release-<minor>.md` (e.g. `docs/en/release_notes/release-3.5.md`)
+  - **prev tag** = the previous patch (e.g. `3.5.18`) — the newest `## X.Y.Z` already in
+    **file**; read it to confirm rather than assuming.
+
+Use the derived **file** path everywhere below — do not hardcode `release-3.5.md`.
 
 ## Workflow
 
@@ -77,19 +79,22 @@ Omit empty subsections. English file only.
 
 ### 5. Lint (required so the translation comment appears)
 The `Translation Status Check` workflow only posts the language checkboxes after
-`markdownlint` passes, so the diff must be clean:
+`markdownlint` passes, so the diff must be clean. Lint the **derived file**, and note the
+Vale config lives at `docs/.vale.ini` and resolves its styles relative to `docs/` — run
+Vale from the `docs/` directory:
 
 ```bash
-vale --config=.vale.ini docs/en/release_notes/release-3.5.md
+# from the docs/ directory, using the version-derived file (e.g. release-3.5.md)
+cd docs && vale --config=.vale.ini en/release_notes/release-<minor>.md
 ```
 
-Also run the repo's markdownlint if configured (check `package.json` / `.markdownlint*`).
-Fix any issues. Re-confirm frontmatter/`description` is unchanged.
+Also run the repo's markdownlint (`docs/.markdownlint.json`) if available. Fix any issues.
+Re-confirm frontmatter/`description` is unchanged.
 
 ### 6. Open the PR
 ```bash
 git checkout -b release-notes-<new_tag>           # e.g. release-notes-3.5.19
-git add docs/en/release_notes/release-3.5.md
+git add docs/en/release_notes/release-<minor>.md  # the derived file, e.g. release-3.5.md
 git commit -s -m "[Doc] Add release notes for StarRocks v<new_tag>"
 git push -u origin release-notes-<new_tag>
 gh pr create --title "[Doc] Add release notes for StarRocks v<new_tag>" --body-file <body>
@@ -123,7 +128,7 @@ entirely when `unresolved_count` is 0.)
 
 ### 8. Hand off translation
 Stop and tell the user:
-- Only `docs/en/release_notes/release-3.5.md` changed.
+- Only the derived English file (e.g. `docs/en/release_notes/release-3.5.md`) changed.
 - Once `CI DOC Checker → markdownlint` passes on the PR, the
   **"🌎 Translation Required?"** comment will auto-post with `zh` and `ja` checkboxes.
 - A **docs-maintainer** checks the desired boxes and replies **`/translate`**; the
