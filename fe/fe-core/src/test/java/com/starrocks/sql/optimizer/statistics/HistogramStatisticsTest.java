@@ -19,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
@@ -488,6 +489,39 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(0.0, estimated.getColumnStatistic(columnRefOperator).getNullsFraction(), 0.001);
     }
 
+    @Test
+    public void testOrPredicateWithMcvOnlyJoinHistogram() {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
+
+        Map<String, Long> leftMcv = Maps.newHashMap();
+        leftMcv.put("10", 300L);
+        leftMcv.put("22", 100L);
+        Histogram leftHistogram = new Histogram(new ArrayList<>(), leftMcv);
+        ColumnRefOperator leftColumn = new ColumnRefOperator(0, IntegerType.BIGINT, "left_v1", true);
+        ColumnStatistic leftStatistic = new ColumnStatistic(1, 50, 0, 4, 500,
+                leftHistogram, ColumnStatistic.StatisticType.ESTIMATE);
+
+        Map<String, Long> rightMcv = Maps.newHashMap();
+        rightMcv.put("22", 80L);
+        rightMcv.put("9", 50L);
+        Histogram rightHistogram = new Histogram(new ArrayList<>(), rightMcv);
+        ColumnRefOperator rightColumn = new ColumnRefOperator(1, IntegerType.BIGINT, "right_v1", true);
+        ColumnStatistic rightStatistic = new ColumnStatistic(1, 50, 0, 4, 500,
+                rightHistogram, ColumnStatistic.StatisticType.ESTIMATE);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(leftColumn, leftStatistic)
+                .addColumnStatistic(rightColumn, rightStatistic)
+                .build();
+        CompoundPredicateOperator predicate = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR,
+                new BinaryPredicateOperator(BinaryType.EQ, leftColumn, rightColumn),
+                new BinaryPredicateOperator(BinaryType.EQ, rightColumn, ConstantOperator.createBigint(0)));
+
+        Assertions.assertDoesNotThrow(() -> PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics));
+    }
 
     @Test
     public void testUpdateHistWithJoin() {
@@ -534,7 +568,7 @@ public class HistogramStatisticsTest {
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(
                 columnStatisticLeft, IntegerType.BIGINT, columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
-        Assertions.assertNull(exist.get().getBuckets());
+        Assertions.assertTrue(exist.get().getBuckets().isEmpty());
         Assertions.assertEquals(exist.get().getMCV().size(), 1);
         Assertions.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
 
