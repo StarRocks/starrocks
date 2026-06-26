@@ -98,7 +98,6 @@ set(RUNTIME_FILES
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp
-    routine_load/routine_load_task_executor.cpp
     small_file_mgr.cpp
     external_scan_context_mgr.cpp
     runtime_filter_worker.cpp

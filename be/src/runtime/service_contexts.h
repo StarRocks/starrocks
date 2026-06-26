@@ -35,7 +35,6 @@ class PriorityThreadPool;
 class ProfileReportWorker;
 class ResultBufferMgr;
 class ResultQueueMgr;
-class RoutineLoadTaskExecutor;
 class RuntimeFilterCache;
 class RuntimeFilterQueryLifecycle;
 class RuntimeFilterWorker;
@@ -137,7 +136,6 @@ struct RuntimeServices {
     TransactionMgr* transaction_mgr = nullptr;
     BatchWriteMgr* batch_write_mgr = nullptr;
     StreamLoadExecutor* stream_load_executor = nullptr;
-    RoutineLoadTaskExecutor* routine_load_task_executor = nullptr;
     SmallFileMgr* small_file_mgr = nullptr;
     RuntimeFilterWorker* runtime_filter_worker = nullptr;
     RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;

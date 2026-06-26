@@ -52,12 +52,11 @@
 #include "http/core/http_headers.h"
 #include "http/core/http_request.h"
 #include "http/core/http_response.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 
@@ -175,7 +174,11 @@ private:
     bool _released{false};
 };
 
-TransactionStreamLoadAction::TransactionStreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+TransactionStreamLoadAction::TransactionStreamLoadAction(
+        ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator)
+        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator) {
+    DCHECK(_stream_load_orchestrator != nullptr);
+}
 
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
 
@@ -575,7 +578,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
     request.__set_warehouse(ctx->warehouse);
 
     // check reuse
-    return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
+    return _stream_load_orchestrator->execute_plan_fragment(ctx);
 }
 
 void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {

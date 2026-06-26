@@ -24,7 +24,7 @@ namespace starrocks {
 
 class ExecEnv;
 
-namespace query_orchestration {
+namespace orchestration {
 
 class QueryOrchestrator {
 public:
@@ -37,5 +37,5 @@ private:
     ExecEnv* _exec_env;
 };
 
-} // namespace query_orchestration
+} // namespace orchestration
 } // namespace starrocks

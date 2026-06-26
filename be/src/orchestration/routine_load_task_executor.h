@@ -40,6 +40,8 @@
 #include <memory>
 #include <mutex>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include "base/uid_util.h"
 #include "common/thread/threadpool.h"
@@ -54,6 +56,10 @@ class Status;
 class StreamLoadContext;
 class TRoutineLoadTask;
 
+namespace orchestration {
+
+class StreamLoadOrchestrator;
+
 // A routine load task executor will receive routine load
 // tasks from FE, put it to a fixed thread pool.
 // The thread pool will process each task and report the result
@@ -62,7 +68,8 @@ class RoutineLoadTaskExecutor {
 public:
     typedef std::function<void(StreamLoadContext*)> ExecFinishCallback;
 
-    RoutineLoadTaskExecutor(ExecEnv* exec_env) : _exec_env(exec_env), _data_consumer_pool(10) {}
+    RoutineLoadTaskExecutor(ExecEnv* exec_env, StreamLoadOrchestrator* stream_load_orchestrator)
+            : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _data_consumer_pool(10) {}
 
     ~RoutineLoadTaskExecutor() noexcept = default;
 
@@ -89,6 +96,7 @@ private:
     void err_handler(StreamLoadContext* ctx, const Status& st, std::string_view err_msg);
 
     ExecEnv* _exec_env;
+    StreamLoadOrchestrator* _stream_load_orchestrator;
     std::unique_ptr<ThreadPool> _thread_pool;
     DataConsumerPool _data_consumer_pool;
 
@@ -97,4 +105,5 @@ private:
     std::unordered_map<UniqueId, StreamLoadContext*> _task_map;
 };
 
+} // namespace orchestration
 } // namespace starrocks

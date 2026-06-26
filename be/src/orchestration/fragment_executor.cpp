@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "query_orchestration/fragment_executor.h"
+#include "orchestration/fragment_executor.h"
 
 #include <optional>
 #include <unordered_map>
@@ -73,7 +73,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state_helper.h"
 
-namespace starrocks::query_orchestration {
+namespace starrocks::orchestration {
 
 DEFINE_FAIL_POINT(fragment_prepare_sleep);
 
@@ -1163,4 +1163,4 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     return Status::OK();
 }
 
-} // namespace starrocks::query_orchestration
+} // namespace starrocks::orchestration

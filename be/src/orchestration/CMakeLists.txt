@@ -12,18 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/query_orchestration")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/orchestration")
 
-set(QUERY_ORCHESTRATION_FILES
+set(ORCHESTRATION_FILES
     fragment_executor.cpp
+    orchestration_env.cpp
     query_orchestrator.cpp
+    routine_load_task_executor.cpp
+    stream_load_orchestrator.cpp
 )
 
-ADD_BE_LIB(QueryOrchestration
-    ${QUERY_ORCHESTRATION_FILES}
+ADD_BE_LIB(Orchestration
+    ${ORCHESTRATION_FILES}
 )
 
-target_link_libraries(QueryOrchestration PUBLIC
+target_link_libraries(Orchestration PUBLIC
     Runtime
     Exec
     ExecRuntime

@@ -48,17 +48,19 @@
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/result/result_queue_mgr.h"
 #include "gutil/strings/substitute.h"
-#include "query_orchestration/query_orchestrator.h"
+#include "orchestration/orchestration_env.h"
+#include "orchestration/query_orchestrator.h"
+#include "orchestration/routine_load_task_executor.h"
 #include "runtime/exec_env.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/routine_load/routine_load_task_executor.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
 
 namespace starrocks {
 
-BackendServiceBase::BackendServiceBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
+BackendServiceBase::BackendServiceBase(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env)
+        : _exec_env(exec_env), _orchestration_env(orchestration_env) {}
 
 void BackendServiceBase::exec_plan_fragment(TExecPlanFragmentResult& return_val,
                                             const TExecPlanFragmentParams& params) {
@@ -103,8 +105,11 @@ void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::
 #ifdef __APPLE__
     Status::NotSupported("submit_routine_load_task is not supported on MacOS").to_thrift(&t_status);
 #else
+    DCHECK(_orchestration_env != nullptr);
+    auto* routine_load_task_executor = _orchestration_env->routine_load_task_executor();
+    DCHECK(routine_load_task_executor != nullptr);
     for (auto& task : tasks) {
-        Status st = _exec_env->routine_load_task_executor()->submit_task(task);
+        Status st = routine_load_task_executor->submit_task(task);
         if (!st.ok()) {
             LOG(WARNING) << "failed to submit routine load task. job id: " << task.job_id << " task id: " << task.id;
             return st.to_thrift(&t_status);
@@ -146,7 +151,7 @@ void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenP
     }
     std::vector<TScanColumnDesc> selected_columns;
     // start the scan procedure
-    query_orchestration::QueryOrchestrator query_orchestrator(_exec_env);
+    orchestration::QueryOrchestrator query_orchestrator(_exec_env);
     Status exec_st = query_orchestrator.exec_external_plan_fragment(params, fragment_instance_id, &selected_columns,
                                                                     &(p_context->query_id));
     exec_st.to_thrift(&t_status);

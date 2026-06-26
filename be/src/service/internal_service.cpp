@@ -79,7 +79,9 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/strings/substitute.h"
-#include "query_orchestration/fragment_executor.h"
+#include "orchestration/fragment_executor.h"
+#include "orchestration/orchestration_env.h"
+#include "orchestration/routine_load_task_executor.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
@@ -87,7 +89,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/time_guard.h"
 #include "service/service_metrics.h"
@@ -105,7 +106,9 @@ static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& param
 static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
 
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env,
+                                                      orchestration::OrchestrationEnv* orchestration_env)
+        : _exec_env(exec_env), _orchestration_env(orchestration_env) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -388,7 +391,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
 
     // prepare query context and desc table first
-    query_orchestration::FragmentExecutor fragment_executor;
+    orchestration::FragmentExecutor fragment_executor;
     Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
     if (!status.ok()) {
         status.to_protobuf(response->mutable_status());
@@ -399,8 +402,8 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     std::vector<PromiseStatusSharedPtr> promise_statuses;
     std::vector<std::shared_future<Status>> prepare_futures;
     // must use shared_ptr to avoid uaf
-    std::shared_ptr<std::vector<query_orchestration::FragmentExecutor>> fragment_executors =
-            std::make_shared<std::vector<query_orchestration::FragmentExecutor>>(unique_requests.size());
+    std::shared_ptr<std::vector<orchestration::FragmentExecutor>> fragment_executors =
+            std::make_shared<std::vector<orchestration::FragmentExecutor>>(unique_requests.size());
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
@@ -588,8 +591,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code =
-                query_orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        Status code = orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }
@@ -629,7 +631,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
-    query_orchestration::FragmentExecutor fragment_executor;
+    orchestration::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
@@ -918,10 +920,13 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
     std::string group_id;
     MonotonicStopWatch watch;
     watch.start();
+    DCHECK(_orchestration_env != nullptr);
+    auto* routine_load_task_executor = _orchestration_env->routine_load_task_executor();
+    DCHECK(routine_load_task_executor != nullptr);
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
-        st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
-                                                                               &partition_ids, timeout_ms, &group_id);
+        st = routine_load_task_executor->get_kafka_partition_meta(request->kafka_meta_request(), &partition_ids,
+                                                                  timeout_ms, &group_id);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
@@ -931,8 +936,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
     } else if (request->has_kafka_offset_request()) {
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
-        st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms, &group_id);
+        st = routine_load_task_executor->get_kafka_partition_offset(request->kafka_offset_request(), &beginning_offsets,
+                                                                    &latest_offsets, timeout_ms, &group_id);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -952,8 +957,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                 break;
             }
 
-            st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets, left_ms, &group_id);
+            st = routine_load_task_executor->get_kafka_partition_offset(offset_req, &beginning_offsets, &latest_offsets,
+                                                                        left_ms, &group_id);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -1011,10 +1016,13 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
         return;
     }
 
+    DCHECK(_orchestration_env != nullptr);
+    auto* routine_load_task_executor = _orchestration_env->routine_load_task_executor();
+    DCHECK(routine_load_task_executor != nullptr);
+
     if (request->has_pulsar_meta_request()) {
         std::vector<std::string> partitions;
-        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_meta(request->pulsar_meta_request(),
-                                                                                       &partitions);
+        Status st = routine_load_task_executor->get_pulsar_partition_meta(request->pulsar_meta_request(), &partitions);
         if (st.ok()) {
             PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
             for (const std::string& p : partitions) {
@@ -1026,8 +1034,8 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     }
     if (request->has_pulsar_backlog_request()) {
         std::vector<int64_t> backlog_nums;
-        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(
-                request->pulsar_backlog_request(), &backlog_nums);
+        Status st = routine_load_task_executor->get_pulsar_partition_backlog(request->pulsar_backlog_request(),
+                                                                             &backlog_nums);
         if (st.ok()) {
             auto result = response->mutable_pulsar_backlog_result();
             for (int i = 0; i < backlog_nums.size(); i++) {
@@ -1041,8 +1049,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     if (request->has_pulsar_backlog_batch_request()) {
         for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
             std::vector<int64_t> backlog_nums;
-            Status st =
-                    _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
+            Status st = routine_load_task_executor->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
             auto backlog_result = response->mutable_pulsar_backlog_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < backlog_nums.size(); i++) {
