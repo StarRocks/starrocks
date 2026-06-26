@@ -705,6 +705,7 @@
         "size_tiered_level_num",
         "chaos_test_enable_random_compaction_strategy",
         "compaction_memory_limit_per_worker",
+        "compaction_chunk_reset_memory_tracker_threshold_percent",
         "flush_thread_num_per_store",
         "max_segment_file_size",
         "meta_threshold_to_manual_compact",
