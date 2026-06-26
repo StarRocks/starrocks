@@ -84,10 +84,12 @@ import java.util.Objects;
  *       integer sort key (decoded as the true unsigned magnitude and range-checked), but ONLY when
  *       the file's raw footer declares a TypeDefinedOrder column order for that leaf.</li>
  * </ul>
- * <p>DATE/DATETIME values are additionally gated to {@code [1970-01-01, 9999-12-31]}; values
- * outside that window (year &le; 0 mis-renders through the {@code yyyy} formatters, pre-1970
- * has unverified FE/BE timestamp-division parity, pre-1582 has calendar-parity questions)
- * fall back to data tier.
+ * <p>A DATE boundary is gated to {@code [0001-01-01, 9999-12-31]} and a DATETIME boundary to the
+ * narrower {@code [1970-01-01, 9999-12-31]}; a value outside its window falls back to data tier.
+ * DATE reaches year 1 because the BE day-of-epoch load is proleptic-Gregorian with no sub-second
+ * part, so the boundary is FE/BE-identical; DATETIME keeps the epoch lower bound because the BE
+ * timestamp load does not yet decode a pre-1970 sub-second tick to a boundary-matching wall clock
+ * (see {@link MetaTierTemporalWindow}).
  * Anything else (UINT_64, signed INT_8/16/32 annotations, UTC-adjusted/INT96 timestamps, JSON,
  * BSON, UUID, FLOAT, DOUBLE, byte-array DECIMAL without a footer-declared TypeDefinedOrder,
  * raw BINARY for VARBINARY) makes the reader throw
@@ -312,10 +314,10 @@ public final class ParquetRowGroupStatisticsReader {
         if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
             long ticks = ((Number) parquetValue).longValue();
             LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
-            // A negative (pre-1970) tick lands on a date before the window's lower bound and is
-            // rejected here, which also keeps the floorDiv/floorMod conversion above in the range
-            // where it is provably identical to BE's signed division.
-            MetaTierTemporalWindow.rejectDateOutsideWindow(dateTime.toLocalDate());
+            // A negative (pre-1970) tick lands before the DATETIME window's lower bound and is
+            // rejected here: the BE timestamp load does not yet decode a pre-1970 sub-second tick to
+            // the wall clock this floorDiv/floorMod boundary expects (see MetaTierTemporalWindow).
+            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(dateTime.toLocalDate());
             return Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(dateTime));
         }
         if (location.logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation) {
