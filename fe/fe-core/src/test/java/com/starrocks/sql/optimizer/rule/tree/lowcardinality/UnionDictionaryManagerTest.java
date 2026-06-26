@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -276,7 +277,8 @@ class UnionDictionaryManagerTest {
         stringRefToDefineExprMap.put(6, col3);
         List<Map<ColumnRefOperator, ConstantOperator>> constantEncodingMap =
                 unionDictionaryManager.generateConstantEncodingMap(List.of(col4, col5, col6),
-                        List.of(List.of(col1, col8, col3), List.of(col7, col2, col9)), Set.of(1, 2, 4, 5));
+                        List.of(List.of(col1, col8, col3), List.of(col7, col2, col9)),
+                        new ColumnRefSet(List.of(col1, col2, col4, col5)));
 
         Assertions.assertEquals(2, constantEncodingMap.size());
         Assertions.assertEquals(Map.of(col8, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
