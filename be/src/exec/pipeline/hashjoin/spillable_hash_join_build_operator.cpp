@@ -36,7 +36,7 @@
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
