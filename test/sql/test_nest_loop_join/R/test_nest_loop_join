@@ -499,3 +499,23 @@ with L as ( select  c1 lk from  t1),R as ( select  c1 rk from  t1),DIM as ( sele
 -- result:
 2
 -- !result
+create table t5 (x int null, v double null)
+duplicate key(x) distributed by hash(x) buckets 4 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t5 select g%100000, cast(g%500 as double)
+from table(generate_series(1,20000)) t(g);
+-- result:
+-- !result
+with scd as (select 'test' as type, 0 as lo, 100000 as hi)
+select a.*, b.v from scd a
+left join t5 b on b.x between a.lo and a.hi
+left join t5 c on c.x between a.lo and a.hi
+order by b.v limit 5;
+-- result:
+test	0	100000	0.0
+test	0	100000	0.0
+test	0	100000	0.0
+test	0	100000	0.0
+test	0	100000	0.0
+-- !result
