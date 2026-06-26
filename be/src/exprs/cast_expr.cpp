@@ -1605,6 +1605,18 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
     if (from_type == TYPE_JSON && to_type == TYPE_STRUCT) {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
+        // Validate that every struct field name is a parseable JSON path before constructing
+        // CastJsonToStruct, whose ctor would otherwise throw an uncaught std::runtime_error.
+        // The throw propagates out of create_expr_tree (no try/catch on that path) and aborts
+        // the BE at fragment prepare. Returning nullptr surfaces a clean Status::NotSupported.
+        for (const auto& field_name : cast_to.field_names) {
+            std::string path_string = "$." + field_name;
+            if (!JsonPath::parse(Slice(path_string)).ok()) {
+                LOG(WARNING) << "Cannot cast json to struct: field name is not a valid JSON path: " << field_name;
+                return nullptr;
+            }
+        }
+
         std::vector<Expr*> field_casts(cast_to.children.size());
         for (int i = 0; i < cast_to.children.size(); ++i) {
             TypeDescriptor json_type = TypeDescriptor::create_json_type();
@@ -1663,6 +1675,161 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
 
         return new CastJsonToMap(node, key_cast_expr, value_cast_expr);
     }
+<<<<<<< HEAD
+=======
+    default:
+        LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
+                     << " to type: " << type_to_string(to_type);
+        return nullptr;
+    }
+}
+
+Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool* pool, const TExprNode& node,
+                                                                     LogicalType from_type, LogicalType to_type,
+                                                                     bool allow_throw_exception) {
+    DCHECK(from_type == TYPE_VARIANT);
+
+    switch (to_type) {
+    case TYPE_ARRAY: {
+        const TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+        TExprNode cast;
+        cast.type = expected_type.children[0].to_thrift();
+        cast.child_type = to_thrift(from_type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = from_thrift(pool, cast, allow_throw_exception);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        DCHECK(pool != nullptr);
+        pool->add(cast_element_expr);
+
+        auto* child = new ColumnRef(cast);
+        pool->add(child);
+        cast_element_expr->add_child(child);
+
+        return new CastVariantToArray(node, cast_element_expr, expected_type);
+    }
+    case TYPE_MAP: {
+        TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+
+        DCHECK(expected_type.children.size() == 2);
+        Expr* key_cast_expr = nullptr;
+        auto& key_desc = expected_type.children[0];
+        if (key_desc.type != TYPE_VARCHAR) {
+            const TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            if (!result.ok()) {
+                LOG(ERROR) << "Fail to create cast expr from variant to map, map key type: " << key_desc
+                           << ", status: " << result.status();
+                return nullptr;
+            }
+
+            key_cast_expr = result.value();
+            Expr* cast_input = create_slot_ref(varchar_type).release();
+            key_cast_expr->add_child(cast_input);
+            pool->add(key_cast_expr);
+            pool->add(cast_input);
+        }
+        Expr* value_cast_expr = nullptr;
+        auto& value_desc = expected_type.children[1];
+        if (value_desc.type != TYPE_VARIANT) {
+            TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+            auto result = create_cast_expr(pool, variant_type, value_desc, allow_throw_exception);
+            if (!result.ok()) {
+                LOG(ERROR) << "Fail to create cast expr from variant to map, map value type: " << value_desc
+                           << ", status: " << result.status();
+                return nullptr;
+            }
+            value_cast_expr = result.value();
+            Expr* cast_input = create_slot_ref(variant_type).release();
+            value_cast_expr->add_child(cast_input);
+            pool->add(value_cast_expr);
+            pool->add(cast_input);
+        }
+
+        return new CastVariantToMap(node, key_cast_expr, value_cast_expr);
+    }
+    case TYPE_STRUCT: {
+        TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+
+        // Validate that every struct field name is a parseable variant path before constructing
+        // CastVariantToStruct, whose ctor would otherwise throw an uncaught std::runtime_error
+        // that propagates out of create_expr_tree and aborts the BE at fragment prepare.
+        // Returning nullptr surfaces a clean Status::NotSupported instead.
+        for (const auto& field_name : expected_type.field_names) {
+            std::string path_string = "$." + field_name;
+            if (!VariantPathParser::parse(Slice(path_string)).ok()) {
+                LOG(WARNING) << "Cannot cast variant to struct: field name is not a valid variant path: " << field_name;
+                return nullptr;
+            }
+        }
+
+        std::vector<Expr*> field_casts(expected_type.children.size());
+        for (int i = 0; i < expected_type.children.size(); ++i) {
+            TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+            auto ret = create_cast_expr(pool, variant_type, expected_type.children[i], allow_throw_exception);
+            if (!ret.ok()) {
+                LOG(WARNING) << "Fail to create cast expr from variant to struct, field type: "
+                             << expected_type.children[i] << ", status: " << ret.status();
+                return nullptr;
+            }
+            pool->add(ret.value());
+            field_casts[i] = ret.value();
+            auto cast_input = create_slot_ref(variant_type);
+            field_casts[i]->add_child(cast_input.get());
+            pool->add(cast_input.release());
+        }
+
+        return new CastVariantToStruct(node, std::move(field_casts));
+    }
+    default:
+        LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
+                     << " to type: " << type_to_string(to_type);
+        return nullptr;
+    }
+}
+
+// Need add result to pool by caller.
+Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
+                                                       LogicalType to_type, bool allow_throw_exception) {
+    if (to_type == TYPE_CHAR) {
+        to_type = TYPE_VARCHAR;
+    }
+    if (from_type == TYPE_CHAR) {
+        from_type = TYPE_VARCHAR;
+    }
+    if (from_type == TYPE_NULL) {
+        // NULL TO OTHER TYPE, direct return
+        from_type = to_type;
+    }
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
+        return dispatch_throw_exception<CastVarcharToHll>(allow_throw_exception, node);
+    }
+    // Cast string to array<ANY>
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_ARRAY) {
+        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
+        TExprNode cast;
+        cast.type = cast_to.children[0].to_thrift();
+        cast.child_type = to_thrift(from_type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        DCHECK(pool != nullptr);
+        pool->add(cast_element_expr);
+
+        auto* child = new ColumnRef(cast);
+        pool->add(child);
+        cast_element_expr->add_child(child);
+
+        return new CastStringToArray(node, cast_element_expr, cast_to, allow_throw_exception);
+    }
+>>>>>>> a444b5204c ([BugFix] Avoid BE abort on CAST(json/variant AS struct) with a non-path field name (#75355))
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
         return dispatch_throw_exception<CastVarcharToBitmap>(allow_throw_exception, node);
