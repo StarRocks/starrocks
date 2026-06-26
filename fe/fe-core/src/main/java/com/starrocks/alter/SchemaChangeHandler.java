@@ -727,6 +727,42 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    // Returns true when the MODIFY COLUMN clause changes nothing but the column comment, so it can take the
+    // lightweight ModifyColumnComment path instead of spawning a schema change job.
+    private boolean isCommentOnlyModification(ModifyColumnClause alterClause, OlapTable olapTable) {
+        // Repositioning the column, targeting a rollup, or carrying column properties is a real change.
+        if (alterClause.getColPos() != null || alterClause.getRollupName() != null
+                || (alterClause.getProperties() != null && !alterClause.getProperties().isEmpty())) {
+            return false;
+        }
+        Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
+        Column oriColumn = olapTable.getBaseColumn(modColumn.getName());
+        if (oriColumn == null) {
+            // Leave the "column does not exist" error to processModifyColumn.
+            return false;
+        }
+        // The KEY designation is table-level and is not repeated in the MODIFY COLUMN clause, so a rebuilt
+        // column inherits the stored key flag the same way processModifyColumn does.
+        if (!modColumn.isKey()) {
+            modColumn.setIsKey(oriColumn.isKey());
+        }
+        if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+            // AlterTableClauseAnalyzer force-injects REPLACE on PK value columns (and keeps key columns as
+            // keys), so modColumn always carries an aggregation type here. Mirror the PK branch in
+            // processModifyColumn, which unconditionally realigns the type + implicit flag from the stored
+            // column, so an explicitly-typed clause still compares as comment-only.
+            modColumn.setAggregationType(oriColumn.getAggregationType(), oriColumn.isAggregationTypeImplicit());
+        } else if (oriColumn.isAggregationTypeImplicit() && modColumn.getAggregationType() == null) {
+            // For DUP/UNIQUE the value column's aggregation (NONE/REPLACE) is implied by the table model and
+            // the user omits it; inherit it as implicit so the comparison matches. If the user *explicitly*
+            // wrote an aggregation method, leave it explicit so the comparison fails and processModifyColumn
+            // raises the proper "Can not assign aggregation method" error instead of being silently dropped
+            // into the lightweight comment path.
+            modColumn.setAggregationType(oriColumn.getAggregationType(), oriColumn.isAggregationTypeImplicit());
+        }
+        return oriColumn.equalsIgnoreComment(modColumn);
+    }
+
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexMetaIdToSchema,
@@ -2304,6 +2340,23 @@ public class SchemaChangeHandler extends AlterHandler {
                                 newIndexes);
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
+
+                // A MODIFY COLUMN that only changes the comment does not need a schema change job; route it to
+                // the lightweight ModifyColumnCommentClause path instead, mirroring the explicit
+                // MODIFY COLUMN COMMENT syntax (including its restriction against batching). This is checked
+                // before processModifyColumn so a comment-only change on a primary key column is not rejected
+                // by the key-column validation there.
+                if (isCommentOnlyModification(modifyColumnClause, olapTable)) {
+                    // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("MODIFY COLUMN COMMENT can not be combined with other alter operations");
+                    }
+                    ColumnDef columnDef = modifyColumnClause.getColumnDef();
+                    ModifyColumnCommentClause commentClause = new ModifyColumnCommentClause(
+                            columnDef.getName(), columnDef.getComment(), modifyColumnClause.getPos());
+                    processModifyColumnComment(commentClause, db, olapTable, indexMetaIdToSchema);
+                    return null;
+                }
 
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumnDef().getName());
