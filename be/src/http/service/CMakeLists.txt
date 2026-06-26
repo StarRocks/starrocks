@@ -53,4 +53,4 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(HttpService ${HTTP_SERVICE_FILES})
-target_link_libraries(HttpService PUBLIC HttpCore PRIVATE Storage DataWorkflows)
+target_link_libraries(HttpService PUBLIC HttpCore PRIVATE Storage DataWorkflows Orchestration)

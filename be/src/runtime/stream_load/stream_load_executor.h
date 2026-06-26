@@ -53,8 +53,6 @@ public:
 
     Status rollback_txn(StreamLoadContext* ctx);
 
-    Status execute_plan_fragment(StreamLoadContext* ctx);
-
 private:
     // collect the load statistics from context and set them to stat
     // return true if stat is set, otherwise, return false

@@ -76,7 +76,6 @@ class ResultBufferMgr;
 class ResultQueueMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
-class RoutineLoadTaskExecutor;
 class SmallFileMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
@@ -155,7 +154,6 @@ public:
     BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
-    RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
     const PlatformServices& platform_services() const { return _platform_services; }
@@ -214,7 +212,6 @@ private:
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
     StreamLoadExecutor* _stream_load_executor = nullptr;
-    RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

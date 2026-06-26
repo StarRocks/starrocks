@@ -29,7 +29,7 @@
 namespace starrocks {
 class RuntimeState;
 
-namespace query_orchestration {
+namespace orchestration {
 
 class FragmentExecutor {
 public:
@@ -95,5 +95,5 @@ private:
     workgroup::WorkGroupPtr _wg = nullptr;
 };
 
-} // namespace query_orchestration
+} // namespace orchestration
 } // namespace starrocks

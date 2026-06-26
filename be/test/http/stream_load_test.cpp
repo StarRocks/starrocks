@@ -57,6 +57,7 @@
 #include "http/core/http_channel.h"
 #include "http/core/http_common.h"
 #include "http/core/http_request.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -122,6 +123,7 @@ public:
 
 private:
     ExecEnv _env;
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env};
     evhttp_request* _evhttp_req = nullptr;
     std::unique_ptr<ConcurrentLimiter> _limiter;
     MetricRegistry _metrics{"stream_load_action_test"};
@@ -129,7 +131,7 @@ private:
 };
 
 TEST_F(StreamLoadActionTest, no_auth) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request.set_handler(&action);
@@ -143,7 +145,7 @@ TEST_F(StreamLoadActionTest, no_auth) {
 
 #if 0
 TEST_F(StreamLoadActionTest, no_content_length) {
-    StreamLoadAction action(&__env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -157,7 +159,7 @@ TEST_F(StreamLoadActionTest, no_content_length) {
 }
 
 TEST_F(StreamLoadActionTest, unknown_encoding) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -173,7 +175,7 @@ TEST_F(StreamLoadActionTest, unknown_encoding) {
 #endif
 
 TEST_F(StreamLoadActionTest, normal) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -191,7 +193,7 @@ TEST_F(StreamLoadActionTest, normal) {
 }
 
 TEST_F(StreamLoadActionTest, process_exit_abort_stream_load) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -222,7 +224,7 @@ TEST_F(StreamLoadActionTest, process_exit_abort_stream_load) {
 }
 
 TEST_F(StreamLoadActionTest, put_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
 
@@ -240,7 +242,7 @@ TEST_F(StreamLoadActionTest, put_fail) {
 }
 
 TEST_F(StreamLoadActionTest, commit_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -257,7 +259,7 @@ TEST_F(StreamLoadActionTest, commit_fail) {
 }
 
 TEST_F(StreamLoadActionTest, commit_try) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -274,7 +276,7 @@ TEST_F(StreamLoadActionTest, commit_try) {
 }
 
 TEST_F(StreamLoadActionTest, begin_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -292,7 +294,7 @@ TEST_F(StreamLoadActionTest, begin_fail) {
 
 #if 0
 TEST_F(StreamLoadActionTest, receive_failed) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -312,7 +314,7 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::execute_plan_fragment:1",
                                           [](void* arg) { *((Status*)arg) = Status::InternalError("TestFail"); });
 
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -331,7 +333,7 @@ TEST_F(StreamLoadActionTest, plan_fail) {
 }
 
 TEST_F(StreamLoadActionTest, huge_malloc) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
     auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->body_sink = std::make_shared<StreamLoadPipe>();
@@ -414,7 +416,7 @@ TEST_F(StreamLoadActionTest, batch_write_csv) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
     HttpRequest request(_evhttp_req);
 
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -473,7 +475,7 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
     HttpRequest request(_evhttp_req);
 
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -523,7 +525,7 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
 }
 
 TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -623,7 +625,7 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
 }
 
 TEST_F(StreamLoadActionTest, url_db_key_decode_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "%RR");
@@ -632,7 +634,7 @@ TEST_F(StreamLoadActionTest, url_db_key_decode_fail) {
 }
 
 TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -642,7 +644,7 @@ TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
 }
 
 TEST_F(StreamLoadActionTest, invalid_envelope) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -672,7 +674,7 @@ TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     };
 
     for (const auto& tc : test_cases) {
-        StreamLoadAction action(&_env, _limiter.get());
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
         SyncPoint::GetInstance()->EnableProcessing();
         DeferOp defer([]() {
             SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");

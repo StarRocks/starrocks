@@ -48,7 +48,9 @@
 #include "http/service/action/update_config_action.h"
 #include "http/service/download_action.h"
 #include "http/service/web_page_handler.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "runtime/env/global_env.h"
+#include "runtime/exec_env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "http/service/action/jit_cache_action.h"
@@ -201,7 +203,9 @@ TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_skip_framework_auth) 
 }
 
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
-    StreamLoadAction action(nullptr, nullptr);
+    ExecEnv env;
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env);
+    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr);
     EXPECT_FALSE(action.need_auth());
 }
 
@@ -211,7 +215,9 @@ TEST(BeHandlerNeedAuthTest, transaction_endpoints_skip_framework_auth) {
     // look up the StreamLoadContext by label).
     TransactionManagerAction txn_mgr(nullptr);
     EXPECT_FALSE(txn_mgr.need_auth());
-    TransactionStreamLoadAction txn_load(nullptr);
+    ExecEnv env;
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env);
+    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator);
     EXPECT_FALSE(txn_load.need_auth());
 }
 

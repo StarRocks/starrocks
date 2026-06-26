@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "query_orchestration/query_orchestrator.h"
+#include "orchestration/query_orchestrator.h"
 
 #include <gtest/gtest.h>
 
@@ -32,7 +32,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 
-namespace starrocks::query_orchestration {
+namespace starrocks::orchestration {
 
 class QueryOrchestratorTest : public testing::Test {
 protected:
@@ -169,4 +169,4 @@ TEST_F(QueryOrchestratorTest, ExecExternalPlanFragmentLooksUpSlotWithEmptyColNam
     EXPECT_TRUE(st.is_not_found()) << "expected NotFound from unknown tablet, got: " << st;
 }
 
-} // namespace starrocks::query_orchestration
+} // namespace starrocks::orchestration

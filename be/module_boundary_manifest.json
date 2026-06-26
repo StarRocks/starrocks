@@ -111,6 +111,7 @@
         "exprs/",
         "fs/",
         "io/",
+        "orchestration/",
         "platform/",
         "runtime/",
         "storage/",
@@ -121,7 +122,7 @@
       ],
       "forbidden_include_prefixes": ["service/", "service_be/", "agent/", "connector/"],
       "forbidden_includes": [],
-      "allowed_target_deps": ["HttpCore", "Storage", "DataWorkflows", "Runtime", "RuntimeCore", "RuntimeEnv", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FSCore", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["HttpCore", "Storage", "DataWorkflows", "Orchestration", "Runtime", "RuntimeCore", "RuntimeEnv", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FSCore", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep HTTP service code above HttpCore; move reusable transport/request primitives down to HttpCore and keep service/bootstrap integration outside HttpService."
@@ -1073,13 +1074,13 @@
       "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
     },
     {
-      "id": "queryorchestration",
-      "doc_label": "QueryOrchestration",
-      "summary": "Query orchestration layer below Service for query and fragment lifecycle entrypoints over concrete runtime and execution modules.",
-      "owned_targets": ["QueryOrchestration"],
-      "owned_roots": ["be/src/query_orchestration"],
+      "id": "orchestration",
+      "doc_label": "Orchestration",
+      "summary": "Orchestration layer below Service for query, fragment, and ingestion lifecycle entrypoints over concrete runtime and execution modules.",
+      "owned_targets": ["Orchestration"],
+      "owned_roots": ["be/src/orchestration"],
       "allowed_include_prefixes": [
-        "query_orchestration/",
+        "orchestration/",
         "connector/data_source_provider.h",
         "exec/",
         "runtime/",
@@ -1092,9 +1093,9 @@
       ],
       "forbidden_include_prefixes": ["service/", "http/service/", "agent/"],
       "allowed_target_deps": ["Runtime", "Exec", "ExecRuntime", "ExecPrimitive", "ComputeEnv", "ConnectorPrimitive", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
-      "allowed_test_targets": ["query_orchestration_test"],
-      "allowed_test_link_deps": ["QueryOrchestration"],
-      "remediation": "Keep QueryOrchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime primitives to their owning modules."
+      "allowed_test_targets": ["orchestration_test"],
+      "allowed_test_link_deps": ["Orchestration"],
+      "remediation": "Keep Orchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime or ingestion primitives to their owning modules."
     },
     {
       "id": "service",
@@ -1120,7 +1121,7 @@
         "http/service/",
         "io/",
         "platform/",
-        "query_orchestration/",
+        "orchestration/",
         "runtime/",
         "serde/",
         "storage/",
@@ -1130,7 +1131,7 @@
       "forbidden_include_prefixes": ["service/service_be/", "service_be/"],
       "allowed_target_deps": [
         "Runtime",
-        "QueryOrchestration",
+        "Orchestration",
         "RuntimeEnv",
         "RuntimeCore",
         "Cache",

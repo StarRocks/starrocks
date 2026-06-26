@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/routine_load/routine_load_task_executor.h"
+#include "orchestration/routine_load_task_executor.h"
 
 #include <gtest/gtest.h>
 
@@ -42,6 +42,7 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
@@ -78,6 +79,7 @@ public:
 
 private:
     ExecEnv _env;
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env};
 };
 
 TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
@@ -104,7 +106,7 @@ TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
 
     task.__set_kafka_load_info(k_info);
 
-    RoutineLoadTaskExecutor executor(&_env);
+    orchestration::RoutineLoadTaskExecutor executor(&_env, &_stream_load_orchestrator);
 
     // submit task
     Status st;

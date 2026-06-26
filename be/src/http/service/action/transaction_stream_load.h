@@ -29,6 +29,10 @@ class Status;
 class StreamLoadContext;
 class TStreamLoadPutRequest;
 
+namespace orchestration {
+class StreamLoadOrchestrator;
+}
+
 class TransactionManagerAction : public HttpHandler {
 public:
     explicit TransactionManagerAction(ExecEnv* exec_env);
@@ -50,7 +54,7 @@ private:
 
 class TransactionStreamLoadAction : public HttpHandler {
 public:
-    explicit TransactionStreamLoadAction(ExecEnv* exec_env);
+    TransactionStreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator);
     ~TransactionStreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -77,6 +81,7 @@ private:
     Status _parse_request(HttpRequest* http_req, StreamLoadContext* ctx, TStreamLoadPutRequest& request);
 
     ExecEnv* _exec_env;
+    orchestration::StreamLoadOrchestrator* _stream_load_orchestrator;
 };
 
 } // namespace starrocks

@@ -45,7 +45,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "http",
     "io",
     "platform",
-    "query_orchestration",
+    "orchestration",
     "runtime",
     "script",
     "serde",

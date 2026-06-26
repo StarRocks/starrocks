@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "query_orchestration/query_orchestrator.h"
+#include "orchestration/query_orchestrator.h"
 
 #include <fmt/format.h>
 #include <thrift/protocol/TDebugProtocol.h>
@@ -37,12 +37,12 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Planner_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
-#include "query_orchestration/fragment_executor.h"
+#include "orchestration/fragment_executor.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "types/logical_type.h"
 
-namespace starrocks::query_orchestration {
+namespace starrocks::orchestration {
 
 QueryOrchestrator::QueryOrchestrator(ExecEnv* exec_env) : _exec_env(exec_env) {
     DCHECK(_exec_env != nullptr);
@@ -205,4 +205,4 @@ Status QueryOrchestrator::exec_external_plan_fragment(const TScanOpenParams& par
     return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
 }
 
-} // namespace starrocks::query_orchestration
+} // namespace starrocks::orchestration
