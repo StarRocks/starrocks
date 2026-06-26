@@ -62,8 +62,7 @@ static bool should_release_compaction_chunk_capacity(const Chunk* chunk, MemTrac
         return false;
     }
 
-    return static_cast<double>(mem_tracker->consumption()) >
-           static_cast<double>(limit) * threshold_percent / 100.0;
+    return static_cast<double>(mem_tracker->consumption()) > static_cast<double>(limit) * threshold_percent / 100.0;
 }
 
 static bool should_release_compaction_chunk_capacity(const Chunk* chunk) {

@@ -268,7 +268,8 @@ TEST_F(RowsetMergerTest, compaction_chunk_clone_empty_releases_capacity) {
 
 TEST_F(RowsetMergerTest, compaction_chunk_reset_memory_tracker_threshold_percent_triggers_output_chunk_release) {
     const auto old_vector_chunk_size = config::vector_chunk_size;
-    const auto old_reset_memory_tracker_threshold_percent = config::compaction_chunk_reset_memory_tracker_threshold_percent;
+    const auto old_reset_memory_tracker_threshold_percent =
+            config::compaction_chunk_reset_memory_tracker_threshold_percent;
     const auto old_vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     DeferOp restore_config([&]() {
         config::vector_chunk_size = old_vector_chunk_size;
