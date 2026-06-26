@@ -383,4 +383,111 @@ TEST_F(BinaryPlainPageTest, TestDictFilterSelectionLargeDictSize) {
     ASSERT_EQ(1, selection[kNumDictValues - 1]);
 }
 
+<<<<<<< HEAD
+=======
+// NOLINTNEXTLINE
+TEST_F(BinaryPlainPageTest, test_delta_offset_roundtrip) {
+    std::vector<Slice> slices;
+    slices.emplace_back(""); // zero-length value -> delta 0
+    slices.emplace_back("a");
+    slices.emplace_back("persona,1");
+    slices.emplace_back("persona,1234567");
+    slices.emplace_back("bb");
+    std::string longstr(300, 'z');
+    slices.emplace_back(longstr);
+    slices.emplace_back("tail");
+    const size_t n = slices.size();
+
+    // delta == true exercises the PLAIN_ENCODING_DELTA_OFFSET path; false is the legacy
+    // absolute-offset path. Both must decode to identical values. The format is passed via the
+    // builder/decoder ctor flag (the on-disk count field stays a plain element count).
+    auto build_and_check = [&](bool delta) {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options, delta);
+        size_t added = builder.add(reinterpret_cast<const uint8_t*>(slices.data()), n);
+        ASSERT_EQ(n, added);
+        OwnedSlice owned = builder.finish()->build();
+        Slice page = owned.slice();
+
+        // The trailer's count field is a plain element count regardless of delta encoding.
+        uint32_t raw = decode_fixed32_le((const uint8_t*)page.data + page.size - sizeof(uint32_t));
+        ASSERT_EQ(n, raw);
+
+        BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page, delta);
+        ASSERT_OK(decoder.init());
+        ASSERT_EQ(n, decoder.count());
+
+        // full scan round-trip: every value must come back byte-identical
+        auto col = BinaryColumn::create();
+        size_t size = 1024;
+        ASSERT_OK(decoder.next_batch(&size, col.get()));
+        ASSERT_EQ(n, size);
+        for (size_t i = 0; i < n; i++) {
+            ASSERT_EQ(slices[i], col->immutable_data()[i]);
+        }
+
+        // point seek
+        auto col2 = BinaryColumn::create();
+        ASSERT_OK(decoder.seek_to_position_in_page(3));
+        size = 1;
+        ASSERT_OK(decoder.next_batch(&size, col2.get()));
+        ASSERT_EQ(1, size);
+        ASSERT_EQ(slices[3], col2->immutable_data()[0]);
+
+        // sparse range read crossing non-adjacent values
+        auto col3 = BinaryColumn::create();
+        ASSERT_OK(decoder.seek_to_position_in_page(0));
+        SparseRange<> r;
+        r.add(Range<>(0, 2));
+        r.add(Range<>(5, 7));
+        ASSERT_OK(decoder.next_batch(r, col3.get()));
+        ASSERT_EQ(4, col3->size());
+        ASSERT_EQ(slices[0], col3->immutable_data()[0]);
+        ASSERT_EQ(slices[1], col3->immutable_data()[1]);
+        ASSERT_EQ(slices[5], col3->immutable_data()[2]);
+        ASSERT_EQ(slices[6], col3->immutable_data()[3]);
+    };
+
+    build_and_check(false); // legacy absolute offsets
+    build_and_check(true);  // delta offsets must decode identically
+}
+
+// NOLINTNEXTLINE
+TEST_F(BinaryPlainPageTest, test_max_value_length_is_cached_and_correct) {
+    auto build_decoder = [](const std::vector<Slice>& slices, OwnedSlice* keep_alive) {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options);
+        size_t count = slices.size();
+        builder.add(reinterpret_cast<const uint8_t*>(slices.data()), count);
+        *keep_alive = builder.finish()->build();
+        return BinaryPlainPageDecoder<TYPE_VARCHAR>(keep_alive->slice());
+    };
+
+    // Longest value is "StarRocks" (9 bytes); repeated calls must be stable and equal to the
+    // freshly-recomputed value (memoization must not change the answer).
+    {
+        std::vector<Slice> slices{"Hello", ",", "StarRocks", "ab"};
+        OwnedSlice owned;
+        auto decoder = build_decoder(slices, &owned);
+        ASSERT_OK(decoder.init());
+        EXPECT_EQ(9U, decoder.max_value_length());
+        EXPECT_EQ(9U, decoder.max_value_length());
+        EXPECT_EQ(9U, decoder.max_value_length());
+    }
+
+    // All-empty dictionary: max length is the legitimate value 0; the -1 "not computed" sentinel
+    // must not be confused with a cached 0.
+    {
+        std::vector<Slice> slices{"", "", ""};
+        OwnedSlice owned;
+        auto decoder = build_decoder(slices, &owned);
+        ASSERT_OK(decoder.init());
+        EXPECT_EQ(0U, decoder.max_value_length());
+        EXPECT_EQ(0U, decoder.max_value_length());
+    }
+}
+
+>>>>>>> 908d1ca3b5 ([Enhancement] Cache BinaryPlainPageDecoder::max_value_length (#75425))
 } // namespace starrocks
