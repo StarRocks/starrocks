@@ -27,6 +27,36 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 
 :::
 
+## 3.5.19
+
+发布日期：2026 年 6 月 26 日
+
+### 行为变更
+
+- FILES() 和 LOAD 现在会遵循 Parquet INT64 时间戳中的 `isAdjustedToUTC=false`。 [#73674](https://github.com/StarRocks/starrocks/pull/73674)
+- Incremental Scan Range Driver 现在会正确复用 DOP。 [#74674](https://github.com/StarRocks/starrocks/pull/74674)
+- MySQL 协议异常现在会被处理，以避免客户端出现 `ERROR 2013` 连接失败。 [#70072](https://github.com/StarRocks/starrocks/pull/70072)
+
+### 功能优化
+
+- 支持为统计信息收集启用宽字符串列隔离。 [#73258](https://github.com/StarRocks/starrocks/pull/73258)
+- Arrow-to-JSON 转换器支持 `LARGE_LIST` 和 `FIXED_SIZE_LIST`。 [#73714](https://github.com/StarRocks/starrocks/pull/73714)
+- 优化了 `base64_to_bitmap` 的常量计算。 [#74684](https://github.com/StarRocks/starrocks/pull/74684)
+- 新增 Catalog Recycle Bin 大小指标、Vacuum 批大小和重试次数指标、审计日志中的导出行数，并支持重复输出审计事件。 [#74440](https://github.com/StarRocks/starrocks/pull/74440) [#74112](https://github.com/StarRocks/starrocks/pull/74112) [#74467](https://github.com/StarRocks/starrocks/pull/74467) [#73896](https://github.com/StarRocks/starrocks/pull/73896)
+- 新增 BugFix 版本索引工作流，用于发布和回合并跟踪。 [#74716](https://github.com/StarRocks/starrocks/pull/74716)
+
+### 问题修复
+
+修复了以下问题：
+
+- 查询改写和优化器问题，包括通过 sum/count 物化视图改写 `avg(DISTINCT ...)`、Distinct Aggregate 下推后空 Analytic Operator 未裁剪、带 HAVING 谓词的聚合物化视图改写、外连接物化视图的 Lazy Materialization 可空性、`SHOW CREATE MATERIALIZED VIEW` 中重复的 Warehouse 属性、嵌套物化视图刷新 NPE、Distinct Aggregate 完成通知、Local/Partition TopN、Partitioned Join 以及交换律 AND/OR 的公共子表达式消除问题。 [#75071](https://github.com/StarRocks/starrocks/pull/75071) [#74810](https://github.com/StarRocks/starrocks/pull/74810) [#73610](https://github.com/StarRocks/starrocks/pull/73610) [#72621](https://github.com/StarRocks/starrocks/pull/72621) [#69418](https://github.com/StarRocks/starrocks/pull/69418) [#73644](https://github.com/StarRocks/starrocks/pull/73644) [#74055](https://github.com/StarRocks/starrocks/pull/74055) [#75045](https://github.com/StarRocks/starrocks/pull/75045) [#69752](https://github.com/StarRocks/starrocks/pull/69752) [#72848](https://github.com/StarRocks/starrocks/pull/72848) [#74315](https://github.com/StarRocks/starrocks/pull/74315) [#72823](https://github.com/StarRocks/starrocks/pull/72823)
+- SQL、函数和表达式问题，包括 `ALTER MODIFY COLUMN ... AFTER`、空分隔符字符串拆分、CTAS 中 `VARCHAR` 长度保留、Datetime 预处理参数解析以及全 NULL 可空 Decimal 表达式。 [#75073](https://github.com/StarRocks/starrocks/pull/75073) [#75068](https://github.com/StarRocks/starrocks/pull/75068) [#73498](https://github.com/StarRocks/starrocks/pull/73498) [#74141](https://github.com/StarRocks/starrocks/pull/74141) [#73789](https://github.com/StarRocks/starrocks/pull/73789)
+- External Catalog、导入和 Connector 问题，包括 `information_schema.COLUMNS.DATETIME_PRECISION`、嵌套类型 JSON Load Partial Append、Arrow `LargeList` 和 `FixedSizeList` 到 JsonColumn 的 Broker Load 转换、Paimon DATE 分区列 NULL 值、Hudi varchar Slice Reader、Iceberg Equality Delete 的 NULL-safe 比较、Routine Load SQL 持久化和 Broker RPC 锁、Connector 字节读取统计、非根 Compound Predicate 下推以及 Schema Change Meta Scan。 [#74623](https://github.com/StarRocks/starrocks/pull/74623) [#73715](https://github.com/StarRocks/starrocks/pull/73715) [#73718](https://github.com/StarRocks/starrocks/pull/73718) [#73950](https://github.com/StarRocks/starrocks/pull/73950) [#58521](https://github.com/StarRocks/starrocks/pull/58521) [#67321](https://github.com/StarRocks/starrocks/pull/67321) [#74188](https://github.com/StarRocks/starrocks/pull/74188) [#73591](https://github.com/StarRocks/starrocks/pull/73591) [#73799](https://github.com/StarRocks/starrocks/pull/73799) [#74218](https://github.com/StarRocks/starrocks/pull/74218) [#72901](https://github.com/StarRocks/starrocks/pull/72901)
+- Runtime 和执行问题，包括 BE 异常重启、并行 Profile 收集中的 Tracer fork 安全性、Partition Consumer 错误传播、JIT 编译失败清理、RuntimeProfile min/max 序列化竞争、OlapTableSink 内存统计、Task Run 归档和 Edit Log、Data Dir Load 线程命名、UDAF Cache 内存泄漏以及可空 Analytic 列追加。 [#74424](https://github.com/StarRocks/starrocks/pull/74424) [#74746](https://github.com/StarRocks/starrocks/pull/74746) [#74693](https://github.com/StarRocks/starrocks/pull/74693) [#74396](https://github.com/StarRocks/starrocks/pull/74396) [#72904](https://github.com/StarRocks/starrocks/pull/72904) [#73807](https://github.com/StarRocks/starrocks/pull/73807) [#74146](https://github.com/StarRocks/starrocks/pull/74146) [#73882](https://github.com/StarRocks/starrocks/pull/73882) [#73862](https://github.com/StarRocks/starrocks/pull/73862) [#74025](https://github.com/StarRocks/starrocks/pull/74025) [#74453](https://github.com/StarRocks/starrocks/pull/74453)
+- Storage 和 Lake 问题，包括 Autovacuum 删除事务日志前的 minActiveTxnId 防抖、BE Vacuum 任务超时处理、Schema Change Rowset 检查、Vector Index Schema 污染、Schema Drift 下 Lake Partial Column Update、`MaterializedIndexMeta` 竞争、非主键副本永久版本空洞、关闭均衡时 Dead BE Colocate Tablet 状态、空 Tablet 删除快速路径，以及 Tablet Context 调度中的锁不匹配。 [#74906](https://github.com/StarRocks/starrocks/pull/74906) [#74694](https://github.com/StarRocks/starrocks/pull/74694) [#74855](https://github.com/StarRocks/starrocks/pull/74855) [#74785](https://github.com/StarRocks/starrocks/pull/74785) [#74005](https://github.com/StarRocks/starrocks/pull/74005) [#74412](https://github.com/StarRocks/starrocks/pull/74412) [#74408](https://github.com/StarRocks/starrocks/pull/74408) [#73550](https://github.com/StarRocks/starrocks/pull/73550) [#73955](https://github.com/StarRocks/starrocks/pull/73955) [#74596](https://github.com/StarRocks/starrocks/pull/74596)
+- Catalog、统计信息、权限和管理语句问题，包括分区统计中的零行数、统计计算过程中分区被并发删除、`CatalogRecycleBin` 因集群快照失败而冻结、`ADMIN SHOW REPLICA STATUS` 缺失副本行、Public Role 变更后的权限缓存失效，以及数据库重命名后 DB 级 UDF 恢复。 [#74801](https://github.com/StarRocks/starrocks/pull/74801) [#73711](https://github.com/StarRocks/starrocks/pull/73711) [#74379](https://github.com/StarRocks/starrocks/pull/74379) [#74393](https://github.com/StarRocks/starrocks/pull/74393) [#73717](https://github.com/StarRocks/starrocks/pull/73717) [#74313](https://github.com/StarRocks/starrocks/pull/74313)
+- JLine、Netty、Tomcat 和 libthrift 中的依赖安全漏洞。 [#75066](https://github.com/StarRocks/starrocks/pull/75066) [#74668](https://github.com/StarRocks/starrocks/pull/74668) [#73797](https://github.com/StarRocks/starrocks/pull/73797) [#73243](https://github.com/StarRocks/starrocks/pull/73243)
+
 ## 3.5.18
 
 发布日期：2026 年 6 月 5 日

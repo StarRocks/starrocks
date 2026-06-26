@@ -27,6 +27,36 @@ description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAu
 
 :::
 
+## 3.5.19
+
+リリース日：2026 年 6 月 26 日
+
+### 動作変更
+
+- FILES() と LOAD が Parquet INT64 タイムスタンプの `isAdjustedToUTC=false` を尊重するようになりました。 [#73674](https://github.com/StarRocks/starrocks/pull/73674)
+- Incremental Scan Range Driver が DOP を正しく再利用するようになりました。 [#74674](https://github.com/StarRocks/starrocks/pull/74674)
+- MySQL プロトコル例外を処理し、クライアント側の `ERROR 2013` 接続失敗を回避するようになりました。 [#70072](https://github.com/StarRocks/starrocks/pull/70072)
+
+### 改善点
+
+- 統計情報収集で wide-string column isolation を任意で有効化できるようになりました。 [#73258](https://github.com/StarRocks/starrocks/pull/73258)
+- Arrow-to-JSON converter が `LARGE_LIST` と `FIXED_SIZE_LIST` をサポートしました。 [#73714](https://github.com/StarRocks/starrocks/pull/73714)
+- `base64_to_bitmap` の定数評価を最適化しました。 [#74684](https://github.com/StarRocks/starrocks/pull/74684)
+- Catalog Recycle Bin サイズメトリクス、Vacuum のバッチサイズとリトライ回数メトリクス、監査ログのエクスポート行数を追加し、監査イベントの重複出力をサポートしました。 [#74440](https://github.com/StarRocks/starrocks/pull/74440) [#74112](https://github.com/StarRocks/starrocks/pull/74112) [#74467](https://github.com/StarRocks/starrocks/pull/74467) [#73896](https://github.com/StarRocks/starrocks/pull/73896)
+- リリースとバックポート追跡用の bugfix version index workflow を追加しました。 [#74716](https://github.com/StarRocks/starrocks/pull/74716)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- `avg(DISTINCT ...)` の materialized view rewrite、Distinct Aggregate pushdown 後の空 Analytic Operator、HAVING 述語付き集約 MV rewrite、外部結合上の MV に対する lazy-materialization nullability、`SHOW CREATE MATERIALIZED VIEW` の重複 Warehouse プロパティ、ネストした MV refresh の NPE、Distinct Aggregate の完了通知、Local/Partition TopN、Partitioned Join、可換 AND/OR の共通部分式除去に関する Query rewrite と Optimizer の問題。 [#75071](https://github.com/StarRocks/starrocks/pull/75071) [#74810](https://github.com/StarRocks/starrocks/pull/74810) [#73610](https://github.com/StarRocks/starrocks/pull/73610) [#72621](https://github.com/StarRocks/starrocks/pull/72621) [#69418](https://github.com/StarRocks/starrocks/pull/69418) [#73644](https://github.com/StarRocks/starrocks/pull/73644) [#74055](https://github.com/StarRocks/starrocks/pull/74055) [#75045](https://github.com/StarRocks/starrocks/pull/75045) [#69752](https://github.com/StarRocks/starrocks/pull/69752) [#72848](https://github.com/StarRocks/starrocks/pull/72848) [#74315](https://github.com/StarRocks/starrocks/pull/74315) [#72823](https://github.com/StarRocks/starrocks/pull/72823)
+- `ALTER MODIFY COLUMN ... AFTER`、空デリミタの文字列分割、CTAS での `VARCHAR` 長保持、Datetime prepared parameter、全 NULL の nullable decimal 式に関する SQL、関数、式の問題。 [#75073](https://github.com/StarRocks/starrocks/pull/75073) [#75068](https://github.com/StarRocks/starrocks/pull/75068) [#73498](https://github.com/StarRocks/starrocks/pull/73498) [#74141](https://github.com/StarRocks/starrocks/pull/74141) [#73789](https://github.com/StarRocks/starrocks/pull/73789)
+- `information_schema.COLUMNS.DATETIME_PRECISION`、ネスト型 JSON Load partial append、Arrow `LargeList` と `FixedSizeList` の JsonColumn への Broker Load 変換、Paimon DATE パーティション列の NULL 値、Hudi varchar slice reader、Iceberg equality delete の null-safe comparison、Routine Load SQL 永続化と Broker RPC ロック、Connector bytes-read 統計、非 root compound predicate pushdown、Schema Change Meta Scan に関する External Catalog、Load、Connector の問題。 [#74623](https://github.com/StarRocks/starrocks/pull/74623) [#73715](https://github.com/StarRocks/starrocks/pull/73715) [#73718](https://github.com/StarRocks/starrocks/pull/73718) [#73950](https://github.com/StarRocks/starrocks/pull/73950) [#58521](https://github.com/StarRocks/starrocks/pull/58521) [#67321](https://github.com/StarRocks/starrocks/pull/67321) [#74188](https://github.com/StarRocks/starrocks/pull/74188) [#73591](https://github.com/StarRocks/starrocks/pull/73591) [#73799](https://github.com/StarRocks/starrocks/pull/73799) [#74218](https://github.com/StarRocks/starrocks/pull/74218) [#72901](https://github.com/StarRocks/starrocks/pull/72901)
+- 予期しない BE restart、parallel profile collection での Tracer fork safety、partition consumer error propagation、JIT compile failure cleanup、RuntimeProfile min/max serialization race、OlapTableSink memory accounting、Task Run archive と Edit Log、Data Dir Load thread naming、UDAF cache memory leak、nullable analytic column append に関する Runtime と Execution の問題。 [#74424](https://github.com/StarRocks/starrocks/pull/74424) [#74746](https://github.com/StarRocks/starrocks/pull/74746) [#74693](https://github.com/StarRocks/starrocks/pull/74693) [#74396](https://github.com/StarRocks/starrocks/pull/74396) [#72904](https://github.com/StarRocks/starrocks/pull/72904) [#73807](https://github.com/StarRocks/starrocks/pull/73807) [#74146](https://github.com/StarRocks/starrocks/pull/74146) [#73882](https://github.com/StarRocks/starrocks/pull/73882) [#73862](https://github.com/StarRocks/starrocks/pull/73862) [#74025](https://github.com/StarRocks/starrocks/pull/74025) [#74453](https://github.com/StarRocks/starrocks/pull/74453)
+- Autovacuum の transaction-log deletion、BE Vacuum task timeout handling、Schema Change rowset check、Vector Index schema pollution、schema drift 下の Lake partial column update、`MaterializedIndexMeta` race、非 PK replica version hole、dead-BE colocate tablet、empty tablet deletion fast path、tablet context scheduling の lock mismatch に関する Storage と Lake の問題。 [#74906](https://github.com/StarRocks/starrocks/pull/74906) [#74694](https://github.com/StarRocks/starrocks/pull/74694) [#74855](https://github.com/StarRocks/starrocks/pull/74855) [#74785](https://github.com/StarRocks/starrocks/pull/74785) [#74005](https://github.com/StarRocks/starrocks/pull/74005) [#74412](https://github.com/StarRocks/starrocks/pull/74412) [#74408](https://github.com/StarRocks/starrocks/pull/74408) [#73550](https://github.com/StarRocks/starrocks/pull/73550) [#73955](https://github.com/StarRocks/starrocks/pull/73955) [#74596](https://github.com/StarRocks/starrocks/pull/74596)
+- Partition statistics の zero row count、statistics calculation 中の concurrent partition drop、cluster snapshot failure による `CatalogRecycleBin` freeze、`ADMIN SHOW REPLICA STATUS` の missing-replica row、public role 変更後の privilege cache invalidation、database rename 後の DB-level UDF restore に関する Catalog、Statistics、Privilege、Admin Statement の問題。 [#74801](https://github.com/StarRocks/starrocks/pull/74801) [#73711](https://github.com/StarRocks/starrocks/pull/73711) [#74379](https://github.com/StarRocks/starrocks/pull/74379) [#74393](https://github.com/StarRocks/starrocks/pull/74393) [#73717](https://github.com/StarRocks/starrocks/pull/73717) [#74313](https://github.com/StarRocks/starrocks/pull/74313)
+- JLine、Netty、Tomcat、libthrift の依存関係 CVE。 [#75066](https://github.com/StarRocks/starrocks/pull/75066) [#74668](https://github.com/StarRocks/starrocks/pull/74668) [#73797](https://github.com/StarRocks/starrocks/pull/73797) [#73243](https://github.com/StarRocks/starrocks/pull/73243)
+
 ## 3.5.18
 
 リリース日：2026 年 6 月 5 日
