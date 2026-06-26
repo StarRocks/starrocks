@@ -18,8 +18,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/util")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 
 set(UTIL_FILES
-  arrow/row_batch.cpp
-  arrow/starrocks_column_to_arrow.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
   static_asserts.cpp
@@ -34,4 +32,4 @@ ADD_BE_LIB(Util
     ${UTIL_FILES}
 )
 
-target_link_libraries(Util PUBLIC RuntimeEnv ColumnCore)
+target_link_libraries(Util PUBLIC RuntimeEnv)

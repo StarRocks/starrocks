@@ -14,6 +14,7 @@
 
 #include "udf/udf_call_stub.h"
 
+#include <arrow/memory_pool.h>
 #include <fmt/format.h>
 
 #include <memory>
@@ -22,13 +23,13 @@
 
 #include "base/utility/arrow_utils.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"
+#include "column/arrow/record_batch_converter.h"
+#include "column/arrow/type_to_arrow_converter.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/function_helper.h"
 #include "gutil/casts.h"
-#include "util/arrow/row_batch.h"
-#include "util/arrow/starrocks_column_to_arrow.h"
 
 namespace starrocks {
 

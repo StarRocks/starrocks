@@ -29,6 +29,8 @@ set(COLUMN_TEST_FILES
     array_view_column_core_test.cpp
     arrow_to_starrocks_converter_test.cpp
     arrow_to_json_converter_test.cpp
+    type_to_arrow_converter_test.cpp
+    record_batch_converter_test.cpp
     map_column_core_test.cpp
     struct_column_core_test.cpp
     binary_column_core_test.cpp

@@ -751,6 +751,7 @@
         "be/src/exec/pipeline/scan/split_morsel_ticket_checker.h"
       ],
       "allowed_include_prefixes": [
+        "exec/arrow/",
         "exec/data_sink.h",
         "exec/runtime_filter/",
         "exec/pipeline/pipeline_fwd.h",

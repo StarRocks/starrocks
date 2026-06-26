@@ -12,70 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/util/arrow/row_batch.cpp
+// This file contains code originally based on Apache Doris'
+// be/src/util/arrow/row_batch.cpp under the Apache License 2.0.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+#include "column/arrow/type_to_arrow_converter.h"
 
-#include "util/arrow/row_batch.h"
-
-#include <arrow/array.h>
-#include <arrow/array/builder_primitive.h>
-#include <arrow/buffer.h>
-#include <arrow/io/memory.h>
-#include <arrow/ipc/writer.h>
-#include <arrow/memory_pool.h>
-#include <arrow/record_batch.h>
-#include <arrow/status.h>
 #include <arrow/type.h>
-#include <arrow/visitor.h>
 #include <fmt/format.h>
 
-#include <memory>
-
-#include "base/utility/arrow_utils.h"
-#include "common/logging.h"
-#include "exprs/column_ref.h"
-#include "exprs/expr_context.h"
-#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/descriptors.h"
 
 namespace starrocks {
-
-using strings::Substitute;
-
-namespace {
-
-ColumnRef* find_first_column_ref(Expr* expr) {
-    if (expr->is_slotref()) {
-        return down_cast<ColumnRef*>(expr);
-    }
-    for (Expr* child : expr->children()) {
-        if (ColumnRef* ref = find_first_column_ref(child); ref != nullptr) {
-            return ref;
-        }
-    }
-    return nullptr;
-}
-
-} // namespace
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
     switch (type.type) {
@@ -206,7 +153,7 @@ Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::sha
     case TYPE_HLL:
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
-        // HLL,BITMAP,PERCENTILE are always converted to binary with null values, which is the same as MySQL output.
+        // HLL, BITMAP, and PERCENTILE are converted to binary with null values, matching MySQL output.
         *result = arrow::binary();
         break;
     case TYPE_DECIMALV2:
@@ -259,8 +206,7 @@ Status convert_to_arrow_field(const TypeDescriptor& desc, const std::string& col
                               std::shared_ptr<arrow::Field>* field) {
     std::shared_ptr<arrow::DataType> type;
     RETURN_IF_ERROR(convert_to_arrow_type(desc, &type));
-    // we keep the col_name here just for compatibility, col_names are from the first RefSlot,
-    // users of arrow should not adjust the order of columns based on the colname.
+    // Keep the column name for compatibility. Arrow consumers must not adjust column order by name.
     *field = arrow::field(col_name, type, is_nullable);
     return Status::OK();
 }
@@ -274,103 +220,9 @@ Status convert_to_arrow_field_for_flight_sql(const TypeDescriptor& desc, const s
     }
     RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(desc, &type));
 
-    // we keep the col_name here just for compatibility, col_names are from the first RefSlot,
-    // users of arrow should not adjust the order of columns based on the colname.
+    // Keep the column name for compatibility. Arrow consumers must not adjust column order by name.
     *field = arrow::field(col_name, type, is_nullable);
     return Status::OK();
 }
 
-Status convert_to_arrow_schema(const RowDescriptor& row_desc,
-                               const std::unordered_map<int64_t, std::string>& id_to_col_name,
-                               std::shared_ptr<arrow::Schema>* result,
-                               const std::vector<ExprContext*>& output_expr_ctxs,
-                               const std::vector<std::string>* output_column_names, int32_t flight_sql_version) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    for (size_t i = 0; i < output_expr_ctxs.size(); ++i) {
-        const auto& expr_context = output_expr_ctxs[i];
-
-        Expr* expr = expr_context->root();
-        std::shared_ptr<arrow::Field> field;
-        std::string col_name;
-        ColumnRef* col_ref = find_first_column_ref(expr);
-        DCHECK(col_ref != nullptr);
-        int64_t slot_id = col_ref->slot_id();
-        int64_t tuple_id = col_ref->tuple_id();
-        int64_t id = tuple_id << 32 | slot_id;
-
-        if (output_column_names != nullptr) {
-            col_name = (*output_column_names)[i];
-        } else if (auto it = id_to_col_name.find(id); it != id_to_col_name.end()) {
-            col_name = it->second;
-        } else {
-            LOG(WARNING) << "Can't find the RefSlot in the row_desc.";
-        }
-
-        if (flight_sql_version <= 0) {
-            RETURN_IF_ERROR(convert_to_arrow_field(expr->type(), col_name, expr->is_nullable(), &field));
-        } else {
-            RETURN_IF_ERROR(convert_to_arrow_field_for_flight_sql(expr->type(), col_name, expr->is_nullable(), &field,
-                                                                  flight_sql_version));
-        }
-
-        fields.push_back(field);
-    }
-    *result = arrow::schema(std::move(fields));
-    return Status::OK();
-}
-
-Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result) {
-    // create sink memory buffer outputstream with the computed capacity
-    int64_t capacity;
-    arrow::Status a_st = arrow::ipc::GetRecordBatchSize(record_batch, &capacity);
-    if (!a_st.ok()) {
-        std::stringstream msg;
-        msg << "GetRecordBatchSize failure, reason: " << a_st.ToString();
-        return Status::InternalError(msg.str());
-    }
-    auto sink_res = arrow::io::BufferOutputStream::Create(capacity, arrow::default_memory_pool());
-    if (!sink_res.ok()) {
-        std::stringstream msg;
-        msg << "create BufferOutputStream failure, reason: " << sink_res.status().ToString();
-        return Status::InternalError(msg.str());
-    }
-    const auto& sink = sink_res.ValueOrDie();
-    // create RecordBatch Writer
-    auto writer_res = arrow::ipc::MakeStreamWriter(sink.get(), record_batch.schema());
-    if (!writer_res.ok()) {
-        std::stringstream msg;
-        msg << "open RecordBatchStreamWriter failure, reason: " << writer_res.status().ToString();
-        return Status::InternalError(msg.str());
-    }
-    const auto& record_batch_writer = writer_res.ValueOrDie();
-    // write RecordBatch to memory buffer outputstream
-    a_st = record_batch_writer->WriteRecordBatch(record_batch);
-    if (!a_st.ok()) {
-        std::stringstream msg;
-        msg << "write record batch failure, reason: " << a_st.ToString();
-        return Status::InternalError(msg.str());
-    }
-    [[maybe_unused]] auto wr_close_st = record_batch_writer->Close();
-    auto finish_res = sink->Finish();
-    if (!finish_res.ok()) {
-        std::stringstream msg;
-        msg << "allocate result buffer failure, reason: " << finish_res.status().ToString();
-        return Status::InternalError(msg.str());
-    }
-    const auto& buffer = finish_res.ValueOrDie();
-    *result = buffer->ToString();
-    // close the sink
-    [[maybe_unused]] auto sk_close_st = sink->Close();
-    return Status::OK();
-}
-
-Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::string* result) {
-    auto empty_arrow_record_batch = arrow::RecordBatch::MakeEmpty(*schema);
-    if (!empty_arrow_record_batch.ok()) {
-        return Status::InternalError("serialize_arrow_schema failed");
-    }
-
-    const auto& record_batch = empty_arrow_record_batch.ValueOrDie();
-    return serialize_record_batch(*record_batch, result);
-}
 } // namespace starrocks

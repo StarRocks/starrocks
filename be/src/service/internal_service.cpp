@@ -52,6 +52,7 @@
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
+#include "column/arrow/record_batch_converter.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
@@ -95,7 +96,6 @@
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/type_descriptor.h"
-#include "util/arrow/row_batch.h"
 
 namespace starrocks {
 
