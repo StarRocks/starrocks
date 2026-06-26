@@ -149,7 +149,7 @@ public:
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr();
     RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
-    BrokerMgr* broker_mgr() const { return _broker_mgr; }
+    BrokerMgr* broker_mgr() const;
     LoadStreamMgr* load_stream_mgr();
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr();
@@ -212,7 +212,6 @@ private:
 
     RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;
 
-    BrokerMgr* _broker_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
     BatchWriteMgr* _batch_write_mgr = nullptr;
 

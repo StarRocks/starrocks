@@ -70,7 +70,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
         return std::vector<PipeLineReportTaskKey>();
     };
     ASSERT_OK(env.compute_env()->init_profile_report_worker(std::move(profile_report_worker_options)));
-    env._broker_mgr = reinterpret_cast<BrokerMgr*>(0x5);
     env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
     env._heartbeat_flags = reinterpret_cast<HeartbeatFlags*>(0xb);
@@ -91,7 +90,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().backend_client_cache, platform_env->backend_client_cache());
     EXPECT_EQ(env.rpc_services().frontend_client_cache, platform_env->frontend_client_cache());
     EXPECT_EQ(env.rpc_services().broker_client_cache, platform_env->broker_client_cache());
-    EXPECT_EQ(env.rpc_services().broker_mgr, env._broker_mgr);
+    EXPECT_EQ(env.rpc_services().broker_mgr, platform_env->broker_mgr());
     EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
     EXPECT_EQ(env.platform_services().store_path_registry, platform_env->store_path_registry());
 
