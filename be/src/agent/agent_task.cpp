@@ -32,13 +32,20 @@
 #include "data_workflows/consistency/engine_checksum_task.h"
 #include "data_workflows/migration/engine_storage_migration_task.h"
 #include "data_workflows/schema_change/engine_alter_tablet_task.h"
+<<<<<<< HEAD
 #include "fs/fs.h"
+=======
+#include "data_workflows/snapshot/snapshot_loader.h"
+>>>>>>> e711a55ff12... [Refactor] Move snapshot to data_workflows (#75383)
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/external_cluster_snapshot_task.h"
+=======
+>>>>>>> e711a55ff12... [Refactor] Move snapshot to data_workflows (#75383)
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"

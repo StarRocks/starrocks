@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/snapshot_loader.h"
+#include "data_workflows/snapshot/snapshot_loader.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -43,7 +43,6 @@
 #include "common/logging.h"
 #include "common/system/master_info.h"
 #include "fs/fs.h"
-#include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/FileBrokerService_types.h"
@@ -52,6 +51,7 @@
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "platform/broker_mgr.h"
+#include "platform/fs_broker.h"
 #include "runtime/exec_env.h"
 #include "storage/index/index_descriptor.h"
 #ifndef __APPLE__

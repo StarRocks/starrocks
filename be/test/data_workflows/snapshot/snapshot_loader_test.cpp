@@ -26,7 +26,7 @@
 #define private public // hack complier
 #define protected public
 
-#include "runtime/snapshot_loader.h"
+#include "data_workflows/snapshot/snapshot_loader.h"
 
 #undef protected
 #undef private

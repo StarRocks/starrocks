@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <runtime/lake_snapshot_loader.h>
+#include "data_workflows/snapshot/lake_snapshot_loader.h"
 
 #include "base/container/raw_container.h"
 #include "base/network/network_util.h"
 #include "common/config_rpc_client_fwd.h"
-#include "fs/fs_broker.h"
+#include "data_workflows/snapshot/snapshot_loader.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "platform/fs_broker.h"
 #include "runtime/exec_env.h"
-#include "runtime/snapshot_loader.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/tablet.h"

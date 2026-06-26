@@ -71,7 +71,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/snapshot_loader.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/primitive/storage_ids.h"
