@@ -21,6 +21,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_PRIMITIVE_FILES
+    arrow/result_to_arrow_converter.cpp
     data_sink.cpp
     exec_node.cpp
     runtime_filter/runtime_filter_descriptor.cpp
@@ -57,6 +58,7 @@ target_link_libraries(ExecPrimitive PUBLIC
     Gutil
     StarRocksGen
 )
+target_link_libraries(ExecPrimitive PRIVATE arrow)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
