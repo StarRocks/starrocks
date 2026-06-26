@@ -88,7 +88,6 @@ set(RUNTIME_FILES
     plan_fragment_executor.cpp
     pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
-    rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_executor.cpp

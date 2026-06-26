@@ -22,9 +22,11 @@ namespace starrocks {
 
 class BrpcStubCache;
 class DiagnoseDaemon;
+class ExecEnv;
 class LoadChannelMgr;
 class MemTracker;
 class MetricRegistry;
+class RejectedRecordSyncDaemon;
 class TableMetricsManager;
 
 namespace lake {
@@ -32,6 +34,7 @@ class TabletManager;
 }
 
 struct DataWorkflowsEnvOptions {
+    ExecEnv* exec_env = nullptr;
     lake::TabletManager* lake_tablet_manager = nullptr;
     DiagnoseDaemon* diagnose_daemon = nullptr;
     BrpcStubCache* brpc_stub_cache = nullptr;
@@ -54,7 +57,9 @@ public:
 
 private:
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
+    std::unique_ptr<RejectedRecordSyncDaemon> _rejected_record_sync_daemon;
     bool _load_channel_mgr_started = false;
+    bool _rejected_record_sync_daemon_started = false;
 };
 
 } // namespace starrocks

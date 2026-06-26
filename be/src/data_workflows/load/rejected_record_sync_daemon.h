@@ -33,13 +33,15 @@ class ExecEnv;
 // RejectedRecordSyncDaemon periodically scans the local JSON Lines files
 // produced by RejectedRecordWriter (Phase 2) and ships them to the FE
 // `_statistics_.rejected_records` system table via a merge-commit Stream
-// Load. The daemon is opt-in during the phased rollout: it is started by
-// ExecEnv only when `config::enable_rejected_record_sync` is true.
+// Load. DataWorkflowsEnv starts the daemon unconditionally; the tick loop
+// re-checks `config::enable_rejected_record_sync` and does no I/O while the
+// feature is disabled.
 //
 // Lifecycle:
-//   * init()   -- called from ExecEnv::init(). Spawns the background thread.
-//   * stop()   -- called from ExecEnv::stop() (or dtor). Signals the thread
-//                 to drain and exit; joins it.
+//   * init()   -- called from DataWorkflowsEnv::init(). Spawns the background
+//                 thread.
+//   * stop()   -- called from DataWorkflowsEnv::stop() (or dtor). Signals the
+//                 thread to drain and exit; joins it.
 //
 // Design choices:
 //   * Reuses the `pthread_create` + `std::promise<bool>::wait_for` pattern

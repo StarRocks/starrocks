@@ -62,7 +62,6 @@ class ExternalScanContextMgr;
 class FragmentMgr;
 class BaseLoadPathMgr;
 class LoadPathMgr;
-class RejectedRecordSyncDaemon;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class StreamContextMgr;
@@ -148,7 +147,6 @@ public:
 
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr();
-    RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
     BrokerMgr* broker_mgr() const;
     LoadStreamMgr* load_stream_mgr();
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
@@ -209,8 +207,6 @@ private:
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<ComputeEnv> _compute_env;
-
-    RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;
 
     TransactionMgr* _transaction_mgr = nullptr;
     BatchWriteMgr* _batch_write_mgr = nullptr;

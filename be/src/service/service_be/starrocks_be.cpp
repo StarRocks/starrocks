@@ -157,6 +157,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
+    data_workflows_env_options.exec_env = exec_env;
     data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     data_workflows_env_options.diagnose_daemon = exec_env->diagnose_daemon();
     data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
