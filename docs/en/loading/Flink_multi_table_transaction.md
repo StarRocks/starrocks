@@ -22,7 +22,7 @@ Typical scenarios:
 - A single job maintaining multiple interrelated downstream result tables
 
 :::tip[Prerequisites]
-To enable Multi-table Transaction, you must running your cluster on StarRocks v4.0 (with the Multi-table Transaction Stream Load support), and StarRocks Flink Connector on v1.2.9 and later.
+To enable Multi-table Transaction, you must running your cluster on StarRocks v4.0 and later (with the Multi-table Transaction Stream Load support), and StarRocks Flink Connector on v1.2.9 and later.
 :::
 
 ## Core Capabilities
