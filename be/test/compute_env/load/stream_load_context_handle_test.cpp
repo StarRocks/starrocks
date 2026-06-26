@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/stream_load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_context_handle.h"
 
 #include <gtest/gtest.h>
 
@@ -71,9 +71,14 @@ TEST_F(StreamLoadContextHandleTest, cancel_and_close_channel_context) {
     ctx->body_sink = sink;
     ASSERT_OK(stream_context_mgr.put_channel_context(label, table, channel_id, ctx));
 
-    StreamLoadContextHandle handle(ctx, &stream_context_mgr);
+    int close_count = 0;
+    StreamLoadContextHandle handle(ctx, [&](StreamLoadContext* context) {
+        ++close_count;
+        stream_context_mgr.remove_channel_context(context);
+    });
     handle.cancel(Status::Cancelled("cancel only"));
     EXPECT_EQ(1, sink->cancel_count);
+    EXPECT_EQ(0, close_count);
 
     auto* fetched = stream_context_mgr.get_channel_context(label, table, channel_id);
     ASSERT_NE(nullptr, fetched);
@@ -81,10 +86,12 @@ TEST_F(StreamLoadContextHandleTest, cancel_and_close_channel_context) {
 
     handle.close(Status::Cancelled("close"));
     EXPECT_EQ(2, sink->cancel_count);
+    EXPECT_EQ(1, close_count);
     EXPECT_EQ(nullptr, stream_context_mgr.get_channel_context(label, table, channel_id));
 
     handle.close(Status::Cancelled("close again"));
     EXPECT_EQ(2, sink->cancel_count);
+    EXPECT_EQ(1, close_count);
 }
 
 } // namespace starrocks

@@ -23,7 +23,6 @@
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/broker_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 

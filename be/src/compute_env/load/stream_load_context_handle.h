@@ -14,18 +14,19 @@
 
 #pragma once
 
+#include <functional>
+
 #include "runtime/fragment_attachment.h"
 
 namespace starrocks {
 
-class BatchWriteMgr;
-class StreamContextMgr;
 class StreamLoadContext;
 
 class StreamLoadContextHandle final : public FragmentAttachment {
 public:
-    StreamLoadContextHandle(StreamLoadContext* context, BatchWriteMgr* batch_write_mgr);
-    StreamLoadContextHandle(StreamLoadContext* context, StreamContextMgr* stream_context_mgr);
+    using CloseCallback = std::function<void(StreamLoadContext*)>;
+
+    StreamLoadContextHandle(StreamLoadContext* context, CloseCallback close_cb);
     ~StreamLoadContextHandle() override;
 
     StreamLoadContextHandle(const StreamLoadContextHandle&) = delete;
@@ -38,8 +39,7 @@ public:
 
 private:
     StreamLoadContext* _context = nullptr;
-    BatchWriteMgr* _batch_write_mgr = nullptr;
-    StreamContextMgr* _stream_context_mgr = nullptr;
+    CloseCallback _close_cb;
     bool _closed = false;
 };
 

@@ -12,20 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/stream_load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_context_handle.h"
 
-#include "compute_env/load/stream_context_mgr.h"
+#include <utility>
+
 #include "compute_env/load/stream_load_context.h"
-#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/message_body_sink.h"
 
 namespace starrocks {
 
-StreamLoadContextHandle::StreamLoadContextHandle(StreamLoadContext* context, BatchWriteMgr* batch_write_mgr)
-        : _context(context), _batch_write_mgr(batch_write_mgr) {}
-
-StreamLoadContextHandle::StreamLoadContextHandle(StreamLoadContext* context, StreamContextMgr* stream_context_mgr)
-        : _context(context), _stream_context_mgr(stream_context_mgr) {}
+StreamLoadContextHandle::StreamLoadContextHandle(StreamLoadContext* context, CloseCallback close_cb)
+        : _context(context), _close_cb(std::move(close_cb)) {}
 
 StreamLoadContextHandle::~StreamLoadContextHandle() {
     close(Status::Cancelled("Close the stream load pipe"));
@@ -49,10 +46,8 @@ void StreamLoadContextHandle::close(const Status& status) {
     }
 
     cancel(status);
-    if (_batch_write_mgr != nullptr) {
-        _batch_write_mgr->unregister_stream_load_pipe(_context);
-    } else if (_stream_context_mgr != nullptr) {
-        _stream_context_mgr->remove_channel_context(_context);
+    if (_close_cb) {
+        _close_cb(_context);
     }
     _context = nullptr;
 }
