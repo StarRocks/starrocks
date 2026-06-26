@@ -56,6 +56,13 @@ protected:
         t.__set_slotIdx(id);
         t.__set_isMaterialized(true);
         t.__set_isNullable(nullable);
+        // On branch-3.5/4.0/4.1 SlotDescriptor::is_nullable() is derived from the legacy
+        // null-indicator offset (nullIndicatorBit), not from the isNullable field, and their
+        // thrift declares nullIndicatorBit without a default (so it defaults to 0 => a non-zero
+        // bit_mask => nullable). Set it explicitly so the requested nullability is honored on
+        // these branches too: bit == -1 yields bit_mask 0 (non-nullable).
+        t.__set_nullIndicatorByte(0);
+        t.__set_nullIndicatorBit(nullable ? 0 : -1);
         return _pool.add(new SlotDescriptor(t));
     }
 
