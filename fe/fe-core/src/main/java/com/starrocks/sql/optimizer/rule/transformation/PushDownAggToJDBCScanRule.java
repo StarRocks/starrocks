@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -46,7 +45,6 @@ import java.util.Objects;
 import java.util.Set;
 
 public class PushDownAggToJDBCScanRule extends TransformationRule {
-    private static final String JDBC_AGG_ALIAS_PREFIX = "jdbc_agg_";
     private static final Set<String> SUPPORTED_JDBC_AGG_FUNCTIONS = Set.of(
             FunctionSet.COUNT,
             FunctionSet.SUM,
@@ -90,29 +88,9 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         List<Column> outputColumns = Lists.newArrayList();
         List<ScalarOperator> selectItems = Lists.newArrayList();
         List<String> selectAliases = Lists.newArrayList();
-        Set<String> outputColumnNames = Sets.newHashSet();
-        int aggregateAliasIndex = 0;
-
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : pushDown.outputColumnRefToExpr.entrySet()) {
-            ColumnRefOperator outputColumnRef = entry.getKey();
-            ScalarOperator outputExpr = entry.getValue();
-            String aggregateAlias = null;
-            if (outputExpr instanceof CallOperator) {
-                do {
-                    aggregateAlias = JDBC_AGG_ALIAS_PREFIX + aggregateAliasIndex++;
-                } while (outputColumnNames.contains(aggregateAlias.toLowerCase(Locale.ROOT)));
-            }
-            String columnName = outputExpr instanceof CallOperator ? aggregateAlias : outputColumnRef.getName();
-            Column outputColumn = JDBCPushDownRuleUtils.createOutputColumn(
-                    outputColumnRef, outputExpr, scanOperator, columnName);
-
-            newColRefToColumnMetaMap.put(outputColumnRef, outputColumn);
-            newColumnMetaToColRefMap.put(outputColumn, outputColumnRef);
-            outputColumns.add(outputColumn);
-            outputColumnNames.add(outputColumn.getName().toLowerCase(Locale.ROOT));
-            selectItems.add(outputExpr);
-            selectAliases.add(outputColumn.getName());
-        }
+        JDBCPushDownRuleUtils.buildPushDownColumns(scanOperator, pushDown.outputColumnRefToExpr,
+                JDBCPushDownRuleUtils.JDBC_AGG_ALIAS_PREFIX,
+                newColRefToColumnMetaMap, newColumnMetaToColRefMap, outputColumns, selectItems, selectAliases);
 
         JDBCTable jdbcTable = (JDBCTable) scanOperator.getTable();
         String pushDownQuery = JDBCPushDownSQLBuilder.buildScalarSelectQuery(

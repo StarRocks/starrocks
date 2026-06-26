@@ -83,11 +83,34 @@ on o.customer_id = c.customer_id
 where o.amount >= 20 and c.region in ('east', 'west')
 order by o.order_id;
 -- result:
-[REGEX](?s)^(?!.*HASH JOIN).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c1`, `c3`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region \| 3: amount[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  3:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 03[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  2:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  1:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 3> : amount[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`amount` AS sr_c3, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c1`, `sr_c3`, `sr_c6` FROM \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`amount` AS sr_c3, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
 -- !result
 select o.order_id, c.region, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -106,23 +129,33 @@ on o.customer_id = c.customer_id
 where o.amount >= 20
 order by o.order_id;
 -- result:
-[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:HASH JOIN[ \t]*
-  \|  join op: INNER JOIN .*[ \t]*
-  \|  equal join conjunct: .*[ \t]*
-.*
-PLAN FRAGMENT 2[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
-     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)[ \t]*
-.*
-PLAN FRAGMENT 3[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
-     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  3:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 03[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  2:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  1:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c1`, `sr_c6` FROM \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
 -- !result
 select o.order_id, c.region
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -144,11 +177,35 @@ on c.customer_id = r.customer_id
 where o.amount between 20 and 50
 order by o.order_id;
 -- result:
-[REGEX](?s)^(?!.*HASH JOIN).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t0\.`status` AS c4, t1\.`customer_id` AS c5, t2\.`customer_id` AS c7, t2\.`region_group` AS c8 FROM \(SELECT `order_id`, `customer_id`, `amount`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\) AND \(`amount` <= 50\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\) INNER JOIN \(SELECT `customer_id`, `region_group` FROM `db_join_pushdown_[a-f0-9]+`\.`regions` WHERE \(`customer_id` IS NOT NULL\)\) t2 ON \(t1\.`customer_id` = t2\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c1`, `c3`, `c4`, `c8` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t0\.`status` AS c4, t1\.`customer_id` AS c5, t2\.`customer_id` AS c7, t2\.`region_group` AS c8 FROM \(SELECT `order_id`, `customer_id`, `amount`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\) AND \(`amount` <= 50\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\) INNER JOIN \(SELECT `customer_id`, `region_group` FROM `db_join_pushdown_[a-f0-9]+`\.`regions` WHERE \(`customer_id` IS NOT NULL\)\) t2 ON \(t1\.`customer_id` = t2\.`customer_id`\)\) sr_merged[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 8: region_group \| 4: status \| 3: amount[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  3:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 03[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  2:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  1:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 3> : amount[ \t]*
+  \|  <slot 4> : status[ \t]*
+  \|  <slot 8> : region_group[ \t]*
+  \|[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`amount` AS sr_c3, sr_t0\.`status` AS sr_c4, sr_t2\.`region_group` AS sr_c8 FROM \(SELECT `order_id`, `customer_id`, `amount`, `status` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\) AND \(`amount` <= 50\)\) sr_t0, \(SELECT `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1, \(SELECT `customer_id`, `region_group` FROM `db_join_pushdown_[0-9a-f]+`\.`regions` WHERE \(`customer_id` IS NOT NULL\)\) sr_t2 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\) AND \(sr_t1\.`customer_id` = sr_t2\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c1`, `sr_c3`, `sr_c4`, `sr_c8` FROM \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`amount` AS sr_c3, sr_t0\.`status` AS sr_c4, sr_t2\.`region_group` AS sr_c8 FROM \(SELECT `order_id`, `customer_id`, `amount`, `status` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\) AND \(`amount` <= 50\)\) sr_t0, \(SELECT `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1, \(SELECT `customer_id`, `region_group` FROM `db_join_pushdown_[0-9a-f]+`\.`regions` WHERE \(`customer_id` IS NOT NULL\)\) sr_t2 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\) AND \(sr_t1\.`customer_id` = sr_t2\.`customer_id`\)\) sr_merged[ \t]*
 -- !result
 select o.order_id, r.region_group, o.status, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -170,11 +227,34 @@ on o.customer_id = c.customer_id
 where o.status is null
 order by o.order_id;
 -- result:
-[REGEX](?s)^(?!.*HASH JOIN).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`status` AS c4, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`status` IS NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c1`, `c4`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`status` AS c4, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `status` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`status` IS NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region \| 7: coalesce[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  3:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 03[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  2:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  1:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|  <slot 7> : coalesce\(status, 'missing'\)[ \t]*
+  \|[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`status` AS sr_c4, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `status` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`status` IS NULL\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c1`, `sr_c4`, `sr_c6` FROM \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`status` AS sr_c4, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `status` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`status` IS NULL\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
 -- !result
 select o.order_id, c.region, coalesce(o.status, 'missing')
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -192,23 +272,70 @@ on abs(o.customer_id - 20) = c.customer_id
 where o.order_id in (1, 2)
 order by o.order_id, c.customer_id;
 -- result:
-[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:HASH JOIN[ \t]*
-  \|  join op: INNER JOIN .*[ \t]*
-  \|  equal join conjunct: .*abs.*cast[ \t]*
-.*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 5: customer_id[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  9:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: HASH_PARTITIONED: 7: abs[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 09[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  8:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC, <slot 5> 5: customer_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  7:Project[ \t]*
+  \|  <slot 1> : 1: order_id[ \t]*
+  \|  <slot 5> : 5: customer_id[ \t]*
+  \|[ \t]*
+  6:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN \(PARTITIONED\)[ \t]*
+  \|  colocate: false, reason:[ \t]*
+  \|  equal join conjunct: 7: abs = 8: cast[ \t]*
+  \|[ \t]*
+  \|----5:EXCHANGE[ \t]*
+  \|[ \t]*
+  2:EXCHANGE[ \t]*
+[ \t]*
 PLAN FRAGMENT 2[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
-     QUERY: SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
-.*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 05[ \t]*
+    HASH_PARTITIONED: 8: cast[ \t]*
+[ \t]*
+  4:Project[ \t]*
+  \|  <slot 5> : customer_id[ \t]*
+  \|  <slot 8> : CAST\(5: customer_id AS LARGEINT\)[ \t]*
+  \|[ \t]*
+  3:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
+[ \t]*
 PLAN FRAGMENT 3[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
-     QUERY: SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(1, 2\)\)[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 02[ \t]*
+    HASH_PARTITIONED: 7: abs[ \t]*
+[ \t]*
+  1:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 7> : abs\(CAST\(customer_id AS BIGINT\) - 20\)[ \t]*
+  \|[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`order_id` IN \(1, 2\)\)[ \t]*
 -- !result
 select o.order_id, c.customer_id
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -227,23 +354,63 @@ on o.customer_id = c.customer_id
 where o.amount >= 45
 order by o.order_id;
 -- result:
-[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:HASH JOIN[ \t]*
-  \|  join op: (LEFT|RIGHT) OUTER JOIN .*[ \t]*
-  \|  equal join conjunct: .*[ \t]*
-.*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region \| 3: amount[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  7:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 07[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  6:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  5:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 3> : amount[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|[ \t]*
+  4:HASH JOIN[ \t]*
+  \|  join op: RIGHT OUTER JOIN \(PARTITIONED\)[ \t]*
+  \|  colocate: false, reason:[ \t]*
+  \|  equal join conjunct: customer_id = customer_id[ \t]*
+  \|[ \t]*
+  \|----3:EXCHANGE[ \t]*
+  \|[ \t]*
+  1:EXCHANGE[ \t]*
+[ \t]*
 PLAN FRAGMENT 2[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
-     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 45\)[ \t]*
-.*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 03[ \t]*
+    HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  2:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 45\)[ \t]*
+[ \t]*
 PLAN FRAGMENT 3[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
-     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 01[ \t]*
+    HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers`[ \t]*
 -- !result
 select o.order_id, c.region, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -264,22 +431,61 @@ on o.customer_id = v.customer_id
 where o.amount >= 20
 order by o.order_id;
 -- result:
-[REGEX](?s).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:HASH JOIN[ \t]*
-  \|  join op: INNER JOIN .*[ \t]*
-  \|  equal join conjunct: .*[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region \| 8: label \| 3: amount[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  6:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: RANDOM[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 06[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  5:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
   \|[ \t]*
-  \|----[0-9]+:EXCHANGE[ \t]*
+  4:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 3> : amount[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|  <slot 8> : 8: label[ \t]*
   \|[ \t]*
-  [0-9]+:OlapScanNode[ \t]*
+  3:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN \(BUCKET_SHUFFLE\)[ \t]*
+  \|  colocate: false, reason:[ \t]*
+  \|  equal join conjunct: 7: customer_id = customer_id[ \t]*
+  \|[ \t]*
+  \|----2:EXCHANGE[ \t]*
+  \|[ \t]*
+  0:OlapScanNode[ \t]*
      TABLE: vip_customers[ \t]*
-.*
+     PREAGGREGATION: ON[ \t]*
+     PREDICATES: 7: customer_id IS NOT NULL[ \t]*
+     partitions=1/1[ \t]*
+     rollup: vip_customers[ \t]*
+     tabletRatio=1/1[ \t]*
+     tabletList=[0-9]+[ \t]*
+     cardinality=3[ \t]*
+     avgRowSize=9\.333333[ \t]*
+[ \t]*
 PLAN FRAGMENT 2[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c1`, `c2`, `c3`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t0\.`amount` AS c3, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 02[ \t]*
+    BUCKET_SHUFFLE_HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  1:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`customer_id` AS sr_c2, sr_t0\.`amount` AS sr_c3, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c1`, `sr_c2`, `sr_c3`, `sr_c6` FROM \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t0\.`customer_id` AS sr_c2, sr_t0\.`amount` AS sr_c3, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
 -- !result
 select o.order_id, c.region, v.label, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -300,23 +506,63 @@ on o.customer_id = c.customer_id
 where o.order_id in (2, 3, 4)
 order by o.order_id;
 -- result:
-[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:HASH JOIN[ \t]*
-  \|  join op: INNER JOIN .*[ \t]*
-  \|  equal join conjunct: .*[ \t]*
-.*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region \| 3: amount[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  7:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 07[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  6:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  5:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 3> : amount[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|[ \t]*
+  4:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN \(PARTITIONED\)[ \t]*
+  \|  colocate: false, reason:[ \t]*
+  \|  equal join conjunct: customer_id = customer_id[ \t]*
+  \|[ \t]*
+  \|----3:EXCHANGE[ \t]*
+  \|[ \t]*
+  1:EXCHANGE[ \t]*
+[ \t]*
 PLAN FRAGMENT 2[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
-     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(2, 3, 4\)\)[ \t]*
-.*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 03[ \t]*
+    HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  2:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`order_id` IN \(2, 3, 4\)\)[ \t]*
+[ \t]*
 PLAN FRAGMENT 3[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
-     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 01[ \t]*
+    HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)[ \t]*
 -- !result
 select o.order_id, c.region, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -339,22 +585,53 @@ on ao.customer_id = ac.customer_id
 where o.order_id = 2 and ao.order_id in (3, 4)
 order by o.order_id, ao.order_id;
 -- result:
-[REGEX](?s).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:NESTLOOP JOIN[ \t]*
-  \|  join op: CROSS JOIN[ \t]*
-.*
-  \|----[0-9]+:EXCHANGE[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region \| 7: order_id \| 12: region[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  6:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 06[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  5:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC, <slot 7> 7: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
   \|[ \t]*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` = 2\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c1`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` = 2\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-.*
+  4:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|  <slot 7> : order_id[ \t]*
+  \|  <slot 12> : region[ \t]*
+  \|[ \t]*
+  3:NESTLOOP JOIN[ \t]*
+  \|  join op: CROSS JOIN[ \t]*
+  \|  colocate: false, reason:[ \t]*
+  \|[ \t]*
+  \|----2:EXCHANGE[ \t]*
+  \|[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`order_id` = 2\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c1`, `sr_c6` FROM \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`order_id` = 2\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+[ \t]*
 PLAN FRAGMENT 2[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`order_id` AS c7, t0\.`customer_id` AS c8, t1\.`customer_id` AS c11, t1\.`region` AS c12 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(3, 4\)\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c7`, `c12` FROM \(SELECT t0\.`order_id` AS c7, t0\.`customer_id` AS c8, t1\.`customer_id` AS c11, t1\.`region` AS c12 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`order_id` IN \(3, 4\)\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 02[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  1:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c7, sr_t1\.`region` AS sr_c12 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`order_id` IN \(3, 4\)\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c7`, `sr_c12` FROM \(SELECT sr_t0\.`order_id` AS sr_c7, sr_t1\.`region` AS sr_c12 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`order_id` IN \(3, 4\)\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
 -- !result
 select o.order_id, c.region, ao.order_id, ac.region
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -375,9 +652,21 @@ join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
 on o.customer_id = c.customer_id
 limit 100;
 -- result:
-[REGEX](?s)^(?!.*HASH JOIN).*[0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c1`, `c6` FROM \(SELECT t0\.`order_id` AS c1, t0\.`customer_id` AS c2, t1\.`customer_id` AS c5, t1\.`region` AS c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged LIMIT 100[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  1:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|  limit: 100[ \t]*
+  \|[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged[ \t]*
+     QUERY: SELECT `sr_c1`, `sr_c6` FROM \(SELECT sr_t0\.`order_id` AS sr_c1, sr_t1\.`region` AS sr_c6 FROM \(SELECT `order_id`, `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) sr_t0, \(SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged LIMIT 100[ \t]*
+     limit: 100[ \t]*
 -- !result
 select count(*) from (
     select o.order_id, c.region
@@ -394,9 +683,15 @@ from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
 join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
 on o.customer_id = c.customer_id;
 -- result:
-[REGEX](?s)^(?!.*HASH JOIN)(?!.*QUERY: SELECT count).*AGGREGATE.*[0-9]+:SCAN JDBC[ \t]*
-     TABLE: \(SELECT t0\.`customer_id` AS c2, t1\.`customer_id` AS c5 FROM \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
-     QUERY: SELECT `c2` FROM \(SELECT t0\.`customer_id` AS c2, t1\.`customer_id` AS c5 FROM \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) t0 INNER JOIN \(SELECT `customer_id` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) t1 ON \(t0\.`customer_id` = t1\.`customer_id`\)\) sr_merged[ \t]*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:count[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: \(SELECT count\(\*\) AS `jdbc_agg_7` FROM \(SELECT 1 AS `jdbc_proj_9` FROM \(SELECT sr_t0\.`customer_id` AS sr_c2 FROM \(SELECT `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) sr_t0, \(SELECT `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged\) sr_merged\) sr_merged[ \t]*
+     QUERY: SELECT `jdbc_agg_7` FROM \(SELECT count\(\*\) AS `jdbc_agg_7` FROM \(SELECT 1 AS `jdbc_proj_9` FROM \(SELECT sr_t0\.`customer_id` AS sr_c2 FROM \(SELECT `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`customer_id` IS NOT NULL\)\) sr_t0, \(SELECT `customer_id` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`customer_id` IS NOT NULL\)\) sr_t1 WHERE \(sr_t0\.`customer_id` = sr_t1\.`customer_id`\)\) sr_merged\) sr_merged\) sr_merged[ \t]*
 -- !result
 select count(*)
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
@@ -415,23 +710,63 @@ on o.customer_id = c.customer_id
 where o.amount >= 20 and c.region in ('east', 'west')
 order by o.order_id;
 -- result:
-[REGEX](?s)^(?!.*sr_merged).*PLAN FRAGMENT 1[ \t]*
-.*
-  [0-9]+:HASH JOIN[ \t]*
-  \|  join op: INNER JOIN .*[ \t]*
-  \|  equal join conjunct: .*[ \t]*
-.*
+[REGEX]PLAN FRAGMENT 0[ \t]*
+ OUTPUT EXPRS:1: order_id \| 6: region \| 3: amount[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  RESULT SINK[ \t]*
+[ \t]*
+  7:MERGING-EXCHANGE[ \t]*
+[ \t]*
+PLAN FRAGMENT 1[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 07[ \t]*
+    UNPARTITIONED[ \t]*
+[ \t]*
+  6:SORT[ \t]*
+  \|  order by: <slot 1> 1: order_id ASC[ \t]*
+  \|  offset: 0[ \t]*
+  \|[ \t]*
+  5:Project[ \t]*
+  \|  <slot 1> : order_id[ \t]*
+  \|  <slot 3> : amount[ \t]*
+  \|  <slot 6> : region[ \t]*
+  \|[ \t]*
+  4:HASH JOIN[ \t]*
+  \|  join op: INNER JOIN \(PARTITIONED\)[ \t]*
+  \|  colocate: false, reason:[ \t]*
+  \|  equal join conjunct: customer_id = customer_id[ \t]*
+  \|[ \t]*
+  \|----3:EXCHANGE[ \t]*
+  \|[ \t]*
+  1:EXCHANGE[ \t]*
+[ \t]*
 PLAN FRAGMENT 2[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`orders`[ \t]*
-     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[a-f0-9]+`\.`orders` WHERE \(`amount` >= 20\)[ \t]*
-.*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 03[ \t]*
+    HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  2:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`orders`[ \t]*
+     QUERY: SELECT `order_id`, `customer_id`, `amount` FROM `db_join_pushdown_[0-9a-f]+`\.`orders` WHERE \(`amount` >= 20\)[ \t]*
+[ \t]*
 PLAN FRAGMENT 3[ \t]*
-.*
-  [0-9]+:SCAN JDBC[ \t]*
-     TABLE: `db_join_pushdown_[a-f0-9]+`\.`customers`[ \t]*
-     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[a-f0-9]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)[ \t]*
+ OUTPUT EXPRS:[ \t]*
+  PARTITION: UNPARTITIONED[ \t]*
+[ \t]*
+  STREAM DATA SINK[ \t]*
+    EXCHANGE ID: 01[ \t]*
+    HASH_PARTITIONED: customer_id[ \t]*
+[ \t]*
+  0:SCAN JDBC[ \t]*
+     TABLE: `db_join_pushdown_[0-9a-f]+`\.`customers`[ \t]*
+     QUERY: SELECT `customer_id`, `region` FROM `db_join_pushdown_[0-9a-f]+`\.`customers` WHERE \(`region` IN \('east', 'west'\)\)[ \t]*
 -- !result
 select o.order_id, c.region, o.amount
 from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o

@@ -36,8 +36,10 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.VarcharType;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -47,9 +49,22 @@ import java.util.Map;
 
 public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
 
+    private boolean oldEnableJdbcProjectPushDown;
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
+    }
+
+    @BeforeEach
+    public void disableProjectPushDown() {
+        oldEnableJdbcProjectPushDown = connectContext.getSessionVariable().isEnableJdbcProjectPushDown();
+        connectContext.getSessionVariable().setEnableJdbcProjectPushDown(false);
+    }
+
+    @AfterEach
+    public void restoreProjectPushDown() {
+        connectContext.getSessionVariable().setEnableJdbcProjectPushDown(oldEnableJdbcProjectPushDown);
     }
 
     private static int countOccurrences(String text, String pattern) {
@@ -618,7 +633,11 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
         CallOperator divide = new CallOperator(FunctionSet.DIVIDE, IntegerType.INT, List.of(a, b));
 
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.MYSQL));
+        // MySQL/MariaDB evaluate `/` as DECIMAL bounded by div_precision_increment (default 4),
+        // and PG truncates int/int -- both diverge from StarRocks DOUBLE division, so reject up
+        // front. Oracle/ClickHouse use float division and stay pushable.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.MARIADB));
         // PG truncates int/int; the renderer strips implicit casts so the original int columns
         // would reach PG and silently produce wrong results — reject up front.
         Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.POSTGRES));

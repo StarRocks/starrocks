@@ -141,8 +141,8 @@ PLAN FRAGMENT 0
   RESULT SINK
 
   0:SCAN JDBC
-     TABLE: (SELECT count(*) AS `jdbc_agg_0`, max(`amount`) AS `jdbc_agg_1` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
-     QUERY: SELECT `jdbc_agg_0`, `jdbc_agg_1` FROM (SELECT count(*) AS `jdbc_agg_0`, max(`amount`) AS `jdbc_agg_1` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
+     TABLE: (SELECT count(*) AS `jdbc_agg_6`, max(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
+     QUERY: SELECT `jdbc_agg_6`, `jdbc_agg_7` FROM (SELECT count(*) AS `jdbc_agg_6`, max(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
 -- !result
 explain select count(*)
 from t2

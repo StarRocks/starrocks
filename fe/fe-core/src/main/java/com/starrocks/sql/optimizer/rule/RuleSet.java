@@ -135,6 +135,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggFunPredicateRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToJDBCScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
@@ -163,6 +164,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToJDBCScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNToPreAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
@@ -269,6 +271,15 @@ public class RuleSet {
     public static final Rule VECTOR_REWRITE_RULES = new CombinationRule(RuleType.GP_VECTOR_REWRITE, ImmutableList.of(
             new RewriteToVectorPlanRule()
     ));
+
+    // JDBC pushdown: fold expressions and aggregations into a JDBC scan. Applied iteratively
+    // after the final MergeProjectWithChildRule pass so aggregation pushdown can create a scan
+    // projection and the following iteration can fold that projection into the pushed SQL.
+    public static final Rule JDBC_PUSHDOWN_RULES = new CombinationRule(RuleType.GP_JDBC_PUSHDOWN,
+            ImmutableList.of(
+                    new PushDownProjectToJDBCScanRule(),
+                    new PushDownAggToJDBCScanRule()
+            ));
 
     public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(
             new PruneScanColumnRule(),

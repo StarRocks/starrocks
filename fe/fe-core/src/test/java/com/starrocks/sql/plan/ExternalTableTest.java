@@ -269,20 +269,24 @@ public class ExternalTableTest extends PlanTestBase {
 
             sql = "select count(b), a + 1 from test.jdbc_test group by a";
             plan = getFragmentPlan(sql);
+            // project pushdown on: the `a + 1` projection folds in as the outer SELECT,
+            // wrapping the pushed-down aggregate subquery.
             Assertions.assertTrue(plan.contains(
                     "  0:SCAN JDBC\n" +
-                            "     TABLE: (SELECT `a` AS `a`, count(`b`) AS `jdbc_agg_"), plan);
-            Assertions.assertTrue(plan.contains(" + 1"), plan);
+                            "     TABLE: (SELECT `jdbc_agg_"), plan);
+            assertContains(plan, "(`a` + 1) AS `jdbc_proj_");
+            assertContains(plan, "(SELECT `a` AS `a`, count(`b`) AS `jdbc_agg_");
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
 
             sql = "select count(department_id), lock_status + 1 from test.jdbc_agg_t2 group by lock_status";
             plan = getFragmentPlan(sql);
+            // project pushdown on: the `lock_status + 1` projection wraps the pushed aggregate.
             Assertions.assertTrue(plan.contains(
                     "  0:SCAN JDBC\n" +
-                            "     TABLE: (SELECT `lock_status` AS `lock_status`, " +
-                            "count(`department_id`) AS `jdbc_agg_"), plan);
+                            "     TABLE: (SELECT `jdbc_agg_"), plan);
+            assertContains(plan, "(`lock_status` + 1) AS `jdbc_proj_");
+            assertContains(plan, "(SELECT `lock_status` AS `lock_status`, count(`department_id`) AS `jdbc_agg_");
             Assertions.assertTrue(plan.contains("FROM `t2` GROUP BY `lock_status`) sr_merged"), plan);
-            Assertions.assertTrue(plan.contains(" + 1"), plan);
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
         } finally {
             connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
@@ -304,6 +308,25 @@ public class ExternalTableTest extends PlanTestBase {
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
         } finally {
             connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
+        }
+    }
+
+    @Test
+    public void testJDBCAggNotPushedThroughExpressionProjection() throws Exception {
+        // An expression projection (e = a + 1) is not mergeable, so the aggregate must not push
+        // through it. Project pushdown is disabled here so the expression projection stays on the
+        // scan, isolating the agg rule's isMergeableProjection guard.
+        connectContext.getSessionVariable().setEnableJdbcAggPushDown(true);
+        connectContext.getSessionVariable().setEnableJdbcProjectPushDown(false);
+        try {
+            String sql = "select e, sum(a) from (select a, a + 1 as e from test.jdbc_test) t group by e";
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains("AGGREGATE"), plan);
+            Assertions.assertTrue(plan.contains("TABLE: `test_table`"), plan);
+            Assertions.assertFalse(plan.contains("jdbc_agg_"), plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
+            connectContext.getSessionVariable().setEnableJdbcProjectPushDown(true);
         }
     }
 
@@ -399,8 +422,12 @@ public class ExternalTableTest extends PlanTestBase {
                 .map(expr -> (InPredicate) expr).collect(Collectors.toList());
         Assertions.assertTrue(predicates.isEmpty());
         String plan = getCostExplain(sql);
+        // The join key `a` reaches the scan wrapped in an implicit cast (to the `v1` type). The SQL
+        // renderer drops implicit casts, so it is not pushed as a derived `jdbc_proj_` column; only
+        // column pruning + the moved-around `v1 IN (1,2,3)` predicate are pushed onto the JDBC side.
         assertCContains(plan, "  1:SCAN JDBC\n" +
-                "     TABLE: `test_table`\n" +
-                "     QUERY: SELECT `a` FROM `test_table` WHERE (`a` IN (1, 2, 3)) AND (`a` IS NOT NULL)");
+                "     TABLE: `test_table`");
+        assertCContains(plan, "QUERY: SELECT `a` FROM `test_table` WHERE " +
+                "(`a` IN (1, 2, 3)) AND (`a` IS NOT NULL)");
     }
 }

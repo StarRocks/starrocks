@@ -142,7 +142,13 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
         return allChildrenPushable(op, ctx);
     }
 
-    /** MYSQL / MARIADB: base behavior plus {@code concat(...)}. */
+    /**
+     * MYSQL / MARIADB: base behavior plus {@code concat(...)}, minus {@code divide}. MySQL/MariaDB
+     * evaluate {@code /} as DECIMAL whose scale is bounded by {@code div_precision_increment}
+     * (default 4), which diverges from StarRocks' DOUBLE division (e.g. {@code 10/3} renders as
+     * {@code 3.3333} remotely vs {@code 3.3333333...} locally), so {@code a / b} is kept local on
+     * both the filter and projection paths -- mirroring the Postgres/Unknown gates.
+     */
     public static class MySQLLikePushDownGate extends CanPushDownPredicateVisitor {
         @Override
         protected JDBCTable.ProtocolType dialect() {
@@ -152,6 +158,9 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
         @Override
         public Boolean visitCall(CallOperator op, Void ctx) {
             String fnName = op.getFnName().toLowerCase(Locale.ROOT);
+            if ("divide".equals(fnName)) {
+                return false;
+            }
             if ("concat".equals(fnName)) {
                 return op.getChildren().size() >= 2 && allChildrenPushable(op, ctx);
             }
