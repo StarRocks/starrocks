@@ -266,7 +266,7 @@ set(EXEC_FILES
         ./runtime/batch_write/isomorphic_batch_write_test.cpp
         ./runtime/batch_write/txn_state_cache_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
-        #./runtime/routine_load_task_executor_test.cpp
+        #./query_orchestration/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp

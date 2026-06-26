@@ -48,13 +48,15 @@
 
 namespace starrocks {
 
-BackendService::BackendService(ExecEnv* exec_env)
-        : BackendServiceBase(exec_env), _agent_server(exec_env->agent_server()) {}
+BackendService::BackendService(ExecEnv* exec_env, query_orchestration::QueryOrchestrationEnv* query_orchestration_env)
+        : BackendServiceBase(exec_env, query_orchestration_env), _agent_server(exec_env->agent_server()) {}
 
 BackendService::~BackendService() = default;
 
-std::unique_ptr<ThriftServer> BackendService::create(ExecEnv* exec_env, MetricRegistry* metrics, int port) {
-    auto handler = std::make_shared<BackendService>(exec_env);
+std::unique_ptr<ThriftServer> BackendService::create(
+        ExecEnv* exec_env, query_orchestration::QueryOrchestrationEnv* query_orchestration_env, MetricRegistry* metrics,
+        int port) {
+    auto handler = std::make_shared<BackendService>(exec_env, query_orchestration_env);
     auto processor = std::make_shared<BackendServiceProcessor>(handler);
 
     LOG(INFO) << "StarRocksInternalService has started listening port on " << port;

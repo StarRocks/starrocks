@@ -40,6 +40,8 @@
 #include <memory>
 #include <mutex>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include "base/uid_util.h"
 #include "common/thread/threadpool.h"
@@ -53,6 +55,8 @@ class MetricRegistry;
 class Status;
 class StreamLoadContext;
 class TRoutineLoadTask;
+
+namespace query_orchestration {
 
 // A routine load task executor will receive routine load
 // tasks from FE, put it to a fixed thread pool.
@@ -97,4 +101,5 @@ private:
     std::unordered_map<UniqueId, StreamLoadContext*> _task_map;
 };
 
+} // namespace query_orchestration
 } // namespace starrocks

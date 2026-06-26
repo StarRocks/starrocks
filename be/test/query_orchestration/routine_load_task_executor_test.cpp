@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/routine_load/routine_load_task_executor.h"
+#include "query_orchestration/routine_load_task_executor.h"
 
 #include <gtest/gtest.h>
 
@@ -104,7 +104,7 @@ TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
 
     task.__set_kafka_load_info(k_info);
 
-    RoutineLoadTaskExecutor executor(&_env);
+    query_orchestration::RoutineLoadTaskExecutor executor(&_env);
 
     // submit task
     Status st;

@@ -35,6 +35,7 @@
 #include "common/system/backend_options.h"
 #include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
+#include "query_orchestration/query_orchestration_env.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -155,6 +156,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
+    auto query_orchestration_env = std::make_unique<query_orchestration::QueryOrchestrationEnv>();
+    EXIT_IF_ERROR(query_orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": query orchestration env init successfully";
+
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
     data_workflows_env_options.exec_env = exec_env;
@@ -217,7 +222,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         thrift_port = config::thrift_port;
         LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
     }
-    auto thrift_server = BackendService::create(exec_env, process_metrics_registry->root_registry(), thrift_port);
+    auto thrift_server = BackendService::create(exec_env, query_orchestration_env.get(),
+                                                process_metrics_registry->root_registry(), thrift_port);
 
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
@@ -236,7 +242,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto brpc_server = std::make_unique<brpc::Server>();
 
     auto* load_channel_mgr = data_workflows_env->load_channel_mgr();
-    BackendInternalServiceImpl<PInternalService> internal_service(exec_env, load_channel_mgr);
+    BackendInternalServiceImpl<PInternalService> internal_service(exec_env, query_orchestration_env.get(),
+                                                                  load_channel_mgr);
 #ifndef __APPLE__
     LakeServiceImpl lake_service(exec_env, StorageEnv::GetInstance()->lake_tablet_manager(), load_channel_mgr);
 
@@ -376,6 +383,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     agent_server->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server stop successfully";
 
+    query_orchestration_env->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": query orchestration env stop successfully";
+
     data_workflows_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env stop successfully";
 
@@ -410,6 +420,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     data_workflows_env->destroy();
     data_workflows_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
+
+    query_orchestration_env->destroy();
+    query_orchestration_env.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": query orchestration env destroy successfully";
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";

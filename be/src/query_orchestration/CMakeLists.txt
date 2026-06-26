@@ -16,7 +16,9 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/query_orchestration")
 
 set(QUERY_ORCHESTRATION_FILES
     fragment_executor.cpp
+    query_orchestration_env.cpp
     query_orchestrator.cpp
+    routine_load_task_executor.cpp
 )
 
 ADD_BE_LIB(QueryOrchestration

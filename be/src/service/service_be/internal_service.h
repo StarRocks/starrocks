@@ -50,8 +50,9 @@ class LoadChannelMgr;
 template <typename T>
 class BackendInternalServiceImpl : public PInternalServiceImplBase<T> {
 public:
-    BackendInternalServiceImpl(ExecEnv* exec_env, LoadChannelMgr* load_channel_mgr)
-            : PInternalServiceImplBase<T>(exec_env), _load_channel_mgr(load_channel_mgr) {}
+    BackendInternalServiceImpl(ExecEnv* exec_env, query_orchestration::QueryOrchestrationEnv* query_orchestration_env,
+                               LoadChannelMgr* load_channel_mgr)
+            : PInternalServiceImplBase<T>(exec_env, query_orchestration_env), _load_channel_mgr(load_channel_mgr) {}
 
     void tablet_writer_open(google::protobuf::RpcController* controller, const PTabletWriterOpenRequest* request,
                             PTabletWriterOpenResult* response, google::protobuf::Closure* done) override;

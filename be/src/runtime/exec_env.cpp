@@ -76,7 +76,6 @@
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/pipeline_fragment_reporter.h"
-#include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
@@ -162,7 +161,6 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.transaction_mgr = _transaction_mgr;
     _runtime_services.batch_write_mgr = _batch_write_mgr;
     _runtime_services.stream_load_executor = _stream_load_executor;
-    _runtime_services.routine_load_task_executor = _routine_load_task_executor;
     _runtime_services.small_file_mgr = _small_file_mgr;
     _runtime_services.runtime_filter_worker = _runtime_filter_worker;
     _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_worker;
@@ -264,11 +262,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
             std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
     RETURN_IF_ERROR(_batch_write_mgr->init(process_metrics));
-
-#ifndef __APPLE__
-    _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
-    RETURN_IF_ERROR(_routine_load_task_executor->init(process_metrics));
-#endif
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
@@ -545,14 +538,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("batch_write_mgr", MonotonicMillis() - start);
     }
 
-#ifndef __APPLE__
-    if (_routine_load_task_executor) {
-        start = MonotonicMillis();
-        _routine_load_task_executor->stop();
-        component_times.emplace_back("routine_load_task_executor", MonotonicMillis() - start);
-    }
-#endif
-
     if (global_env->dictionary_cache_pool()) {
         start = MonotonicMillis();
         global_env->dictionary_cache_pool()->shutdown();
@@ -596,9 +581,6 @@ void ExecEnv::destroy() {
     if (_compute_env != nullptr) {
         _compute_env->destroy_stream_context_mgr();
     }
-#ifndef __APPLE__
-    SAFE_DELETE(_routine_load_task_executor);
-#endif
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
