@@ -109,6 +109,58 @@ TEST_F(ParquetSchemaBuilderTest, PrimitiveTypes) {
     }
 }
 
+// Test unsigned INT32 widening for FILES schema inference
+TEST_F(ParquetSchemaBuilderTest, UnsignedInt32Widening) {
+    TypeDescriptor type_desc;
+    Status st;
+
+    // UINT_8 -> SMALLINT (max 255 > TINYINT max 127)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("u8", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::Int(8, /*is_signed=*/false),
+                                                           ::parquet::Type::INT32);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_SMALLINT, type_desc.type);
+    }
+    // UINT_16 -> INT (max 65535 > SMALLINT max 32767)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("u16", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::Int(16, /*is_signed=*/false),
+                                                           ::parquet::Type::INT32);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_INT, type_desc.type);
+    }
+    // UINT_32 -> BIGINT (max ~4.29e9 > INT max)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("u32", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::Int(32, /*is_signed=*/false),
+                                                           ::parquet::Type::INT32);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_BIGINT, type_desc.type);
+    }
+    // Signed INT_32 -> INT (unchanged)
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("i32", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::LogicalType::Int(32, /*is_signed=*/true),
+                                                           ::parquet::Type::INT32);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_INT, type_desc.type);
+    }
+    // Legacy converted-type UINT_32 (no logical type set) -> BIGINT. Arrow back-derives an
+    // unsigned IntLogicalType from the converted type, so legacy files widen the same way.
+    {
+        auto node = ::parquet::schema::PrimitiveNode::Make("u32_legacy", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::Type::INT32, ::parquet::ConvertedType::UINT_32);
+        st = get_parquet_type(node, &type_desc);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(TYPE_BIGINT, type_desc.type);
+    }
+}
+
 // Test FIXED_LEN_BYTE_ARRAY schema inference
 TEST_F(ParquetSchemaBuilderTest, FixedLenByteArrayTypes) {
     TypeDescriptor type_desc;
