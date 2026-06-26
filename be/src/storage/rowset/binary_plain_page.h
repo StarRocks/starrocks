@@ -406,7 +406,7 @@ private:
     mutable bool _dict_filter_cache_valid{false};
     mutable std::vector<uint8_t> _dict_filter_cache_selection;
     mutable uint32_t _dict_filter_cache_selected_count{0};
-    
+
     // Lazily-computed cache for max_value_length(); -1 means "not yet computed".
     mutable int64_t _max_value_length_cache = -1;
 };
