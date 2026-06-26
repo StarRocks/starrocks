@@ -25,7 +25,6 @@ class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
 class DiagnoseDaemon;
-class ExternalScanContextMgr;
 class FragmentMgr;
 class BaseLoadPathMgr;
 class HeartbeatFlags;
@@ -124,7 +123,6 @@ struct LakeServices {
 };
 
 struct RuntimeServices {
-    ExternalScanContextMgr* external_scan_context_mgr = nullptr;
     DataStreamMgr* stream_mgr = nullptr;
     LookUpDispatcherMgr* lookup_dispatcher_mgr = nullptr;
     ResultBufferMgr* result_mgr = nullptr;

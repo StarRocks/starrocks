@@ -324,8 +324,8 @@ Reusable exec join hash table algorithms without join nodes, pipeline, storage, 
 ### Orchestration (`orchestration`)
 Orchestration layer below Service for query, fragment, and ingestion lifecycle entrypoints over concrete runtime and execution modules.
 - Targets: `Orchestration`
-- Allowed internal include prefixes: `orchestration/`, `connector/data_source_provider.h`, `exec/`, `runtime/`, `compute_env/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
-- Allowed target deps: `Runtime`, `Exec`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `ConnectorPrimitive`, `RuntimeCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
+- Allowed internal include prefixes: `orchestration/`, `connector/data_source_provider.h`, `column/`, `exec/`, `runtime/`, `compute_env/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
+- Allowed target deps: `Runtime`, `Exec`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `ConnectorPrimitive`, `ColumnCore`, `RuntimeCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
 - Core tests: `orchestration_test`
 - Remediation: Keep Orchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime or ingestion primitives to their owning modules.
 

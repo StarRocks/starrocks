@@ -32,13 +32,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/external_scan_context_mgr.h"
+#include "orchestration/external_scan_context_mgr.h"
 
 #include <gtest/gtest.h>
 
 #include <memory>
 
+#include "common/config_runtime_fwd.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/result/result_queue_mgr.h"
 #include "exec/pipeline/query_context.h"
@@ -46,7 +48,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 
-namespace starrocks {
+namespace starrocks::orchestration {
 
 class ExternalScanContextMgrTest : public testing::Test {
 public:
@@ -54,6 +56,13 @@ public:
     ~ExternalScanContextMgrTest() override = default;
 
 protected:
+    static void SetUpTestSuite() {
+        CpuInfo::init();
+        config::fragment_pool_thread_num_min = 1;
+        config::fragment_pool_thread_num_max = 1;
+        config::fragment_pool_queue_size = 64;
+    }
+
     void SetUp() override {
         ComputeEnvOptions options;
         options.max_num_pipeline_drivers = 1;
@@ -122,4 +131,4 @@ TEST_F(ExternalScanContextMgrTest, clear_context) {
     ASSERT_TRUE(!st.ok());
     ASSERT_TRUE(result == nullptr);
 }
-} // namespace starrocks
+} // namespace starrocks::orchestration
