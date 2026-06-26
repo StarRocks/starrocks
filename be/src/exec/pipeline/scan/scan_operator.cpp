@@ -232,8 +232,19 @@ bool ScanOperator::is_finished() const {
         return false;
     }
 
+    // Once this scan has produced enough rows to satisfy its pushed-down limit, it must not keep
+    // waiting for more incremental scan ranges (`has_more`) nor for the remaining morsels to be
+    // drained. When connector incremental scan ranges are enabled the FE may short-circuit delivery
+    // after the limit is reached; if it fails to deliver the terminal `has_more=false` sentinel and
+    // we still blocked on `has_more()`/`!empty()` here, the operator would never finish and the query
+    // would hang until query_timeout.
+    const bool reached_limit = _morsel_queue->reach_limit();
+
     // Any io task is running or needs to run.
-    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
+    if (_num_running_io_tasks > 0) {
+        return false;
+    }
+    if (!reached_limit && (_morsel_queue->has_more() || !_morsel_queue->empty())) {
         return false;
     }
 

@@ -101,6 +101,11 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
+    public boolean reachLimit() {
+        return reachLimit;
+    }
+
+    @Override
     public void setReachLimit() {
         reachLimit = true;
     }
@@ -123,6 +128,14 @@ public class IcebergScanNode extends ScanNode {
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         if (tvrVersionRange.isEmpty() || scanRangeSource == null) {
+            return List.of();
+        }
+
+        // Once the scan has reached its limit we must not generate (and list files for) any more scan
+        // ranges. Returning empty lets the final incremental round deliver only the terminal
+        // has_more=false sentinel produced by computeScanRangeAssignment(), so parked scan operators
+        // can finish instead of hanging until query_timeout.
+        if (reachLimit) {
             return List.of();
         }
 
