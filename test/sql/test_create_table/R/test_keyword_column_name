@@ -1,0 +1,36 @@
+-- name: test_keyword_column_name
+-- FLOOR and CEIL are non-reserved keywords (the time_slice/date_slice boundary argument).
+-- Regression: they must be usable as ordinary column names in queries, and must not be parsed
+-- as a UnitBoundary literal (which previously raised
+-- "class com.starrocks.sql.ast.UnitBoundary cannot be cast to ...ast.expression.Expr").
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (floor int, ceil int) distributed by hash(floor);
+-- result:
+-- !result
+insert into t values(1, 2);
+-- result:
+-- !result
+select floor from t;
+-- result:
+1
+-- !result
+select ceil from t;
+-- result:
+2
+-- !result
+select floor, ceil from t;
+-- result:
+1	2
+-- !result
+select floor + ceil as s from t;
+-- result:
+3
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
