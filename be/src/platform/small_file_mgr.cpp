@@ -32,15 +32,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/small_file_mgr.h"
+#include "platform/small_file_mgr.h"
 
 #include <boost/algorithm/string/predicate.hpp> // boost::algorithm::starts_with
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <sstream>
 #include <utility>
 
 #include "base/crypto/md5.h"
+#include "base/metrics.h"
 #include "common/status.h"
 #include "common/system/master_info.h"
 #include "fs/fs.h"
@@ -48,20 +50,32 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/core/http_client.h"
-#include "runtime/runtime_metrics.h"
 
 namespace starrocks {
 
+static constexpr const char* kSmallFileCacheCountMetricName = "small_file_cache_count";
+
 SmallFileMgr::SmallFileMgr(std::string local_path, MetricRegistry* metrics) : _local_path(std::move(local_path)) {
     if (metrics != nullptr) {
-        REGISTER_GAUGE_RUNTIME_METRIC(metrics, small_file_cache_count, [this]() {
-            std::lock_guard<std::mutex> l(_lock);
-            return _file_cache.size();
-        });
+        if (metrics->register_metric(kSmallFileCacheCountMetricName, &_small_file_cache_count)) {
+            if (metrics->register_hook(kSmallFileCacheCountMetricName, [this]() {
+                    std::lock_guard<std::mutex> l(_lock);
+                    _small_file_cache_count.set_value(_file_cache.size());
+                })) {
+                _metrics = metrics;
+            } else {
+                _small_file_cache_count.hide();
+            }
+        }
     }
 }
 
-SmallFileMgr::~SmallFileMgr() = default;
+SmallFileMgr::~SmallFileMgr() {
+    if (_metrics != nullptr) {
+        _metrics->deregister_hook(kSmallFileCacheCountMetricName);
+        _small_file_cache_count.hide();
+    }
+}
 
 Status SmallFileMgr::init() {
     RETURN_IF_ERROR(_load_local_files());

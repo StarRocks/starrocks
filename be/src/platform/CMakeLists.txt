@@ -34,6 +34,7 @@ set(PLATFORM_FILES
   path_rw.cpp
   python/env.cpp
   query_timeout_hook.cpp
+  small_file_mgr.cpp
   store_path.cpp
   thrift_rpc_helper.cpp
   udf_downloader.cpp

@@ -268,7 +268,6 @@ set(EXEC_FILES
         ./compute_env/load/stream_load_context_handle_test.cpp
         #./orchestration/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
-        ./runtime/small_file_mgr_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp

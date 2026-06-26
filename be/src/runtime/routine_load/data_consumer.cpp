@@ -47,8 +47,8 @@
 #include "common/system/backend_options.h"
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
+#include "platform/small_file_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/small_file_mgr.h"
 
 namespace starrocks {
 

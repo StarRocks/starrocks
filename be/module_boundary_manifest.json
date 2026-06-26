@@ -322,7 +322,6 @@
         "runtime/result_queue_mgr.h",
         "runtime/result_sink.h",
         "runtime/schema_table_sink.h",
-        "runtime/small_file_mgr.h",
         "runtime/table_function_table_sink.h",
         "runtime/tablets_channel.h",
         "runtime/variable_result_writer.h"
