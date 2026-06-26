@@ -87,7 +87,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private Map<String, String> restCatalogProperties;
     private final boolean nestedNamespaceEnabled;
     private final boolean viewEndpointsEnabled;
-    private final boolean enableVendedCredentials;
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
@@ -105,7 +104,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         restCatalogProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
-        this.enableVendedCredentials =
+        boolean enableVendedCredentials =
                 Boolean.parseBoolean(restCatalogProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
         if (enableVendedCredentials) {
             restCatalogProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
@@ -140,7 +139,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.nestedNamespaceEnabled = false;
         this.viewEndpointsEnabled = true;
         this.restCatalogProperties = Maps.newHashMap();
-        this.enableVendedCredentials = false;
     }
 
     @Override
@@ -466,10 +464,5 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         return new SessionCatalog.SessionContext(sessionId, context.getQualifiedUser(), credentials, ImmutableMap.of(),
                 context.getCurrentUserIdentity());
-    }
-
-    @Override
-    public boolean isVendedCredentialsEnabled() {
-        return enableVendedCredentials;
     }
 }
