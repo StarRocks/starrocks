@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/fs_broker.h"
+#include "platform/fs_broker.h"
 
 #include <brpc/uri.h>
 #include <gtest/gtest.h>

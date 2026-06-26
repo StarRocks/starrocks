@@ -24,6 +24,7 @@ set(DATA_WORKFLOWS_TEST_FILES
     load/tablet_writer/load_channel_test.cpp
     load/tablet_writer/local_tablets_channel_test.cpp
     push_handler_test.cpp
+    snapshot/snapshot_loader_test.cpp
 )
 
 add_library(starrocks_data_workflows_test_objs OBJECT ${DATA_WORKFLOWS_TEST_FILES})

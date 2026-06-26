@@ -30,6 +30,8 @@ set(DATA_WORKFLOWS_FILES
     load/tablet_writer/local_tablets_channel.cpp
     load/tablet_writer/tablets_channel.cpp
     migration/engine_storage_migration_task.cpp
+    snapshot/lake_snapshot_loader.cpp
+    snapshot/snapshot_loader.cpp
     schema_change/engine_alter_tablet_task.cpp
 )
 
@@ -42,6 +44,7 @@ target_link_libraries(DataWorkflows PUBLIC
     Exec
     Runtime
     StoragePrimitive
+    Platform
     Common
     Base
     Gutil
