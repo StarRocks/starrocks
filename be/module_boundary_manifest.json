@@ -1073,6 +1073,29 @@
       "remediation": "Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules."
     },
     {
+      "id": "queryorchestration",
+      "doc_label": "QueryOrchestration",
+      "summary": "Query orchestration layer below Service for query and fragment lifecycle entrypoints over concrete runtime and execution modules.",
+      "owned_targets": ["QueryOrchestration"],
+      "owned_roots": ["be/src/query_orchestration"],
+      "allowed_include_prefixes": [
+        "query_orchestration/",
+        "exec/",
+        "runtime/",
+        "compute_env/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/",
+        "types/"
+      ],
+      "forbidden_include_prefixes": ["service/", "http/service/", "agent/"],
+      "allowed_target_deps": ["Runtime", "Exec", "ExecRuntime", "ComputeEnv", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
+      "allowed_test_targets": ["query_orchestration_test"],
+      "allowed_test_link_deps": ["QueryOrchestration"],
+      "remediation": "Keep QueryOrchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime primitives to their owning modules."
+    },
+    {
       "id": "service",
       "doc_label": "Service",
       "summary": "Shared service-layer target above runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.",
@@ -1096,6 +1119,7 @@
         "http/service/",
         "io/",
         "platform/",
+        "query_orchestration/",
         "runtime/",
         "serde/",
         "storage/",
@@ -1105,6 +1129,7 @@
       "forbidden_include_prefixes": ["service/service_be/", "service_be/"],
       "allowed_target_deps": [
         "Runtime",
+        "QueryOrchestration",
         "RuntimeEnv",
         "RuntimeCore",
         "Cache",

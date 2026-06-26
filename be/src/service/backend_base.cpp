@@ -48,6 +48,7 @@
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/result/result_queue_mgr.h"
 #include "gutil/strings/substitute.h"
+#include "query_orchestration/query_orchestrator.h"
 #include "runtime/exec_env.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
@@ -128,7 +129,7 @@ void BackendServiceBase::finish_stream_load_channel(TStatus& t_status, const TSt
 
 /*
  * 1. validate user privilege (todo)
- * 2. FragmentMgr#exec_plan_fragment
+ * 2. QueryOrchestrator#exec_external_plan_fragment
  */
 void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) {
     TStatus t_status;
@@ -145,8 +146,9 @@ void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenP
     }
     std::vector<TScanColumnDesc> selected_columns;
     // start the scan procedure
-    Status exec_st = _exec_env->fragment_mgr()->exec_external_plan_fragment(params, fragment_instance_id,
-                                                                            &selected_columns, &(p_context->query_id));
+    query_orchestration::QueryOrchestrator query_orchestrator(_exec_env);
+    Status exec_st = query_orchestrator.exec_external_plan_fragment(params, fragment_instance_id, &selected_columns,
+                                                                    &(p_context->query_id));
     exec_st.to_thrift(&t_status);
     //return status
     // t_status.status_code = TStatusCode::OK;
