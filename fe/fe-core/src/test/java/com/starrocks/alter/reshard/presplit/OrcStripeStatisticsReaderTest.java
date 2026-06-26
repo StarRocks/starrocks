@@ -35,6 +35,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 class OrcStripeStatisticsReaderTest {
@@ -318,7 +320,7 @@ class OrcStripeStatisticsReaderTest {
     void pre1970DateStripeIsAccepted() throws Exception {
         // day-of-epoch -1 = 1969-12-31. A DATE has no sub-second part and BE's day-of-epoch load is
         // proleptic-Gregorian end to end, so a pre-1970 DATE boundary is FE/BE-identical and stays
-        // on the meta tier (only DATETIME keeps the 1970 lower bound).
+        // on the meta tier. DATE and DATETIME share the [0001-01-01, 9999-12-31] window.
         Path orcPath = writeOrc(
                 "struct<event_day:date>",
                 /*rowCount=*/ 2,
@@ -447,22 +449,81 @@ class OrcStripeStatisticsReaderTest {
     }
 
     @Test
-    void pre1970TimestampFallsBackToDataTier() throws Exception {
-        // -1000 ms = 1969-12-31 23:59:59 < 1970-01-01: outside the safe window → data tier.
+    void pre1970TimestampStripeIsAccepted() throws Exception {
+        // -2000 ms = 1969-12-31 23:59:58, -1000 ms = 1969-12-31 23:59:59: both before the epoch but
+        // inside [0001-01-01, 9999-12-31]. The BE plain-TIMESTAMP load and the boundary parse both
+        // pack through the same proleptic from_date, so a pre-1970 DATETIME boundary stays on the
+        // meta tier.
         Path orcPath = writeOrc(
                 "struct<event_ts:timestamp>",
                 /*rowCount=*/ 2,
                 (batch, batchRow, rowIndex) -> {
                     TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
                     vector.setIsUTC(true);
-                    vector.time[batchRow] = -1000L - rowIndex;
+                    vector.time[batchRow] = -2000L + rowIndex * 1000L;
                     vector.nanos[batchRow] = 0;
                 });
 
-        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
-                OrcStripeStatisticsReader.read(
-                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
-                        new Column("event_ts", DateType.DATETIME)));
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertEquals("1969-12-31 23:59:58",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        // Whole-second max; assert the second prefix to stay robust to a sub-millisecond stats
+        // ceiling if the ORC writer leaves maxNanos at its sentinel for a 0-nanos value.
+        Assertions.assertTrue(stats.get(0).getMaxTuple().getValues().get(0).getStringValue()
+                .startsWith("1969-12-31 23:59:59"));
+    }
+
+    @Test
+    void pre1970TimestampStripeWithSubSecondIsAccepted() throws Exception {
+        // A pre-1970 timestamp carrying a .500123 microsecond fraction is accepted, and the fraction
+        // survives in the boundary (the reader renders getMinimumUTC() via floorDiv + getNanos). The
+        // exact whole-second is asserted loosely: Hive's TimestampColumnVector statistics shift a
+        // negative time[] + nanos[] by a second versus the naive time/1000, a fixture-writing artifact
+        // (a real pyarrow-written ORC has consistent stats/data — the e2e is authoritative for the
+        // exact pre-1970 sub-second load parity that the parallel BE pre-epoch fix delivers).
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = -1000L;
+                    vector.nanos[batchRow] = 500_123_000;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        String min = stats.get(0).getMinTuple().getValues().get(0).getStringValue();
+        Assertions.assertTrue(min.startsWith("1969-12-31 23:59:5"), "expected a pre-1970 datetime, got " + min);
+        Assertions.assertTrue(min.endsWith(".500123"), "sub-second fraction must survive, got " + min);
+    }
+
+    @Test
+    void pre1582TimestampStripeIsAccepted() throws Exception {
+        // 1500-06-15 12:00:00 UTC, before the 1582 Gregorian cutover. BE's calendar is proleptic
+        // Gregorian (load via cctz then the same from_date as the boundary parse), so it aligns and
+        // stays on the meta tier.
+        long millis = LocalDateTime.of(1500, 6, 15, 12, 0, 0).toEpochSecond(ZoneOffset.UTC) * 1000L;
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = millis;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertEquals("1500-06-15 12:00:00",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
     }
 
     @Test
