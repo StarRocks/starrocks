@@ -261,7 +261,6 @@ set(EXEC_FILES
         ./runtime/pipeline_fragment_reporter_test.cpp
         ./runtime/runtime_metrics_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
-        ./runtime/rejected_record_sync_daemon_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
         ./runtime/batch_write/isomorphic_batch_write_test.cpp

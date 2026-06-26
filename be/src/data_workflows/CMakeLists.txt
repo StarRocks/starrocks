@@ -24,6 +24,7 @@ set(DATA_WORKFLOWS_FILES
     load/lake_spark_load_handler.cpp
     load/push_broker_reader.cpp
     load/push_handler.cpp
+    load/rejected_record_sync_daemon.cpp
     load/tablet_writer/lake_tablets_channel.cpp
     load/tablet_writer/load_channel.cpp
     load/tablet_writer/load_channel_mgr.cpp
