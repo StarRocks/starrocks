@@ -324,10 +324,10 @@ let
       md5 = "70e48cba7fecf289153d009791c9977f";
       sha256 = "07v5b365vz6bjdlqw4vwcna4yhaf6xzxny31hfq159ijg3q7gdhn";
     };
-    "starrocks-clucene-2026.04.09.tar.gz" = {
-      url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz";
-      md5 = "a06ce32908dad5b2b834b19a8879a2c8";
-      sha256 = "1a40dmgchxcbalxr1xvl1ma3k11z34qa934v4f0i0az3kqpcyrmb";
+    "starrocks-clucene-2026.06.23.tar.gz" = {
+      url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz";
+      md5 = "774561443bc372ec6e8e56f46f3e9f4a";
+      sha256 = "04wpgq7bq923bh2fbp9g2ljqd8svx8k5rvfa99bqjrxnfmnhn3hp";
     };
     "streamvbyte-0.5.1.tar.gz" = {
       url = "https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz";
@@ -460,7 +460,7 @@ let
 
   bySystem = {
     "x86_64-linux" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
       "thrift-0.23.0.tar.gz"
@@ -531,7 +531,7 @@ let
       "benchgen-26.03.11.tar.gz"
     ];
     "aarch64-linux" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
       "thrift-0.23.0.tar.gz"
@@ -600,7 +600,7 @@ let
       "benchgen-26.03.11.tar.gz"
     ];
     "aarch64-darwin" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
       "thrift-0.23.0.tar.gz"
