@@ -22,6 +22,7 @@
 #include "agent/agent_server.h"
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
+#include "bootstrap/bootstrap.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_path_fwd.h"
@@ -31,10 +32,8 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
-#include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -66,7 +65,7 @@ int init_test_env(int argc, char** argv) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
-    auto fs_registry_status = fs::install_builtin_file_system_providers();
+    auto fs_registry_status = bootstrap::install_builtin_file_system_providers();
     CHECK(fs_registry_status.ok()) << fs_registry_status;
     butil::FilePath curr_dir(std::filesystem::current_path());
     butil::FilePath storage_root;
@@ -144,7 +143,7 @@ int init_test_env(int argc, char** argv) {
     CHECK(st.ok()) << st;
 
     auto* exec_env = ExecEnv::GetInstance();
-    st = connector::bootstrap_builtin_connectors();
+    st = bootstrap::bootstrap_builtin_connectors();
     CHECK(st.ok()) << st;
     st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;

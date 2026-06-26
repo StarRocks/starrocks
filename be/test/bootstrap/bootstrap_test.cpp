@@ -12,12 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "bootstrap/bootstrap.h"
 
-#include "common/status.h"
+#include <gtest/gtest.h>
 
-namespace starrocks::connector {
+#include "base/testutil/assert.h"
+#include "fs/fs_registry.h"
 
-Status bootstrap_builtin_connectors();
+namespace starrocks {
 
-} // namespace starrocks::connector
+TEST(BootstrapTest, RegistryBootstrapIsIdempotent) {
+    ASSERT_OK(bootstrap::install_builtin_file_system_providers());
+    ASSERT_OK(bootstrap::install_builtin_file_system_providers());
+    ASSERT_OK(bootstrap::bootstrap_builtin_connectors());
+    ASSERT_OK(bootstrap::bootstrap_builtin_connectors());
+
+    ASSIGN_OR_ABORT(auto fs, fs::default_file_system_provider_registry().create_shared("posix://"));
+    ASSERT_EQ(FileSystem::POSIX, fs->type());
+}
+
+} // namespace starrocks

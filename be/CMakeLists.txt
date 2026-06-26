@@ -547,6 +547,7 @@ set(STARROCKS_LINK_LIBS
     # Legacy connector registration pulls concrete connector objects that
     # depend on Exec symbols, so keep it in the static library group.
     ConnectorBuiltinRegistry
+    Bootstrap
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
@@ -878,7 +879,7 @@ endif()
 # compile or link test helper code.
 set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ConnectorBuiltinRegistry
-    ConnectorBootstrap
+    Bootstrap
     TestUtil
     ${WL_START_GROUP}
     gmock
@@ -972,6 +973,7 @@ add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/bootstrap)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
 add_subdirectory(${SRC_DIR}/gen_cpp)

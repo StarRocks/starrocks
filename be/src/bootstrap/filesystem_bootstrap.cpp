@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/fs_provider_bootstrap.h"
+#include "bootstrap/bootstrap.h"
 
 #ifndef __APPLE__
 #include "fs/azure/fs_azblob.h"
@@ -29,31 +29,31 @@
 #include "compute_env/staros/starlet_filesystem.h"
 #endif
 
-namespace starrocks::fs {
+namespace starrocks::bootstrap {
 
 Status install_builtin_file_system_providers() {
     static Status status = [] {
-        static FileSystemProviderRegistry registry;
+        static fs::FileSystemProviderRegistry registry;
 
-        RETURN_IF_ERROR(registry.register_provider(new_posix_file_system_provider()));
+        RETURN_IF_ERROR(registry.register_provider(fs::new_posix_file_system_provider()));
 #ifndef __APPLE__
-        RETURN_IF_ERROR(registry.register_provider(new_hdfs_fallback_file_system_provider()));
+        RETURN_IF_ERROR(registry.register_provider(fs::new_hdfs_fallback_file_system_provider()));
 #endif
 #ifndef __APPLE__
-        RETURN_IF_ERROR(registry.register_provider(new_s3_file_system_provider()));
-        RETURN_IF_ERROR(registry.register_provider(new_azblob_file_system_provider()));
+        RETURN_IF_ERROR(registry.register_provider(fs::new_s3_file_system_provider()));
+        RETURN_IF_ERROR(registry.register_provider(fs::new_azblob_file_system_provider()));
 #endif
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-        RETURN_IF_ERROR(registry.register_provider(new_starlet_file_system_provider()));
+        RETURN_IF_ERROR(registry.register_provider(fs::new_starlet_file_system_provider()));
 #endif
 #ifndef __APPLE__
-        RETURN_IF_ERROR(registry.register_provider(new_hdfs_file_system_provider()));
+        RETURN_IF_ERROR(registry.register_provider(fs::new_hdfs_file_system_provider()));
 #endif
 
-        install_default_file_system_provider_registry(registry.freeze());
+        fs::install_default_file_system_provider_registry(registry.freeze());
         return Status::OK();
     }();
     return status;
 }
 
-} // namespace starrocks::fs
+} // namespace starrocks::bootstrap

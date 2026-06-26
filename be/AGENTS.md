@@ -283,19 +283,20 @@ Read-side connector contracts, DataSource, and DataSourceProvider default mechan
 - Core tests: `connector_primitive_test`
 - Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
 
-### ConnectorBootstrap (`connectorbootstrap`)
-Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.
-- Targets: `ConnectorBootstrap`
-- Allowed internal include prefixes: `connector/connector_bootstrap.h`, `connector/benchmark/`, `connector/elasticsearch/`, `connector/mysql/`, `connector/connector.h`, `connector/connector_registry.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Remediation: Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap.
-
 ### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)
 Top-level built-in connector registration composition above connector contracts and concrete connector libraries.
 - Targets: `ConnectorBuiltinRegistry`
 - Allowed internal include prefixes: `connector/builtin_connector_registry.h`, `connector/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Connector`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Remediation: Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target.
+- Remediation: Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through Bootstrap instead of depending back on this target.
+
+### Bootstrap (`bootstrap`)
+BE registry bootstrap composition for built-in filesystem providers, split connector libraries, and future process-level registries without owning service lifecycle.
+- Targets: `Bootstrap`
+- Allowed internal include prefixes: `bootstrap/`, `connector/benchmark/`, `connector/elasticsearch/`, `connector/mysql/`, `connector/connector.h`, `connector/connector_registry.h`, `compute_env/staros/`, `fs/azure/`, `fs/hdfs/`, `fs/fs_posix.h`, `fs/fs_registry.h`, `fs/fs_s3.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `FileSystem`, `ComputeEnv`, `FSCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `bootstrap_test`
+- Remediation: Keep Bootstrap limited to registry/process bootstrap composition; move reusable primitives down to their owner modules and keep service lifecycle orchestration in ServiceBE.
 
 ### ExecSchemaScannerCore (`execschemascannercore`)
 Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.
@@ -332,8 +333,8 @@ Orchestration layer below Service for query, fragment, and ingestion lifecycle e
 ### Service (`service`)
 Shared service-layer target above runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.
 - Targets: `Service`
-- Allowed internal include prefixes: `service/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/core/`, `http/service/`, `io/`, `platform/`, `orchestration/`, `runtime/`, `serde/`, `storage/`, `types/`, `util/`
-- Allowed target deps: `Runtime`, `Orchestration`, `RuntimeEnv`, `RuntimeCore`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FSCore`, `FileSystem`, `IO`, `HttpCore`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `Util`, `Serde`, `ChunkCore`, `ColumnCore`, `Types`
+- Allowed internal include prefixes: `service/`, `agent/`, `base/`, `bootstrap/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/core/`, `http/service/`, `io/`, `platform/`, `orchestration/`, `runtime/`, `serde/`, `storage/`, `types/`, `util/`
+- Allowed target deps: `Runtime`, `Orchestration`, `RuntimeEnv`, `RuntimeCore`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FSCore`, `FileSystem`, `IO`, `HttpCore`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `Bootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `Util`, `Serde`, `ChunkCore`, `ColumnCore`, `Types`
 - Remediation: Keep shared Service below ServiceBE and depend on checked module targets such as AgentServer instead of ad hoc lower-layer reach-through.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 

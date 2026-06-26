@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector_bootstrap.h"
-
 #include <memory>
 #include <string>
 
+#include "bootstrap/bootstrap.h"
 #include "connector/connector.h"
 #include "connector/connector_registry.h"
 
@@ -32,12 +31,12 @@
 #include "connector/mysql/mysql_connector.h"
 #endif
 
-namespace starrocks::connector {
+namespace starrocks::bootstrap {
 
 namespace {
 
 template <typename ConnectorT>
-void install_if_absent(ConnectorRegistry* registry, const std::string& name) {
+void install_if_absent(connector::ConnectorRegistry* registry, const std::string& name) {
     if (registry->get(name) == nullptr) {
         registry->put(name, std::make_unique<ConnectorT>());
     }
@@ -46,18 +45,18 @@ void install_if_absent(ConnectorRegistry* registry, const std::string& name) {
 } // namespace
 
 Status bootstrap_builtin_connectors() {
-    auto* registry = ConnectorRegistry::default_instance();
+    auto* registry = connector::ConnectorRegistry::default_instance();
     DCHECK(registry != nullptr);
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
-    install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
+    install_if_absent<connector::BenchmarkConnector>(registry, connector::Connector::BENCHMARK);
 #endif
 #ifdef STARROCKS_WITH_CONNECTOR_ELASTICSEARCH
-    install_if_absent<ESConnector>(registry, Connector::ES);
+    install_if_absent<connector::ESConnector>(registry, connector::Connector::ES);
 #endif
 #ifdef STARROCKS_WITH_CONNECTOR_MYSQL
-    install_if_absent<MySQLConnector>(registry, Connector::MYSQL);
+    install_if_absent<connector::MySQLConnector>(registry, connector::Connector::MYSQL);
 #endif
     return Status::OK();
 }
 
-} // namespace starrocks::connector
+} // namespace starrocks::bootstrap

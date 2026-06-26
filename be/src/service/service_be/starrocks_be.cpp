@@ -22,6 +22,7 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "base/brpc/brpc.h"
+#include "bootstrap/bootstrap.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config_cache_fwd.h"
@@ -33,7 +34,6 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
-#include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
 #include "orchestration/orchestration_env.h"
 #include "runtime/current_thread.h"
@@ -152,7 +152,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
-    EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
+    EXIT_IF_ERROR(bootstrap::bootstrap_builtin_connectors());
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 

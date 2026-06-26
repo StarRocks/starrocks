@@ -29,6 +29,7 @@ from typing import Iterable
 INTERNAL_INCLUDE_PREFIXES = {
     "agent",
     "base",
+    "bootstrap",
     "cache",
     "column",
     "common",

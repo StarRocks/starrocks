@@ -50,6 +50,7 @@
 #include "base/logging.h"
 #include "base/path/path_util.h"
 #include "base/uid_util.h"
+#include "bootstrap/bootstrap.h"
 #include "common/config_object_storage_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -61,7 +62,6 @@
 #include "common/util/thrift_server.h"
 #include "exec/pipeline/query_context.h"
 #include "formats/orc/lzo_decompressor_registration.h"
-#include "fs/fs_provider_bootstrap.h"
 #include "fs/fs_s3.h"
 #include "platform/aws/aws_sdk_guard.h"
 #include "platform/path_rw.h"
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
 
     starrocks::AwsSdkGuard aws_sdk_guard;
 
-    EXIT_IF_ERROR(starrocks::fs::install_builtin_file_system_providers());
+    EXIT_IF_ERROR(starrocks::bootstrap::install_builtin_file_system_providers());
     LOG(INFO) << "file system provider registry init successfully";
 
     std::vector<starrocks::StorePath> paths;

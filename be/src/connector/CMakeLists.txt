@@ -133,42 +133,6 @@ if (WITH_CONNECTOR_BENCHMARK)
     )
 endif()
 
-ADD_BE_LIB(ConnectorBootstrap
-        connector_bootstrap.cpp
-)
-
-target_link_libraries(ConnectorBootstrap PUBLIC
-        Common
-)
-
-target_link_libraries(ConnectorBootstrap PRIVATE
-        Connector
-        Base
-        Gutil
-        StarRocksGen
-)
-
-if (WITH_CONNECTOR_BENCHMARK)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorBenchmark
-    )
-endif()
-
-if (WITH_CONNECTOR_ELASTICSEARCH)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ELASTICSEARCH)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorElasticsearch
-    )
-endif()
-
-if (WITH_CONNECTOR_MYSQL)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_MYSQL)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorMySQL
-    )
-endif()
-
 ADD_BE_LIB(ConnectorBuiltinRegistry
         connector_registry_init.cpp
 )

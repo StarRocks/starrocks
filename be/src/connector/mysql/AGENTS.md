@@ -11,5 +11,5 @@ MySQL connector implementation above connector contracts without registry compos
 - Allowed internal include prefixes: `connector/mysql/`, `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ConnectorPrimitive`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_mysql_test`
-- Remediation: Keep ConnectorMySQL limited to MySQL read-side scan and scanner logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library.
+- Remediation: Keep ConnectorMySQL limited to MySQL read-side scan and scanner logic; move registration into Bootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library.
 <!-- END GENERATED: BE MODULE HARNESSES -->

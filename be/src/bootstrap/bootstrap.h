@@ -16,8 +16,9 @@
 
 #include "common/status.h"
 
-namespace starrocks::fs {
+namespace starrocks::bootstrap {
 
 Status install_builtin_file_system_providers();
+Status bootstrap_builtin_connectors();
 
-} // namespace starrocks::fs
+} // namespace starrocks::bootstrap
