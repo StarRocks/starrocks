@@ -1267,37 +1267,23 @@ public class IcebergMetadata implements ConnectorMetadata {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
         IcebergTable icebergTable = (IcebergTable) table;
-        long snapshotId;
-        if (version.end().isPresent()) {
-            snapshotId = version.end().get();
-        } else {
+        if (version.end().isEmpty()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 
         boolean enableColumnStats = session.getSessionVariable().enableIcebergColumnStatistics();
-        boolean isIncrementalDelta = version.start().isPresent();
 
         // -------- path selection --------
-        // Three paths with different accuracy/cost trade-offs:
+        // Two paths with different accuracy/cost trade-offs:
         //
         // A. Column-statistics enabled (opt-in, default OFF):
-        //    Must scan files for per-column bounds and Puffin NDV. buildFileScanTaskIterator
-        //    handles both full-table and delta internally.  Cost: O(files) planFiles + per-column
-        //    metadata collection.  Accuracy: best (NDV + min/max).
+        //    Must scan files for per-column bounds and Puffin NDV.  Cost: O(files) planFiles +
+        //    per-column metadata collection.  Accuracy: best (NDV + min/max).
         if (enableColumnStats) {
             return getFullTableStatisticsFromPlanFiles(icebergTable, columns, session, predicate, limit, version);
         }
         //
-        // B. Incremental delta (append-only, column-stats off):
-        //    Requires datafile-level precision (added_snapshot_id) because MergeAppend/compaction
-        //    rewrites manifests and merges old + new records, making manifest-level addedRows
-        //    / existingRows unreliable for a snapshot range. Delta files are few by definition,
-        //    so O(files) plan cost is acceptable; accuracy is required.
-        if (isIncrementalDelta) {
-            return getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
-        }
-        //
-        // C. Whole-table snapshot (default, column-stats off, non-delta):
+        // B. Whole-table snapshot (default, column-stats off):
         //    Manifest addedRows+existingRows is PROVABLY exact for total live files regardless of
         //    write style.  In the vast majority of cases (all modern Iceberg writers: StarRocks,
         //    Spark, Trino, Flink) manifests carry the row-count fields needed; partition-aware
@@ -1305,7 +1291,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    Cost: O(manifests), ZERO manifest-file opens, ZERO DataFile enumeration — splitTasks
         //    never populated, incremental scan range delivery stays unlocked.
         //    Rare fallback: if a matching manifest is missing row-count metadata (v1 manifest list
-        //    or pre-0.10 Iceberg), we fall through to Path B for exact cardinality via planFiles.
+        //    or pre-0.10 Iceberg), we fall through to planFiles for exact cardinality.
         return getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
     }
 
