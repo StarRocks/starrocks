@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "common/logging.h"
+#include "data_workflows/load/rejected_record_sync_daemon.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 
 namespace starrocks {
@@ -27,6 +29,7 @@ DataWorkflowsEnv::~DataWorkflowsEnv() {
 }
 
 Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
+    DCHECK(options.exec_env != nullptr);
     DCHECK(options.diagnose_daemon != nullptr);
     DCHECK(options.brpc_stub_cache != nullptr);
     DCHECK(options.load_mem_tracker != nullptr);
@@ -36,10 +39,24 @@ Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
                                              options.brpc_stub_cache, options.metrics, options.table_metrics_mgr);
     RETURN_IF_ERROR(_load_channel_mgr->init(options.load_mem_tracker));
     _load_channel_mgr_started = true;
+
+    // Start unconditionally so mutable config can enable sync without a BE restart.
+    _rejected_record_sync_daemon = std::make_unique<RejectedRecordSyncDaemon>(options.exec_env);
+    Status rr_status = _rejected_record_sync_daemon->init();
+    if (!rr_status.ok()) {
+        LOG(ERROR) << "RejectedRecordSyncDaemon init failed: " << rr_status.message();
+        _rejected_record_sync_daemon.reset();
+    } else {
+        _rejected_record_sync_daemon_started = true;
+    }
     return Status::OK();
 }
 
 void DataWorkflowsEnv::stop() {
+    if (_rejected_record_sync_daemon != nullptr && _rejected_record_sync_daemon_started) {
+        _rejected_record_sync_daemon->stop();
+        _rejected_record_sync_daemon_started = false;
+    }
     if (_load_channel_mgr != nullptr && _load_channel_mgr_started) {
         _load_channel_mgr->close();
         _load_channel_mgr_started = false;
@@ -48,6 +65,7 @@ void DataWorkflowsEnv::stop() {
 
 void DataWorkflowsEnv::destroy() {
     stop();
+    _rejected_record_sync_daemon.reset();
     _load_channel_mgr.reset();
 }
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/rejected_record_sync_daemon.h"
+#include "data_workflows/load/rejected_record_sync_daemon.h"
 
 #include <gtest/gtest.h>
 #include <unistd.h>
