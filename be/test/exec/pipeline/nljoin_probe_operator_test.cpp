@@ -28,8 +28,8 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
-#include "types/type_descriptor.h"
 
 // The test object library is compiled with -fno-access-control, so the test can reach the
 // private members (_init_output_chunk, _curr_build_chunk, NLJoinContext::_build_chunks) directly.
