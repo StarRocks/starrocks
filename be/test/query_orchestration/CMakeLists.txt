@@ -19,6 +19,7 @@ endif()
 
 add_executable(query_orchestration_test
     ${BE_TEST_MACOS_LINK_STUBS}
+    fragment_executor_test.cpp
     query_orchestrator_test.cpp
 )
 target_link_libraries(query_orchestration_test QueryOrchestration ${TEST_LINK_LIBS} gtest_main)

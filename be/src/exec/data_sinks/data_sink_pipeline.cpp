@@ -32,7 +32,7 @@
 #include "exec/pipeline/exchange/split_local_exchange.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/fragment_execution_params.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"

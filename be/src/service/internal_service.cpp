@@ -69,7 +69,6 @@
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
-#include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -80,6 +79,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/strings/substitute.h"
+#include "query_orchestration/fragment_executor.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
@@ -388,7 +388,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
 
     // prepare query context and desc table first
-    pipeline::FragmentExecutor fragment_executor;
+    query_orchestration::FragmentExecutor fragment_executor;
     Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
     if (!status.ok()) {
         status.to_protobuf(response->mutable_status());
@@ -399,8 +399,8 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     std::vector<PromiseStatusSharedPtr> promise_statuses;
     std::vector<std::shared_future<Status>> prepare_futures;
     // must use shared_ptr to avoid uaf
-    std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
-            std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
+    std::shared_ptr<std::vector<query_orchestration::FragmentExecutor>> fragment_executors =
+            std::make_shared<std::vector<query_orchestration::FragmentExecutor>>(unique_requests.size());
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
@@ -588,7 +588,8 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        Status code =
+                query_orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }
@@ -628,7 +629,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
-    pipeline::FragmentExecutor fragment_executor;
+    query_orchestration::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);

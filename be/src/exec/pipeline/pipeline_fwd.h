@@ -29,7 +29,6 @@ class FragmentContext;
 using FragmentContextPtr = std::shared_ptr<FragmentContext>;
 class FragmentContextManager;
 using FragmentContextManagerPtr = std::unique_ptr<FragmentContextManager>;
-class FragmentExecutor;
 using FragmentPromise = std::promise<void>;
 using FragmentFuture = std::future<void>;
 class Pipeline;

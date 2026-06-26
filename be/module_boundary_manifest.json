@@ -1080,6 +1080,7 @@
       "owned_roots": ["be/src/query_orchestration"],
       "allowed_include_prefixes": [
         "query_orchestration/",
+        "connector/data_source_provider.h",
         "exec/",
         "runtime/",
         "compute_env/",
@@ -1090,7 +1091,7 @@
         "types/"
       ],
       "forbidden_include_prefixes": ["service/", "http/service/", "agent/"],
-      "allowed_target_deps": ["Runtime", "Exec", "ExecRuntime", "ComputeEnv", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
+      "allowed_target_deps": ["Runtime", "Exec", "ExecRuntime", "ExecPrimitive", "ComputeEnv", "ConnectorPrimitive", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
       "allowed_test_targets": ["query_orchestration_test"],
       "allowed_test_link_deps": ["QueryOrchestration"],
       "remediation": "Keep QueryOrchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime primitives to their owning modules."
