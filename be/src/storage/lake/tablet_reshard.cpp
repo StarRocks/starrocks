@@ -21,7 +21,6 @@
 
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"

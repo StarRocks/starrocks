@@ -35,6 +35,7 @@
 #include "compute_env/spill/options.h"
 #include "compute_env/spill/spill_metrics.h"
 #include "compute_env/spill/spiller.hpp"
+#include "compute_env/workgroup/work_group.h"
 #include "exprs/sort_exec_exprs.h"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
@@ -154,9 +155,13 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
 Status Spiller::prepare(RuntimeState* state) {
     _chunk_builder.chunk_schema() = std::make_shared<SpilledChunkBuildSchema>();
-#ifndef BE_TEST
-    DCHECK(_opts.wg != nullptr) << "workgroup must be set";
-#endif
+    // A nullptr workgroup means "use the reserved default workgroup". Resolve it here, once,
+    // so that downstream task dispatch (IOTaskExecutor) and yield/preemption logic all observe
+    // the same workgroup. In unit tests the default is unset and _opts.wg stays nullptr, which
+    // is fine: those tests dispatch through SyncTaskExecutor and never touch a workgroup executor.
+    if (_opts.wg == nullptr) {
+        _opts.wg = workgroup::WorkGroup::default_workgroup();
+    }
 
     ASSIGN_OR_RETURN(_serde, Serde::create_serde(this));
 

@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "http/action/stream_load.h"
+#include "http/service/action/stream_load.h"
 
 #include <event2/buffer.h>
 #include <event2/http.h>
@@ -50,15 +50,15 @@
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_request.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_common.h"
+#include "http/core/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
 class mg_connection;
@@ -101,7 +101,6 @@ public:
             _owns_platform_env = true;
         }
         _env._refresh_service_contexts();
-        _env._load_stream_mgr = new LoadStreamMgr();
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
@@ -109,8 +108,6 @@ public:
         _limiter.reset(new ConcurrentLimiter(1000));
     }
     void TearDown() override {
-        delete _env._load_stream_mgr;
-        _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
         if (_owns_platform_env) {
@@ -335,7 +332,7 @@ TEST_F(StreamLoadActionTest, plan_fail) {
 
 TEST_F(StreamLoadActionTest, huge_malloc) {
     StreamLoadAction action(&_env, _limiter.get());
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->body_sink = std::make_shared<StreamLoadPipe>();
     HttpRequest request(_evhttp_req);
@@ -546,7 +543,7 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
 TEST_F(StreamLoadActionTest, merge_commit_response) {
     // success
     {
-        StreamLoadContext ctx(&_env);
+        StreamLoadContext ctx(&_env, _env.load_stream_mgr());
         ctx.enable_batch_write = true;
         ctx.status = Status::OK();
         ctx.txn_id = 1;
@@ -586,7 +583,7 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
 
     // fail
     {
-        StreamLoadContext ctx(&_env);
+        StreamLoadContext ctx(&_env, _env.load_stream_mgr());
         ctx.enable_batch_write = true;
         ctx.status = Status::InternalError("TestFail");
         ctx.txn_id = 2;

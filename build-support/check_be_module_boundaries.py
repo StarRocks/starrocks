@@ -49,7 +49,6 @@ INTERNAL_INCLUDE_PREFIXES = {
     "script",
     "serde",
     "service",
-    "staros_integration",
     "storage",
     "testutil",
     "tools",

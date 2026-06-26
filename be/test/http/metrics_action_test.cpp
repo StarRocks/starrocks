@@ -32,16 +32,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "http/action/metrics_action.h"
+#include "http/service/action/metrics_action.h"
 
 #include <gtest/gtest.h>
 
 #include "base/metrics.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
-#include "http/http_response.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_request.h"
+#include "http/core/http_response.h"
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
 #endif

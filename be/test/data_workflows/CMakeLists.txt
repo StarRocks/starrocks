@@ -19,7 +19,13 @@ endif()
 
 set(DATA_WORKFLOWS_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    load/tablet_writer/lake_tablets_channel_test.cpp
+    load/tablet_writer/load_channel_mgr_test.cpp
+    load/tablet_writer/load_channel_test.cpp
+    load/tablet_writer/local_tablets_channel_test.cpp
     push_handler_test.cpp
+    rejected_record_sync_daemon_test.cpp
+    snapshot/snapshot_loader_test.cpp
 )
 
 add_library(starrocks_data_workflows_test_objs OBJECT ${DATA_WORKFLOWS_TEST_FILES})

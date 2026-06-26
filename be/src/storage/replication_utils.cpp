@@ -28,7 +28,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/stringpiece.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_client.h"
+#include "http/core/http_client.h"
 #include "storage/remote_snapshot_client.h"
 
 namespace starrocks {

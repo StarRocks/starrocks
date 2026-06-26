@@ -20,10 +20,6 @@
 
 namespace starrocks {
 
-bool batch_write_trace_log_enabled();
-
-#define TRACE_BATCH_WRITE LOG_IF(INFO, ::starrocks::batch_write_trace_log_enabled())
-
 using BatchWriteLoadParams = std::map<std::string, std::string>;
 
 struct BatchWriteId {

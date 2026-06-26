@@ -203,6 +203,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -707,6 +708,8 @@ public class StmtExecutor {
             return "Update";
         } else if (parsedStmt instanceof DeleteStmt) {
             return "Delete";
+        } else if (parsedStmt instanceof MergeIntoStmt) {
+            return "MergeInto";
         } else {
             return "Query";
         }
@@ -1593,6 +1596,7 @@ public class StmtExecutor {
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
         maybeEmbedExplainPlanInProfile(profile, plan);
+        appendStatsSourceToProfile(profile, plan);
         // Capture the session timezone now so that the async profile task uses the same zone
         // as START_TIME (the context may change before the async task runs).
         java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
@@ -1646,6 +1650,40 @@ public class StmtExecutor {
             }
         };
         return coord.tryProcessProfileAsync(task);
+    }
+
+    /**
+     * Traverse scan operators in the profiled plan and record per-table StatsSource
+     * into a dedicated section of the runtime profile.
+     */
+    private void appendStatsSourceToProfile(RuntimeProfile profile, ExecPlan plan) {
+        if (plan == null) {
+            return;
+        }
+        ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
+        if (profilingPlan == null) {
+            return;
+        }
+        RuntimeProfile statsSourceProfile = new RuntimeProfile("StatsSource");
+        for (ProfilingExecPlan.ProfilingFragment fragment : profilingPlan.getFragments()) {
+            collectStatsSource(fragment.getRoot(), statsSourceProfile);
+        }
+        profile.addChild(statsSourceProfile);
+    }
+
+    private static void collectStatsSource(ProfilingExecPlan.ProfilingElement element,
+                                           RuntimeProfile statsSourceProfile) {
+        if (element == null) {
+            return;
+        }
+        if (element.instanceOf(ScanNode.class)) {
+            String tableName = element.getUniqueInfos().get("Table");
+            String label = tableName != null ? tableName : String.valueOf(element.getId());
+            statsSourceProfile.addInfoString(label, element.getStatsSource().name());
+        }
+        for (ProfilingExecPlan.ProfilingElement child : element.getChildren()) {
+            collectStatsSource(child, statsSourceProfile);
+        }
     }
 
     /**
@@ -3525,7 +3563,7 @@ public class StmtExecutor {
                 return;
             }
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
-                    || stmt instanceof UpdateStmt)) {
+                    || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
@@ -3816,6 +3854,8 @@ public class StmtExecutor {
             ConnectorMetricsMgr.increaseUpdateTotalFail(connectorType, t);
         } else if (dmlType == DmlType.DELETE) {
             ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
+        } else if (dmlType == DmlType.MERGE_INTO) {
+            ConnectorMetricsMgr.increaseIcebergMergeTotalFail(t);
         } else {
             String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
             ConnectorMetricsMgr.increaseWriteTotalFail(connectorType, t, writeType);

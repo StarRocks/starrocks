@@ -27,6 +27,9 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_context_handle.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
@@ -69,9 +72,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/stream_load_context_handle.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks::pipeline {
 
@@ -727,24 +727,29 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                         broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
                 StreamLoadContext* ctx = nullptr;
                 if (is_batch_write) {
+                    auto* batch_write_mgr = exec_env->batch_write_mgr();
                     ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
-                                                  exec_env, exec_env->batch_write_mgr(), db_name, table_name,
+                                                  exec_env, batch_write_mgr, db_name, table_name,
                                                   broker_scan_range.batch_write_parameters, label, txn_id, load_id,
                                                   broker_scan_range.batch_write_interval_ms));
-                    fragment_attachments.emplace_back(
-                            std::make_unique<StreamLoadContextHandle>(ctx, exec_env->batch_write_mgr()));
+                    fragment_attachments.emplace_back(std::make_unique<StreamLoadContextHandle>(
+                            ctx, [batch_write_mgr](StreamLoadContext* context) {
+                                batch_write_mgr->unregister_stream_load_pipe(context);
+                            }));
                 } else {
-                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
+                    auto* stream_context_mgr = exec_env->stream_context_mgr();
+                    RETURN_IF_ERROR(stream_context_mgr->create_channel_context(
                             exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
                     DeferOp op([&] {
                         if (ctx->unref()) {
                             delete ctx;
                         }
                     });
-                    RETURN_IF_ERROR(
-                            exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
-                    fragment_attachments.emplace_back(
-                            std::make_unique<StreamLoadContextHandle>(ctx, exec_env->stream_context_mgr()));
+                    RETURN_IF_ERROR(stream_context_mgr->put_channel_context(label, table_name, channel_id, ctx));
+                    fragment_attachments.emplace_back(std::make_unique<StreamLoadContextHandle>(
+                            ctx, [stream_context_mgr](StreamLoadContext* context) {
+                                stream_context_mgr->remove_channel_context(context);
+                            }));
                 }
             }
         }

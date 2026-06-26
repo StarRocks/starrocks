@@ -284,13 +284,63 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void pre1970DateFallsBackToDataTier() throws Exception {
-        // epochDay -1 = 1969-12-31 < 1970-01-01: outside the safe window (pre-1970 +
-        // pre-1582 + year-0 parity traps). Meta tier must defer to data tier.
+    void pre1970DateIsAccepted() throws Exception {
+        // epochDay -1 = 1969-12-31. A DATE has no sub-second part and BE's day-of-epoch load is
+        // proleptic-Gregorian end to end, so a pre-1970 DATE boundary is FE/BE-identical and stays
+        // on the meta tier (only DATETIME keeps the 1970 lower bound).
         Path parquetPath = writeParquet(
                 "message schema { required int32 event_day (DATE); }",
                 /*rowCount=*/ 2,
                 (group, rowIndex) -> group.append("event_day", -1 - rowIndex));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("1969-12-31",
+                rowGroupStatistics.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void pre1582DateIsAccepted() throws Exception {
+        // epochDay -171499 = 1500-06-15, before the 1582 Gregorian cutover. BE's calendar is
+        // proleptic Gregorian (no Julian switch), so this still aligns and stays on the meta tier.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", -171499));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("1500-06-15",
+                rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void minSupportedDateIsAccepted() throws Exception {
+        // epochDay -719162 = 0001-01-01, the lower edge of the DATE window — accepted.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", -719162));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertEquals(1, rowGroupStatistics.size());
+        Assertions.assertEquals("0001-01-01",
+                rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void belowMinSupportedDateFallsBackToDataTier() throws Exception {
+        // epochDay -719163 = 0000-12-31, below 0001-01-01: outside the DATE window → data tier.
+        Path parquetPath = writeParquet(
+                "message schema { required int32 event_day (DATE); }",
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_day", -719163));
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
@@ -640,22 +690,128 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void declaresSignedByteArrayOrderRequiresTypeOrderEntry() {
+    void declaresTypeDefinedColumnOrderRequiresTypeOrderEntry() {
         // parquet-mr's high-level writer always emits column_orders, so the "no column_orders /
         // unknown order → data tier" rejection is verified at the raw-footer-mapping predicate level.
         ColumnOrder typeOrder = ColumnOrder.TYPE_ORDER(new TypeDefinedOrder());
         // Footer positively declares TypeDefinedOrder for the leaf → signed order confirmed.
         Assertions.assertTrue(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 0));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(List.of(typeOrder), 0));
         // Legacy file with no column_orders → not confirmed.
         Assertions.assertFalse(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(null, 0));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(null, 0));
         // Entry present but no TypeDefinedOrder set (UNDEFINED order) → not confirmed.
         Assertions.assertFalse(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(new ColumnOrder()), 0));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(List.of(new ColumnOrder()), 0));
         // Leaf index past the end of the list → not confirmed.
         Assertions.assertFalse(
-                ParquetRowGroupStatisticsReader.declaresSignedByteArrayOrder(List.of(typeOrder), 5));
+                ParquetRowGroupStatisticsReader.declaresTypeDefinedColumnOrder(List.of(typeOrder), 5));
+    }
+
+    private static MessageType unsignedIntSchema(int bitWidth) {
+        return Types.buildMessage()
+                .required(bitWidth <= 32 ? PrimitiveTypeName.INT32 : PrimitiveTypeName.INT64)
+                .as(LogicalTypeAnnotation.intType(bitWidth, /*signed=*/ false))
+                .named("u")
+                .named("schema");
+    }
+
+    @Test
+    void readsUint8Statistics() throws Exception {
+        // UINT_8 (INT32-backed), values 250..254 — all < 2^31, decode identical to signed.
+        Path parquetPath = writeParquet(unsignedIntSchema(8), /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("u", 250 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.SMALLINT));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("250", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("254", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsUint16Statistics() throws Exception {
+        // UINT_16 (INT32-backed), values 65530..65534 — all < 2^31.
+        Path parquetPath = writeParquet(unsignedIntSchema(16), /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("u", 65530 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT));
+
+        Assertions.assertEquals("65530", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("65534", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsUint32StatisticsWithHighBitSet() throws Exception {
+        // UINT_32 values ~3e9 are stored as NEGATIVE int32 bit patterns. Integer.toString would
+        // sign-extend them; the unsigned decode must surface the true magnitude (~3e9), monotone.
+        // (Integer) 3_000_000_000 overflows int literal range, so write via (int) of a long.
+        Path parquetPath = writeParquet(unsignedIntSchema(32), /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("u", (int) (3_000_000_000L + rowIndex)));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.BIGINT));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("3000000000", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("3000000002", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void uint64FallsBackToDataTier() throws Exception {
+        // UINT_64 (INT64-backed): no signed-64 StarRocks fit (BIGINT max < 2^64), so it is rejected.
+        Path parquetPath = writeParquet(unsignedIntSchema(64), /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("u", (long) rowIndex));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("u", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void uint32IntoTooNarrowTargetFallsBackToDataTier() throws Exception {
+        // UINT_32 ~3e9 into a StarRocks INT (max 2^31-1): IntVariant range-check fails → data tier.
+        Path parquetPath = writeParquet(unsignedIntSchema(32), /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("u", (int) (3_000_000_000L + rowIndex)));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("u", IntegerType.INT)));
+    }
+
+    @Test
+    void readsUint32IntoIntWithinRange() throws Exception {
+        // UINT_32 values <= Integer.MAX_VALUE map into a StarRocks INT at the meta tier (the BE
+        // INT32->INT pass-through equals the unsigned magnitude below 2^31). Admitted, not rejected.
+        Path parquetPath = writeParquet(unsignedIntSchema(32), /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("u", 2_000_000_000 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertEquals("2000000000", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("2000000002", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsUint8IntoTinyint() throws Exception {
+        // UINT_8 values 0..127 map into a StarRocks TINYINT at the meta tier (narrowed admitted path:
+        // int8(magnitude) == magnitude within range). Admitted, not rejected.
+        Path parquetPath = writeParquet(unsignedIntSchema(8), /*rowCount=*/ 5,
+                (group, rowIndex) -> group.append("u", 100 + rowIndex));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.TINYINT));
+
+        Assertions.assertEquals("100", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("104", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
     }
 
     private Path writeParquet(

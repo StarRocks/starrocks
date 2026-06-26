@@ -29,7 +29,6 @@ class ExternalScanContextMgr;
 class FragmentMgr;
 class BaseLoadPathMgr;
 class HeartbeatFlags;
-class LoadChannelMgr;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class PriorityThreadPool;
@@ -133,7 +132,6 @@ struct RuntimeServices {
     ResultQueueMgr* result_queue_mgr = nullptr;
     FragmentMgr* fragment_mgr = nullptr;
     BaseLoadPathMgr* load_path_mgr = nullptr;
-    LoadChannelMgr* load_channel_mgr = nullptr;
     LoadStreamMgr* load_stream_mgr = nullptr;
     StreamContextMgr* stream_context_mgr = nullptr;
     TransactionMgr* transaction_mgr = nullptr;

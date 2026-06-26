@@ -45,7 +45,7 @@
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_filter_serde.h"
 #include "runtime/runtime_state.h"
-#include "util/time_guard.h"
+#include "runtime/time_guard.h"
 
 namespace starrocks {
 

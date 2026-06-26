@@ -23,6 +23,8 @@
 #include "common/system/cpu_info.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/dictionary_cache/dictionary_cache_manager.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load_path/dummy_load_path_mgr.h"
 #include "compute_env/load_path/load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
@@ -39,7 +41,10 @@
 
 namespace starrocks {
 
-ComputeEnv::ComputeEnv() : _dictionary_cache_manager(std::make_unique<DictionaryCacheManager>()) {}
+ComputeEnv::ComputeEnv()
+        : _dictionary_cache_manager(std::make_unique<DictionaryCacheManager>()),
+          _load_stream_mgr(std::make_unique<LoadStreamMgr>()),
+          _stream_context_mgr(std::make_unique<StreamContextMgr>(_load_stream_mgr.get())) {}
 
 ComputeEnv::~ComputeEnv() = default;
 
@@ -49,6 +54,7 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     auto stream_mgr = std::make_unique<DataStreamMgr>(options.metrics);
     auto result_mgr = std::make_unique<ResultBufferMgr>(options.metrics);
     auto result_queue_mgr = std::make_unique<ResultQueueMgr>(options.metrics);
+    _load_stream_mgr->install_metrics(options.metrics);
     RETURN_IF_ERROR(pipeline_timer->start());
 
     _driver_limiter = std::move(driver_limiter);
@@ -154,8 +160,15 @@ Status ComputeEnv::init_profile_report_worker(ProfileReportWorkerOptions options
 }
 
 void ComputeEnv::stop() {
+    stop_stream_load_pipes();
     if (_stream_mgr != nullptr) {
         _stream_mgr->close();
+    }
+}
+
+void ComputeEnv::stop_stream_load_pipes() {
+    if (_load_stream_mgr != nullptr) {
+        _load_stream_mgr->close();
     }
 }
 
@@ -181,6 +194,10 @@ void ComputeEnv::stop_result_mgr() {
     }
 }
 
+void ComputeEnv::destroy_stream_context_mgr() {
+    _stream_context_mgr.reset();
+}
+
 void ComputeEnv::destroy_profile_report_worker() {
     stop_profile_report_worker();
     _profile_report_worker.reset();
@@ -203,6 +220,9 @@ void ComputeEnv::destroy() {
     stop_result_mgr();
     _result_queue_mgr.reset();
     _result_mgr.reset();
+    destroy_stream_context_mgr();
+    stop_stream_load_pipes();
+    _load_stream_mgr.reset();
     _stream_mgr.reset();
     _cache_mgr.reset();
     _driver_limiter.reset();

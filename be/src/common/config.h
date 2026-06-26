@@ -114,6 +114,17 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
+// process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
+// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so this config does not
+// reconfigure jemalloc at runtime; it is exported by bin/start_backend.sh and surfaced here purely
+// for observability via information_schema.be_configs. It is ignored under the jemalloc_debug and
+// check_mem_leak modes, which force their own JEMALLOC_CONF.
+// NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
+CONF_String(jemalloc_conf,
+            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
+            "background_thread:true,prof:true,prof_active:false");
+
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
@@ -266,7 +277,7 @@ CONF_Bool(sys_log_timezone, "false");
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
 
-// The maximum number of bytes to display on the debug webserver's log page.
+// The maximum number of bytes to display on the debug HTTP service's log page.
 CONF_Int64(web_log_bytes, "1048576");
 // The number of threads available to serve backend execution requests.
 CONF_Int32(be_service_threads, "64");
@@ -1525,10 +1536,10 @@ CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
 // a file has it, regardless of this flag; the flag only controls the write format. Defaults to
-// false: enable it only after the whole cluster has been upgraded to a version that understands
-// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses
-// the legacy reader and cannot parse files written in the new format.
-CONF_mBool(lake_enable_protobuf_file_checksum, "false");
+// true. Set it to false only while the cluster may still be downgraded to a version that predates
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
+// legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table

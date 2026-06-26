@@ -36,31 +36,40 @@ TEST_F(JVMMetricsTest, normal) {
     ASSERT_TRUE(st.ok());
     jvm_metrics.install(&registry);
 
-    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes{type=\"used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes{type=\"committed\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes{type=\"max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes{type=\"used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes{type=\"committed\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"committed\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"peak_used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"peak_max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"committed\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"peak_used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"peak_max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"committed\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"peak_used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"peak_max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"committed\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"max\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"peak_used\"}"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"peak_max\"}"));
+    // Each JVM gauge is registered under a bare metric name plus a `type` label, so that the
+    // Prometheus exposition emits one valid `# TYPE <name>` line per name (see issue #75159).
+    auto type_label = [](const std::string& type) { return MetricLabels().add("type", type); };
+
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("committed")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes", type_label("committed")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes", type_label("committed")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes", type_label("max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes", type_label("peak_used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes", type_label("peak_max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes", type_label("committed")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes", type_label("max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes", type_label("peak_used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes", type_label("peak_max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes", type_label("committed")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes", type_label("max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes", type_label("peak_used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes", type_label("peak_max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes", type_label("committed")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes", type_label("max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes", type_label("peak_used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes", type_label("peak_max")));
+
+    // Regression guard for #75159: the label must NOT be baked into the metric name. If it were,
+    // the `# TYPE` line would contain `{...}` and break the entire Prometheus scrape.
+    ASSERT_EQ(nullptr, registry.get_metric("jvm_heap_size_bytes{type=\"used\"}"));
+    ASSERT_EQ(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"peak_max\"}"));
 
     registry.trigger_hook();
 

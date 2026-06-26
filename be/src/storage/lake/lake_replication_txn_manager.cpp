@@ -19,16 +19,17 @@
 
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "cache/dynamic_cache.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/staros/starlet_filesystem.h"
 #include "fs/fs_factory.h"
-#include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
+#include "platform/key_cache.h"
 #include "replication_txn_manager.h"
 #include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
@@ -41,7 +42,6 @@
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type.h"
-#include "util/dynamic_cache.h"
 #include "vacuum.h"
 
 namespace starrocks::lake {

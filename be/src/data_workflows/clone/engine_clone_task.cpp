@@ -56,7 +56,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/stringpiece.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_client.h"
+#include "http/core/http_client.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "storage/rowset/rowset.h"

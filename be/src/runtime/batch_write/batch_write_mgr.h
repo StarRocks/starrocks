@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+#include <string>
 #include <unordered_map>
 
 #include "base/concurrency/bthread_shared_mutex.h"
@@ -21,7 +24,6 @@
 #include "common/util/bthreads/executor.h"
 #include "runtime/batch_write/isomorphic_batch_write.h"
 #include "runtime/batch_write/txn_state_cache.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace brpc {
 class Controller;
@@ -33,6 +35,7 @@ class ExecEnv;
 class PStreamLoadRequest;
 class PStreamLoadResponse;
 class StreamLoadContext;
+class TUniqueId;
 class PUpdateTransactionStateRequest;
 class PUpdateTransactionStateResponse;
 class MetricRegistry;
@@ -54,8 +57,8 @@ public:
     TxnStateCache* txn_state_cache() { return _txn_state_cache.get(); }
 
     static StatusOr<StreamLoadContext*> create_and_register_pipe(
-            ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr, const string& db, const string& table,
-            const std::map<std::string, std::string>& load_parameters, const string& label, long txn_id,
+            ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr, const std::string& db, const std::string& table,
+            const std::map<std::string, std::string>& load_parameters, const std::string& label, long txn_id,
             const TUniqueId& load_id, int32_t batch_write_interval_ms);
 
     void receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl, const PStreamLoadRequest* request,

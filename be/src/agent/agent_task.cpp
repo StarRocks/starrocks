@@ -31,11 +31,11 @@
 #include "data_workflows/consistency/engine_checksum_task.h"
 #include "data_workflows/migration/engine_storage_migration_task.h"
 #include "data_workflows/schema_change/engine_alter_tablet_task.h"
+#include "data_workflows/snapshot/snapshot_loader.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/snapshot_loader.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -65,7 +65,7 @@ static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash,
     return status;
 }
 
-static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signature,
+static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signature, ExecEnv* exec_env,
                          TFinishTaskRequest* finish_task_request) {
     TStatus task_status;
     std::vector<std::string> error_msgs;
@@ -77,7 +77,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     TSchemaHash new_schema_hash = 0;
     new_tablet_id = agent_task_req.new_tablet_id;
     new_schema_hash = agent_task_req.new_schema_hash;
-    EngineAlterTabletTask engine_task(GlobalEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
+    EngineAlterTabletTask engine_task(GlobalEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req, exec_env);
     Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
     AgentStatus status;
     if (!sc_status.ok()) {
@@ -314,7 +314,7 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
         TFinishTaskRequest finish_task_request;
         TTaskType::type task_type = agent_task_req->task_type;
         if (task_type == TTaskType::ALTER) {
-            alter_tablet(agent_task_req->task_req, signatrue, &finish_task_request);
+            alter_tablet(agent_task_req->task_req, signatrue, exec_env, &finish_task_request);
         }
         finish_task(finish_task_request);
     }

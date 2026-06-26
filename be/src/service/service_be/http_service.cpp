@@ -47,40 +47,40 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/stl_util.h"
-#include "http/action/checksum_action.h"
-#include "http/action/compact_rocksdb_meta_action.h"
-#include "http/action/compaction_action.h"
-#include "http/action/datacache_action.h"
-#include "http/action/greplog_action.h"
-#include "http/action/health_action.h"
+#include "http/service/action/checksum_action.h"
+#include "http/service/action/compact_rocksdb_meta_action.h"
+#include "http/service/action/compaction_action.h"
+#include "http/service/action/datacache_action.h"
+#include "http/service/action/greplog_action.h"
+#include "http/service/action/health_action.h"
 #ifdef STARROCKS_JIT_ENABLE
-#include "http/action/jit_cache_action.h"
+#include "http/service/action/jit_cache_action.h"
 #endif
 #include "common/metrics/process_metrics_registry.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
-#include "http/action/lake/dump_tablet_metadata_action.h"
-#include "http/action/memory_metrics_action.h"
-#include "http/action/meta_action.h"
-#include "http/action/metrics_action.h"
-#include "http/action/pipeline_blocking_drivers_action.h"
-#include "http/action/pprof_actions.h"
-#include "http/action/proc_profile_action.h"
-#include "http/action/proc_profile_file_action.h"
-#include "http/action/query_cache_action.h"
-#include "http/action/reload_tablet_action.h"
-#include "http/action/restore_tablet_action.h"
-#include "http/action/runtime_filter_cache_action.h"
-#include "http/action/snapshot_action.h"
-#include "http/action/stop_be_action.h"
-#include "http/action/stream_load.h"
-#include "http/action/transaction_stream_load.h"
-#include "http/action/update_config_action.h"
-#include "http/default_path_handlers.h"
-#include "http/download_action.h"
-#include "http/ev_http_server.h"
-#include "http/http_method.h"
-#include "http/utils.h"
-#include "http/web_page_handler.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_method.h"
+#include "http/service/action/lake/dump_tablet_metadata_action.h"
+#include "http/service/action/memory_metrics_action.h"
+#include "http/service/action/meta_action.h"
+#include "http/service/action/metrics_action.h"
+#include "http/service/action/pipeline_blocking_drivers_action.h"
+#include "http/service/action/pprof_actions.h"
+#include "http/service/action/proc_profile_action.h"
+#include "http/service/action/proc_profile_file_action.h"
+#include "http/service/action/query_cache_action.h"
+#include "http/service/action/reload_tablet_action.h"
+#include "http/service/action/restore_tablet_action.h"
+#include "http/service/action/runtime_filter_cache_action.h"
+#include "http/service/action/snapshot_action.h"
+#include "http/service/action/stop_be_action.h"
+#include "http/service/action/stream_load.h"
+#include "http/service/action/transaction_stream_load.h"
+#include "http/service/action/update_config_action.h"
+#include "http/service/default_path_handlers.h"
+#include "http/service/download_action.h"
+#include "http/service/utils.h"
+#include "http/service/web_page_handler.h"
 #include "platform/store_path.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
@@ -90,11 +90,13 @@
 namespace starrocks {
 
 HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, const GlobalEnv& global_env,
-                             ProcessMetricsRegistry* process_metrics_registry, int port, int num_threads)
+                             ProcessMetricsRegistry* process_metrics_registry, LoadChannelMgr* load_channel_mgr,
+                             int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
           _global_env(global_env),
           _process_metrics_registry(process_metrics_registry),
+          _load_channel_mgr(load_channel_mgr),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
@@ -114,7 +116,7 @@ void HttpServiceBE::join() {
 }
 
 Status HttpServiceBE::start() {
-    register_config_update_hooks(_env, _global_env);
+    register_config_update_hooks(_env, _global_env, _load_channel_mgr);
     ConfigUpdateRegistry::instance()->set_ready();
 
     add_default_path_handlers(_web_page_handler.get(), _global_env);

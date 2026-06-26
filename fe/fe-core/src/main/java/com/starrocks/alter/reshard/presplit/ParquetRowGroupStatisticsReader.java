@@ -40,6 +40,7 @@ import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.StringLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
@@ -79,14 +80,19 @@ import java.util.Objects;
  *       SAME precision and scale, but ONLY when the file's raw footer declares a TypeDefinedOrder
  *       column order for that leaf (then the big-endian two's-complement footer min/max are
  *       signed-ordered). A file with no/UNDEFINED column order is deferred → data tier.</li>
+ *   <li>Parquet INT32 with an UNSIGNED INT annotation (UINT_8/UINT_16/UINT_32) → any StarRocks
+ *       integer sort key (decoded as the true unsigned magnitude and range-checked), but ONLY when
+ *       the file's raw footer declares a TypeDefinedOrder column order for that leaf.</li>
  * </ul>
- * <p>DATE/DATETIME values are additionally gated to {@code [1970-01-01, 9999-12-31]}; values
- * outside that window (year &le; 0 mis-renders through the {@code yyyy} formatters, pre-1970
- * has unverified FE/BE timestamp-division parity, pre-1582 has calendar-parity questions)
- * fall back to data tier.
- * Anything else (UINT_*, UTC-adjusted/INT96 timestamps, JSON, BSON, UUID, FLOAT, DOUBLE,
- * byte-array DECIMAL without a footer-declared TypeDefinedOrder, raw BINARY for VARBINARY) makes
- * the reader throw
+ * <p>A DATE boundary is gated to {@code [0001-01-01, 9999-12-31]} and a DATETIME boundary to the
+ * narrower {@code [1970-01-01, 9999-12-31]}; a value outside its window falls back to data tier.
+ * DATE reaches year 1 because the BE day-of-epoch load is proleptic-Gregorian with no sub-second
+ * part, so the boundary is FE/BE-identical; DATETIME keeps the epoch lower bound because the BE
+ * timestamp load does not yet decode a pre-1970 sub-second tick to a boundary-matching wall clock
+ * (see {@link MetaTierTemporalWindow}).
+ * Anything else (UINT_64, signed INT_8/16/32 annotations, UTC-adjusted/INT96 timestamps, JSON,
+ * BSON, UUID, FLOAT, DOUBLE, byte-array DECIMAL without a footer-declared TypeDefinedOrder,
+ * raw BINARY for VARBINARY) makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
  * load failure. Pure I/O failures surface as {@link StarRocksException}.
  */
@@ -157,15 +163,15 @@ public final class ParquetRowGroupStatisticsReader {
         // Footer min/max for a byte-array (FLBA/BINARY) decimal are only signed-ordered when the
         // file's raw column_orders entry for this leaf is TypeDefinedOrder. parquet-mr's converted
         // PrimitiveType.columnOrder() defaults a missing column_orders to TYPE_DEFINED_ORDER, so we
-        // inspect the raw footer instead. Only a byte-array decimal pays this extra footer read.
-        boolean signedByteArrayOrder = false;
-        if ((parquetTypeName == PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
-                || parquetTypeName == PrimitiveTypeName.BINARY)
-                && logicalAnnotation instanceof DecimalLogicalTypeAnnotation) {
-            signedByteArrayOrder = declaresSignedByteArrayOrder(
+        // inspect the raw footer instead. Byte-array DECIMAL and INT32-backed UNSIGNED ints both
+        // need a footer-declared TypeDefinedOrder before their footer min/max can be trusted (see
+        // declaresTypeDefinedColumnOrder). Only those leaves pay the extra raw-footer read.
+        boolean typeDefinedColumnOrder = false;
+        if (requiresColumnOrderCheck(parquetTypeName, logicalAnnotation)) {
+            typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(
                     readColumnOrders(inputFile), leafColumnIndex(schema, path));
         }
-        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, signedByteArrayOrder, sortKeyColumn);
+        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn);
         return new SortKeyLocation(path, parquetTypeName, logicalAnnotation, sortKeyColumn);
     }
 
@@ -178,14 +184,14 @@ public final class ParquetRowGroupStatisticsReader {
      * TIMESTAMP annotation → StarRocks DATETIME, and INT32/INT64 with a DECIMAL annotation
      * → a same-precision/scale StarRocks DECIMAL. FIXED_LEN_BYTE_ARRAY/BINARY-backed DECIMAL is
      * accepted on the same exact-precision/scale match but only when the caller resolved a
-     * footer-declared TypeDefinedOrder ({@code signedByteArrayOrder}); a file with no/UNDEFINED
+     * footer-declared TypeDefinedOrder ({@code typeDefinedColumnOrder}); a file with no/UNDEFINED
      * column order and other annotations (UINT_*, UTC-adjusted TIMESTAMP, JSON, BSON, UUID, ...)
      * are deferred (fall back to data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             PrimitiveTypeName parquetTypeName,
             LogicalTypeAnnotation logicalAnnotation,
-            boolean signedByteArrayOrder,
+            boolean typeDefinedColumnOrder,
             Column sortKeyColumn) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
@@ -199,6 +205,14 @@ public final class ParquetRowGroupStatisticsReader {
                     // INT32+DATE is days-since-epoch; only a StarRocks DATE sort key
                     // gives those day counts their intended calendar meaning.
                     yield starRocksPrimitive == PrimitiveType.DATE;
+                }
+                if (logicalAnnotation instanceof IntLogicalTypeAnnotation intAnnotation
+                        && !intAnnotation.isSigned() && intAnnotation.getBitWidth() <= 32) {
+                    // UINT_8/16/32 are all INT32-backed (the bit-width guard rejects a malformed
+                    // INT32 + UINT_64 annotation). Accept any StarRocks integer sort key (decode +
+                    // range-check, like the unannotated integer path), but only when the file declares a
+                    // TypeDefinedOrder for this leaf so the footer min/max are unsigned-ordered.
+                    yield starRocksPrimitive.isIntegerType() && typeDefinedColumnOrder;
                 }
                 // INT32-backed DECIMAL: the signed-integer order of the unscaled stat equals the
                 // decimal order, so footer min/max are safe. Require an exact precision/scale match
@@ -226,9 +240,9 @@ public final class ParquetRowGroupStatisticsReader {
                 if (logicalAnnotation instanceof StringLogicalTypeAnnotation) {
                     yield starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR;
                 }
-                yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, signedByteArrayOrder);
+                yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             }
-            case FIXED_LEN_BYTE_ARRAY -> isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, signedByteArrayOrder);
+            case FIXED_LEN_BYTE_ARRAY -> isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             default -> false;
         };
         if (!compatible) {
@@ -300,10 +314,10 @@ public final class ParquetRowGroupStatisticsReader {
         if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
             long ticks = ((Number) parquetValue).longValue();
             LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
-            // A negative (pre-1970) tick lands on a date before the window's lower bound and is
-            // rejected here, which also keeps the floorDiv/floorMod conversion above in the range
-            // where it is provably identical to BE's signed division.
-            MetaTierTemporalWindow.rejectDateOutsideWindow(dateTime.toLocalDate());
+            // A negative (pre-1970) tick lands before the DATETIME window's lower bound and is
+            // rejected here: the BE timestamp load does not yet decode a pre-1970 sub-second tick to
+            // the wall clock this floorDiv/floorMod boundary expects (see MetaTierTemporalWindow).
+            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(dateTime.toLocalDate());
             return Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(dateTime));
         }
         if (location.logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation) {
@@ -320,6 +334,13 @@ public final class ParquetRowGroupStatisticsReader {
             }
             BigDecimal decoded = new BigDecimal(unscaled, decimalAnnotation.getScale());
             return Variant.of(location.starRocksColumn.getType(), decoded.toPlainString());
+        }
+        if (location.logicalAnnotation instanceof IntLogicalTypeAnnotation intAnnotation && !intAnnotation.isSigned()) {
+            // The gate admits only INT32-backed UNSIGNED ints; decode the true magnitude. A plain
+            // toString() would sign-extend a high-bit-set UINT_32 (stored as a negative int32).
+            // IntVariant range-checks the magnitude against the target column (too-narrow → data tier).
+            return Variant.of(location.starRocksColumn.getType(),
+                    Long.toString(Integer.toUnsignedLong((Integer) parquetValue)));
         }
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
@@ -380,19 +401,37 @@ public final class ParquetRowGroupStatisticsReader {
     /**
      * A byte-array (FIXED_LEN_BYTE_ARRAY/BINARY) DECIMAL is accepted only with an exact
      * precision/scale match AND a footer-declared TypeDefinedOrder — then its big-endian
-     * two's-complement footer min/max are signed-ordered (see {@link #declaresSignedByteArrayOrder}).
+     * two's-complement footer min/max are signed-ordered (see {@link #declaresTypeDefinedColumnOrder}).
      */
     private static boolean isSignedByteArrayDecimal(
-            LogicalTypeAnnotation logicalAnnotation, Column sortKeyColumn, boolean signedByteArrayOrder) {
+            LogicalTypeAnnotation logicalAnnotation, Column sortKeyColumn, boolean typeDefinedColumnOrder) {
         return logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
                 && decimalMatchesExactly(decimalAnnotation, sortKeyColumn)
-                && signedByteArrayOrder;
+                && typeDefinedColumnOrder;
+    }
+
+    /**
+     * Leaves whose footer min/max are only trustworthy with a positively-declared TypeDefinedOrder:
+     * byte-array (FIXED_LEN_BYTE_ARRAY/BINARY) DECIMAL (signed two's-complement order) and INT32-backed
+     * UNSIGNED integers (unsigned order; a legacy file could otherwise surface signed-ordered min/max).
+     */
+    private static boolean requiresColumnOrderCheck(
+            PrimitiveTypeName parquetTypeName, LogicalTypeAnnotation logicalAnnotation) {
+        if ((parquetTypeName == PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
+                || parquetTypeName == PrimitiveTypeName.BINARY)
+                && logicalAnnotation instanceof DecimalLogicalTypeAnnotation) {
+            return true;
+        }
+        return parquetTypeName == PrimitiveTypeName.INT32
+                && logicalAnnotation instanceof IntLogicalTypeAnnotation intAnnotation
+                && !intAnnotation.isSigned()
+                && intAnnotation.getBitWidth() <= 32;
     }
 
     /**
      * True only when the file's raw footer positively declares a {@code TypeDefinedOrder} column
-     * order for this leaf. For a DECIMAL logical type that guarantees parquet ordered the byte-array
-     * min/max as signed two's-complement (parquet-mr's {@code BINARY_AS_SIGNED_INTEGER_COMPARATOR}).
+     * order for this leaf — required to trust the footer min/max for byte-array DECIMAL (signed
+     * two's-complement order) and for UNSIGNED integers (unsigned order).
      *
      * <p>A null/short {@code column_orders} list (legacy file that omitted it) or an unset entry
      * (UNDEFINED order) is treated as unknown → data tier. We must read the RAW footer for this:
@@ -401,7 +440,7 @@ public final class ParquetRowGroupStatisticsReader {
      * predicate is unit-testable (parquet-mr's high-level writer cannot produce a file without
      * {@code column_orders}).
      */
-    static boolean declaresSignedByteArrayOrder(List<ColumnOrder> columnOrders, int leafIndex) {
+    static boolean declaresTypeDefinedColumnOrder(List<ColumnOrder> columnOrders, int leafIndex) {
         return columnOrders != null
                 && leafIndex >= 0
                 && leafIndex < columnOrders.size()

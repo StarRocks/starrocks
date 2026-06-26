@@ -23,14 +23,14 @@
 #include "common/config_merge_commit_fwd.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "http/http_common.h"
-#include "http/http_headers.h"
+#include "http/core/http_common.h"
+#include "http/core/http_headers.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/stream_load_context_handle.h"
-#include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 
 namespace starrocks {
 
@@ -63,7 +63,7 @@ public:
     }
 
     StreamLoadContext* build_data_context(const BatchWriteId& batch_write_id, const std::string& data) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;
@@ -145,7 +145,8 @@ TEST_F(BatchWriteMgrTest, stream_load_context_handle_cancel_and_close_batch_writ
     auto batch_write = status_or_batch_write.value();
     ASSERT_TRUE(batch_write->contain_pipe(ctx));
 
-    StreamLoadContextHandle handle(ctx, _batch_write_mgr.get());
+    StreamLoadContextHandle handle(
+            ctx, [this](StreamLoadContext* context) { _batch_write_mgr->unregister_stream_load_pipe(context); });
     handle.cancel(Status::Cancelled("cancel only"));
     ASSERT_TRUE(batch_write->contain_pipe(ctx));
 

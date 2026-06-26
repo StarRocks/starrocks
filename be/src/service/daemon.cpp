@@ -47,8 +47,8 @@
 #include "compute_env/workgroup/work_group.h"
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "fslib/star_cache_handler.h"
-#include "staros_integration/staros_worker_runtime.h"
 #endif
 #include <fmt/ranges.h>
 

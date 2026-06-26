@@ -17,8 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-add_subdirectory(rowset)
-
 ADD_BE_LIB(StoragePrimitive
     primitive/aggregate_type.cpp
     primitive/chunk_iterator.cpp
@@ -92,6 +90,7 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_metrics.cpp
+    json_path_deriver.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
@@ -101,6 +100,12 @@ set(STORAGE_FILES
     olap_server.cpp
     persistent_index.cpp
     primary_index.cpp
+    query/bucket_sequence_morsel_queue.cpp
+    query/olap_dynamic_morsel_queue.cpp
+    query/olap_fixed_morsel_queue.cpp
+    query/olap_morsel_queue.cpp
+    query/split_morsel_queue.cpp
+    query/split_scan_morsel.cpp
     protobuf_file.cpp
     replication_txn_manager.cpp
     remote_snapshot_client.cpp
@@ -353,7 +358,12 @@ set(STORAGE_FILES
     index/inverted/builtin/builtin_inverted_reader.cpp
     index/inverted/builtin/builtin_inverted_index_iterator.cpp
     index/inverted/builtin/builtin_simple_analyzer.cpp
-    manual_compaction.cpp)
+    manual_compaction.cpp
+    rowset/unique_rowset_id_generator.cpp
+    rowset/rowset.cpp
+    rowset/rowset_factory.cpp
+    rowset/rowset_meta_manager.cpp
+    rowset/rowset_writer.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
@@ -363,4 +373,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache HttpCore)

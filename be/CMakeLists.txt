@@ -539,10 +539,9 @@ endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Webserver
+    HttpService
     Tools
     AgentServer
-    DataWorkflows
     ${WL_START_GROUP}
     Connector
     # Legacy connector registration pulls concrete connector objects that
@@ -552,13 +551,13 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    Storage
-    Rowset
     Runtime
+    DataWorkflows
     Udf
     Util
     Script
     ${WL_END_GROUP}
+    Storage
     FormatAvro
     FormatCsv
     FormatJson
@@ -567,6 +566,7 @@ set(STARROCKS_LINK_LIBS
     ExecRuntime
     ComputeEnv
     ExecPrimitive
+    StoragePrimitive
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     Serde
     $<TARGET_FILE:Cache>
@@ -579,7 +579,6 @@ set(STARROCKS_LINK_LIBS
     $<TARGET_FILE:Types>
     $<TARGET_FILE:FSCore>
     $<TARGET_FILE:IO>
-    StarOSIntegration
     Geo
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
@@ -684,6 +683,7 @@ set(STARROCKS_DEPENDENCIES
     icuuc
     icui18n
     icudata
+    blake3
     ${WL_END_GROUP}
 )
 
@@ -971,7 +971,6 @@ add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
-add_subdirectory(${SRC_DIR}/staros_integration)
 add_subdirectory(${SRC_DIR}/fs)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
@@ -985,12 +984,12 @@ add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/data_workflows)
 add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/cache)
 add_subdirectory(${SRC_DIR}/compute_env)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
-add_subdirectory(${SRC_DIR}/cache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)

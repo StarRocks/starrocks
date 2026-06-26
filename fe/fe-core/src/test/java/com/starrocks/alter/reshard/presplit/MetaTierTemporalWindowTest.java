@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
@@ -62,5 +63,35 @@ public class MetaTierTemporalWindowTest {
         } finally {
             Locale.setDefault(previous);
         }
+    }
+
+    @Test
+    public void dateWindowAcceptsYearOneThroughNineThousand() throws Exception {
+        // DATE reaches the start of the AD range: pre-1970 and pre-1582 are FE/BE-identical because
+        // the day-of-epoch load is proleptic Gregorian with no sub-second component.
+        MetaTierTemporalWindow.rejectDateOutsideWindow(LocalDate.of(1, 1, 1));
+        MetaTierTemporalWindow.rejectDateOutsideWindow(LocalDate.of(1500, 6, 15));
+        MetaTierTemporalWindow.rejectDateOutsideWindow(LocalDate.of(1969, 12, 31));
+        MetaTierTemporalWindow.rejectDateOutsideWindow(LocalDate.of(9999, 12, 31));
+    }
+
+    @Test
+    public void dateWindowRejectsYearZeroAndBeyondNineThousand() {
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectDateOutsideWindow(LocalDate.of(0, 12, 31)));
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectDateOutsideWindow(LocalDate.of(10000, 1, 1)));
+    }
+
+    @Test
+    public void dateTimeWindowKeepsEpochLowerBound() throws Exception {
+        // DATETIME stays at the epoch: the BE timestamp load does not yet decode a pre-1970
+        // sub-second tick to a boundary-matching wall clock.
+        MetaTierTemporalWindow.rejectDateTimeOutsideWindow(LocalDate.of(1970, 1, 1));
+        MetaTierTemporalWindow.rejectDateTimeOutsideWindow(LocalDate.of(9999, 12, 31));
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectDateTimeOutsideWindow(LocalDate.of(1969, 12, 31)));
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectDateTimeOutsideWindow(LocalDate.of(1500, 6, 15)));
     }
 }

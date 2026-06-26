@@ -49,6 +49,7 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
+#include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/profile_report_worker.h"
 #include "compute_env/workgroup/scan_executor.h"
@@ -64,25 +65,22 @@
 #include "exec/runtime/query_context_manager.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "platform/broker_mgr.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/broker_mgr.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
-#include "runtime/load_channel_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/pipeline_fragment_reporter.h"
-#include "runtime/rejected_record_sync_daemon.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/small_file_mgr.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
@@ -138,7 +136,7 @@ void ExecEnv::_refresh_service_contexts() {
     _rpc_services.backend_client_cache = platform_env->backend_client_cache();
     _rpc_services.frontend_client_cache = platform_env->frontend_client_cache();
     _rpc_services.broker_client_cache = platform_env->broker_client_cache();
-    _rpc_services.broker_mgr = _broker_mgr;
+    _rpc_services.broker_mgr = platform_env->broker_mgr();
     _rpc_services.brpc_stub_cache = platform_env->brpc_stub_cache();
 
     auto* storage_env = StorageEnv::GetInstance();
@@ -159,9 +157,8 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.result_queue_mgr = result_queue_mgr();
     _runtime_services.fragment_mgr = _fragment_mgr;
     _runtime_services.load_path_mgr = load_path_mgr();
-    _runtime_services.load_channel_mgr = _load_channel_mgr;
-    _runtime_services.load_stream_mgr = _load_stream_mgr;
-    _runtime_services.stream_context_mgr = _stream_context_mgr;
+    _runtime_services.load_stream_mgr = load_stream_mgr();
+    _runtime_services.stream_context_mgr = stream_context_mgr();
     _runtime_services.transaction_mgr = _transaction_mgr;
     _runtime_services.batch_write_mgr = _batch_write_mgr;
     _runtime_services.stream_load_executor = _stream_load_executor;
@@ -207,7 +204,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _global_env = global_env;
     auto* platform_env = PlatformEnv::GetInstance();
     if (platform_env->backend_client_cache() == nullptr || platform_env->frontend_client_cache() == nullptr ||
-        platform_env->broker_client_cache() == nullptr || platform_env->brpc_stub_cache() == nullptr) {
+        platform_env->broker_client_cache() == nullptr || platform_env->broker_mgr() == nullptr ||
+        platform_env->brpc_stub_cache() == nullptr) {
         return Status::InternalError("PlatformEnv is not initialized");
     }
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
@@ -221,6 +219,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
     RETURN_IF_ERROR(global_env->init_execution_thread_pools(process_metrics));
     _fragment_mgr = new FragmentMgr(this, process_metrics);
+
+    REGISTER_GAUGE_RUNTIME_METRIC(process_metrics, broker_count, []() -> uint64_t {
+        auto* broker_mgr = PlatformEnv::GetInstance()->broker_mgr();
+        return broker_mgr == nullptr ? 0 : broker_mgr->broker_count();
+    });
 
     // register the metrics to monitor the task queue len
     pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
@@ -247,11 +250,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
     RETURN_IF_ERROR(_compute_env->init_workgroup(workgroup_options));
 
-    _broker_mgr = new BrokerMgr(process_metrics);
-
-    _load_stream_mgr = new LoadStreamMgr(process_metrics);
     _stream_load_executor = new StreamLoadExecutor(this);
-    _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
 
     std::unique_ptr<ThreadPool> batch_write_thread_pool;
@@ -309,23 +308,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         exit(-1);
     }
 
-    // Phase 3 of the rejected records feature. The daemon thread is
-    // started unconditionally; its tick_loop() re-reads
-    // `config::enable_rejected_record_sync` every interval and treats a
-    // false value as a no-op. Starting it only when the flag is true at
-    // BE-boot time would break the mutable-config contract: operators
-    // (and tests) expect `update_config?enable_rejected_record_sync=true`
-    // to activate shipping without a BE restart. Leaving the thread
-    // parked costs one condvar wait per interval and no I/O when the
-    // flag is off.
-    _rejected_record_sync_daemon = new RejectedRecordSyncDaemon(this);
-    Status rr_status = _rejected_record_sync_daemon->init();
-    if (!rr_status.ok()) {
-        LOG(ERROR) << "RejectedRecordSyncDaemon init failed: " << rr_status.message();
-        // Non-fatal: the load path still works, we just don't ship
-        // rejected records to the system table this run.
-    }
-
     StorageEnvOptions storage_env_options;
     storage_env_options.store_path_registry = platform_env->store_path_registry();
     storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
@@ -339,13 +321,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
 
-    _load_channel_mgr =
-            new LoadChannelMgr(StorageEnv::GetInstance()->lake_tablet_manager(), process_metrics, _table_metrics_mgr);
+    _diagnose_daemon = new DiagnoseDaemon();
+    RETURN_IF_ERROR(_diagnose_daemon->init());
 
-    _broker_mgr->init();
     RETURN_IF_ERROR(_small_file_mgr->init());
-
-    RETURN_IF_ERROR(_load_channel_mgr->init(global_env->load_mem_tracker()));
 
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
@@ -354,8 +333,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_compute_env->init_spill(StorageEngine::instance()->get_store_paths(), process_metrics));
     StorageEnv::GetInstance()->set_spill_dir_mgr(_compute_env->spill_dir_mgr());
 
-    _diagnose_daemon = new DiagnoseDaemon();
-    RETURN_IF_ERROR(_diagnose_daemon->init());
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
@@ -390,6 +367,10 @@ std::string ExecEnv::token() const {
     return get_master_token();
 }
 
+BrokerMgr* ExecEnv::broker_mgr() const {
+    return PlatformEnv::GetInstance()->broker_mgr();
+}
+
 DataStreamMgr* ExecEnv::stream_mgr() {
     return _compute_env == nullptr ? nullptr : _compute_env->stream_mgr();
 }
@@ -410,6 +391,14 @@ BaseLoadPathMgr* ExecEnv::load_path_mgr() {
     return _compute_env == nullptr ? nullptr : _compute_env->load_path_mgr();
 }
 
+LoadStreamMgr* ExecEnv::load_stream_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->load_stream_mgr();
+}
+
+StreamContextMgr* ExecEnv::stream_context_mgr() {
+    return _compute_env == nullptr ? nullptr : _compute_env->stream_context_mgr();
+}
+
 ProfileReportWorker* ExecEnv::profile_report_worker() {
     return _compute_env == nullptr ? nullptr : _compute_env->profile_report_worker();
 }
@@ -421,18 +410,9 @@ void ExecEnv::stop() {
     auto* global_env = _global_env;
     DCHECK(global_env != nullptr);
 
-    if (_load_channel_mgr) {
+    if (_compute_env != nullptr && _compute_env->load_stream_mgr() != nullptr) {
         start = MonotonicMillis();
-        // Clear load channel should be executed before stopping the storage engine,
-        // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
-        // so when the ThreadPool is destroyed, it will crash.
-        _load_channel_mgr->close();
-        component_times.emplace_back("load_channel_mgr", MonotonicMillis() - start);
-    }
-
-    if (_load_stream_mgr) {
-        start = MonotonicMillis();
-        _load_stream_mgr->close();
+        _compute_env->stop_stream_load_pipes();
         component_times.emplace_back("load_stream_mgr", MonotonicMillis() - start);
     }
 
@@ -613,20 +593,15 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_heartbeat_flags);
     SAFE_DELETE(_small_file_mgr);
     SAFE_DELETE(_transaction_mgr);
-    SAFE_DELETE(_stream_context_mgr);
+    if (_compute_env != nullptr) {
+        _compute_env->destroy_stream_context_mgr();
+    }
 #ifndef __APPLE__
     SAFE_DELETE(_routine_load_task_executor);
 #endif
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
-    SAFE_DELETE(_load_stream_mgr);
-    SAFE_DELETE(_load_channel_mgr);
-    SAFE_DELETE(_broker_mgr);
-    if (_rejected_record_sync_daemon != nullptr) {
-        _rejected_record_sync_daemon->stop();
-    }
-    SAFE_DELETE(_rejected_record_sync_daemon);
     if (_compute_env != nullptr) {
         _compute_env->destroy_load_path();
     }

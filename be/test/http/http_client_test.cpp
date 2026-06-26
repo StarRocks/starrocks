@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "http/http_client.h"
+#include "http/core/http_client.h"
 
 #include <gtest/gtest.h>
 
@@ -23,11 +23,11 @@
 #include "boost/algorithm/string.hpp"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
-#include "http/ev_http_server.h"
-#include "http/http_auth.h"
-#include "http/http_channel.h"
-#include "http/http_handler.h"
-#include "http/http_request.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_auth.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_handler.h"
+#include "http/core/http_request.h"
 
 namespace starrocks {
 

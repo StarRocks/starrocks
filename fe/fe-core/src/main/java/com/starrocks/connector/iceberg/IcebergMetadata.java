@@ -201,6 +201,8 @@ import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFA
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
+import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL;
+import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL_DEFAULT;
 
@@ -1676,29 +1678,196 @@ public class IcebergMetadata implements ConnectorMetadata {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 
+        boolean enableColumnStats = session.getSessionVariable().enableIcebergColumnStatistics();
+        boolean isIncrementalDelta = version instanceof TvrTableDelta &&
+                version.start() != null && version.start().isPresent();
+
+        // -------- path selection --------
+        // Three paths with different accuracy/cost trade-offs:
+        //
+        // A. Column-statistics enabled (opt-in, default OFF):
+        //    Must scan files for per-column bounds and Puffin NDV. buildFileScanTaskIterator
+        //    handles both full-table and delta internally.  Cost: O(files) planFiles + per-column
+        //    metadata collection.  Accuracy: best (NDV + min/max).
+        if (enableColumnStats) {
+            return getFullTableStatisticsFromPlanFiles(icebergTable, columns, session, predicate, limit, version);
+        }
+        //
+        // B. Incremental delta (append-only, column-stats off):
+        //    Requires datafile-level precision (added_snapshot_id) because MergeAppend/compaction
+        //    rewrites manifests and merges old + new records, making manifest-level addedRows
+        //    / existingRows unreliable for a snapshot range. Delta files are few by definition,
+        //    so O(files) plan cost is acceptable; accuracy is required.
+        if (isIncrementalDelta) {
+            return getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
+        }
+        //
+        // C. Whole-table snapshot (default, column-stats off, non-delta):
+        //    Manifest addedRows+existingRows is PROVABLY exact for total live files regardless of
+        //    write style.  In the vast majority of cases (all modern Iceberg writers: StarRocks,
+        //    Spark, Trino, Flink) manifests carry the row-count fields needed; partition-aware
+        //    pruning via filterManifests at manifest-granularity yields a safe over-estimate.
+        //    Cost: O(manifests), ZERO manifest-file opens, ZERO DataFile enumeration — splitTasks
+        //    never populated, incremental scan range delivery stays unlocked.
+        //    Rare fallback: if a matching manifest is missing row-count metadata (v1 manifest list
+        //    or pre-0.10 Iceberg), we fall through to Path B for exact cardinality via planFiles.
+        return getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
+    }
+
+    // -------------------------------------------------------------------------
+    // Path A: whole-table snapshot, manifest-pruned (default, column-stats off, non-delta).
+    //
+    // Trade-off: manifest-level partition pruning (filterManifests) is coarser than file-level
+    // — a matching manifest contributes its FULL row count even if the predicate doesn't match
+    // every file within it. Typical over-estimate: <5x (safe direction for CBO).  Cost is
+    // O(manifests) with ZERO manifest-file opens and ZERO DataFile enumeration, so splitTasks is
+    // never populated and incremental scan range delivery stays lazy/streaming.
+    //
+    // Fallback: if any matching manifest has files but is missing both addedRowsCount and
+    // existingRowsCount (e.g. older or upgraded Iceberg metadata with v1 manifest list), the
+    // manifest-pruned count would be incomplete — fall back to planFiles for exact cardinality.
+    private Statistics getStatisticsFromManifest(IcebergTable icebergTable,
+                                                  Map<ColumnRefOperator, Column> columns,
+                                                  ScalarOperator predicate,
+                                                  long limit,
+                                                  TvrVersionRange version) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality")) {
+            long rowCount = getManifestPrunedRowCount(icebergTable, predicate, version);
+            if (rowCount < 0) {
+                // Manifest row-count metadata incomplete → fall back to planFiles.
+                return getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
+            }
+            return statisticProvider.buildRowCountStatistics(columns, rowCount);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Path B: incremental delta (append-only) and fallback — column-stats off.
+    //
+    // Used for two cases:
+    //   1. Incremental delta: requires datafile-level precision (added_snapshot_id on each DataFile)
+    //      because MergeAppend/compaction merges old + new records into the same manifest, making
+    //      manifest-level addedRows/existingRows unreliable for snapshot ranges. Delta files are
+    //      few, so O(files) is acceptable; accuracy is required.
+    //   2. Fallback from manifest-pruned: when a matching manifest has live files but is missing
+    //      addedRowsCount / existingRowsCount (e.g. v1 manifest list or pre-0.10 Iceberg metadata),
+    //      the manifest-pruned count would be incomplete. planFiles gets exact cardinality every
+    //      time because DataFile.recordCount() is a required field.
+    private Statistics getCardinalityFromPlanFiles(IcebergTable icebergTable,
+                                                               Map<ColumnRefOperator, Column> columns,
+                                                               ScalarOperator predicate, long limit,
+                                                               TvrVersionRange version) {
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setLimit(limit)
                 .setTableVersionRange(version)
-                .setEnableColumnStats(session.getSessionVariable().enableIcebergColumnStatistics())
+                .setEnableColumnStats(false)
                 .build();
-
         PredicateSearchKey key = PredicateSearchKey.of(
                 icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
         triggerIcebergPlanFilesIfNeeded(key, icebergTable);
-
-        if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
-            List<FileScanTask> icebergScanTasks = splitTasks.get(key);
-            if (icebergScanTasks == null) {
-                throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
-                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), predicate);
-            }
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality" + key)) {
-                return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
-            }
-        } else {
-            return statisticProvider.getTableStatistics(icebergTable, columns, session, params);
+        // buildFileScanTaskIterator detects TvrTableDelta internally → IncrementalAppendScan.
+        List<FileScanTask> icebergScanTasks = splitTasks.get(key);
+        if (icebergScanTasks == null) {
+            throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), predicate);
         }
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality" + key)) {
+            return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Path C: column-statistics enabled (opt-in, default OFF).
+    //
+    // Trade-off: full file enumeration to collect per-column lowerBounds / upperBounds /
+    // nullCounts / columnSizes and (when available) Puffin NDV.  Highest front-end cost
+    // (O(files) planFiles + per-column metadata) but richest statistics (NDV + min/max).
+    // buildFileScanTaskIterator handles both full-table and delta internally.
+    private Statistics getFullTableStatisticsFromPlanFiles(IcebergTable icebergTable,
+                                                            Map<ColumnRefOperator, Column> columns,
+                                                            OptimizerContext session,
+                                                            ScalarOperator predicate, long limit,
+                                                            TvrVersionRange version) {
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setPredicate(predicate)
+                .setLimit(limit)
+                .setTableVersionRange(version)
+                .setEnableColumnStats(true)
+                .build();
+        PredicateSearchKey key = PredicateSearchKey.of(
+                icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable);
+        return statisticProvider.getTableStatistics(icebergTable, columns, session, params);
+    }
+
+    // -------------------------------------------------------------------------
+    // Whole-table row count from manifest metadata with partition-aware manifest pruning.
+    // O(manifests), ZERO manifest-file opens, ZERO DataFile enumeration.
+    //
+    // Accuracy: for a whole-table snapshot, the sum of (addedRowsCount + existingRowsCount)
+    // across all matching data manifests is EXACTLY the total live file row count — regardless
+    // of write style (fastAppend / MergeAppend / compaction / MOR). The manifest list is a
+    // complete, consistent catalogue of all live data files at that snapshot. Delete files are
+    // ignored (over-count not undercount; consistent with getCardinalityStats).
+    //
+    // Partition pruning: filterManifests uses ManifestEvaluator against inline manifest partition
+    // summaries (from the manifest LIST; no manifest-file open). A matching manifest contributes
+    // its FULL row count — resulting in a partition-aware over-estimate (safe for CBO).
+    //
+    // NOT SAFE for incremental versions (TvrTableDelta with start present): MergeAppend/compaction
+    // makes manifest-level added/existing unreliable for ranges. Use Path B instead for delta.
+    //
+    // Returns a negative value when any matching manifest has files but is missing both
+    // addedRowsCount and existingRowsCount (e.g. v1 manifest list or upgraded metadata) —
+    // callers must fall back to planFiles for exact cardinality.
+    private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TvrVersionRange version) {
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        if (!version.end().isPresent()) {
+            return 1;
+        }
+        Snapshot snapshot = nativeTbl.snapshot(version.end().get());
+        if (snapshot == null) {
+            return 1;
+        }
+
+        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+
+        List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTbl.io());
+        List<ManifestFile> matchingManifests = filterManifests(dataManifests, nativeTbl, icebergPredicate);
+
+        long rowCount = 0;
+        for (ManifestFile manifest : matchingManifests) {
+            if (!canCountRowsFromManifest(manifest)) {
+                return -1;
+            }
+            rowCount += orZeroRows(manifest.addedRowsCount()) + orZeroRows(manifest.existingRowsCount());
+        }
+        return Math.max(rowCount, 1);
+    }
+
+    private static long orZeroRows(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    // A manifest can only be counted via addedRowsCount / existingRowsCount when the
+    // manifest-list entry carries those row-count fields. They were added in Iceberg v2
+    // manifest-list format (~0.10, 2021); v1 manifest lists and pre-0.10 metadata lack them.
+    // All modern writers (StarRocks, Spark, Trino, Flink, etc.) write v2+ manifest lists
+    // that include these fields, so normal tables always pass this check. It only rejects
+    // manifests from very old or non-standard Iceberg metadata — and even then, only when
+    // the manifest actually contains live files (added / existing / deleted).
+    private static boolean canCountRowsFromManifest(ManifestFile manifest) {
+        // At least one non-null row count → safe to estimate from manifest metadata.
+        if (manifest.addedRowsCount() != null || manifest.existingRowsCount() != null) {
+            return true;
+        }
+        // Both row counts are null. If the manifest has any live files, the count would be
+        // a severe under-estimate → caller must fall back to planFiles for exact cardinality.
+        return !manifest.hasAddedFiles() && !manifest.hasExistingFiles() && !manifest.hasDeletedFiles();
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
@@ -1855,16 +2024,30 @@ public class IcebergMetadata implements ConnectorMetadata {
                 }
             }
 
-            if (hasPositionDeletes && hasDataFiles) {
-                // UPDATE / MERGE: RowDelta with both delete and data files
+            // Route MERGE by its operation type, not by the emitted file mix. Routing on
+            // the file mix alone is wrong for a MERGE in two ways: (1) an INSERT-only MERGE
+            // emits data files only and would take the plain-append path, which ignores the
+            // frozen base snapshot and conflict-detection filter and so escapes SERIALIZABLE
+            // conflict detection; (2) a delete-only MERGE would take the pure-DELETE path,
+            // which records iceberg_delete_* metrics instead of the merge accounting and
+            // skips validateNoConflictingDeleteFiles. Sending every MERGE that emits files
+            // through commitRowDeltaOperation gives it uniform SERIALIZABLE validation and
+            // merge metrics; commitRowDeltaOperation handles a data-only or delete-only file
+            // set (it conditionally addRows()/addDeletes()). An empty MERGE (no files) has
+            // nothing to validate or count and falls through to the no-op append path.
+            boolean isMerge = extra instanceof IcebergSinkExtra
+                    && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
+
+            if ((hasPositionDeletes && hasDataFiles) || (isMerge && (hasDataFiles || hasPositionDeletes))) {
+                // UPDATE, or any MERGE that emitted files: RowDelta with delete and/or data files
                 commitRowDeltaOperation(transaction, nativeTbl, dataFiles, branch,
                         dbName, tableName, extra, context);
             } else if (hasPositionDeletes) {
-                // Pure DELETE (unchanged)
+                // Pure (non-MERGE) DELETE (unchanged)
                 commitDeleteOperation(transaction, nativeTbl, dataFiles, branch,
                         dbName, tableName, extra, context);
             } else {
-                // Pure INSERT/OVERWRITE (unchanged)
+                // Pure INSERT/OVERWRITE, or an empty MERGE (unchanged)
                 commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite,
                         isRewrite, extra, dbName, tableName, context);
             }
@@ -2104,9 +2287,13 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        // Use the base snapshot id frozen at plan time so conflict detection covers
-        // every commit landed between scan and commit. Falling back to currentSnapshot
-        // here would silently skip that window and defeat SERIALIZABLE isolation.
+        boolean isMerge = extra instanceof IcebergSinkExtra
+                && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
+
+        // Use the base snapshot id frozen at plan time so conflict detection covers every
+        // commit landed between scan and commit. The MERGE/UPDATE planners freeze it from the
+        // target scan whenever existing rows are modified; the currentSnapshot fallback below
+        // covers paths that do not (plain appends, target-less MERGE).
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
@@ -2132,8 +2319,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().
-                getOrDefault(UPDATE_ISOLATION_LEVEL, UPDATE_ISOLATION_LEVEL_DEFAULT));
+        // MERGE and UPDATE have separate Iceberg isolation-level properties; pick by op type
+        // so a table that relaxes one but not the other validates at the right level.
+        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().getOrDefault(
+                isMerge ? MERGE_ISOLATION_LEVEL : UPDATE_ISOLATION_LEVEL,
+                isMerge ? MERGE_ISOLATION_LEVEL_DEFAULT : UPDATE_ISOLATION_LEVEL_DEFAULT));
         if (isolationLevel == IsolationLevel.SERIALIZABLE) {
             rowDelta.validateNoConflictingDataFiles();
         }
@@ -2157,26 +2347,57 @@ public class IcebergMetadata implements ConnectorMetadata {
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
-            ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
+            if (isMerge) {
+                ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
 
-            Snapshot newSnapshot = nativeTbl.currentSnapshot();
-            if (newSnapshot != null && newSnapshot.summary() != null) {
-                long affectedRows = Long.parseLong(newSnapshot.summary()
-                        .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
-                ConnectorMetricsMgr.increaseUpdateRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, affectedRows);
+                Snapshot newSnapshot = nativeTbl.currentSnapshot();
+                if (newSnapshot != null && newSnapshot.summary() != null) {
+                    // matched = target rows hit by UPDATE/DELETE (position deletes);
+                    // written = data rows written (UPDATE rewrites + INSERTs).
+                    long matchedRows = Long.parseLong(newSnapshot.summary()
+                            .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
+                    long writtenRows = Long.parseLong(newSnapshot.summary()
+                            .getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(matchedRows,
+                            ConnectorMetricsMgr.MERGE_ROW_TYPE_MATCHED);
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(writtenRows,
+                            ConnectorMetricsMgr.MERGE_ROW_TYPE_WRITTEN);
+                }
+
+                ConnectorMetricsMgr.increaseIcebergMergeBytes(deleteBytes,
+                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseIcebergMergeBytes(dataBytes,
+                        ConnectorMetricsMgr.FILE_TYPE_DATA);
+                ConnectorMetricsMgr.increaseIcebergMergeFiles(deleteFileCount,
+                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseIcebergMergeFiles(dataFileCount,
+                        ConnectorMetricsMgr.FILE_TYPE_DATA);
+            } else {
+                ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
+
+                Snapshot updateSnapshot = nativeTbl.currentSnapshot();
+                if (updateSnapshot != null && updateSnapshot.summary() != null) {
+                    long affectedRows = Long.parseLong(updateSnapshot.summary()
+                            .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
+                    ConnectorMetricsMgr.increaseUpdateRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, affectedRows);
+                }
+
+                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        deleteBytes, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        dataBytes, ConnectorMetricsMgr.FILE_TYPE_DATA);
+                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        deleteFileCount, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        dataFileCount, ConnectorMetricsMgr.FILE_TYPE_DATA);
             }
-
-            ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    deleteBytes, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-            ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    dataBytes, ConnectorMetricsMgr.FILE_TYPE_DATA);
-            ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    deleteFileCount, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-            ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    dataFileCount, ConnectorMetricsMgr.FILE_TYPE_DATA);
         } finally {
-            ConnectorMetricsMgr.increaseUpdateDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    System.currentTimeMillis() - startMs);
+            if (isMerge) {
+                ConnectorMetricsMgr.increaseIcebergMergeDurationMs(System.currentTimeMillis() - startMs);
+            } else {
+                ConnectorMetricsMgr.increaseUpdateDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs);
+            }
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
@@ -2376,6 +2597,15 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     public static class IcebergSinkExtra {
+        /**
+         * Which row-delta DML produced this sink. Drives metric routing on the
+         * commit path (UPDATE vs MERGE counters).
+         */
+        public enum OperationType {
+            UPDATE,
+            MERGE
+        }
+
         private final Set<DataFile> scannedDataFiles;
         private final Set<DeleteFile> appliedDeleteFiles;
         private Expression conflictDetectionFilter;
@@ -2383,10 +2613,19 @@ public class IcebergMetadata implements ConnectorMetadata {
         // so conflict detection covers the window between scan and commit, not a fresher
         // snapshot re-read at commit time.
         private Long baseSnapshotId;
+        private OperationType operationType = OperationType.UPDATE;
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
             this.appliedDeleteFiles = new HashSet<>();
+        }
+
+        public void setOperationType(OperationType operationType) {
+            this.operationType = operationType;
+        }
+
+        public OperationType getOperationType() {
+            return operationType;
         }
 
         public void addScannedDataFiles(Set<DataFile> o) {

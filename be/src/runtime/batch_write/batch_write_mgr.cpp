@@ -15,18 +15,21 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 
 #include "base/metrics.h"
+#include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_merge_commit_fwd.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "http/http_common.h"
+#include "http/core/http_common.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/merge_commit_trace.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 
 namespace starrocks {
 
@@ -136,8 +139,9 @@ StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
     auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(pipe_name, batch_write_interval_ms,
                                                             config::merge_commit_stream_load_pipe_block_wait_us,
                                                             config::merge_commit_stream_load_pipe_max_buffered_bytes);
-    RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
-    StreamLoadContext* ctx = new StreamLoadContext(exec_env, load_id);
+    auto* load_stream_mgr = exec_env->load_stream_mgr();
+    RETURN_IF_ERROR(load_stream_mgr->put(load_id, pipe));
+    StreamLoadContext* ctx = new StreamLoadContext(exec_env, load_id, load_stream_mgr);
     ctx->ref();
     ctx->id = load_id;
     ctx->db = db;
@@ -168,7 +172,7 @@ static std::string s_empty;
 
 void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl,
                                             const PStreamLoadRequest* request, PStreamLoadResponse* response) {
-    auto* ctx = new StreamLoadContext(exec_env);
+    auto* ctx = new StreamLoadContext(exec_env, exec_env->load_stream_mgr());
     ctx->ref();
     DeferOp defer([&]() {
         response->set_json_result(ctx->to_json());

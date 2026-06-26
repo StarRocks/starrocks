@@ -20,6 +20,9 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/flat_json/json_flat_path.h"
+#include "column/flat_json/json_flattener.h"
+#include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -28,10 +31,10 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/json_functions.h"
 #include "exprs/jsonpath.h"
 #include "gutil/casts.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_iterator_decorator.h"
@@ -39,7 +42,6 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -670,7 +672,10 @@ public:
             : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
               _path(std::move(path)),
               _type(type),
-              _state(ExecEnv::GetInstance()),
+              // JsonFunctions only needs RuntimeState as FunctionContext backing here. Constant-path JSON
+              // extraction does not access ExecEnv-backed services, so a local state keeps rowset reads independent
+              // from the process-global ExecEnv singleton.
+              _state(TQueryGlobals{}),
               _mem_pool(),
               _source_chunk() {
         // prepare the source chunk

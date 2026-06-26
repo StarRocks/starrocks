@@ -22,7 +22,13 @@ set(PLATFORM_FILES
   aws/poco_common.cpp
   aws/poco_http_client.cpp
   aws/poco_http_client_factory.cpp
+  fs_broker.cpp
+  broker_mgr.cpp
   download_util.cpp
+  key_cache.cpp
+  llm/llm_cache.cpp
+  llm/llm_query_service.cpp
+  llm/model_config.cpp
   platform_env.cpp
   platform_metrics.cpp
   path_rw.cpp
@@ -38,4 +44,4 @@ ADD_BE_LIB(Platform
     ${PLATFORM_FILES}
 )
 
-target_link_libraries(Platform PUBLIC HttpCore FSCore IO Common Base Gutil StarRocksGen)
+target_link_libraries(Platform PUBLIC HttpCore FSCore IO Types Common Base Gutil StarRocksGen)

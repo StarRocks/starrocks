@@ -1253,6 +1253,27 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testDictMappingGroupByReservesExtraCode() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        try {
+            // A value-adding dict-mapping group-by key (e.g. `case when x is null then '-'`,
+            // ifnull, coalesce) can grow the derived dict to base dict size + 1 codes. The
+            // compressed group-by key range must reserve that extra code, otherwise the code
+            // overflows the packed key width and decode fails with "Dict can't take cover all key".
+            String sql = "select count(*) from supplier group by "
+                    + "case when S_ADDRESS is null then '-' else S_ADDRESS end";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "group by min-max stats:\n" + "  |  - 0:2");
+
+            sql = "select count(*) from supplier group by ifnull(S_ADDRESS, 'x')";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "group by min-max stats:\n" + "  |  - 0:2");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
+    }
+
+    @Test
     public void testGroupByWithOrderBy() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         try {
@@ -1294,7 +1315,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "result: VARBINARY; args nullable: false; result nullable: false]\n" +
                     "  |  group by: [12: upper, INT, true]\n" +
                     "  |  group by min-max stats:\n" +
-                    "  |  - 0:1\n" +
+                    "  |  - 0:2\n" +
                     "  |  cardinality: 1\n");
             assertContains(plan, "Global Dict Exprs:\n" +
                     "    12: DictDefine(11: S_ADDRESS, [upper(<place-holder>)])");
