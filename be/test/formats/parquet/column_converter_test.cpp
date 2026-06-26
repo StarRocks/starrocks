@@ -741,4 +741,25 @@ TEST_F(ColumnConverterTest, Int64_2_Timestamp) {
         }
     }
 }
+
+// A pre-1970 (negative epoch tick) timestamp with a nonzero sub-second component must decode to the
+// correct wall clock. C++ truncating division splits a negative tick into a too-high second and a
+// negative sub-second; without a floor-borrow that negative sub-second corrupts the packed DATETIME.
+TEST_F(ColumnConverterTest, Int64PreEpochTimestampSubSecond) {
+    const std::string file_path =
+            "./be/test/formats/parquet/test_data/column_converter/int64_timestamp_pre_epoch.parquet";
+    const size_t expected_rows = 5;
+    const std::string expected_value = "[1969-12-31 23:59:59.500000]";
+
+    {
+        const std::string col_name = "timestamp_millis";
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+        check(file_path, col_type, col_name, expected_value, expected_rows);
+    }
+    {
+        const std::string col_name = "timestamp_micros";
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+        check(file_path, col_type, col_name, expected_value, expected_rows);
+    }
+}
 } // namespace starrocks::parquet
