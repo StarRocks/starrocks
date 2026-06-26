@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/fragment_executor.h"
+#include "query_orchestration/fragment_executor.h"
 
 #include <optional>
 #include <unordered_map>
@@ -73,39 +73,15 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state_helper.h"
 
-namespace starrocks::pipeline {
+namespace starrocks::query_orchestration {
 
 DEFINE_FAIL_POINT(fragment_prepare_sleep);
 
+using namespace pipeline;
 using WorkGroupManager = workgroup::WorkGroupManager;
 using WorkGroup = workgroup::WorkGroup;
 using WorkGroupPtr = workgroup::WorkGroupPtr;
 using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, std::vector<Pipeline*>>;
-
-/// UnifiedExecPlanFragmentParams.
-const std::vector<TScanRangeParams> UnifiedExecPlanFragmentParams::_no_scan_ranges;
-const PerDriverScanRangesMap UnifiedExecPlanFragmentParams::_no_scan_ranges_per_driver_seq;
-
-const std::vector<TScanRangeParams>& UnifiedExecPlanFragmentParams::scan_ranges_of_node(TPlanNodeId node_id) const {
-    return FindWithDefault(_unique_request.params.per_node_scan_ranges, node_id, _no_scan_ranges);
-}
-
-const PerDriverScanRangesMap& UnifiedExecPlanFragmentParams::per_driver_seq_scan_ranges_of_node(
-        TPlanNodeId node_id) const {
-    if (!_unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
-        return _no_scan_ranges_per_driver_seq;
-    }
-
-    return FindWithDefault(_unique_request.params.node_to_per_driver_seq_scan_ranges, node_id,
-                           _no_scan_ranges_per_driver_seq);
-}
-
-const TDataSink& UnifiedExecPlanFragmentParams::output_sink() const {
-    if (_unique_request.fragment.__isset.output_sink) {
-        return _unique_request.fragment.output_sink;
-    }
-    return _common_request.fragment.output_sink;
-}
 
 /// FragmentExecutor.
 FragmentExecutor::FragmentExecutor() {
@@ -1187,4 +1163,4 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     return Status::OK();
 }
 
-} // namespace starrocks::pipeline
+} // namespace starrocks::query_orchestration

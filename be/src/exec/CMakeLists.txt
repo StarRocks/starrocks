@@ -167,7 +167,7 @@ set(PIPELINE_RUNTIME_SRCS
 
 set(PIPELINE_ADAPTERS_SRCS
     pipeline/exec_node_pipeline_adapter.cpp
-    pipeline/fragment_executor.cpp
+    pipeline/fragment_execution_params.cpp
     pipeline/pipeline_builder_operators.cpp
     pipeline/pipeline_driver_instantiator.cpp
 )
