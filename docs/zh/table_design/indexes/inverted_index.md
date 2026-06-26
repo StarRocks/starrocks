@@ -403,3 +403,37 @@ DISTRIBUTED BY HASH(`id1`);
 ```SQL
 CREATE INDEX idx_gram ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin', 'dict_gram_num' = '3');
 ```
+
+### lower_case
+
+`lower_case` 参数仅适用于使用英文分词（`"parser" = "english"`）的 builtin 倒排索引实现。该参数控制在构建索引以及匹配查询时是否将英文 token 归一化为小写。
+
+#### 参数详情
+
+| 参数 | 默认值 | 有效值 | 描述 |
+|------|-------|-------|------|
+| `lower_case` | `true` | `true`、`false` | 是否将英文 token 归一化为小写。仅在 `"imp_lib" = "builtin"` 且 `"parser" = "english"` 时有效。 |
+
+- `true`（默认）：在构建索引和匹配查询关键词时都会将大写英文字母转换为小写，因此匹配不区分大小写。这与原有行为保持一致。
+- `false`：在构建索引和匹配时都保留大小写，因此匹配区分大小写。当需要区分仅大小写不同的词（如 `Apple`、`apple`、`APPLE`）时使用。
+
+#### 示例
+
+创建一个区分大小写的 builtin 英文倒排索引：
+
+```SQL
+CREATE TABLE `t_case` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_cs (`value`) USING GIN (
+        "parser" = "english",
+        "imp_lib" = "builtin",
+        "lower_case" = "false"
+    ) COMMENT 'case-sensitive builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`)
+PROPERTIES (
+    "replicated_storage" = "false"
+);
+```
