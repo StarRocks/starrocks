@@ -285,6 +285,48 @@ public class AlterTableTest extends TableTestBase {
     }
 
     @Test
+    public void testCombinedAddAndDropColumn() throws Exception {
+        // Regression test for StarRocksTest issue #11315: a single ALTER carrying multiple
+        // schema clauses (e.g. ADD a, ADD b, DROP c) previously failed with
+        // "Cannot add column, name already exists: ..." because the executor re-ran every
+        // previously appended action on each subsequent visit() call.
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableH;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        // Use a unique table name so we don't share the IcebergMetadata.tables cache
+        // with the other tests in this class (which all reuse "srTableName" backed by
+        // mockedNativeTableB).
+        String sql = "alter table iceberg_catalog.db.combinedAlterTestTable "
+                + "add column multi_col_a varchar(32), "
+                + "add column multi_col_b int, "
+                + "drop column k5";
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assertions.assertEquals(3, stmt.getAlterClauseList().size());
+
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
+
+        mockedNativeTableH.refresh();
+        org.apache.iceberg.Schema schema = mockedNativeTableH.schema();
+        Assertions.assertNotNull(schema.findField("multi_col_a"));
+        Assertions.assertNotNull(schema.findField("multi_col_b"));
+        Assertions.assertNull(schema.findField("k5"));
+    }
+
+    @Test
     public void testAlterView() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
