@@ -783,8 +783,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
-                     buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, snapshotId,
-                             connectContext, enableCollectColumnStatistics)) {
+                buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, snapshotId,
+                        connectContext, enableCollectColumnStatistics)) {
             while (iterator.hasNext()) {
                 FileScanTask scanTask = iterator.next();
 
@@ -918,10 +918,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
-                                                             Expression icebergPredicate,
-                                                             Long snapshotId,
-                                                             ConnectContext connectContext,
-                                                             boolean enableCollectColumnStats) {
+                                                                      Expression icebergPredicate,
+                                                                      Long snapshotId,
+                                                                      ConnectContext connectContext,
+                                                                      boolean enableCollectColumnStats) {
         String dbName = icebergTable.getCatalogDBName();
         String tableName = icebergTable.getCatalogTableName();
 
@@ -1275,8 +1275,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         boolean enableColumnStats = session.getSessionVariable().enableIcebergColumnStatistics();
-        boolean isIncrementalDelta = version instanceof TvrTableDelta &&
-                version.start() != null && version.start().isPresent();
+        boolean isIncrementalDelta = version.start().isPresent();
 
         // -------- path selection --------
         // Three paths with different accuracy/cost trade-offs:
@@ -1323,10 +1322,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     // existingRowsCount (e.g. older or upgraded Iceberg metadata with v1 manifest list), the
     // manifest-pruned count would be incomplete — fall back to planFiles for exact cardinality.
     private Statistics getStatisticsFromManifest(IcebergTable icebergTable,
-                                                  Map<ColumnRefOperator, Column> columns,
-                                                  ScalarOperator predicate,
-                                                  long limit,
-                                                  TvrVersionRange version) {
+                                                 Map<ColumnRefOperator, Column> columns,
+                                                 ScalarOperator predicate,
+                                                 long limit,
+                                                 TableVersionRange version) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality")) {
             long rowCount = getManifestPrunedRowCount(icebergTable, predicate, version);
             if (rowCount < 0) {
@@ -1350,24 +1349,19 @@ public class IcebergMetadata implements ConnectorMetadata {
     //      the manifest-pruned count would be incomplete. planFiles gets exact cardinality every
     //      time because DataFile.recordCount() is a required field.
     private Statistics getCardinalityFromPlanFiles(IcebergTable icebergTable,
-                                                               Map<ColumnRefOperator, Column> columns,
-                                                               ScalarOperator predicate, long limit,
-                                                               TvrVersionRange version) {
+                                                   Map<ColumnRefOperator, Column> columns,
+                                                   ScalarOperator predicate, long limit,
+                                                   TableVersionRange version) {
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setLimit(limit)
-<<<<<<< HEAD
-                .setSnapshotId(snapshotId)
-=======
-                .setTableVersionRange(version)
-                .setEnableColumnStats(false)
->>>>>>> 801d2b0ffc ([Enhancement] Compute Iceberg foreground row-count from manifests without enumerating files (#75280))
+                .setSnapshotId(version.end().get())
                 .build();
         PredicateSearchKey key = PredicateSearchKey.of(
                 icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
 
         triggerIcebergPlanFilesIfNeeded(key, icebergTable);
-        // buildFileScanTaskIterator detects TvrTableDelta internally → IncrementalAppendScan.
+        // buildFileScanTaskIterator detects incremental delta internally.
         List<FileScanTask> icebergScanTasks = splitTasks.get(key);
         if (icebergScanTasks == null) {
             throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
@@ -1386,10 +1380,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     // (O(files) planFiles + per-column metadata) but richest statistics (NDV + min/max).
     // buildFileScanTaskIterator handles both full-table and delta internally.
     private Statistics getFullTableStatisticsFromPlanFiles(IcebergTable icebergTable,
-                                                            Map<ColumnRefOperator, Column> columns,
-                                                            OptimizerContext session,
-                                                            ScalarOperator predicate, long limit,
-                                                            TvrVersionRange version) {
+                                                           Map<ColumnRefOperator, Column> columns,
+                                                           OptimizerContext session,
+                                                           ScalarOperator predicate, long limit,
+                                                           TableVersionRange version) {
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setLimit(limit)
@@ -1416,13 +1410,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     // summaries (from the manifest LIST; no manifest-file open). A matching manifest contributes
     // its FULL row count — resulting in a partition-aware over-estimate (safe for CBO).
     //
-    // NOT SAFE for incremental versions (TvrTableDelta with start present): MergeAppend/compaction
+    // NOT SAFE for incremental versions (delta with start present): MergeAppend/compaction
     // makes manifest-level added/existing unreliable for ranges. Use Path B instead for delta.
     //
     // Returns a negative value when any matching manifest has files but is missing both
     // addedRowsCount and existingRowsCount (e.g. v1 manifest list or upgraded metadata) —
     // callers must fall back to planFiles for exact cardinality.
-    private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TvrVersionRange version) {
+    private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TableVersionRange version) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         if (!version.end().isPresent()) {
             return 1;

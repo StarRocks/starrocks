@@ -1179,7 +1179,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
                 new ConnectorProperties(ConnectorType.ICEBERG,
-                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")));
         // Two separate commits => two data manifests. Manifest-pruned row count must sum across manifests
         // (FILE_A=2 + FILE_A_2=2 = 4).
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
@@ -1188,11 +1188,11 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "id", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", IntegerType.INT));
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
-        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(
+        TableVersionRange versionRange = TableVersionRange.withEnd(Optional.of(
                 mockedNativeTableA.currentSnapshot().snapshotId()));
         Statistics statistics = metadata.getTableStatistics(
                 context, icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
@@ -1213,7 +1213,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
                 new ConnectorProperties(ConnectorType.ICEBERG,
-                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")));
         // snap1: FILE_A (2 rows). snap2: FILE_A_1 (2 rows). Full table at snap2 = 4 rows.
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         Snapshot snap1 = mockedNativeTableA.currentSnapshot();
@@ -1224,14 +1224,14 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "id", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", IntegerType.INT));
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
 
         // Append-only delta snap1(exclusive) -> snap2(inclusive) must be costed on the delta only
         // (FILE_A_1 = 2 rows), NOT the full-table manifest-pruned count (4 rows).
-        TvrTableDelta delta = TvrTableDelta.of(TvrVersion.of(snap1.snapshotId()), TvrVersion.of(snap2.snapshotId()));
+        TableVersionRange delta = new TableVersionRange(Optional.of(snap1.snapshotId()), Optional.of(snap2.snapshotId()));
         Statistics statistics = metadata.getTableStatistics(
                 context, icebergTable, colRefToColumnMetaMap, null, null, -1, delta);
         Assertions.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
