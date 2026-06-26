@@ -30,6 +30,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
@@ -86,16 +87,6 @@ import java.util.stream.Collectors;
  */
 public class ColocateChecker {
     private static final Logger LOG = LogManager.getLogger(ColocateChecker.class);
-
-    // Cap on tablets per getShardInfo RPC during PACK reconcile. A local safety bound on this
-    // (potentially large) sweep — getShardInfo is not globally chunked, and other callers pass
-    // smaller, bounded lists.
-    private static final int GET_SHARD_INFO_BATCH_SIZE = 1000;
-
-    // Cap on PACK shard group ids per queryShardGroupStable RPC. Colocate ranges (one PACK group
-    // each) accumulate across Level-1 splits, so bound the convergence query like the membership
-    // read above.
-    private static final int QUERY_SHARD_GROUP_STABLE_BATCH_SIZE = 1000;
 
     /**
      * Invoked from {@link TabletReshardJobMgr#runAfterCatalogReady} on every scheduler tick.
@@ -183,7 +174,7 @@ public class ColocateChecker {
     }
 
     /**
-     * Final stability gate (F7): after range alignment and PACK membership repair, asks StarOS whether
+     * Final stability gate: after range alignment and PACK membership repair, asks StarOS whether
      * every PACK shard group of this colocate group has actually converged onto co-resident workers —
      * placement is done, not merely that membership was assigned. Range alignment + membership are
      * sufficient for query correctness, but the colocate-join optimization only pays off when execution
@@ -210,9 +201,10 @@ public class ColocateChecker {
         try {
             long workerGroupId = resolveWorkerGroupId(colocateTableIndex, peers);
             StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-            for (int batchStart = 0; batchStart < packGroupIds.size(); batchStart += QUERY_SHARD_GROUP_STABLE_BATCH_SIZE) {
+            int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_batch_size);
+            for (int batchStart = 0; batchStart < packGroupIds.size(); batchStart += batchSize) {
                 List<Long> batch = packGroupIds.subList(batchStart,
-                        Math.min(batchStart + QUERY_SHARD_GROUP_STABLE_BATCH_SIZE, packGroupIds.size()));
+                        Math.min(batchStart + batchSize, packGroupIds.size()));
                 List<Boolean> stable = starOSAgent.queryShardGroupStable(batch, workerGroupId);
                 // A size mismatch would let allMatch pass on a subset and flip the group stable while a
                 // group is still migrating — fail closed so placement convergence is never faked.
@@ -336,9 +328,10 @@ public class ColocateChecker {
         List<Long> tabletIds = new ArrayList<>(tabletIdToRange.keySet());
         Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();
         // Query membership in bounded batches so one very large table cannot produce an oversized RPC.
-        for (int batchStart = 0; batchStart < tabletIds.size(); batchStart += GET_SHARD_INFO_BATCH_SIZE) {
+        int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_batch_size);
+        for (int batchStart = 0; batchStart < tabletIds.size(); batchStart += batchSize) {
             List<Long> batch = tabletIds.subList(batchStart,
-                    Math.min(batchStart + GET_SHARD_INFO_BATCH_SIZE, tabletIds.size()));
+                    Math.min(batchStart + batchSize, tabletIds.size()));
             try {
                 for (ShardInfo shardInfo : starOSAgent.getShardInfo(batch, StarOSAgent.DEFAULT_WORKER_GROUP_ID)) {
                     tabletIdToGroupIds.put(shardInfo.getShardId(), shardInfo.getGroupIdsList());
