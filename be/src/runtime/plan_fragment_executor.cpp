@@ -43,6 +43,8 @@
 #include "common/object_pool.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
 #include "compute_env/profile_report_worker.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/result/result_queue_mgr.h"
@@ -59,8 +61,6 @@
 #include "runtime/message_body_sink.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks {
 

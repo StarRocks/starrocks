@@ -46,9 +46,9 @@
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
 // NOLINTNEXTLINE
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "script/script.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
 
 namespace starrocks {
 
@@ -1146,6 +1146,90 @@ TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     auto res = starrocks::lake::TabletManager::parse_bundle_tablet_metadata("test_path", serialized_string);
     EXPECT_FALSE(res.ok());
     EXPECT_TRUE(res.status().is_corruption());
+}
+
+// Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas
+// lack filename, with the real names only in deprecated_segments. put_bundle_tablet_metadata must
+// persist metadata whose segment filename survives (reproduces old-worker -> new-aggregator).
+TEST_F(LakeTabletManagerTest, put_bundle_preserves_legacy_segment_filenames) {
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    {
+        auto* schema = metadata.mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    // Legacy-shaped rowset: segment_metas carries only sort-key fields (no filename); the real name
+    // lives only in deprecated_segments.
+    auto* rs = metadata.add_rowsets();
+    rs->set_id(2);
+    rs->set_overlapped(false);
+    rs->set_num_rows(5);
+    rs->add_segment_metas()->set_num_rows(5);
+    rs->add_deprecated_segments("real_seg.dat");
+    metadatas.emplace(tablet_id, metadata);
+
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto got = std::move(res).value();
+    ASSERT_EQ(1, got->rowsets_size());
+    ASSERT_EQ(1, got->rowsets(0).segment_metas_size());
+    EXPECT_EQ("real_seg.dat", got->rowsets(0).segment_metas(0).filename());
+}
+
+// Layer C (after_load extend) on the aggregate receive path: a sparse legacy rowset
+// (segment_metas_size() < deprecated_segments_size()) must keep ALL segment names. Without the
+// after_load in put_bundle_tablet_metadata, the no-extend before_save would truncate the tail.
+TEST_F(LakeTabletManagerTest, put_bundle_extends_then_preserves_mismatched_legacy_counts) {
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    {
+        auto* schema = metadata.mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    auto* rs = metadata.add_rowsets();
+    rs->set_id(2);
+    rs->set_overlapped(false);
+    rs->set_num_rows(10);
+    rs->add_segment_metas()->set_num_rows(10); // only 1 segment_metas...
+    rs->add_deprecated_segments("s0.dat");     // ...but 2 real segment names
+    rs->add_deprecated_segments("s1.dat");
+    metadatas.emplace(tablet_id, metadata);
+
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto got = std::move(res).value();
+    ASSERT_EQ(1, got->rowsets_size());
+    ASSERT_EQ(2, got->rowsets(0).segment_metas_size());
+    EXPECT_EQ("s0.dat", got->rowsets(0).segment_metas(0).filename());
+    EXPECT_EQ("s1.dat", got->rowsets(0).segment_metas(1).filename());
 }
 
 TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {

@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "agent/agent_server.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
@@ -31,8 +33,10 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
+#include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
@@ -53,13 +57,22 @@ public:
     void SetUp() override {
         ConfigUpdateRegistry::instance()->TEST_reset();
         _global_env = GlobalEnv::GetInstance();
-        register_config_update_hooks(ExecEnv::GetInstance(), *_global_env);
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
+                                                             PlatformEnv::GetInstance()->brpc_stub_cache());
+        ASSERT_OK(_load_channel_mgr->init(_global_env->load_mem_tracker()));
+        register_config_update_hooks(ExecEnv::GetInstance(), *_global_env, _load_channel_mgr.get());
         ConfigUpdateRegistry::instance()->set_ready();
     }
-    void TearDown() override { ConfigUpdateRegistry::instance()->TEST_reset(); }
+    void TearDown() override {
+        ConfigUpdateRegistry::instance()->TEST_reset();
+        if (_load_channel_mgr != nullptr) {
+            _load_channel_mgr->close();
+        }
+    }
 
 protected:
     GlobalEnv* _global_env = nullptr;
+    std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
 };
 
 TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
@@ -231,7 +244,7 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
 // TearDown's TEST_reset() restores a clean registry for the next test.
 TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_null_exec_env_returns_internal_error) {
     ConfigUpdateRegistry::instance()->TEST_reset();
-    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
+    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance(), _load_channel_mgr.get());
     ConfigUpdateRegistry::instance()->set_ready();
 
     auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");

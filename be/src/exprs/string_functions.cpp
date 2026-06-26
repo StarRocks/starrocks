@@ -41,8 +41,10 @@
 #include <type_traits>
 
 #include "base/container/raw_container.h"
+#include "base/crypto/blake3_hash.h"
 #include "base/crypto/sm3.h"
 #include "base/string/utf8.h"
+#include "base/string/utf8_encoding.h"
 #include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -63,7 +65,6 @@
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
 #include "storage/primitive/storage_define.h"
-#include "util/utf8_encoding.h"
 
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
@@ -2806,6 +2807,13 @@ static Status url_decode_slice(const char* value, size_t len, std::string* to) {
     to->reserve(len);
     for (size_t i = 0; i < len; i++) {
         if (value[i] == '%') {
+            // A '%' must be followed by two hex digits. Without this bound check, a truncated
+            // escape ("...%" or "...%X") at the end of the slice reads 1-2 bytes past it. The
+            // slice is not NUL-terminated for column input (e.g. url_extract_parameter), so this
+            // is an out-of-bounds read of adjacent memory whose result depends on neighbouring data.
+            if (i + 2 >= len) {
+                return Status::RuntimeError("decode string contains an incomplete percent-encoding");
+            }
             char l = value[i + 1];
             char r = value[i + 2];
             if ((l < 'A' || l > 'F') && (l < '0' || l > '9')) {
@@ -2881,6 +2889,31 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
 
 StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(blake3Impl, str) {
+    const Slice& input_str = str;
+    const auto* message = reinterpret_cast<const unsigned char*>(input_str.data);
+    size_t message_len = input_str.size;
+
+    uint8_t output[Blake3Hash::BLAKE3_HASH_BYTES];
+    Blake3Hash::blake3_compute(message, message_len, output);
+
+    // Format as a continuous lowercase hex string.
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string result;
+    result.resize(Blake3Hash::BLAKE3_HASH_BYTES * 2);
+    size_t pos = 0;
+    for (int i = 0; i < Blake3Hash::BLAKE3_HASH_BYTES; ++i) {
+        result[pos++] = kHex[(output[i] >> 4) & 0xF];
+        result[pos++] = kHex[output[i] & 0xF];
+    }
+
+    return result;
+}
+
+StatusOr<ColumnPtr> StringFunctions::blake3(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<blake3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
 // ascii

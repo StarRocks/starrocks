@@ -35,6 +35,7 @@ ADD_BE_LIB(Base
   debug/trace.cpp
   debug/trace_metrics.cpp
   coding.cpp
+  base64.cpp
   gc/gc_helper.cpp
   memory/jemalloc_allocator.cpp
   memory/malloc_allocator.cpp
@@ -54,6 +55,7 @@ ADD_BE_LIB(Base
   types/int256.cpp
   types/int96.cpp
   json/easy_json.cc
+  json/json_util.cpp
   path/file_util.cpp
   path/path_builder.cpp
   path/path_util.cpp

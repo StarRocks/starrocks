@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 
 set(CACHE_FILES
   data_cache_hit_rate_counter.hpp
+  dynamic_cache.h
   disk_cache/io_buffer.cpp
   disk_cache/block_cache.cpp
   mem_cache/lrucache_engine.cpp

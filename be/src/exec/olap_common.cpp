@@ -39,9 +39,9 @@
 #include <utility>
 #include <vector>
 
-#include "exec/olap_utils.h"
 #include "storage/primitive/olap_tuple.h"
 #include "storage/primitive/value_cast.h"
+#include "storage/query/olap_scan_range.h"
 
 namespace starrocks {
 

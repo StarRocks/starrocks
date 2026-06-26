@@ -1,0 +1,235 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "http/service/action/datacache_action.h"
+
+#include <fmt/format.h>
+#include <rapidjson/document.h>
+#include <rapidjson/prettywriter.h>
+#include <rapidjson/stringbuffer.h>
+
+#include <string>
+#include <type_traits>
+
+#include "cache/data_cache_hit_rate_counter.hpp"
+#include "cache/disk_cache/local_disk_cache_engine.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
+#include "gutil/strings/substitute.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_headers.h"
+#include "http/core/http_request.h"
+#include "http/core/http_status.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/disk_cache/starcache_engine.h"
+#endif
+
+namespace starrocks {
+
+const static std::string HEADER_JSON = "application/json";
+const static std::string ACTION_KEY = "action";
+const static std::string ACTION_STAT = "stat";
+const static std::string ACTION_APP_STAT = "app_stat";
+
+bool DataCacheAction::_check_request(HttpRequest* req) {
+    if (req->method() != HttpMethod::GET) {
+        HttpChannel::send_reply(req, HttpStatus::METHOD_NOT_ALLOWED, "Method Not Allowed");
+        return false;
+    }
+    if (req->param(ACTION_KEY) != ACTION_STAT && req->param(ACTION_KEY) != ACTION_APP_STAT) {
+        HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Not Found");
+        return false;
+    }
+    return true;
+}
+
+void DataCacheAction::handle(HttpRequest* req) {
+    VLOG_ROW << req->debug_string();
+    if (!_check_request(req)) {
+        return;
+    }
+    if (!_disk_cache || !_disk_cache->is_initialized()) {
+        _handle_error(req, strings::Substitute("Cache system is not ready"));
+    } else if (req->param(ACTION_KEY) == ACTION_STAT) {
+        _handle_stat(req);
+    } else {
+        _handle_app_stat(req);
+    }
+}
+
+void DataCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjson::Document&)>& func) {
+    rapidjson::Document root;
+    root.SetObject();
+    func(root);
+    rapidjson::StringBuffer strbuf;
+    rapidjson::PrettyWriter writer(strbuf);
+    root.Accept(writer);
+    req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
+    HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
+}
+
+double DataCacheAction::_calc_rate(size_t total, size_t count) {
+    if (total > 0) {
+        return std::round(static_cast<double>(count) / static_cast<double>(total) * 100.0) / 100.0;
+    }
+    return 0;
+}
+
+template <typename T>
+static rapidjson::Value make_json_number(T value) {
+    static_assert(std::is_arithmetic_v<T>);
+    if constexpr (std::is_floating_point_v<T>) {
+        return rapidjson::Value(static_cast<double>(value));
+    } else if constexpr (std::is_signed_v<T>) {
+        return rapidjson::Value(static_cast<int64_t>(value));
+    } else {
+        return rapidjson::Value(static_cast<uint64_t>(value));
+    }
+}
+
+void DataCacheAction::_handle_stat(HttpRequest* req) {
+    _handle(req, [=](rapidjson::Document& root) {
+        auto& allocator = root.GetAllocator();
+
+        DataCacheMemMetrics mem_metrics;
+        if (_mem_cache != nullptr) {
+            mem_metrics = _mem_cache->cache_metrics();
+        }
+        DataCacheHitRateCounter* hit_rate_counter = DataCacheHitRateCounter::instance();
+        root.AddMember("page_cache_mem_quota_bytes", make_json_number(mem_metrics.mem_quota_bytes), allocator);
+        root.AddMember("page_cache_mem_used_bytes", make_json_number(mem_metrics.mem_used_bytes), allocator);
+        auto mem_used_rate = _calc_rate(mem_metrics.mem_quota_bytes, mem_metrics.mem_used_bytes);
+        root.AddMember("page_cache_mem_used_rate", make_json_number(mem_used_rate), allocator);
+
+        root.AddMember("page_cache_hit_count", make_json_number(hit_rate_counter->page_cache_hit_count()), allocator);
+        root.AddMember("page_cache_miss_count", make_json_number(hit_rate_counter->page_cache_miss_count()), allocator);
+        root.AddMember("page_cache_hit_rate", make_json_number(hit_rate_counter->page_cache_hit_rate()), allocator);
+
+        root.AddMember("page_cache_hit_count_last_minute",
+                       make_json_number(hit_rate_counter->page_cache_hit_count_last_minute()), allocator);
+        root.AddMember("page_cache_miss_count_last_minute",
+                       make_json_number(hit_rate_counter->page_cache_miss_count_last_minute()), allocator);
+        root.AddMember("page_cache_hit_rate_last_minute",
+                       make_json_number(hit_rate_counter->page_cache_hit_rate_last_minute()), allocator);
+
+#ifdef WITH_STARCACHE
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(_disk_cache);
+        auto&& metrics = starcache->starcache_metrics(2);
+        std::string status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
+
+        rapidjson::Value status_value;
+        status_value.SetString(status.c_str(), status.length(), allocator);
+        root.AddMember("block_cache_status", status_value, allocator);
+        root.AddMember("block_cache_disk_quota_bytes", make_json_number(metrics.disk_quota_bytes), allocator);
+        root.AddMember("block_cache_disk_used_bytes", make_json_number(metrics.disk_used_bytes), allocator);
+
+        auto disk_used_rate = _calc_rate(metrics.disk_quota_bytes, metrics.disk_used_bytes);
+        root.AddMember("block_cache_disk_used_rate", make_json_number(disk_used_rate), allocator);
+
+        std::string disk_spaces;
+        for (size_t i = 0; i < metrics.disk_dir_spaces.size(); ++i) {
+            std::string space =
+                    fmt::format("{}:{}", metrics.disk_dir_spaces[i].path, metrics.disk_dir_spaces[i].quota_bytes);
+            if (i != metrics.disk_dir_spaces.size() - 1) {
+                space.append(";");
+            }
+            disk_spaces += space;
+        }
+
+        rapidjson::Value disk_spaces_value;
+        disk_spaces_value.SetString(disk_spaces.c_str(), disk_spaces.length(), allocator);
+        root.AddMember("block_cache_disk_spaces", disk_spaces_value, allocator);
+        root.AddMember("block_cache_meta_used_bytes", make_json_number(metrics.meta_used_bytes), allocator);
+
+        root.AddMember("block_cache_hit_count", make_json_number(metrics.detail_l1->hit_count), allocator);
+        root.AddMember("block_cache_miss_count", make_json_number(metrics.detail_l1->miss_count), allocator);
+
+        size_t total_reads = metrics.detail_l1->hit_count + metrics.detail_l1->miss_count;
+        auto hit_rate = _calc_rate(total_reads, metrics.detail_l1->hit_count);
+        root.AddMember("block_cache_hit_rate", make_json_number(hit_rate), allocator);
+
+        root.AddMember("block_cache_hit_bytes", make_json_number(metrics.detail_l1->hit_bytes), allocator);
+        root.AddMember("block_cache_miss_bytes", make_json_number(metrics.detail_l1->miss_bytes), allocator);
+
+        root.AddMember("block_cache_hit_count_last_minute", make_json_number(metrics.detail_l2->hit_count_last_minite),
+                       allocator);
+        root.AddMember("block_cache_miss_count_last_minute",
+                       make_json_number(metrics.detail_l2->miss_count_last_minite), allocator);
+        root.AddMember("block_cache_hit_bytes_last_minute", make_json_number(metrics.detail_l2->hit_bytes_last_minite),
+                       allocator);
+        root.AddMember("block_cache_miss_bytes_last_minute",
+                       make_json_number(metrics.detail_l2->miss_bytes_last_minite), allocator);
+
+        root.AddMember("block_cache_read_disk_bytes", make_json_number(metrics.detail_l2->read_disk_bytes), allocator);
+
+        root.AddMember("block_cache_write_bytes", make_json_number(metrics.detail_l2->write_bytes), allocator);
+        root.AddMember("block_cache_write_success_count", make_json_number(metrics.detail_l2->write_success_count),
+                       allocator);
+        root.AddMember("block_cache_write_fail_count", make_json_number(metrics.detail_l2->write_fail_count),
+                       allocator);
+
+        root.AddMember("block_cache_remove_bytes", make_json_number(metrics.detail_l2->remove_bytes), allocator);
+        root.AddMember("block_cache_remove_success_count", make_json_number(metrics.detail_l2->remove_success_count),
+                       allocator);
+        root.AddMember("block_cache_remove_fail_count", make_json_number(metrics.detail_l2->remove_fail_count),
+                       allocator);
+
+        root.AddMember("block_cache_current_reading_count", make_json_number(metrics.detail_l2->current_reading_count),
+                       allocator);
+        root.AddMember("block_cache_current_writing_count", make_json_number(metrics.detail_l2->current_writing_count),
+                       allocator);
+        root.AddMember("block_cache_current_removing_count",
+                       make_json_number(metrics.detail_l2->current_removing_count), allocator);
+#endif
+    });
+}
+
+void DataCacheAction::_handle_app_stat(HttpRequest* req) {
+    _handle(req, [=](rapidjson::Document& root) {
+        auto& allocator = root.GetAllocator();
+        DataCacheHitRateCounter* hit_rate_counter = DataCacheHitRateCounter::instance();
+
+        root.AddMember("block_cache_hit_bytes", make_json_number(hit_rate_counter->block_cache_hit_bytes()), allocator);
+        root.AddMember("block_cache_miss_bytes", make_json_number(hit_rate_counter->block_cache_miss_bytes()),
+                       allocator);
+        root.AddMember("block_cache_hit_rate", make_json_number(hit_rate_counter->block_cache_hit_rate()), allocator);
+
+        root.AddMember("block_cache_hit_bytes_last_minute",
+                       make_json_number(hit_rate_counter->block_cache_hit_bytes_last_minute()), allocator);
+        root.AddMember("block_cache_miss_bytes_last_minute",
+                       make_json_number(hit_rate_counter->block_cache_miss_bytes_last_minute()), allocator);
+        root.AddMember("block_cache_hit_rate_last_minute",
+                       make_json_number(hit_rate_counter->block_cache_hit_rate_last_minute()), allocator);
+
+        root.AddMember("page_cache_hit_count", make_json_number(hit_rate_counter->page_cache_hit_count()), allocator);
+        root.AddMember("page_cache_miss_count", make_json_number(hit_rate_counter->page_cache_miss_count()), allocator);
+        root.AddMember("page_cache_hit_rate", make_json_number(hit_rate_counter->page_cache_hit_rate()), allocator);
+
+        root.AddMember("page_cache_hit_count_last_minute",
+                       make_json_number(hit_rate_counter->page_cache_hit_count_last_minute()), allocator);
+        root.AddMember("page_cache_miss_count_last_minute",
+                       make_json_number(hit_rate_counter->page_cache_miss_count_last_minute()), allocator);
+        root.AddMember("page_cache_hit_rate_last_minute",
+                       make_json_number(hit_rate_counter->page_cache_hit_rate_last_minute()), allocator);
+    });
+}
+
+void DataCacheAction::_handle_error(HttpRequest* req, const std::string& err_msg) {
+    _handle(req, [err_msg](rapidjson::Document& root) {
+        auto& allocator = root.GetAllocator();
+        root.AddMember("error", rapidjson::Value(err_msg.c_str(), err_msg.size()), allocator);
+    });
+}
+
+} // namespace starrocks

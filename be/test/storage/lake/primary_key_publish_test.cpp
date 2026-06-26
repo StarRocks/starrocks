@@ -34,7 +34,7 @@
 #include "common/logging.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"

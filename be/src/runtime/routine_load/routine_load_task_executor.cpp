@@ -42,6 +42,8 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_context.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
@@ -49,8 +51,6 @@
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
@@ -82,6 +82,12 @@ std::string build_kafka_source_info(const TKafkaLoadInfo& info) {
     rapidjson::Writer<rapidjson::StringBuffer> w(buf);
     d.Accept(w);
     return std::string(buf.GetString(), buf.GetSize());
+}
+
+void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env) {
+    ctx->set_need_rollback([exec_env](StreamLoadContext* rollback_ctx) {
+        return exec_env->stream_load_executor()->rollback_txn(rollback_ctx);
+    });
 }
 
 } // namespace
@@ -127,7 +133,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::KAFKA;
     ctx.label = "NaN";
@@ -144,7 +150,6 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     t_info.__set_properties(properties);
 
     ctx.kafka_info = std::make_unique<KafkaLoadInfo>(t_info);
-    ctx.need_rollback = false;
 
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
@@ -170,7 +175,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::KAFKA;
     ctx.label = "NaN";
@@ -187,7 +192,6 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     t_info.__set_properties(properties);
 
     ctx.kafka_info = std::make_unique<KafkaLoadInfo>(t_info);
-    ctx.need_rollback = false;
 
     // convert pb repeated value to vector
     std::vector<int32_t> partition_ids;
@@ -220,7 +224,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxy
     DCHECK(request.has_pulsar_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::PULSAR;
     ctx.label = "NaN";
@@ -238,7 +242,6 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxy
     t_info.__set_properties(properties);
 
     ctx.pulsar_info = std::make_unique<PulsarLoadInfo>(t_info);
-    ctx.need_rollback = false;
 
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
@@ -257,7 +260,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
     DCHECK(request.has_pulsar_info());
 
     // This context is meaningless, just for unifing the interface
-    StreamLoadContext ctx(_exec_env);
+    StreamLoadContext ctx(_exec_env, _exec_env->load_stream_mgr());
     ctx.load_type = TLoadType::ROUTINE_LOAD;
     ctx.load_src_type = TLoadSourceType::PULSAR;
     ctx.label = "NaN";
@@ -275,7 +278,6 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
     t_info.__set_properties(properties);
 
     ctx.pulsar_info = std::make_unique<PulsarLoadInfo>(t_info);
-    ctx.need_rollback = false;
 
     // convert pb repeated value to vector
     std::vector<std::string> partitions;
@@ -314,7 +316,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     }
 
     // create the context
-    auto* ctx = new StreamLoadContext(_exec_env);
+    auto* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr());
     ctx->load_type = TLoadType::ROUTINE_LOAD;
     ctx->load_src_type = task.type;
     ctx->job_id = task.job_id;
@@ -348,7 +350,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     }
     // the routine load task'txn has alreay began in FE.
     // so it need to rollback if encounter error.
-    ctx->need_rollback = true;
+    set_need_rollback(ctx, _exec_env);
     if (task.__isset.max_filter_ratio) {
         ctx->max_filter_ratio = task.max_filter_ratio;
     } else {
@@ -549,9 +551,9 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
 void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& st, std::string_view err_msg) {
     LOG(WARNING) << err_msg << " " << ctx->brief();
     ctx->status = st;
-    if (ctx->need_rollback) {
+    if (ctx->need_rollback()) {
         (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
-        ctx->need_rollback = false;
+        ctx->clear_need_rollback();
     }
     if (ctx->body_sink != nullptr) {
         ctx->body_sink->cancel(st);

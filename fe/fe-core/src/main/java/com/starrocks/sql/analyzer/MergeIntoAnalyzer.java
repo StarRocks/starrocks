@@ -27,6 +27,7 @@ import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.MergeIntoStmt;
@@ -264,6 +265,11 @@ public class MergeIntoAnalyzer {
                 stmt.getMergeCondition(),
                 false
         );
+        // Pin the join distribution like IcebergEqualityDeleteRewriteRule does: the
+        // duplicate-match check is a local check above this join, which is correct only
+        // when the TARGET side is never broadcast/replicated (each target row owned by
+        // exactly one instance). The planner re-validates the physical join shape.
+        joinRelation.setJoinHint(HintNode.HINT_JOIN_SHUFFLE);
 
         // Create SELECT ... FROM (join)
         SelectRelation selectRelation = new SelectRelation(

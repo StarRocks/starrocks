@@ -46,11 +46,11 @@
 #include "common/util/bthreads/executor.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/txn_state_cache.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/load_channel_mgr.h"
 #include "service/core_dump_resource_releaser.h"
 #include "storage/compaction_manager.h"
 #include "storage/index/vector/vector_index_cache.h"
@@ -70,14 +70,14 @@
 
 #ifdef USE_STAROS
 #include "common/gflags_utils.h"
-#include "staros_integration/staros_starcache.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
+#include "compute_env/staros/staros_starcache.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #endif // USE_STAROS
 
 namespace starrocks {
 
-void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env) {
+void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env, LoadChannelMgr* load_channel_mgr) {
     auto* registry = ConfigUpdateRegistry::instance();
     const auto* global_env_ptr = &global_env;
 
@@ -422,8 +422,10 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
     });
     registry->register_callback("load_channel_rpc_thread_pool_num", [=]() -> Status {
         LOG(INFO) << "set load_channel_rpc_thread_pool_num:" << config::load_channel_rpc_thread_pool_num;
-        return ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(
-                config::load_channel_rpc_thread_pool_num);
+        if (load_channel_mgr == nullptr) {
+            return Status::InternalError("LoadChannelMgr is not initialized");
+        }
+        return load_channel_mgr->async_rpc_pool()->update_max_threads(config::load_channel_rpc_thread_pool_num);
     });
     registry->register_callback("exec_state_report_max_threads", [=]() -> Status {
         LOG(INFO) << "set exec_state_report_max_threads:" << config::exec_state_report_max_threads;

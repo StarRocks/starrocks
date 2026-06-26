@@ -38,7 +38,7 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "util/time_guard.h"
+#include "runtime/time_guard.h"
 
 namespace starrocks::pipeline {
 

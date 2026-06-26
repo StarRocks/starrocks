@@ -22,6 +22,7 @@
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
+#include "cache/dynamic_cache.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -38,7 +39,6 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_manager.h"
-#include "util/dynamic_cache.h"
 
 namespace starrocks::lake {
 

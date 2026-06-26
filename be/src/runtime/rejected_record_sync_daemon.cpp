@@ -29,13 +29,13 @@
 #include "common/logging.h"
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"
+#include "compute_env/load/stream_load_context.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_common.h"
+#include "http/core/http_common.h"
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -551,7 +551,7 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // ROOT, skipping password / INSERT-privilege checks. The placeholder
     // user/passwd fields below are kept syntactically valid; FE thrift
     // ignores them once the token bypass fires.
-    StreamLoadContext* ctx = new StreamLoadContext(_env);
+    StreamLoadContext* ctx = new StreamLoadContext(_env, _env->load_stream_mgr());
     ctx->ref();
     DeferOp release([&] {
         if (ctx->unref()) {

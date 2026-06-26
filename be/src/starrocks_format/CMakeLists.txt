@@ -39,14 +39,13 @@ set(STARROCKS_LIBS
     Platform
     Serde
     Storage
-    Rowset
     Runtime
     RuntimeCore
     Types
     Util
     Script
     StarRocksGen
-    Webserver
+    HttpService
     Cache
     ${WL_END_GROUP}
     FormatOrc

@@ -299,6 +299,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return name;
     }
 
+    // Display-friendly qualified name: catalog.db.table for external tables,
+    // short name for internal tables.
+    public String getQualifiedTableName() {
+        try {
+            return getCatalogName() + "." + getCatalogDBName() + "." + getCatalogTableName();
+        } catch (NotImplementedException e) {
+            return getName();
+        }
+    }
+
     // Table name is the name written in native table.
     // but catalog table name is name defined in catalog.
     // If we use resource mapping, they are probably different.
@@ -401,6 +411,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isIcebergTable() {
         return type == TableType.ICEBERG;
+    }
+
+    // Returns a one-line summary string for stats-collection logging.
+    // Subclasses can override to include connector-specific metadata (e.g. snapshot info).
+    public String getStatsCollectSummary() {
+        return "";
     }
 
     public boolean isDeltalakeTable() {

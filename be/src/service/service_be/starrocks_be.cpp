@@ -34,6 +34,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "connector/connector_bootstrap.h"
+#include "data_workflows/data_workflows_env.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -51,9 +52,9 @@
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
-#include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
 
 #ifdef WITH_STARCACHE
@@ -154,6 +155,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
+    auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
+    DataWorkflowsEnvOptions data_workflows_env_options;
+    data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
+    data_workflows_env_options.diagnose_daemon = exec_env->diagnose_daemon();
+    data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
+    data_workflows_env_options.metrics = process_metrics_registry->root_registry();
+    data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
+    data_workflows_env_options.load_mem_tracker = global_env->load_mem_tracker();
+    EXIT_IF_ERROR(data_workflows_env->init(data_workflows_env_options));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": data workflows env init successfully";
+
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
     // AgentServer::start() starts workers that can read ExecEnv::agent_server()
     // immediately, so publish the pointer before starting those workers.
@@ -222,9 +234,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
 
-    BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
+    auto* load_channel_mgr = data_workflows_env->load_channel_mgr();
+    BackendInternalServiceImpl<PInternalService> internal_service(exec_env, load_channel_mgr);
 #ifndef __APPLE__
-    LakeServiceImpl lake_service(exec_env, StorageEnv::GetInstance()->lake_tablet_manager());
+    LakeServiceImpl lake_service(exec_env, StorageEnv::GetInstance()->lake_tablet_manager(), load_channel_mgr);
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
@@ -280,12 +293,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, *global_env, process_metrics_registry,
-                                                       config::be_http_port, config::be_http_num_workers);
+    auto http_server =
+            std::make_unique<HttpServiceBE>(cache_env, exec_env, *global_env, process_metrics_registry,
+                                            load_channel_mgr, config::be_http_port, config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, *global_env, process_metrics_registry,
-                                                       config::be_http_port, config::be_http_num_workers);
+    auto http_server =
+            std::make_unique<HttpServiceBE>(nullptr, exec_env, *global_env, process_metrics_registry, load_channel_mgr,
+                                            config::be_http_port, config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
@@ -360,6 +375,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     agent_server->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server stop successfully";
 
+    data_workflows_env->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env stop successfully";
+
     exec_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec engine destroy successfully";
 
@@ -387,6 +405,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     exec_env->set_agent_server(nullptr);
     agent_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server destroy successfully";
+
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";

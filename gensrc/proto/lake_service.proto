@@ -50,19 +50,37 @@ message PublishVersionRequest {
     map<int64, int64> tablet_built_versions = 11;
 }
 
+// Per-tablet stats returned by the lake publish RPC. The FE also reuses this as a plain in-process
+// {num_rows, data_size} holder on the shared-nothing first-load path (built from TTabletInfo in
+// LeaderImpl), so first-load statistics collection is unified across both architectures.
+message TabletStatPB {
+    optional int64 num_rows = 1;
+    optional int64 data_size = 2;
+}
+
 message PublishVersionResponse {
     repeated int64 failed_tablets = 1;
     // Mapping from tablet id to compaction score.
     map<int64, double> compaction_scores = 2;
     optional StatusPB status = 3;
-    // Mapping from tablet id to row_nums when the partition is first imported
-    map<int64, int64> tablet_row_nums = 4;
+    // Legacy first-import row counts. A new FE derives first-load statistics from |tablet_stats|
+    // (field 8) and ignores this field. BE still populates it for base_version == 1 so that an OLD
+    // FE during a BE-before-FE rolling upgrade keeps collecting first-load statistics: the old FE
+    // reads ordinal 4 (original json_name "tablet_row_nums"). Once all FEs are upgraded this field
+    // is dead. Do not reuse ordinal 4.
+    map<int64, int64> deprecated_tablet_row_nums = 4 [json_name = "tablet_row_nums"];
     map<int64, TabletMetadataPB> tablet_metas = 5;
     // New tablet ranges for tablet splitting
     map<int64, TabletRangePB> tablet_ranges = 6;
     // Tablets that have async vector indexes and were published in this batch.
     // FE uses this to register new pending build tasks.
     repeated VectorIndexBuildInfoPB vector_index_build_infos = 7;
+    // Per-tablet aggregate stats. Returned for range-distribution tablets on every
+    // publish so FE can trigger split/merge in real time, and for any tablet on first
+    // import (base_version == 1) so FE can collect first-load statistics (supersedes the
+    // deprecated_tablet_row_nums field). No entry is emitted for non-range tablets after
+    // their first import.
+    map<int64, TabletStatPB> tablet_stats = 8;
 }
 
 message VectorIndexBuildInfoPB {

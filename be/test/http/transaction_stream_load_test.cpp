@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/action/transaction_stream_load.h"
+#include "http/service/action/transaction_stream_load.h"
 
 #include <event2/buffer.h>
 #include <event2/http.h>
@@ -30,15 +30,17 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/download_action.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_request.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_common.h"
+#include "http/core/http_request.h"
+#include "http/service/download_action.h"
 #include "platform/platform_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 
@@ -80,9 +82,7 @@ public:
             _owns_platform_env = true;
         }
         _env._refresh_service_contexts();
-        _env._load_stream_mgr = new LoadStreamMgr();
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
-        _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
@@ -91,10 +91,6 @@ public:
     void TearDown() override {
         delete _env._transaction_mgr;
         _env._transaction_mgr = nullptr;
-        delete _env._stream_context_mgr;
-        _env._stream_context_mgr = nullptr;
-        delete _env._load_stream_mgr;
-        _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
         if (_owns_platform_env) {
@@ -862,7 +858,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
 
 TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->db = "db";
     ctx->table = "tbl";
     ctx->label = "huge_malloc";
@@ -937,7 +933,7 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -999,7 +995,7 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -1056,7 +1052,7 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
 
 TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -1094,7 +1090,7 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
     TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";

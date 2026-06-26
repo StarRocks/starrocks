@@ -94,6 +94,18 @@ public class IcebergStatisticProvider {
 
         statisticsBuilder.setOutputRowCount(cardinality);
         statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
+        statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        return statisticsBuilder.build();
+    }
+
+    // Build row-count-only statistics from a pre-computed cardinality (e.g. manifest-pruned row count),
+    // without enumerating DataFiles. Column statistics are left UNKNOWN here; NDV estimation is handled
+    // separately by the column-statistics path.
+    public Statistics buildRowCountStatistics(
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap, long rowCount) {
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        statisticsBuilder.setOutputRowCount(Math.max(rowCount, 1));
+        statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
         return statisticsBuilder.build();
     }
 
@@ -138,6 +150,7 @@ public class IcebergStatisticProvider {
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
             statisticsBuilder.addColumnStatistics(buildColumnStatistics(
                     nativeTable, colRefToColumnMetaMap, icebergFileStats, colIdToNdvs));
+            statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         } else {
             // empty table
             statisticsBuilder.setOutputRowCount(1);

@@ -52,7 +52,7 @@
 #include "common/thread/thread.h"
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
@@ -65,6 +65,7 @@
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "tablet_meta_manager.h"
 

@@ -31,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -92,7 +93,9 @@ public class TransactionStateTest {
         partitionCommitInfo.setDataVersion(11L);
         partitionCommitInfo.setVersionEpoch(12L);
         partitionCommitInfo.setIsDoubleWrite(true);
-        partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().put(40000L, 123L);
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 123L;
+        partitionCommitInfo.getTabletStats().put(40000L, stat);
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         original.putIdToTableCommitInfo(20000L, tableCommitInfo);
 
@@ -115,7 +118,7 @@ public class TransactionStateTest {
 
         partitionCommitInfo.setVersion(20L);
         assertEquals(10L, copiedPartitionCommitInfo.getVersion());
-        assertEquals(Long.valueOf(123L), copiedPartitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().get(40000L));
+        assertEquals(Long.valueOf(123L), copiedPartitionCommitInfo.getTabletStats().get(40000L).numRows);
     }
 
     @Test

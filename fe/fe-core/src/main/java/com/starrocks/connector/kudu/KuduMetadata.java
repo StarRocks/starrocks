@@ -310,7 +310,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange versionRange) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }

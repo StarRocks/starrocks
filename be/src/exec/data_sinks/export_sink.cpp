@@ -44,9 +44,9 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
+#include "platform/fs_broker.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 

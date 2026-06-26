@@ -24,7 +24,6 @@
 #include "compute_env/spill/log_block_manager.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_env.h"
