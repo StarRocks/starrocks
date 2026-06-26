@@ -106,6 +106,13 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+        // Once the scan has reached its limit we must not generate (and list files for) any more scan
+        // ranges. Returning empty lets the final incremental round deliver only the terminal
+        // has_more=false sentinel produced by computeScanRangeAssignment(), without extra metadata
+        // listing, so parked scan operators can finish instead of hanging until query_timeout.
+        if (reachLimit) {
+            return List.of();
+        }
         if (maxScanRangeLength == 0) {
             return scanRangeSource.getAllOutputs();
         }
@@ -115,6 +122,11 @@ public class HdfsScanNode extends ScanNode {
     @Override
     public boolean hasMoreScanRanges() {
         return !reachLimit && scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public boolean reachLimit() {
+        return reachLimit;
     }
 
     @Override

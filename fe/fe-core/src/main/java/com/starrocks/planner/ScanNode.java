@@ -156,6 +156,14 @@ public abstract class ScanNode extends PlanNode {
     public void setReachLimit() {
     }
 
+    // Whether this scan node has stopped generating scan ranges because its limit has been reached.
+    // Incremental scan-range delivery uses this to know it must still flush a terminal
+    // has_more=false sentinel to already-deployed fragment instances, otherwise their scan
+    // operators stay parked waiting for more ranges and the query hangs until query_timeout.
+    public boolean reachLimit() {
+        return false;
+    }
+
     /**
      * Hook for subclasses that hold external resources (scan range sources, iterators, etc.)
      * to release them when query finishes/cancels. Default no-op.

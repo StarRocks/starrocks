@@ -1096,6 +1096,35 @@ public class IcebergScanNodeTest {
                 "scanRangeSource should be cleared");
     }
 
+    // Once the scan reaches its limit, reachLimit() must report true (so the coordinator still flushes
+    // the terminal incremental scan-range sentinel) and getScanRangeLocations() must stop emitting
+    // ranges (so no extra file listing happens). Guards against silently dropping either override.
+    @Test
+    public void testReachLimitStopsScanRanges(@Mocked IcebergTable table,
+                                              @Mocked IcebergConnectorScanRangeSource mockSource) {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, PartitionIdGenerator.of());
+        // snapshotId present + non-null scanRangeSource are required to reach the reachLimit guard.
+        scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(123L)));
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+
+        new Expectations() {{
+            // If the reachLimit guard in getScanRangeLocations() were removed, the node would return
+            // this non-empty list instead of empty, failing the assertion below.
+            mockSource.getOutputs(20);
+            result = List.of(new TScanRangeLocations());
+            minTimes = 0;
+        }};
+
+        scanNode.setReachLimit();
+
+        Assertions.assertTrue(scanNode.reachLimit());
+        Assertions.assertTrue(scanNode.getScanRangeLocations(20).isEmpty());
+    }
+
     @Test
     public void testGetBucketNums(@Mocked IcebergTable table) {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));

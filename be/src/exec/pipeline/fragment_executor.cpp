@@ -1104,8 +1104,10 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     }
     FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
     if (fragment_ctx == nullptr) {
-        return Status::InternalError(fmt::format("FragmentContext not found for query_id: {}, instance_id: {}",
-                                                 print_id(query_id), print_id(instance_id)));
+        // The fragment instance may have already finished (e.g. its scan reached the limit and the
+        // instance was torn down) before this incremental / terminal scan-range delivery arrived.
+        // A late delivery to a finished instance is a no-op, not an error.
+        return Status::OK();
     }
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 

@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -22,6 +23,7 @@ import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -32,6 +34,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
 
@@ -145,5 +149,74 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
                 }
             }
         }
+    }
+
+    // Regression for the connector incremental scan-range hang with a small LIMIT: when a scan reaches
+    // its limit before the scan-range source is exhausted, the coordinator must still flush the
+    // terminal has_more=false sentinel to the already-deployed instances. Otherwise the BE scan
+    // operators stay parked on has_more=true and the query hangs until query_timeout.
+    @Test
+    public void testTerminalSentinelDeliveredWhenReachLimit() throws Exception {
+        connectContext.getSessionVariable().setEnableConnectorIncrementalScanRanges(true);
+        connectContext.getSessionVariable().setConnectorIncrementalScanRangeNumber(20);
+
+        // Simulate the scan reaching its limit right after the first batch is deployed: from then on
+        // hasMoreScanRanges() reports false (limit) while reachLimit() reports true, even though the
+        // real source still has undelivered ranges.
+        AtomicBoolean limitReached = new AtomicBoolean(false);
+        new MockUp<HdfsScanNode>() {
+            @Mock
+            public boolean hasMoreScanRanges(Invocation inv) {
+                if (limitReached.get()) {
+                    return false;
+                }
+                return inv.proceed();
+            }
+
+            @Mock
+            public boolean reachLimit() {
+                return limitReached.get();
+            }
+        };
+
+        List<TExecPlanFragmentParams> requests = new ArrayList<>();
+        AtomicInteger deployCount = new AtomicInteger();
+        new MockUp<Deployer>() {
+            @Mock
+            public void deployFragments(DeployState deployState) {
+                for (List<FragmentInstanceExecState> execStates : deployState.getThreeStageExecutionsToDeploy()) {
+                    for (FragmentInstanceExecState execState : execStates) {
+                        requests.add(execState.getRequestToDeploy().deepCopy());
+                    }
+                }
+                // After the initial deployment, pretend the scan reached its limit.
+                if (deployCount.getAndIncrement() == 0) {
+                    limitReached.set(true);
+                }
+            }
+        };
+
+        String sql = "select * from hive0.file_split_db.file_split_tbl";
+        final DefaultCoordinator coordinator = startScheduling(sql);
+        Assertions.assertTrue(coordinator.getJobSpec().isIncrementalScanRanges());
+
+        // The fix must deliver a terminal sentinel (empty TScanRangeParams with has_more=false) after
+        // reachLimit. Before the fix no terminal sentinel was sent on the reachLimit path (the hang).
+        boolean sawTerminalSentinel = false;
+        for (TExecPlanFragmentParams r : requests) {
+            TPlanFragmentExecParams params = r.params;
+            if (params.getPer_node_scan_ranges() == null) {
+                continue;
+            }
+            for (List<TScanRangeParams> v : params.getPer_node_scan_ranges().values()) {
+                for (TScanRangeParams p : v) {
+                    if (p.isEmpty() && !p.has_more) {
+                        sawTerminalSentinel = true;
+                    }
+                }
+            }
+        }
+        Assertions.assertTrue(sawTerminalSentinel,
+                "expected a terminal has_more=false sentinel after the scan reached its limit");
     }
 }

@@ -122,6 +122,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -702,6 +703,11 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    // Fragments to which the terminal incremental scan-range sentinel (has_more=false) has already
+    // been delivered after their scans reached the limit. Ensures we flush that sentinel exactly
+    // once so parked scan operators can finish instead of hanging until query_timeout.
+    private final Set<PlanFragmentId> incrementalTerminalSentinelSentFragmentIds = ConcurrentHashMap.newKeySet();
+
     @Override
     public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
             throws StarRocksException {
@@ -721,13 +727,27 @@ public class DefaultCoordinator extends Coordinator {
             Set<PlanFragmentId> updatedPlanFragmentIds = new HashSet<>();
             for (PlanFragmentId fragmentId : planFragmentIds) {
                 boolean hasMoreScanRanges = false;
+                boolean reachedLimitWithPendingRanges = false;
                 ExecutionFragment fragment = executionDAG.getFragment(fragmentId);
                 for (ScanNode scanNode : fragment.getScanNodes()) {
                     if (scanNode.hasMoreScanRanges()) {
                         hasMoreScanRanges = true;
+                    } else if (scanNode.reachLimit()) {
+                        // The scan stopped generating ranges because its limit was reached while the
+                        // source still had undelivered ranges. The already-deployed scan operators may
+                        // be parked waiting for the terminal has_more=false sentinel; if we just stop
+                        // here they never observe it and the fragment hangs until query_timeout.
+                        reachedLimitWithPendingRanges = true;
                     }
                 }
                 if (hasMoreScanRanges) {
+                    coordinatorPreprocessor.assignIncrementalScanRangesToFragmentInstances(fragment);
+                    updatedPlanFragmentIds.add(fragmentId);
+                } else if (reachedLimitWithPendingRanges &&
+                        incrementalTerminalSentinelSentFragmentIds.add(fragmentId)) {
+                    // Flush the terminal sentinel exactly once. HdfsScanNode.getScanRangeLocations()
+                    // returns no real ranges once reachLimit is set, so this round only stamps
+                    // has_more=false (no extra metadata listing).
                     coordinatorPreprocessor.assignIncrementalScanRangesToFragmentInstances(fragment);
                     updatedPlanFragmentIds.add(fragmentId);
                 }

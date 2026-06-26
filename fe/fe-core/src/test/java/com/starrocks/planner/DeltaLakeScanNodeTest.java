@@ -27,6 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TScanRangeLocations;
 import io.delta.kernel.Snapshot;
 import mockit.Expectations;
 import mockit.Mock;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -206,5 +208,42 @@ public class DeltaLakeScanNodeTest {
         scanNode.toThrift(node);
         Assertions.assertNotNull(node.getConnector_scan_node());
         Assertions.assertEquals("deltalake", node.getConnector_scan_node().getCatalog_type());
+    }
+
+    // Once the scan reaches its limit, reachLimit() must report true (so the coordinator still flushes
+    // the terminal incremental scan-range sentinel) and getScanRangeLocations() must stop emitting
+    // ranges (so no extra file listing happens). Guards against silently dropping either override.
+    @Test
+    public void testReachLimitStopsScanRanges(@Mocked GlobalStateMgr globalStateMgr,
+                                              @Mocked CatalogConnector connector,
+                                              @Mocked DeltaLakeTable table,
+                                              @Mocked DeltaConnectorScanRangeSource mockSource) {
+        String catalog = "delta_cat";
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+            result = connector;
+            minTimes = 0;
+            connector.getMetadata().getCloudConfiguration();
+            result = cc;
+            minTimes = 0;
+            table.getCatalogName();
+            result = catalog;
+            minTimes = 0;
+            // If the reachLimit guard in getScanRangeLocations() were removed, the node would return
+            // this non-empty list instead of empty, failing the assertion below.
+            mockSource.getOutputs(20);
+            result = List.of(new TScanRangeLocations());
+            minTimes = 0;
+        }};
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+
+        scanNode.setReachLimit();
+
+        Assertions.assertTrue(scanNode.reachLimit());
+        Assertions.assertTrue(scanNode.getScanRangeLocations(20).isEmpty());
     }
 }
