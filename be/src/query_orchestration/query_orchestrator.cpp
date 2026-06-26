@@ -32,12 +32,12 @@
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
 #include "common/util/thrift_util.h"
-#include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Planner_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
+#include "query_orchestration/fragment_executor.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "types/logical_type.h"
@@ -197,7 +197,7 @@ Status QueryOrchestrator::exec_external_plan_fragment(const TScanOpenParams& par
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();
-    pipeline::FragmentExecutor fragment_executor;
+    FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, exec_fragment_params, exec_fragment_params);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);

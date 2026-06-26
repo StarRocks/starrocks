@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/query_orchestration")
 
 set(QUERY_ORCHESTRATION_FILES
+    fragment_executor.cpp
     query_orchestrator.cpp
 )
 
@@ -26,7 +27,9 @@ target_link_libraries(QueryOrchestration PUBLIC
     Runtime
     Exec
     ExecRuntime
+    ExecPrimitive
     ComputeEnv
+    ConnectorPrimitive
     RuntimeCore
     Common
     Base

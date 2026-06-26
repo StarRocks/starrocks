@@ -324,8 +324,8 @@ Reusable exec join hash table algorithms without join nodes, pipeline, storage, 
 ### QueryOrchestration (`queryorchestration`)
 Query orchestration layer below Service for query and fragment lifecycle entrypoints over concrete runtime and execution modules.
 - Targets: `QueryOrchestration`
-- Allowed internal include prefixes: `query_orchestration/`, `exec/`, `runtime/`, `compute_env/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
-- Allowed target deps: `Runtime`, `Exec`, `ExecRuntime`, `ComputeEnv`, `RuntimeCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
+- Allowed internal include prefixes: `query_orchestration/`, `connector/data_source_provider.h`, `exec/`, `runtime/`, `compute_env/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
+- Allowed target deps: `Runtime`, `Exec`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `ConnectorPrimitive`, `RuntimeCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
 - Core tests: `query_orchestration_test`
 - Remediation: Keep QueryOrchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime primitives to their owning modules.
 
