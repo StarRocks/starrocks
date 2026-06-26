@@ -132,4 +132,75 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
 
         return root;
     }
+<<<<<<< HEAD
+=======
+
+    // Numeric/date columns are the only ones whose dict codes form the contiguous [0, dictSize]
+    // range the aggregator's compressed-key path can use as group-by min/max bounds.
+    private static boolean isNumericOrDate(ColumnRefOperator column) {
+        return column.getType().isNumericType() || column.getType().isDate();
+    }
+
+    private static Map<Integer, ColumnDict> toGlobalDictMap(List<Pair<Integer, ColumnDict>> globalDicts) {
+        return globalDicts.stream().collect(Collectors.toMap(p -> p.first, p -> p.second));
+    }
+
+    // A numeric/date group-by key on this scan that no scan has supplied min/max for yet.
+    private static boolean isUncoveredGroupByKey(ColumnRefOperator column, ColumnRefSet groupByRefSets,
+            Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos) {
+        return groupByRefSets.contains(column.getId()) && isNumericOrDate(column)
+                && !infos.containsKey(column.getId());
+    }
+
+    // Emit (0, dictSize) min/max for every group-by key backed by a global dict on this scan — both
+    // the projection's DictMappingOperator form and bare scan columns. Shared by the OLAP and
+    // iceberg branches so their dict handling stays identical.
+    private static void collectDictGroupByMinMax(PhysicalScanOperator scan, ColumnRefSet groupByRefSets,
+            Map<Integer, ColumnDict> globalDicts, Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos) {
+        if (scan.getProjection() != null) {
+            for (var entry : scan.getProjection().getColumnRefMap().entrySet()) {
+                if (groupByRefSets.contains(entry.getKey())
+                        && entry.getValue() instanceof DictMappingOperator mappingOperator) {
+                    ColumnRefOperator column = mappingOperator.getDictColumn();
+                    if (isNumericOrDate(column) && globalDicts.containsKey(column.getId())) {
+                        // A dict-mapping expression maps each input code, including the dict's NULL
+                        // slot, to at most one output value, so the derived result dict can hold up
+                        // to base dict size + 1 codes (a value-adding expression such as
+                        // `case when x is null then '-' ...` grows it by one). Reserve that extra
+                        // code for the compressed group-by key range, otherwise it overflows the
+                        // packed key width and decode fails with "Dict can't take cover all key".
+                        infos.put(entry.getKey().getId(), dictMinMaxForMapping(globalDicts.get(column.getId())));
+                    }
+                }
+            }
+        }
+        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
+            if (groupByRefSets.contains(column.getId()) && isNumericOrDate(column)
+                    && globalDicts.containsKey(column.getId())) {
+                infos.put(column.getId(), dictMinMax(globalDicts.get(column.getId())));
+            }
+        }
+    }
+
+    private static Pair<ConstantOperator, ConstantOperator> dictMinMax(ColumnDict dict) {
+        return new Pair<>(ConstantOperator.createVarchar("0"),
+                ConstantOperator.createVarchar("" + dict.getDictSize()));
+    }
+
+    private static Pair<ConstantOperator, ConstantOperator> dictMinMaxForMapping(ColumnDict dict) {
+        return new Pair<>(ConstantOperator.createVarchar("0"),
+                ConstantOperator.createVarchar("" + (dict.getDictSize() + 1)));
+    }
+
+    private static void putStatsMgrMinMax(ColumnRefOperator column,
+            Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos, IMinMaxStatsMgr mgr,
+            ColumnIdentifier columnId, StatsVersion version) {
+        Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = mgr.getStats(columnId, version);
+        if (minMax.isEmpty()) {
+            return;
+        }
+        infos.put(column.getId(), new Pair<>(ConstantOperator.createVarchar(minMax.get().minValue()),
+                ConstantOperator.createVarchar(minMax.get().maxValue())));
+    }
+>>>>>>> a39539fb4b ([BugFix] Reserve dict size + 1 for NULL-absorbing dict-mapping groupby keys (#75357))
 }
