@@ -1238,6 +1238,21 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testNestedNullSensitiveDictKeepsIntermediate() throws Exception {
+        // A NULL-sensitive outer expression (IS NULL) over a derived dict (the inner CASE result)
+        // must keep the intermediate dict instead of being flattened through the child define.
+        // Flattening would drop the derived dict's synthetic NULL code and the query would fail at
+        // runtime with "Dict Decode failed, Dict can't take cover all key".
+        String sql = "select distinct case when subq.x is null then '-' else subq.x end as x "
+                + "from (select distinct case when S_ADDRESS = 'a' then 'A' else 'B' end as x "
+                + "from supplier_nullable) subq";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "if(<place-holder> = 'a', 'A', 'B')");
+        assertContains(plan, "if(<place-holder> IS NULL, '-', <place-holder>)");
+        assertNotContains(plan, "if(if(");
+    }
+
+    @Test
     public void testGroupByWithOrderBy() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         try {
