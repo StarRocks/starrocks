@@ -15,6 +15,8 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/orchestration")
 
 set(ORCHESTRATION_FILES
+    external_scan_context_mgr.cpp
+    external_scan_orchestrator.cpp
     fragment_executor.cpp
     orchestration_env.cpp
     query_orchestrator.cpp
@@ -33,6 +35,7 @@ target_link_libraries(Orchestration PUBLIC
     ExecPrimitive
     ComputeEnv
     ConnectorPrimitive
+    ColumnCore
     RuntimeCore
     Common
     Base

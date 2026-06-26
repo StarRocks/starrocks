@@ -58,7 +58,6 @@ class BrokerMgr;
 class ComputeEnv;
 class DataStreamMgr;
 class EvHttpServer;
-class ExternalScanContextMgr;
 class FragmentMgr;
 class BaseLoadPathMgr;
 class LoadPathMgr;
@@ -131,7 +130,6 @@ public:
     ~ExecEnv();
 
     std::string token() const;
-    ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
     DataStreamMgr* stream_mgr();
@@ -198,8 +196,6 @@ private:
     size_t _get_running_fragments_count() const;
 
     GlobalEnv* _global_env = nullptr;
-    // Leave protected so that subclasses can override
-    ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;

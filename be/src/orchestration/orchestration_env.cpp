@@ -17,6 +17,8 @@
 #include <memory>
 
 #include "common/logging.h"
+#include "orchestration/external_scan_context_mgr.h"
+#include "orchestration/external_scan_orchestrator.h"
 #include "orchestration/routine_load_task_executor.h"
 #include "orchestration/stream_load_orchestrator.h"
 
@@ -30,6 +32,10 @@ OrchestrationEnv::~OrchestrationEnv() {
 
 Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
     DCHECK(exec_env != nullptr);
+
+    _external_scan_context_mgr = std::make_unique<ExternalScanContextMgr>(exec_env, metrics);
+    _external_scan_orchestrator =
+            std::make_unique<ExternalScanOrchestrator>(exec_env, _external_scan_context_mgr.get());
 
     _stream_load_orchestrator = std::make_unique<StreamLoadOrchestrator>(exec_env);
 
@@ -51,6 +57,8 @@ void OrchestrationEnv::destroy() {
     stop();
     _routine_load_task_executor.reset();
     _stream_load_orchestrator.reset();
+    _external_scan_orchestrator.reset();
+    _external_scan_context_mgr.reset();
 }
 
 } // namespace starrocks::orchestration
