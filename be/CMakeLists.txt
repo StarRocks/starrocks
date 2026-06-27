@@ -876,7 +876,9 @@ endif()
 # Set libraries for test. TestUtil is UT-only and intentionally stays out of
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
-set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+set (TEST_LINK_LIBS
+    Orchestration
+    ${STARROCKS_LINK_LIBS}
     ConnectorBuiltinRegistry
     ConnectorBootstrap
     TestUtil

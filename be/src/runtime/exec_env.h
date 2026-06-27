@@ -58,7 +58,6 @@ class BrokerMgr;
 class ComputeEnv;
 class DataStreamMgr;
 class EvHttpServer;
-class FragmentMgr;
 class BaseLoadPathMgr;
 class LoadPathMgr;
 class LoadStreamMgr;
@@ -114,8 +113,6 @@ public:
     // ~VectorIndexCache itself handles the IVF-PQ self-cascade safely; see
     // the destructor for the FUTEX_WAIT_PRIVATE deadlock the cascade triggers.
     void destroy_vector_index_cache();
-    void wait_for_finish();
-
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
     /// we return the most recently created instance.
@@ -141,7 +138,6 @@ public:
     workgroup::ScanExecutor* connector_scan_executor();
     workgroup::WorkGroupManager* workgroup_manager();
 
-    FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr();
     BrokerMgr* broker_mgr() const;
     LoadStreamMgr* load_stream_mgr();
@@ -191,13 +187,10 @@ public:
 
 private:
     void _refresh_service_contexts();
-    void _wait_for_fragments_finish();
-    size_t _get_running_fragments_count() const;
 
     GlobalEnv* _global_env = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
-    FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<ComputeEnv> _compute_env;
 

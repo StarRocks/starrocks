@@ -41,10 +41,10 @@
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "orchestration/external_scan_orchestrator.h"
+#include "orchestration/fragment_mgr.h"
 #include "orchestration/orchestration_env.h"
 #include "orchestration/routine_load_task_executor.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 
 namespace starrocks {
 
@@ -63,13 +63,17 @@ Status BackendServiceBase::start_plan_fragment_execution(const TExecPlanFragment
     if (!exec_params.fragment.__isset.output_sink) {
         return Status::InternalError("missing sink in plan fragment");
     }
-    return _exec_env->fragment_mgr()->exec_plan_fragment(exec_params);
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+    return _orchestration_env->fragment_mgr()->exec_plan_fragment(exec_params);
 }
 
 void BackendServiceBase::cancel_plan_fragment(TCancelPlanFragmentResult& return_val,
                                               const TCancelPlanFragmentParams& params) {
     LOG(INFO) << "cancel_plan_fragment(): instance_id=" << params.fragment_instance_id;
-    _exec_env->fragment_mgr()->cancel(params.fragment_instance_id).set_t_status(&return_val);
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+    _orchestration_env->fragment_mgr()->cancel(params.fragment_instance_id).set_t_status(&return_val);
 }
 
 void BackendServiceBase::transmit_data(TTransmitDataResult& return_val, const TTransmitDataParams& params) {

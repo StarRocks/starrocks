@@ -38,7 +38,6 @@
 #include "orchestration/orchestration_env.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "service/daemon.h"
 #include "service/service.h"
@@ -355,7 +354,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     int exit_step = 1;
 
-    exec_env->wait_for_finish();
+    orchestration_env->wait_for_finish();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": wait exec engine tasks finish successfully";
 
     heartbeat_server->stop();
