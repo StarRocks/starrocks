@@ -34,6 +34,13 @@ TEST(GlobalEnvTest, GetInstanceReturnsStableSingleton) {
     ASSERT_EQ(GlobalEnv::GetInstance(), GlobalEnv::GetInstance());
 }
 
+TEST(GlobalEnvTest, OwnsHeartbeatFlags) {
+    auto* env = GlobalEnv::GetInstance();
+    auto* heartbeat_flags = env->heartbeat_flags();
+    ASSERT_NE(heartbeat_flags, nullptr);
+    ASSERT_EQ(heartbeat_flags, env->heartbeat_flags());
+}
+
 TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
     CpuInfo::init();
     runtime_env_test::set_small_thread_pool_configs();

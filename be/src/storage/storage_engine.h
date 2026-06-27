@@ -55,7 +55,6 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
-#include "runtime/heartbeat_flags.h"
 #include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"

@@ -26,13 +26,14 @@
 #include "common/system/mem_info.h"
 #include "platform/python/env.h"
 #include "runtime/current_thread.h"
+#include "runtime/heartbeat_flags.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "types/hll.h"
 
 namespace starrocks {
 
-GlobalEnv::GlobalEnv() = default;
+GlobalEnv::GlobalEnv() : _heartbeat_flags(std::make_unique<HeartbeatFlags>()) {}
 
 GlobalEnv::~GlobalEnv() {
     _is_init = false;
@@ -120,6 +121,7 @@ bool GlobalEnv::is_init() {
 }
 
 Status GlobalEnv::init(MetricRegistry* metrics) {
+    _heartbeat_flags->update(0);
     RETURN_IF_ERROR(_init_mem_tracker(metrics));
     RETURN_IF_ERROR(global_python_env_registry().init(config::python_envs));
     CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);

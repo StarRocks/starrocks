@@ -26,7 +26,6 @@ class BrpcStubCache;
 class DataStreamMgr;
 class DiagnoseDaemon;
 class BaseLoadPathMgr;
-class HeartbeatFlags;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class PriorityThreadPool;
@@ -146,7 +145,6 @@ struct RuntimeServices {
 
 struct AgentServices {
     AgentServer* agent_server = nullptr;
-    HeartbeatFlags* heartbeat_flags = nullptr;
 };
 
 struct QueryExecutionServices {

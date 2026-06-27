@@ -68,7 +68,6 @@
 #include "platform/store_path.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "runtime/memory/roaring_hook.h"
 #include "service/daemon.h"
