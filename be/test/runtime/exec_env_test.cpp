@@ -28,6 +28,7 @@
 #include "exec/pipeline/driver_queue_factory.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
+#include "runtime/runtime_filter_worker.h"
 #include "storage/storage_env.h"
 
 namespace starrocks {
@@ -46,6 +47,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+    EXPECT_EQ(env.runtime_services().runtime_filter_sender, nullptr);
+    EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle, nullptr);
 
     ComputeEnvOptions compute_env_options;
     compute_env_options.max_num_pipeline_drivers = 2;
@@ -113,6 +116,10 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().profile_report_worker, env.compute_env()->profile_report_worker());
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
+    EXPECT_EQ(env.runtime_services().runtime_filter_sender,
+              static_cast<RuntimeFilterSender*>(env._runtime_filter_worker));
+    EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle,
+              static_cast<RuntimeFilterQueryLifecycle*>(env._runtime_filter_worker));
 
     EXPECT_EQ(env.agent_services().agent_server, agent_server);
     EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);

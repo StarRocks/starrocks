@@ -24,9 +24,8 @@
 #include "exec/runtime_filter/runtime_filter_registry.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_filter_sender.h"
 #include "runtime/runtime_filter_serde.h"
-#include "runtime/runtime_filter_worker.h"
-#include "runtime/runtime_filter_worker_event.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/type_descriptor.h"
@@ -147,11 +146,11 @@ void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBui
                     std::min_element(rf_desc->broadcast_grf_senders().begin(), rf_desc->broadcast_grf_senders().end(),
                                      [](const auto& a, const auto& b) { return a.lo < b.lo; });
             if (passthrough_delivery || *sender_id == state->fragment_instance_id()) {
-                runtime_services(state).runtime_filter_worker->send_broadcast_runtime_filter(
+                runtime_services(state).runtime_filter_sender->send_broadcast_runtime_filter(
                         std::move(params), rf_desc->broadcast_grf_destinations(), timeout_ms, rpc_http_min_size);
             }
         } else {
-            runtime_services(state).runtime_filter_worker->send_part_runtime_filter(
+            runtime_services(state).runtime_filter_sender->send_part_runtime_filter(
                     std::move(params), rf_desc->merge_nodes(), timeout_ms, rpc_http_min_size, EventType::SEND_PART_RF);
         }
     }
@@ -198,7 +197,7 @@ void RuntimeFilterPort::publish_skew_broadcast_join_key_columns(RuntimeFilterBui
     RETURN_IF(!actual_size.status().ok(), (void)nullptr);
     rf_data->resize(actual_size.value());
     *(params.mutable_columntype()) = type_desc.to_protobuf();
-    runtime_services(state).runtime_filter_worker->send_part_runtime_filter(std::move(params), rf_desc->merge_nodes(),
+    runtime_services(state).runtime_filter_sender->send_part_runtime_filter(std::move(params), rf_desc->merge_nodes(),
                                                                             timeout_ms, rpc_http_min_size,
                                                                             EventType::SEND_SKEW_JOIN_BROADCAST_RF);
 }
