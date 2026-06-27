@@ -37,16 +37,15 @@
 #include <condition_variable>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/query_statistics.h"
-#include "runtime/runtime_state.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -54,8 +53,13 @@ class ExecNode;
 class RowDescriptor;
 class DataSink;
 class DataStreamMgr;
+class DescriptorTbl;
+class ObjectPool;
+class QueryStatistics;
 class RuntimeProfile;
 class RuntimeState;
+class StreamLoadContext;
+class TExecPlanFragmentParams;
 class TPlanFragment;
 class TPlanFragmentExecParams;
 class TPlanExecParams;
@@ -219,7 +223,7 @@ private:
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
 
-    ObjectPool* obj_pool() { return _runtime_state->obj_pool(); }
+    ObjectPool* obj_pool();
 
     // Invoked the report callback if there is a report callback and the current
     // status isn't CANCELLED. Sets 'done' to true in the callback invocation if
@@ -235,7 +239,7 @@ private:
 
     Status _get_next_internal_vectorized(ChunkPtr* chunk);
 
-    const DescriptorTbl& desc_tbl() { return _runtime_state->desc_tbl(); }
+    const DescriptorTbl& desc_tbl();
 
     void collect_query_statistics();
 };

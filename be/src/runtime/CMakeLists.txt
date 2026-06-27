@@ -85,7 +85,6 @@ set(RUNTIME_FILES
     lookup_stream_mgr.cpp
     exec_env.cpp
     jdbc_driver_manager.cpp
-    plan_fragment_executor.cpp
     pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
     stream_load/transaction_mgr.cpp
