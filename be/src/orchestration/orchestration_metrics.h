@@ -19,18 +19,20 @@
 #include <memory>
 
 #include "base/metrics.h"
-#include "runtime/runtime_filter_worker_event.h"
+#include "orchestration/runtime_filter_worker_event.h"
 
 namespace starrocks::orchestration {
 
 class OrchestrationMetrics {
 public:
     using RuntimeFilterMetricsProvider = std::function<const RuntimeFilterWorkerMetrics*()>;
+    using RuntimeFilterQueueSizeProvider = std::function<int64_t()>;
 
     OrchestrationMetrics() = default;
     ~OrchestrationMetrics();
 
-    void install(MetricRegistry* registry, RuntimeFilterMetricsProvider runtime_filter_metrics_provider);
+    void install(MetricRegistry* registry, RuntimeFilterMetricsProvider runtime_filter_metrics_provider,
+                 RuntimeFilterQueueSizeProvider runtime_filter_queue_size_provider);
     void update_runtime_filter_metrics();
 
 private:
@@ -41,6 +43,8 @@ private:
 
     MetricRegistry* _registry = nullptr;
     RuntimeFilterMetricsProvider _runtime_filter_metrics_provider;
+    RuntimeFilterQueueSizeProvider _runtime_filter_queue_size_provider;
+    METRIC_DEFINE_INT_GAUGE(runtime_filter_event_queue_len, MetricUnit::NOUNIT);
     std::array<std::unique_ptr<RuntimeFilterEventMetrics>, EventType::MAX_COUNT> _runtime_filter_event_metrics;
 };
 

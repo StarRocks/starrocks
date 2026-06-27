@@ -21,9 +21,9 @@
 #include "orchestration/external_scan_orchestrator.h"
 #include "orchestration/orchestration_metrics.h"
 #include "orchestration/routine_load_task_executor.h"
+#include "orchestration/runtime_filter_worker.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_filter_worker.h"
 
 namespace starrocks::orchestration {
 
@@ -35,12 +35,17 @@ OrchestrationEnv::~OrchestrationEnv() {
 
 Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
     DCHECK(exec_env != nullptr);
+    _exec_env = exec_env;
+
+    _runtime_filter_worker = std::make_unique<RuntimeFilterWorker>(
+            &exec_env->runtime_services(), &exec_env->rpc_services(), exec_env->query_pool_mem_tracker());
+    _runtime_filter_worker_started = true;
+    exec_env->set_runtime_filter_services(_runtime_filter_worker.get(), _runtime_filter_worker.get());
 
     _metrics = std::make_unique<OrchestrationMetrics>();
-    _metrics->install(metrics, [exec_env] {
-        auto* runtime_filter_worker = exec_env->runtime_filter_worker();
-        return runtime_filter_worker == nullptr ? nullptr : runtime_filter_worker->metrics();
-    });
+    _metrics->install(
+            metrics, [this] { return _runtime_filter_worker == nullptr ? nullptr : _runtime_filter_worker->metrics(); },
+            [this] { return _runtime_filter_worker == nullptr ? 0 : _runtime_filter_worker->queue_size(); });
 
     _external_scan_context_mgr = std::make_unique<ExternalScanContextMgr>(exec_env, metrics);
     _external_scan_orchestrator =
@@ -56,6 +61,10 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
 }
 
 void OrchestrationEnv::stop() {
+    if (_runtime_filter_worker != nullptr && _runtime_filter_worker_started) {
+        _runtime_filter_worker->close();
+        _runtime_filter_worker_started = false;
+    }
     if (_routine_load_task_executor != nullptr && _routine_load_task_executor_started) {
         _routine_load_task_executor->stop();
         _routine_load_task_executor_started = false;
@@ -64,7 +73,12 @@ void OrchestrationEnv::stop() {
 
 void OrchestrationEnv::destroy() {
     stop();
+    if (_exec_env != nullptr) {
+        _exec_env->set_runtime_filter_services(nullptr, nullptr);
+        _exec_env = nullptr;
+    }
     _metrics.reset();
+    _runtime_filter_worker.reset();
     _routine_load_task_executor.reset();
     _stream_load_orchestrator.reset();
     _external_scan_orchestrator.reset();

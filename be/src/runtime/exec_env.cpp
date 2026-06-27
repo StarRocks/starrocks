@@ -77,7 +77,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/pipeline_fragment_reporter.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
@@ -160,8 +159,8 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.batch_write_mgr = _batch_write_mgr;
     _runtime_services.stream_load_executor = _stream_load_executor;
     _runtime_services.small_file_mgr = _small_file_mgr;
-    _runtime_services.runtime_filter_sender = _runtime_filter_worker;
-    _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_worker;
+    _runtime_services.runtime_filter_sender = _runtime_filter_sender;
+    _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_query_lifecycle;
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
     _runtime_services.profile_report_worker = profile_report_worker();
     _runtime_services.query_context_mgr = _query_context_mgr;
@@ -190,6 +189,12 @@ void ExecEnv::_refresh_service_contexts() {
 
 void ExecEnv::set_agent_server(AgentServer* agent_server) {
     _agent_server = agent_server;
+    _refresh_service_contexts();
+}
+
+void ExecEnv::set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFilterQueryLifecycle* query_lifecycle) {
+    _runtime_filter_sender = sender;
+    _runtime_filter_query_lifecycle = query_lifecycle;
     _refresh_service_contexts();
 }
 
@@ -264,7 +269,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
     _small_file_mgr = new SmallFileMgr(config::small_file_dir, process_metrics);
-    _runtime_filter_worker = new RuntimeFilterWorker(&_runtime_services, &_rpc_services);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     ProfileReportWorkerOptions profile_report_worker_options;
@@ -279,11 +283,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
                 return report_pipeline_fragments(_query_context_mgr, pipeline_need_report_query_fragment_ids);
             };
     RETURN_IF_ERROR(_compute_env->init_profile_report_worker(std::move(profile_report_worker_options)));
-    RuntimeMetrics::instance()->register_runtime_filter_event_queue_len_hook([] {
-        auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
-        return (pool == nullptr) ? 0U : pool->queue_size();
-    });
-
     RETURN_IF_ERROR(_compute_env->start_result_mgr());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
@@ -469,12 +468,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("lake_partial_update_thread_pool", MonotonicMillis() - start);
     }
 
-    if (_runtime_filter_worker) {
-        start = MonotonicMillis();
-        _runtime_filter_worker->close();
-        component_times.emplace_back("runtime_filter_worker", MonotonicMillis() - start);
-    }
-
     if (profile_report_worker()) {
         start = MonotonicMillis();
         _compute_env->stop_profile_report_worker();
@@ -568,7 +561,6 @@ void ExecEnv::stop() {
 }
 
 void ExecEnv::destroy() {
-    SAFE_DELETE(_runtime_filter_worker);
     if (_compute_env != nullptr) {
         _compute_env->destroy_profile_report_worker();
     }

@@ -76,7 +76,6 @@ class ResultQueueMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class SmallFileMgr;
-class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 
@@ -164,7 +163,7 @@ public:
 
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
-    RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
+    void set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFilterQueryLifecycle* query_lifecycle);
     MemTracker* query_pool_mem_tracker() { return _global_env->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
@@ -213,7 +212,8 @@ private:
 
     connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 
-    RuntimeFilterWorker* _runtime_filter_worker = nullptr;
+    RuntimeFilterSender* _runtime_filter_sender = nullptr;
+    RuntimeFilterQueryLifecycle* _runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
     AgentServer* _agent_server = nullptr;

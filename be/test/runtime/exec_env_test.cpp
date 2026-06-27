@@ -28,10 +28,25 @@
 #include "exec/pipeline/driver_queue_factory.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
+#include "runtime/runtime_filter_sender.h"
 #include "storage/storage_env.h"
 
 namespace starrocks {
+
+namespace {
+
+class FakeRuntimeFilterServices : public RuntimeFilterSender, public RuntimeFilterQueryLifecycle {
+public:
+    void open_query(const TUniqueId&, const TQueryOptions&, const TRuntimeFilterParams&, bool) override {}
+    void close_query(const TUniqueId&) override {}
+    void send_part_runtime_filter(PTransmitRuntimeFilterParams&&, const std::vector<TNetworkAddress>&, int, int64_t,
+                                  EventType) override {}
+    void send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&&, const std::vector<TRuntimeFilterDestination>&,
+                                       int, int64_t) override {}
+};
+
+} // namespace
 
 TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ExecEnv env;
@@ -77,7 +92,9 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
     env._heartbeat_flags = reinterpret_cast<HeartbeatFlags*>(0xb);
     auto* agent_server = reinterpret_cast<AgentServer*>(0xa);
+    FakeRuntimeFilterServices runtime_filter_services;
 
+    env.set_runtime_filter_services(&runtime_filter_services, &runtime_filter_services);
     env.set_agent_server(agent_server);
 
     EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
@@ -117,9 +134,9 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
     EXPECT_EQ(env.runtime_services().runtime_filter_sender,
-              static_cast<RuntimeFilterSender*>(env._runtime_filter_worker));
+              static_cast<RuntimeFilterSender*>(&runtime_filter_services));
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle,
-              static_cast<RuntimeFilterQueryLifecycle*>(env._runtime_filter_worker));
+              static_cast<RuntimeFilterQueryLifecycle*>(&runtime_filter_services));
 
     EXPECT_EQ(env.agent_services().agent_server, agent_server);
     EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);

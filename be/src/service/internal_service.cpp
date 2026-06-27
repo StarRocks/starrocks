@@ -83,6 +83,7 @@
 #include "orchestration/fragment_executor.h"
 #include "orchestration/orchestration_env.h"
 #include "orchestration/routine_load_task_executor.h"
+#include "orchestration/runtime_filter_worker.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
@@ -90,7 +91,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "runtime/runtime_filter_worker.h"
 #include "runtime/time_guard.h"
 #include "service/service_metrics.h"
 #include "storage/storage_engine.h"
@@ -279,7 +279,11 @@ void PInternalServiceImplBase<T>::_transmit_runtime_filter(google::protobuf::Rpc
               << " query_id = " << print_id(request->query_id()) << ", is_partial = " << request->is_partial()
               << ", filter_id = " << request->filter_id() << ", is_pipeline = " << request->is_pipeline();
     ClosureGuard closure_guard(done);
-    _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
+    if (_orchestration_env == nullptr || _orchestration_env->runtime_filter_worker() == nullptr) {
+        Status::InternalError("runtime filter worker is not initialized").to_protobuf(response->mutable_status());
+        return;
+    }
+    _orchestration_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;
     st.to_protobuf(response->mutable_status());
 }
