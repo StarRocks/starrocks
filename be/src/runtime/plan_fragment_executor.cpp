@@ -60,7 +60,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
 
 namespace starrocks {
 
@@ -133,8 +133,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
         _is_runtime_filter_merge_node = true;
         runtime_services(_query_execution_services)
-                .runtime_filter_worker->open_query(_query_id, request.query_options, params.runtime_filter_params,
-                                                   false);
+                .runtime_filter_query_lifecycle->open_query(_query_id, request.query_options,
+                                                            params.runtime_filter_params, false);
     }
     runtime_services(_query_execution_services).stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
 
@@ -417,7 +417,7 @@ void PlanFragmentExecutor::cancel() {
             _runtime_state->fragment_instance_id());
 
     if (_is_runtime_filter_merge_node) {
-        _runtime_state->query_execution_services()->runtime->runtime_filter_worker->close_query(_query_id);
+        _runtime_state->query_execution_services()->runtime->runtime_filter_query_lifecycle->close_query(_query_id);
     }
 }
 
@@ -451,7 +451,7 @@ void PlanFragmentExecutor::close() {
     _chunk.reset();
 
     if (_is_runtime_filter_merge_node) {
-        runtime_services(_query_execution_services).runtime_filter_worker->close_query(_query_id);
+        runtime_services(_query_execution_services).runtime_filter_query_lifecycle->close_query(_query_id);
     }
     runtime_services(_query_execution_services).stream_mgr->destroy_pass_through_chunk_buffer(_query_id);
 
