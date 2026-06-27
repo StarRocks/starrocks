@@ -43,12 +43,6 @@ void OrchestrationMetrics::install(MetricRegistry* registry,
         DCHECK_EQ(_registry, registry);
         return;
     }
-    if (!registry->register_hook(kRuntimeFilterMetricsHookName, [this] { update_runtime_filter_metrics(); })) {
-        LOG(WARNING) << "failed to register orchestration runtime filter metrics hook";
-        return;
-    }
-
-    _registry = registry;
     _runtime_filter_metrics_provider = std::move(runtime_filter_metrics_provider);
     for (int i = 0; i < EventType::MAX_COUNT; i++) {
         auto event_metrics = std::make_unique<RuntimeFilterEventMetrics>();
@@ -60,6 +54,11 @@ void OrchestrationMetrics::install(MetricRegistry* registry,
                                   &event_metrics->runtime_filter_bytes_in_queue);
         _runtime_filter_event_metrics[i] = std::move(event_metrics);
     }
+    if (!registry->register_hook(kRuntimeFilterMetricsHookName, [this] { update_runtime_filter_metrics(); })) {
+        LOG(WARNING) << "failed to register orchestration runtime filter metrics hook";
+        return;
+    }
+    _registry = registry;
 }
 
 void OrchestrationMetrics::update_runtime_filter_metrics() {
