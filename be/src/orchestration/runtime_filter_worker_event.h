@@ -25,7 +25,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_filter_event_type.h"
 
-namespace starrocks {
+namespace starrocks::orchestration {
 
 // RuntimeFilterWorker works in a separated thread, and does following jobs:
 // 1. deserialize runtime filters.
@@ -73,4 +73,4 @@ struct RuntimeFilterWorkerMetrics {
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> runtime_filter_bytes{};
 };
 
-} // namespace starrocks
+} // namespace starrocks::orchestration

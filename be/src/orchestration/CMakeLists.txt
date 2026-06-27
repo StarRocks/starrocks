@@ -22,6 +22,8 @@ set(ORCHESTRATION_FILES
     orchestration_env.cpp
     query_orchestrator.cpp
     routine_load_task_executor.cpp
+    runtime_filter_delivery.cpp
+    runtime_filter_worker.cpp
     stream_load_orchestrator.cpp
 )
 
