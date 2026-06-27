@@ -89,7 +89,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     };
     ASSERT_OK(env.compute_env()->init_profile_report_worker(std::move(profile_report_worker_options)));
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
-    env._heartbeat_flags = reinterpret_cast<HeartbeatFlags*>(0xb);
     auto* agent_server = reinterpret_cast<AgentServer*>(0xa);
     FakeRuntimeFilterServices runtime_filter_services;
 
@@ -137,7 +136,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
               static_cast<RuntimeFilterQueryLifecycle*>(&runtime_filter_services));
 
     EXPECT_EQ(env.agent_services().agent_server, agent_server);
-    EXPECT_EQ(env.agent_services().heartbeat_flags, env._heartbeat_flags);
 
     EXPECT_EQ(env.query_execution_services().execution, &env.execution_services());
     EXPECT_EQ(env.query_execution_services().rpc, &env.rpc_services());

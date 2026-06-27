@@ -1,5 +1,4 @@
 # Production files that still call ExecEnv::GetInstance() directly.
-src/agent/heartbeat_server.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
 src/orchestration/fragment_executor.cpp

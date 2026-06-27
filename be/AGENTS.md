@@ -240,7 +240,7 @@ Shared compute-side BE environment boundary for process-scoped compute resources
 FE-agent task orchestration, heartbeat handling, agent metrics, and agent worker helpers below Service.
 - Targets: `AgentServer`
 - Allowed internal include prefixes: `agent/`, `data_workflows/`, `cache/`, `compute_env/workgroup/`, `exec/pipeline/query_context.h`, `exec/runtime/query_context_manager.h`, `fs/`, `io/`, `runtime/`, `storage/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Runtime`, `DataWorkflows`, `Storage`, `Cache`, `ComputeEnv`, `ExecRuntime`, `StoragePrimitive`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `Runtime`, `RuntimeEnv`, `DataWorkflows`, `Storage`, `Cache`, `ComputeEnv`, `ExecRuntime`, `StoragePrimitive`, `RuntimeCore`, `Platform`, `FSCore`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep AgentServer as FE-agent task and heartbeat orchestration below Service; move service/bootstrap integration upward.
 
 ### DataWorkflows (`dataworkflows`)
