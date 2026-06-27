@@ -46,7 +46,6 @@
 #include "runtime/closure_guard.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/runtime_filter_worker.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 

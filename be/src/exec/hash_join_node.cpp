@@ -49,7 +49,6 @@
 #include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
-#include "runtime/runtime_filter_worker.h"
 
 namespace starrocks {
 
