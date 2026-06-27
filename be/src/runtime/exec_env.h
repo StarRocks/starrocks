@@ -54,7 +54,6 @@
 namespace starrocks {
 struct StorePath;
 class AgentServer;
-class BrokerMgr;
 class ComputeEnv;
 class DataStreamMgr;
 class EvHttpServer;
@@ -135,7 +134,6 @@ public:
     workgroup::WorkGroupManager* workgroup_manager();
 
     BaseLoadPathMgr* load_path_mgr();
-    BrokerMgr* broker_mgr() const;
     LoadStreamMgr* load_stream_mgr();
     StreamContextMgr* stream_context_mgr();
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }

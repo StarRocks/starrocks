@@ -63,7 +63,6 @@
 #include "exec/runtime/query_context_manager.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
-#include "platform/broker_mgr.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
@@ -314,10 +313,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 #endif
 
     return Status::OK();
-}
-
-BrokerMgr* ExecEnv::broker_mgr() const {
-    return PlatformEnv::GetInstance()->broker_mgr();
 }
 
 DataStreamMgr* ExecEnv::stream_mgr() {
