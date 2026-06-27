@@ -85,6 +85,19 @@ public final class ConnectorNdvEstimator {
                                   double minDouble, double maxDouble,
                                   long colSizeBytes, long colSizeRcnt,
                                   long rowCount) {
+        return estimate(category, minDouble, maxDouble, colSizeBytes, colSizeRcnt, rowCount, 0);
+    }
+
+    /**
+     * Variant that accepts an explicit {@code typeWidthBytesHint} to override the category-based
+     * default in {@link #minBytesPerDistinctValue}.  Pass the actual physical column width (e.g.
+     * 8 for BIGINT/DOUBLE) when the caller has that information; pass {@code 0} to use the
+     * category default.
+     */
+    public static double estimate(TypeCategory category,
+                                  double minDouble, double maxDouble,
+                                  long colSizeBytes, long colSizeRcnt,
+                                  long rowCount, int typeWidthBytesHint) {
         if (rowCount <= 0) {
             return 1.0;
         }
@@ -95,13 +108,13 @@ public final class ConnectorNdvEstimator {
             // Guard against overflow for very wide BIGINT ranges
             long range = (diff >= (double) Long.MAX_VALUE) ? Long.MAX_VALUE : Math.max(0L, (long) diff) + 1;
             double rangeNdv = Math.min(rowCount, range);
-            double sizeNdv = sizeNdv(category, colSizeBytes, colSizeRcnt, rowCount);
+            double sizeNdv = sizeNdv(category, colSizeBytes, colSizeRcnt, rowCount, typeWidthBytesHint);
             // Take min with size-based to stay conservative when range >> actual NDV
             return Math.max(1.0, Double.isNaN(sizeNdv) ? rangeNdv : Math.min(rangeNdv, sizeNdv));
         }
 
         // Tier 2: size-based
-        double sizeNdv = sizeNdv(category, colSizeBytes, colSizeRcnt, rowCount);
+        double sizeNdv = sizeNdv(category, colSizeBytes, colSizeRcnt, rowCount, typeWidthBytesHint);
         if (!Double.isNaN(sizeNdv)) {
             return sizeNdv;
         }
@@ -143,10 +156,16 @@ public final class ConnectorNdvEstimator {
      * @return estimated NDV, or {@link Double#NaN} if size data is unavailable
      */
     static double sizeNdv(TypeCategory category, long colSizeBytes, long colSizeRcnt, long rowCount) {
+        return sizeNdv(category, colSizeBytes, colSizeRcnt, rowCount, 0);
+    }
+
+    static double sizeNdv(TypeCategory category, long colSizeBytes, long colSizeRcnt, long rowCount,
+                          int typeWidthBytesHint) {
         if (colSizeBytes < 0 || colSizeRcnt <= 0) {
             return Double.NaN;
         }
-        double ndv = (double) colSizeBytes / minBytesPerDistinctValue(category);
+        int bytesPerValue = typeWidthBytesHint > 0 ? typeWidthBytesHint : minBytesPerDistinctValue(category);
+        double ndv = (double) colSizeBytes / bytesPerValue;
         // Extrapolate to the full table when size metrics cover only a subset of rows
         if (colSizeRcnt < rowCount) {
             ndv = ndv * rowCount / colSizeRcnt;

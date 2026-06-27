@@ -346,9 +346,33 @@ public class IcebergStatisticProvider {
                 ? columnSizes.get(fieldId) : -1L;
         long colSizeRcnt = icebergStats.getColumnSizeRecordCount(fieldId);
 
+        int typeWidthHint = icebergTypeWidthBytes(fieldId, icebergStats);
         return ConnectorNdvEstimator.estimate(
                 category, minDouble, maxDouble, colSizeBytes, colSizeRcnt,
-                icebergStats.getRecordCount());
+                icebergStats.getRecordCount(), typeWidthHint);
+    }
+
+    /**
+     * Returns the physical storage width (bytes) of an Iceberg primitive type for use as a
+     * Tier-2 size-NDV hint.  Preserves the 4-byte vs 8-byte distinction that was in the
+     * original per-type estimator before the shared-utility refactor.
+     */
+    private static int icebergTypeWidthBytes(Integer fieldId, IcebergFileStats icebergStats) {
+        Map<Integer, Type.PrimitiveType> typeMapping = icebergStats.getIdToTypeMapping();
+        if (typeMapping == null) {
+            return 0;
+        }
+        Type.PrimitiveType type = typeMapping.get(fieldId);
+        if (type instanceof Types.BooleanType) {
+            return 1;
+        } else if (type instanceof Types.LongType || type instanceof Types.DoubleType
+                || type instanceof Types.TimestampType || type instanceof Types.TimeType) {
+            return 8;
+        } else if (type instanceof Types.IntegerType || type instanceof Types.FloatType
+                || type instanceof Types.DateType) {
+            return 4;
+        }
+        return 0; // STRING/BINARY/other: let the category default (4) apply
     }
 
     private static ConnectorNdvEstimator.TypeCategory toTypeCategory(Integer fieldId, IcebergFileStats icebergStats) {
