@@ -26,6 +26,7 @@
 #include "runtime/runtime_filter_delivery.h"
 #include "runtime/runtime_filter_merger.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
+#include "runtime/runtime_filter_sender.h"
 #include "runtime/runtime_filter_worker_event.h"
 
 namespace starrocks {
@@ -33,7 +34,7 @@ namespace starrocks {
 struct RuntimeServices;
 struct RpcServices;
 
-class RuntimeFilterWorker : public RuntimeFilterQueryLifecycle {
+class RuntimeFilterWorker : public RuntimeFilterQueryLifecycle, public RuntimeFilterSender {
 public:
     RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services);
     ~RuntimeFilterWorker();
@@ -46,10 +47,10 @@ public:
     void execute();
     void send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                   const std::vector<starrocks::TNetworkAddress>& addrs, int timeout_ms,
-                                  int64_t rpc_http_min_size, EventType type);
+                                  int64_t rpc_http_min_size, EventType type) override;
     void send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                        const std::vector<TRuntimeFilterDestination>& destinations, int timeout_ms,
-                                       int64_t rpc_http_min_size);
+                                       int64_t rpc_http_min_size) override;
 
     size_t queue_size() const;
     const RuntimeFilterWorkerMetrics* metrics() const { return _metrics; }

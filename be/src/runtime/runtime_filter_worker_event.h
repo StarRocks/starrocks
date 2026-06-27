@@ -17,51 +17,15 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <string>
 #include <type_traits>
 #include <vector>
 
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/runtime_filter_event_type.h"
 
 namespace starrocks {
-
-enum EventType {
-    RECEIVE_TOTAL_RF = 0,
-    CLOSE_QUERY = 1,
-    OPEN_QUERY = 2,
-    RECEIVE_PART_RF = 3,
-    SEND_PART_RF = 4,
-    SEND_BROADCAST_GRF = 5,
-    SEND_SKEW_JOIN_BROADCAST_RF = 6,
-    RECEIVE_SKEW_JOIN_BROADCAST_RF = 7,
-    MAX_COUNT
-};
-
-inline std::string EventTypeToString(EventType type) {
-    switch (type) {
-    case RECEIVE_TOTAL_RF:
-        return "RECEIVE_TOTAL_RF";
-    case CLOSE_QUERY:
-        return "CLOSE_QUERY";
-    case OPEN_QUERY:
-        return "OPEN_QUERY";
-    case RECEIVE_PART_RF:
-        return "RECEIVE_PART_RF";
-    case SEND_SKEW_JOIN_BROADCAST_RF:
-        return "SEND_SKEW_JOIN_BROADCAST_RF";
-    case SEND_PART_RF:
-        return "SEND_PART_RF";
-    case SEND_BROADCAST_GRF:
-        return "SEND_BROADCAST_GRF";
-    case RECEIVE_SKEW_JOIN_BROADCAST_RF:
-        return "RECEIVE_SKEW_JOIN_BROADCAST_RF";
-    default:
-        break;
-    }
-    __builtin_unreachable();
-}
 
 // RuntimeFilterWorker works in a separated thread, and does following jobs:
 // 1. deserialize runtime filters.
