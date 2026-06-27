@@ -16,9 +16,17 @@
 
 #include <gtest/gtest.h>
 
+#ifdef WITH_TENANN
+#include "tenann/index/index_cache.h"
+#endif
+
 #include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "base/utility/defer_op.h"
+#include "common/config_vector_index_fwd.h"
 #include "platform/store_path.h"
 #include "runtime/mem_tracker.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/tablet_manager.h"
 
 namespace starrocks {
@@ -34,6 +42,7 @@ TEST(StorageEnvTest, disabled_init_leaves_lake_resources_null) {
     EXPECT_EQ(env.lake_tablet_manager(), nullptr);
     EXPECT_EQ(env.lake_replication_txn_manager(), nullptr);
     EXPECT_EQ(env.parallel_compact_mgr(), nullptr);
+    EXPECT_EQ(env.vector_index_cache(), nullptr);
 
     env.stop();
     env.stop_lake_tablet_manager();
@@ -88,5 +97,35 @@ TEST(StorageEnvTest, fixed_provider_requires_store_path) {
     auto status = env.init(options);
     EXPECT_TRUE(status.is_invalid_argument()) << status;
 }
+
+#ifdef WITH_TENANN
+TEST(StorageEnvTest, vector_index_cache_init_installs_and_destroy_clears_global) {
+    auto* saved_cache = tenann::GetGlobalIndexCache();
+    DeferOp restore_global([&] { tenann::SetGlobalIndexCache(saved_cache); });
+    tenann::SetGlobalIndexCache(nullptr);
+
+    MemTracker vector_index_mem_tracker(-1, "storage_env_vector_index_test");
+    StorageEnv env;
+    SCOPED_UPDATE(std::string, config::vector_query_cache_capacity, "1024");
+
+    ASSERT_OK(env.init_vector_index_cache(1024 * 1024, &vector_index_mem_tracker));
+    ASSERT_NE(env.vector_index_cache(), nullptr);
+    EXPECT_EQ(env.vector_index_cache()->capacity(), 1024u);
+    EXPECT_EQ(tenann::GetGlobalIndexCache(), env.vector_index_cache());
+
+    ASSERT_OK(env.init_vector_index_cache(1024 * 1024, &vector_index_mem_tracker));
+    EXPECT_EQ(env.vector_index_cache()->capacity(), 1024u);
+
+    env.destroy_vector_index_cache();
+    EXPECT_EQ(env.vector_index_cache(), nullptr);
+    EXPECT_EQ(tenann::GetGlobalIndexCache(), nullptr);
+}
+
+TEST(StorageEnvTest, vector_index_cache_init_requires_tracker) {
+    StorageEnv env;
+    auto status = env.init_vector_index_cache(1024 * 1024, nullptr);
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+}
+#endif
 
 } // namespace starrocks

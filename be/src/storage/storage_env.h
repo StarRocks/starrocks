@@ -24,6 +24,7 @@ namespace starrocks {
 
 class MemTracker;
 class StorePathRegistry;
+class VectorIndexCache;
 
 namespace lake {
 class LakePersistentIndexParallelCompactMgr;
@@ -47,6 +48,8 @@ struct StorageEnvOptions {
     LakeLocationProviderMode lake_location_provider_mode = LakeLocationProviderMode::kDisabled;
     const StorePathRegistry* store_path_registry = nullptr;
     MemTracker* update_mem_tracker = nullptr;
+    int64_t process_mem_limit = 0;
+    MemTracker* vector_index_mem_tracker = nullptr;
     int64_t lake_metadata_cache_limit = 0;
 };
 
@@ -63,10 +66,15 @@ public:
     StorageEnv& operator=(const StorageEnv&) = delete;
 
     Status init(const StorageEnvOptions& options);
+    Status init_vector_index_cache(int64_t process_mem_limit, MemTracker* vector_index_mem_tracker);
     void stop();
     void stop_lake_tablet_manager();
+    // Keep this explicit: the cache must be destroyed after vector index users
+    // are drained and before GlobalEnv::stop() releases the mem tracker tree.
+    void destroy_vector_index_cache();
     void destroy();
 
+    VectorIndexCache* vector_index_cache() const { return _vector_index_cache.get(); }
     std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager.get(); }
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager.get(); }
@@ -82,6 +90,7 @@ private:
     std::unique_ptr<lake::ReplicationTxnManager> _lake_replication_txn_manager;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
     spill::DirManager* _spill_dir_mgr = nullptr;
+    std::unique_ptr<VectorIndexCache> _vector_index_cache;
 };
 
 } // namespace starrocks
