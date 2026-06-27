@@ -97,7 +97,7 @@ public class HiveStatisticsProvider {
         if (avgRowNumPerPartition <= 0) {
             double estimatedRows = getEstimatedRowCount(table, partitionKeys);
             builder.setOutputRowCount(estimatedRows);
-            addTypeNdvColumnStats(builder, columns, table, estimatedRows);
+            addFallbackColumnStats(builder, columns, table, partitionKeys, partitionStatistics, estimatedRows);
             return builder.build();
         }
 
@@ -127,7 +127,7 @@ public class HiveStatisticsProvider {
         if (rowNum == -1) {
             double estimatedRows = getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey()));
             builder.setOutputRowCount(estimatedRows);
-            addTypeNdvColumnStats(builder, columns, table, estimatedRows);
+            addFallbackColumnStats(builder, columns, table, Lists.newArrayList(), Collections.emptyMap(), estimatedRows);
             return builder.build();
         } else {
             builder.setOutputRowCount(rowNum);
@@ -187,7 +187,7 @@ public class HiveStatisticsProvider {
         } finally {
             builder.setOutputRowCount(totalRowNums);
         }
-        addTypeNdvColumnStats(builder, columns, table, totalRowNums);
+        addFallbackColumnStats(builder, columns, table, partitionKeys, Collections.emptyMap(), totalRowNums);
 
         return builder.build();
     }
@@ -481,15 +481,30 @@ public class HiveStatisticsProvider {
                 .build();
     }
 
-    private static void addTypeNdvColumnStats(Statistics.Builder builder,
-                                              List<ColumnRefOperator> columns,
-                                              Table table, double rowCount) {
+    /**
+     * Populates column statistics when HMS row counts are unavailable (fallback path).
+     * Partition columns receive exact NDV derived from the known partition-key list;
+     * data columns receive a type-fraction NDV estimate.
+     */
+    private void addFallbackColumnStats(Statistics.Builder builder,
+                                        List<ColumnRefOperator> columns,
+                                        Table table,
+                                        List<PartitionKey> partitionKeys,
+                                        Map<String, HivePartitionStats> partitionStats,
+                                        double rowCount) {
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+        double avgPerPartition = partitionColumnNames.isEmpty() || partitionKeys.isEmpty()
+                ? 0 : rowCount / partitionKeys.size();
         for (ColumnRefOperator col : columns) {
             Column column = table.getColumn(col.getName());
-            if (column != null) {
-                builder.addColumnStatistic(col, typeNdvStatistic(column, rowCount));
-            } else {
+            if (column == null) {
                 builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            } else if (!partitionColumnNames.isEmpty() && partitionColumnNames.contains(col.getName())) {
+                builder.addColumnStatistic(col, createPartitionColumnStatistics(
+                        column, partitionKeys, partitionStats, partitionColumnNames,
+                        avgPerPartition, rowCount));
+            } else {
+                builder.addColumnStatistic(col, typeNdvStatistic(column, rowCount));
             }
         }
     }

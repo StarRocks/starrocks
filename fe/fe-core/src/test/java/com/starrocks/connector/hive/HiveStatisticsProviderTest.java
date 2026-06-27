@@ -121,9 +121,11 @@ public class HiveStatisticsProviderTest {
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
         Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
-        // No partition stats → early-return with type-NDV estimates; rowCount=1, INT fraction → NDV=1
+        // No HMS partition row stats → early-return path.
+        // Partition column: NDV = exact count of distinct partition values (2: "1" and "2").
+        // Data column: type-fraction NDV, rowCount=1 → max(1.0, 1*0.3) = 1.0.
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertEquals(1.0,
+        Assertions.assertEquals(2.0,
                 statistics.getColumnStatistics().get(partColumnRefOperator).getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(1.0,
                 statistics.getColumnStatistics().get(dataColumnRefOperator).getDistinctValuesCount(), 0.001);
@@ -188,8 +190,9 @@ public class HiveStatisticsProviderTest {
         ColumnStatistic dataColStat = statistics.getColumnStatistics().get(dataColumnRefOperator);
         Assertions.assertFalse(partColStat.isUnknown());
         Assertions.assertFalse(dataColStat.isUnknown());
-        // INT type fraction = 0.3, rowCount=100 → NDV = 30
-        Assertions.assertEquals(30, partColStat.getDistinctValuesCount(), 0.001);
+        // Partition column: exact NDV from 2 distinct partition values ("1", "2")
+        Assertions.assertEquals(2, partColStat.getDistinctValuesCount(), 0.001);
+        // Data column: INT type fraction = 0.3, rowCount=100 → NDV = 30
         Assertions.assertEquals(30, dataColStat.getDistinctValuesCount(), 0.001);
     }
 
