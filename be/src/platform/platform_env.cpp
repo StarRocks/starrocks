@@ -57,7 +57,11 @@ Status PlatformEnv::init(PlatformEnvOptions options) {
     ThriftRpcHelper::setup(_backend_client_cache.get(), _frontend_client_cache.get(), _broker_client_cache.get());
 
     _broker_mgr = std::make_unique<BrokerMgr>();
-    _broker_mgr->init();
+    status = _broker_mgr->init(options.metrics);
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
 
     _small_file_mgr = std::make_unique<SmallFileMgr>(config::small_file_dir, options.metrics);
     status = _small_file_mgr->init();

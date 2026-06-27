@@ -162,17 +162,17 @@ Status HttpServiceBE::start() {
         const auto& store_path_roots = store_path_registry->store_path_roots();
         allow_paths.assign(store_path_roots.begin(), store_path_roots.end());
     }
-    auto* download_action = new DownloadAction(_env, allow_paths);
+    auto* download_action = new DownloadAction(allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_download_load", download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_download_load", download_action);
     _http_handlers.emplace_back(download_action);
 
-    auto* tablet_download_action = new DownloadAction(_env, allow_paths);
+    auto* tablet_download_action = new DownloadAction(allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_tablet/_download", tablet_download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_tablet/_download", tablet_download_action);
     _http_handlers.emplace_back(tablet_download_action);
 
-    auto* error_log_download_action = new DownloadAction(_env, _env->load_path_mgr()->get_load_error_file_dir());
+    auto* error_log_download_action = new DownloadAction(_env->load_path_mgr()->get_load_error_file_dir());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_load_error_log", error_log_download_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_load_error_log", error_log_download_action);
     _http_handlers.emplace_back(error_log_download_action);

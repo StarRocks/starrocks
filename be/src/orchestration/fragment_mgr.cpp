@@ -239,7 +239,7 @@ void FragmentExecState::callback(const Status& status, RuntimeProfile* profile, 
 std::string FragmentExecState::to_http_path(const std::string& file_name) {
     std::stringstream url;
     url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
-        << "token=" << _exec_env->token() << "&file=" << file_name;
+        << "token=" << get_master_token() << "&file=" << file_name;
     return url.str();
 }
 

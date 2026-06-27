@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <mutex>
 #include <string>
@@ -21,7 +22,9 @@
 #include <unordered_set>
 
 #include "base/hash/hash_std.hpp"
+#include "base/metrics.h"
 #include "base/uid_util.h"
+#include "common/status.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
@@ -30,7 +33,7 @@ class BrokerMgr {
 public:
     BrokerMgr();
     ~BrokerMgr();
-    void init();
+    Status init(MetricRegistry* metrics = nullptr);
     const std::string& get_client_id(const TNetworkAddress& address);
     size_t broker_count() const;
 
@@ -40,7 +43,9 @@ private:
     std::string _client_id;
     mutable std::mutex _mutex;
     std::unordered_set<TNetworkAddress> _broker_set;
-    bool _thread_stop{false};
+    MetricRegistry* _metrics = nullptr;
+    UIntGauge _broker_count{MetricUnit::NOUNIT};
+    std::atomic<bool> _thread_stop{false};
     std::thread _ping_thread;
 };
 

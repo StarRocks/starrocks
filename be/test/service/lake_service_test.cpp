@@ -85,7 +85,8 @@ public:
               _partition_id(next_id()),
               _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
               _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
-              _load_channel_mgr(std::make_unique<LoadChannelMgr>(_tablet_mgr, ExecEnv::GetInstance()->diagnose_daemon(),
+              _load_channel_mgr(std::make_unique<LoadChannelMgr>(_tablet_mgr,
+                                                                 GlobalEnv::GetInstance()->diagnose_daemon(),
                                                                  PlatformEnv::GetInstance()->brpc_stub_cache())),
               _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager(),
                             _load_channel_mgr.get()) {

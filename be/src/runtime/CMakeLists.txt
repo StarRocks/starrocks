@@ -62,6 +62,7 @@ target_link_libraries(RuntimeCore PRIVATE
 )
 
 set(RUNTIME_ENV_FILES
+    env/diagnose_daemon.cpp
     env/global_env.cpp
     env/global_thread_pools.cpp
     env/java/java_env.cpp
@@ -102,7 +103,6 @@ set(RUNTIME_FILES
     runtime_filter_worker_context.cpp
     runtime_filter_serde.cpp
     command_executor.cpp
-    diagnose_daemon.cpp
 )
 
 ADD_BE_LIB(Runtime

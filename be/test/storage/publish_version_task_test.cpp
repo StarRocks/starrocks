@@ -32,6 +32,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
+#include "common/system/master_info.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/query_context.h"
@@ -754,7 +755,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_replication_failed) {
     remote_snapshot_request.__set_schema_hash(1111);
     // current tablet visible version is at least 3 in previous tests
     remote_snapshot_request.__set_visible_version(3);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(12345);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(1111);

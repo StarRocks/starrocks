@@ -32,7 +32,7 @@
 #include "runtime/closure_guard.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/diagnose_daemon.h"
+#include "runtime/env/diagnose_daemon.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
 

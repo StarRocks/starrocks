@@ -28,6 +28,7 @@
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "data_workflows/clone/engine_clone_task.h"
 #include "data_workflows/load/engine_batch_load_task.h"
 #include "fs/fs.h"
@@ -127,7 +128,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     remote_snapshot_request.__set_tablet_id(_tablet_id);
     remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_schema_hash(_schema_hash);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -153,7 +154,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     replicate_snapshot_request.__set_tablet_id(_tablet_id);
     replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
