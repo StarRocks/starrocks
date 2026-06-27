@@ -25,7 +25,6 @@ class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
 class DiagnoseDaemon;
-class FragmentMgr;
 class BaseLoadPathMgr;
 class HeartbeatFlags;
 class LoadStreamMgr;
@@ -128,7 +127,6 @@ struct RuntimeServices {
     LookUpDispatcherMgr* lookup_dispatcher_mgr = nullptr;
     ResultBufferMgr* result_mgr = nullptr;
     ResultQueueMgr* result_queue_mgr = nullptr;
-    FragmentMgr* fragment_mgr = nullptr;
     BaseLoadPathMgr* load_path_mgr = nullptr;
     LoadStreamMgr* load_stream_mgr = nullptr;
     StreamContextMgr* stream_context_mgr = nullptr;

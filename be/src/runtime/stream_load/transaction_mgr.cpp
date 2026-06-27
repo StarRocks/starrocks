@@ -55,9 +55,7 @@
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
-#include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {

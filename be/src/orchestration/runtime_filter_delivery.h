@@ -29,10 +29,13 @@ struct RpcServices;
 
 namespace orchestration {
 
+class FragmentMgr;
+
 class RuntimeFilterDelivery {
 public:
-    RuntimeFilterDelivery(const RuntimeServices* runtime_services, const RpcServices* rpc_services)
-            : _runtime_services(runtime_services), _rpc_services(rpc_services) {}
+    RuntimeFilterDelivery(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
+                          FragmentMgr* fragment_mgr)
+            : _runtime_services(runtime_services), _rpc_services(rpc_services), _fragment_mgr(fragment_mgr) {}
 
     void receive_total_runtime_filter(PTransmitRuntimeFilterParams& params, int timeout_ms, int64_t rpc_http_min_size);
     void process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
@@ -55,6 +58,7 @@ private:
 
     const RuntimeServices* _runtime_services;
     const RpcServices* _rpc_services;
+    FragmentMgr* _fragment_mgr;
 };
 
 } // namespace orchestration

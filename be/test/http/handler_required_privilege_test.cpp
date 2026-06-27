@@ -204,7 +204,7 @@ TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_skip_framework_auth) 
 
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
     ExecEnv env;
-    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env);
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
     StreamLoadAction action(&env, &stream_load_orchestrator, nullptr);
     EXPECT_FALSE(action.need_auth());
 }
@@ -216,7 +216,7 @@ TEST(BeHandlerNeedAuthTest, transaction_endpoints_skip_framework_auth) {
     TransactionManagerAction txn_mgr(nullptr);
     EXPECT_FALSE(txn_mgr.need_auth());
     ExecEnv env;
-    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env);
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
     TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator);
     EXPECT_FALSE(txn_load.need_auth());
 }

@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/fragment_mgr.h"
+#include "orchestration/fragment_mgr.h"
 
 #include <gperftools/profiler.h>
 #include <thrift/protocol/TDebugProtocol.h>
@@ -71,6 +71,10 @@
 #include "types/datetime_value.h"
 
 namespace starrocks {
+class RuntimeProfile;
+} // namespace starrocks
+
+namespace starrocks::orchestration {
 
 std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
@@ -83,8 +87,6 @@ std::string to_load_error_http_path(const std::string& file_name) {
         << "file=" << file_name;
     return url.str();
 }
-
-class RuntimeProfile;
 
 class FragmentExecState {
 public:
@@ -788,4 +790,4 @@ void FragmentMgr::debug(std::stringstream& ss) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::orchestration

@@ -81,6 +81,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/strings/substitute.h"
 #include "orchestration/fragment_executor.h"
+#include "orchestration/fragment_mgr.h"
 #include "orchestration/orchestration_env.h"
 #include "orchestration/routine_load_task_executor.h"
 #include "orchestration/runtime_filter_worker.h"
@@ -89,7 +90,6 @@
 #include "runtime/command_executor.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/time_guard.h"
 #include "service/service_metrics.h"
@@ -646,7 +646,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request) {
-    return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+    return _orchestration_env->fragment_mgr()->exec_plan_fragment(t_request);
 }
 
 inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReason reason) {
@@ -753,9 +755,13 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
     } else {
         if (request->has_cancel_reason()) {
-            st = _exec_env->fragment_mgr()->cancel(tid, request->cancel_reason());
+            DCHECK(_orchestration_env != nullptr);
+            DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+            st = _orchestration_env->fragment_mgr()->cancel(tid, request->cancel_reason());
         } else {
-            st = _exec_env->fragment_mgr()->cancel(tid);
+            DCHECK(_orchestration_env != nullptr);
+            DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+            st = _orchestration_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
             LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();

@@ -27,8 +27,8 @@
 #include "exec/runtime/query_context.h"
 #include "exec/runtime/query_context_manager.h"
 #include "gutil/strings/substitute.h"
+#include "orchestration/fragment_mgr.h"
 #include "runtime/current_thread.h"
-#include "runtime/fragment_mgr.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_port.h"
@@ -123,7 +123,8 @@ void RuntimeFilterDelivery::receive_total_runtime_filter(PTransmitRuntimeFilterP
     if (request.has_is_pipeline() && request.is_pipeline()) {
         receive_total_runtime_filter_pipeline(_runtime_services, request, shared_rf);
     } else {
-        _runtime_services->fragment_mgr->receive_runtime_filter(request, shared_rf);
+        DCHECK(_fragment_mgr != nullptr);
+        _fragment_mgr->receive_runtime_filter(request, shared_rf);
     }
 
     // not enough, have to forward this request to continue broadcast.

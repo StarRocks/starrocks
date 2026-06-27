@@ -23,14 +23,17 @@ class StreamLoadContext;
 
 namespace orchestration {
 
+class FragmentMgr;
+
 class StreamLoadOrchestrator {
 public:
-    explicit StreamLoadOrchestrator(ExecEnv* exec_env);
+    StreamLoadOrchestrator(ExecEnv* exec_env, FragmentMgr* fragment_mgr);
 
     Status execute_plan_fragment(StreamLoadContext* ctx);
 
 private:
     ExecEnv* _exec_env;
+    [[maybe_unused]] FragmentMgr* _fragment_mgr;
 };
 
 } // namespace orchestration

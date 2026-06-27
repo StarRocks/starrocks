@@ -24,14 +24,15 @@
 #include "common/util/debug_util.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_metrics.h"
+#include "orchestration/fragment_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
 
 namespace starrocks::orchestration {
 
-StreamLoadOrchestrator::StreamLoadOrchestrator(ExecEnv* exec_env) : _exec_env(exec_env) {
+StreamLoadOrchestrator::StreamLoadOrchestrator(ExecEnv* exec_env, FragmentMgr* fragment_mgr)
+        : _exec_env(exec_env), _fragment_mgr(fragment_mgr) {
     DCHECK(_exec_env != nullptr);
 }
 
@@ -48,7 +49,8 @@ Status StreamLoadOrchestrator::execute_plan_fragment(StreamLoadContext* ctx) {
     LOG(INFO) << "begin to execute job. label=" << ctx->label << ", txn_id: " << ctx->txn_id
               << ", query_id=" << print_id(ctx->put_result.params.params.query_id);
     // Once this is added into FragmentMgr, the fragment will be counted during graceful exit.
-    auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
+    DCHECK(_fragment_mgr != nullptr);
+    auto st = _fragment_mgr->exec_plan_fragment(
             ctx->put_result.params,
             [ctx](PlanFragmentExecutor* executor) {
                 ctx->runtime_profile = executor->runtime_state()->runtime_profile_ptr();

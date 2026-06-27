@@ -53,6 +53,8 @@ class MetricRegistry;
 
 namespace orchestration {
 
+class FragmentMgr;
+
 struct ScanContext {
 public:
     TUniqueId query_id;
@@ -68,7 +70,7 @@ public:
 
 class ExternalScanContextMgr {
 public:
-    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics);
+    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics, FragmentMgr* fragment_mgr);
 
     ~ExternalScanContextMgr();
 
@@ -80,6 +82,7 @@ public:
 
 private:
     ExecEnv* _exec_env;
+    [[maybe_unused]] FragmentMgr* _fragment_mgr;
     std::map<std::string, std::shared_ptr<ScanContext>> _active_contexts;
     void gc_expired_context();
     std::unique_ptr<std::thread> _keep_alive_reaper;

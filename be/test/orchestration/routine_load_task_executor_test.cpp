@@ -79,7 +79,7 @@ public:
 
 private:
     ExecEnv _env;
-    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env};
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env, nullptr};
 };
 
 TEST_F(RoutineLoadTaskExecutorTest, exec_task) {

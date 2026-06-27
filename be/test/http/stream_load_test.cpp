@@ -123,7 +123,7 @@ public:
 
 private:
     ExecEnv _env;
-    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env};
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env, nullptr};
     evhttp_request* _evhttp_req = nullptr;
     std::unique_ptr<ConcurrentLimiter> _limiter;
     MetricRegistry _metrics{"stream_load_action_test"};

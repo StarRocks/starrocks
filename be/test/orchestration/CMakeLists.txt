@@ -22,6 +22,7 @@ add_executable(orchestration_test
     external_scan_context_mgr_test.cpp
     external_scan_orchestrator_test.cpp
     fragment_executor_test.cpp
+    fragment_mgr_test.cpp
     orchestration_metrics_test.cpp
     query_orchestrator_test.cpp
     stream_load_orchestrator_test.cpp

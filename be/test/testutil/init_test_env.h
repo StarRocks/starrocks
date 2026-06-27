@@ -36,6 +36,7 @@
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
+#include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "platform/user_function_cache.h"
@@ -149,6 +150,10 @@ int init_test_env(int argc, char** argv) {
     st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
 
+    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
+    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
+    CHECK(st.ok()) << st;
+
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
     data_workflows_env_options.exec_env = exec_env;
@@ -174,11 +179,12 @@ int init_test_env(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
-    exec_env->wait_for_finish();
+    orchestration_env->wait_for_finish();
     tls_thread_status.set_mem_tracker(nullptr);
     // Stop AgentServer before StorageEngine drains storage cleanup work its pools may submit.
     agent_server->stop();
     exec_env->set_agent_server(nullptr);
+    orchestration_env->stop();
     data_workflows_env->stop();
     exec_env->stop();
     engine->stop();
@@ -187,6 +193,8 @@ int init_test_env(int argc, char** argv) {
 #endif
     data_workflows_env->destroy();
     data_workflows_env.reset();
+    orchestration_env->destroy();
+    orchestration_env.reset();
     delete engine;
     exec_env->destroy();
     agent_server.reset();

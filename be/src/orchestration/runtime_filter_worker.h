@@ -36,10 +36,12 @@ class MemTracker;
 
 namespace orchestration {
 
+class FragmentMgr;
+
 class RuntimeFilterWorker : public RuntimeFilterQueryLifecycle, public RuntimeFilterSender {
 public:
     RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
-                        MemTracker* query_pool_mem_tracker);
+                        MemTracker* query_pool_mem_tracker, FragmentMgr* fragment_mgr);
     ~RuntimeFilterWorker();
     void close();
     // open query for creating runtime filter merger.

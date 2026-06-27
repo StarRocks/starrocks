@@ -37,6 +37,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -53,7 +54,6 @@
 namespace starrocks {
 
 class ExecEnv;
-class FragmentExecState;
 class MetricRegistry;
 class TExecPlanFragmentParams;
 class TUniqueId;
@@ -61,6 +61,11 @@ class PlanFragmentExecutor;
 class ThreadPool;
 
 class RuntimeFilter;
+
+namespace orchestration {
+
+class FragmentExecState;
+
 std::string to_load_error_http_path(const std::string& file_name);
 
 // This class used to manage all the fragment execute in this instance
@@ -130,4 +135,5 @@ private:
     bool _closed = false;
 };
 
+} // namespace orchestration
 } // namespace starrocks

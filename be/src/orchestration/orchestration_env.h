@@ -27,6 +27,7 @@ namespace orchestration {
 
 class ExternalScanContextMgr;
 class ExternalScanOrchestrator;
+class FragmentMgr;
 class OrchestrationMetrics;
 class RoutineLoadTaskExecutor;
 class RuntimeFilterWorker;
@@ -38,9 +39,12 @@ public:
     ~OrchestrationEnv();
 
     Status init(ExecEnv* exec_env, MetricRegistry* metrics);
+    void wait_for_finish();
     void stop();
     void destroy();
 
+    FragmentMgr* fragment_mgr() { return _fragment_mgr.get(); }
+    const FragmentMgr* fragment_mgr() const { return _fragment_mgr.get(); }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor.get(); }
     const RoutineLoadTaskExecutor* routine_load_task_executor() const { return _routine_load_task_executor.get(); }
     StreamLoadOrchestrator* stream_load_orchestrator() { return _stream_load_orchestrator.get(); }
@@ -51,7 +55,10 @@ public:
     const RuntimeFilterWorker* runtime_filter_worker() const { return _runtime_filter_worker.get(); }
 
 private:
+    size_t _get_running_fragments_count() const;
+
     ExecEnv* _exec_env = nullptr;
+    std::unique_ptr<FragmentMgr> _fragment_mgr;
     std::unique_ptr<OrchestrationMetrics> _metrics;
     std::unique_ptr<RuntimeFilterWorker> _runtime_filter_worker;
     std::unique_ptr<ExternalScanContextMgr> _external_scan_context_mgr;

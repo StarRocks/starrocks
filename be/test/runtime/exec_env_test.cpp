@@ -88,7 +88,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
         return std::vector<PipeLineReportTaskKey>();
     };
     ASSERT_OK(env.compute_env()->init_profile_report_worker(std::move(profile_report_worker_options)));
-    env._fragment_mgr = reinterpret_cast<FragmentMgr*>(0x8);
     env._query_context_mgr = reinterpret_cast<pipeline::QueryContextManager*>(0x9);
     env._heartbeat_flags = reinterpret_cast<HeartbeatFlags*>(0xb);
     auto* agent_server = reinterpret_cast<AgentServer*>(0xa);
@@ -122,7 +121,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
               global_env->lake_vector_index_build_thread_pool());
     EXPECT_EQ(env.lake_services().snapshot_file_syncer_thread_pool, env._snapshot_file_syncer_thread_pool.get());
 
-    EXPECT_EQ(env.runtime_services().fragment_mgr, env._fragment_mgr);
     EXPECT_EQ(env.runtime_services().query_context_mgr, env._query_context_mgr);
     EXPECT_EQ(env.runtime_services().stream_mgr, env.compute_env()->stream_mgr());
     EXPECT_EQ(env.runtime_services().result_mgr, env.compute_env()->result_mgr());
