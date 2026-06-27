@@ -462,8 +462,8 @@ TEST(GetUdafMethodDescTest, PrimitiveBooleanArray) {
     std::vector<MethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([Z)V", &desc));
     ASSERT_EQ(desc.size(), 2);
-    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
-    EXPECT_EQ(desc[1].type, TYPE_BOOLEAN);  // param boolean[]
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_BOOLEAN); // param boolean[]
     EXPECT_EQ(desc[1].is_array, true);
 }
 
@@ -472,8 +472,8 @@ TEST(GetUdafMethodDescTest, PrimitiveByteArray) {
     std::vector<MethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([B)V", &desc));
     ASSERT_EQ(desc.size(), 2);
-    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);   // return V
-    EXPECT_EQ(desc[1].type, TYPE_TINYINT);   // param byte[]
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_TINYINT); // param byte[]
     EXPECT_EQ(desc[1].is_array, true);
 }
 
@@ -482,8 +482,8 @@ TEST(GetUdafMethodDescTest, PrimitiveShortArray) {
     std::vector<MethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([S)V", &desc));
     ASSERT_EQ(desc.size(), 2);
-    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);   // return V
-    EXPECT_EQ(desc[1].type, TYPE_SMALLINT);  // param short[]
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
+    EXPECT_EQ(desc[1].type, TYPE_SMALLINT); // param short[]
     EXPECT_EQ(desc[1].is_array, true);
 }
 
@@ -504,8 +504,8 @@ TEST(GetUdafMethodDescTest, PrimitiveLongArray) {
     std::vector<MethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([J)V", &desc));
     ASSERT_EQ(desc.size(), 2);
-    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
-    EXPECT_EQ(desc[1].type, TYPE_BIGINT);   // param long[]
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_BIGINT);  // param long[]
     EXPECT_EQ(desc[1].is_array, true);
 }
 
@@ -514,8 +514,8 @@ TEST(GetUdafMethodDescTest, PrimitiveFloatArray) {
     std::vector<MethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([F)V", &desc));
     ASSERT_EQ(desc.size(), 2);
-    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
-    EXPECT_EQ(desc[1].type, TYPE_FLOAT);    // param float[]
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_FLOAT);   // param float[]
     EXPECT_EQ(desc[1].is_array, true);
 }
 
@@ -524,8 +524,8 @@ TEST(GetUdafMethodDescTest, PrimitiveDoubleArray) {
     std::vector<MethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([D)V", &desc));
     ASSERT_EQ(desc.size(), 2);
-    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
-    EXPECT_EQ(desc[1].type, TYPE_DOUBLE);   // param double[]
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_DOUBLE);  // param double[]
     EXPECT_EQ(desc[1].is_array, true);
 }
 
