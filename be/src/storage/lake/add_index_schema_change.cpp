@@ -522,7 +522,8 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     // same ColumnReader the iterator reads through (both keyed by unique_id).
     auto* col_reader = const_cast<ColumnReader*>(segment->column_with_uid(column.unique_id()));
     if (col_reader == nullptr) {
-        return Status::InternalError("build_bloom_for_column: no column reader for column " + column.name());
+        return Status::InternalError(
+                strings::Substitute("build_bloom_for_column: no column reader for column $0", column.name()));
     }
     const int32_t num_pages = col_reader->num_data_pages();
 
