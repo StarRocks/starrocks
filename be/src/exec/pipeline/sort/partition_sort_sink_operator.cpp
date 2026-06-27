@@ -30,7 +30,7 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "types/logical_type.h"

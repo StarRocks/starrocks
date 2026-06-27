@@ -26,7 +26,7 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_state.h"
 
 #ifdef STARROCKS_JIT_ENABLE
