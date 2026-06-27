@@ -27,6 +27,7 @@
 #include "runtime/exec_env_fwd.h"
 
 namespace starrocks {
+class BatchWriteMgr;
 class RuntimeState;
 
 namespace orchestration {
@@ -36,7 +37,7 @@ public:
     FragmentExecutor();
 
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
-                   const TExecPlanFragmentParams& unique_request);
+                   const TExecPlanFragmentParams& unique_request, BatchWriteMgr* batch_write_mgr = nullptr);
     Status execute(ExecEnv* exec_env);
 
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
@@ -76,7 +77,8 @@ private:
     Status _prepare_exec_plan(ExecEnv* exec_env, const pipeline::UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const pipeline::UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const pipeline::UnifiedExecPlanFragmentParams& request);
-    Status _prepare_stream_load_pipe(ExecEnv* exec_env, const pipeline::UnifiedExecPlanFragmentParams& request);
+    Status _prepare_stream_load_pipe(ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr,
+                                     const pipeline::UnifiedExecPlanFragmentParams& request);
 
     std::unordered_map<int32_t, pipeline::ExecutionGroupPtr> _colocate_exec_groups;
     bool _is_in_colocate_exec_group(PlanNodeId plan_node_id);

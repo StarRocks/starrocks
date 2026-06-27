@@ -65,6 +65,8 @@
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/batch_write/batch_write_mgr.h"
+#include "data_workflows/batch_write/batch_write_util.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -76,8 +78,6 @@
 #include "http/core/http_response.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/batch_write/batch_write_util.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -128,9 +128,13 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
                                        TStreamLoadPutResult* result);
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
-                                   ConcurrentLimiter* limiter)
-        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _http_concurrent_limiter(limiter) {
+                                   BatchWriteMgr* batch_write_mgr, ConcurrentLimiter* limiter)
+        : _exec_env(exec_env),
+          _stream_load_orchestrator(stream_load_orchestrator),
+          _batch_write_mgr(batch_write_mgr),
+          _http_concurrent_limiter(limiter) {
     DCHECK(_stream_load_orchestrator != nullptr);
+    DCHECK(_batch_write_mgr != nullptr);
 }
 
 StreamLoadAction::~StreamLoadAction() = default;
@@ -213,7 +217,7 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
     ctx->buffer->flip_to_read();
-    return _exec_env->batch_write_mgr()->append_data(ctx);
+    return _batch_write_mgr->append_data(ctx);
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {

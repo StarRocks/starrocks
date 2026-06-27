@@ -85,7 +85,6 @@
 #include "orchestration/orchestration_env.h"
 #include "orchestration/routine_load_task_executor.h"
 #include "orchestration/runtime_filter_worker.h"
-#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
 #include "runtime/descriptors.h"
@@ -408,16 +407,18 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     // must use shared_ptr to avoid uaf
     std::shared_ptr<std::vector<orchestration::FragmentExecutor>> fragment_executors =
             std::make_shared<std::vector<orchestration::FragmentExecutor>>(unique_requests.size());
+    DCHECK(_orchestration_env != nullptr);
+    auto* batch_write_mgr = _orchestration_env->batch_write_mgr();
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
         submitted = _exec_env->execution_services().pipeline_prepare_pool->try_offer(
-                [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
+                [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env, batch_write_mgr] {
                     auto& unique_requests = t_batch_requests->unique_param_per_instance;
                     auto& req = unique_requests[i];
                     auto& fragment_executor = fragment_executors->at(i);
-                    ms->set_value(fragment_executor.prepare(exec_env, req, req));
+                    ms->set_value(fragment_executor.prepare(exec_env, req, req, batch_write_mgr));
                 });
         if (!submitted) {
             failed_idx = i;
@@ -636,7 +637,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
     orchestration::FragmentExecutor fragment_executor;
-    auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
+    DCHECK(_orchestration_env != nullptr);
+    auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request,
+                                            _orchestration_env->batch_write_mgr());
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
     } else {
@@ -1370,7 +1373,8 @@ void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* c
                                               google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    _exec_env->batch_write_mgr()->receive_stream_load_rpc(_exec_env, cntl, request, response);
+    DCHECK(_orchestration_env != nullptr);
+    _orchestration_env->receive_batch_write_stream_load_rpc(cntl, request, response);
 }
 
 template <typename T>
@@ -1379,7 +1383,8 @@ void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::Rpc
                                                            PUpdateTransactionStateResponse* response,
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    _exec_env->batch_write_mgr()->update_transaction_state(request, response);
+    DCHECK(_orchestration_env != nullptr);
+    _orchestration_env->update_batch_write_transaction_state(request, response);
 }
 
 template <typename T>

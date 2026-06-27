@@ -64,7 +64,6 @@ class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class StreamContextMgr;
 class TransactionMgr;
-class BatchWriteMgr;
 class ProcessMetricsRegistry;
 class StorageEngine;
 class TableMetricsManager;
@@ -144,7 +143,6 @@ public:
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr();
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
-    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
@@ -195,7 +193,6 @@ private:
     std::unique_ptr<ComputeEnv> _compute_env;
 
     TransactionMgr* _transaction_mgr = nullptr;
-    BatchWriteMgr* _batch_write_mgr = nullptr;
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 

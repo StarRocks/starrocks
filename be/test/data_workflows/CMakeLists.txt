@@ -19,6 +19,10 @@ endif()
 
 set(DATA_WORKFLOWS_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    batch_write/batch_write_mgr_test.cpp
+    batch_write/batch_write_util_test.cpp
+    batch_write/isomorphic_batch_write_test.cpp
+    batch_write/txn_state_cache_test.cpp
     load/tablet_writer/lake_tablets_channel_test.cpp
     load/tablet_writer/load_channel_mgr_test.cpp
     load/tablet_writer/load_channel_test.cpp

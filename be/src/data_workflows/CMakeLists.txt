@@ -16,6 +16,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/data_workflows")
 
 set(DATA_WORKFLOWS_FILES
     data_workflows_env.cpp
+    batch_write/isomorphic_batch_write.cpp
+    batch_write/batch_write_mgr.cpp
+    batch_write/batch_write_util.cpp
+    batch_write/txn_state_cache.cpp
     clone/engine_clone_task.cpp
     compaction/engine_compaction_control_task.cpp
     compaction/engine_manual_compaction_task.cpp
@@ -45,6 +49,7 @@ target_link_libraries(DataWorkflows PUBLIC
     Exec
     Runtime
     StoragePrimitive
+    Cache
     Platform
     Common
     Base

@@ -46,9 +46,8 @@
 #include "common/util/bthreads/executor.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "data_workflows/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
-#include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/batch_write/txn_state_cache.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
 #include "service/core_dump_resource_releaser.h"
@@ -77,7 +76,8 @@
 
 namespace starrocks {
 
-void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env, LoadChannelMgr* load_channel_mgr) {
+void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env, LoadChannelMgr* load_channel_mgr,
+                                  BatchWriteMgr* batch_write_mgr) {
     auto* registry = ConfigUpdateRegistry::instance();
     const auto* global_env_ptr = &global_env;
 
@@ -465,7 +465,6 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
     });
     registry->register_callback("merge_commit_txn_state_cache_capacity", [=]() -> Status {
         LOG(INFO) << "set merge_commit_txn_state_cache_capacity: " << config::merge_commit_txn_state_cache_capacity;
-        auto batch_write_mgr = exec_env->batch_write_mgr();
         if (batch_write_mgr) {
             batch_write_mgr->txn_state_cache()->set_capacity(config::merge_commit_txn_state_cache_capacity);
         }

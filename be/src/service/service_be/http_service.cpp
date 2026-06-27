@@ -122,8 +122,10 @@ Status HttpServiceBE::start() {
     DCHECK(_orchestration_env != nullptr);
     auto* stream_load_orchestrator = _orchestration_env->stream_load_orchestrator();
     DCHECK(stream_load_orchestrator != nullptr);
+    auto* batch_write_mgr = _orchestration_env->batch_write_mgr();
+    DCHECK(batch_write_mgr != nullptr);
 
-    register_config_update_hooks(_env, _global_env, _load_channel_mgr);
+    register_config_update_hooks(_env, _global_env, _load_channel_mgr, batch_write_mgr);
     ConfigUpdateRegistry::instance()->set_ready();
 
     add_default_path_handlers(_web_page_handler.get(), _global_env);
@@ -131,7 +133,8 @@ Status HttpServiceBE::start() {
     _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
 
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env, stream_load_orchestrator, _http_concurrent_limiter.get());
+    auto* stream_load_action =
+            new StreamLoadAction(_env, stream_load_orchestrator, batch_write_mgr, _http_concurrent_limiter.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 

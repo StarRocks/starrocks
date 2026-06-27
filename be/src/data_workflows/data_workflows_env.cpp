@@ -30,6 +30,7 @@ DataWorkflowsEnv::~DataWorkflowsEnv() {
 
 Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
     DCHECK(options.exec_env != nullptr);
+    DCHECK(options.batch_write_mgr != nullptr);
     DCHECK(options.diagnose_daemon != nullptr);
     DCHECK(options.brpc_stub_cache != nullptr);
     DCHECK(options.load_mem_tracker != nullptr);
@@ -41,7 +42,8 @@ Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
     _load_channel_mgr_started = true;
 
     // Start unconditionally so mutable config can enable sync without a BE restart.
-    _rejected_record_sync_daemon = std::make_unique<RejectedRecordSyncDaemon>(options.exec_env);
+    _rejected_record_sync_daemon =
+            std::make_unique<RejectedRecordSyncDaemon>(options.exec_env, options.batch_write_mgr);
     Status rr_status = _rejected_record_sync_daemon->init();
     if (!rr_status.ok()) {
         LOG(ERROR) << "RejectedRecordSyncDaemon init failed: " << rr_status.message();

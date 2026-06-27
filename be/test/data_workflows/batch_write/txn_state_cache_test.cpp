@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/txn_state_cache.h"
+#include "data_workflows/batch_write/txn_state_cache.h"
 
 #include <gtest/gtest.h>
 

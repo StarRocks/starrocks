@@ -20,11 +20,15 @@
 #include <vector>
 
 #include "common/config_exec_env_fwd.h"
+#include "common/config_merge_commit_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/system/master_info.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/profile_report_worker.h"
+#include "data_workflows/batch_write/batch_write_mgr.h"
 #include "exec/runtime/query_context_manager.h"
 #include "orchestration/external_scan_context_mgr.h"
 #include "orchestration/external_scan_orchestrator.h"
@@ -47,6 +51,18 @@ OrchestrationEnv::~OrchestrationEnv() {
 Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
     DCHECK(exec_env != nullptr);
     _exec_env = exec_env;
+
+    std::unique_ptr<ThreadPool> batch_write_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
+                            .set_min_threads(config::merge_commit_thread_pool_num_min)
+                            .set_max_threads(config::merge_commit_thread_pool_num_max)
+                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&batch_write_thread_pool));
+    auto batch_write_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
+    _batch_write_mgr = std::make_unique<BatchWriteMgr>(std::move(batch_write_executor));
+    RETURN_IF_ERROR(_batch_write_mgr->init(metrics));
 
     _fragment_mgr = std::make_unique<FragmentMgr>(exec_env, metrics);
 
@@ -131,6 +147,9 @@ void OrchestrationEnv::stop() {
     if (_fragment_mgr != nullptr) {
         _fragment_mgr->close();
     }
+    if (_batch_write_mgr != nullptr) {
+        _batch_write_mgr->stop();
+    }
 }
 
 void OrchestrationEnv::destroy() {
@@ -147,6 +166,7 @@ void OrchestrationEnv::destroy() {
         _exec_env = nullptr;
     }
     _fragment_mgr.reset();
+    _batch_write_mgr.reset();
 }
 
 size_t OrchestrationEnv::_get_running_fragments_count() const {
@@ -155,6 +175,19 @@ size_t OrchestrationEnv::_get_running_fragments_count() const {
                                             ? 0
                                             : _exec_env->query_context_mgr()->size();
     return non_pipeline_fragments + pipeline_fragments;
+}
+
+void OrchestrationEnv::receive_batch_write_stream_load_rpc(brpc::Controller* cntl, const PStreamLoadRequest* request,
+                                                           PStreamLoadResponse* response) {
+    DCHECK(_exec_env != nullptr);
+    DCHECK(_batch_write_mgr != nullptr);
+    _batch_write_mgr->receive_stream_load_rpc(_exec_env, cntl, request, response);
+}
+
+void OrchestrationEnv::update_batch_write_transaction_state(const PUpdateTransactionStateRequest* request,
+                                                            PUpdateTransactionStateResponse* response) {
+    DCHECK(_batch_write_mgr != nullptr);
+    _batch_write_mgr->update_transaction_state(request, response);
 }
 
 } // namespace starrocks::orchestration

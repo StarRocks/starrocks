@@ -30,10 +30,10 @@
 #include "common/system/backend_options.h"
 #include "common/system/master_info.h"
 #include "compute_env/load/stream_load_context.h"
+#include "data_workflows/batch_write/batch_write_mgr.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/core/http_common.h"
 #include "platform/store_path.h"
-#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/exec_env.h"
 
@@ -134,7 +134,8 @@ void collect_jsonl(const std::string& root, std::vector<std::string>* out) {
 
 } // namespace
 
-RejectedRecordSyncDaemon::RejectedRecordSyncDaemon(ExecEnv* env) : _env(env) {
+RejectedRecordSyncDaemon::RejectedRecordSyncDaemon(ExecEnv* env, BatchWriteMgr* batch_write_mgr)
+        : _env(env), _batch_write_mgr(batch_write_mgr) {
     _stop_future = _stop.get_future();
 }
 
@@ -526,7 +527,7 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
         return Status::Uninitialized(
                 "RejectedRecordSyncDaemon: master FE token not yet propagated (no heartbeat received?)");
     }
-    if (_env == nullptr || _env->batch_write_mgr() == nullptr) {
+    if (_env == nullptr || _batch_write_mgr == nullptr) {
         // Pre-bootstrap state: no ExecEnv / BatchWriteMgr. Treat the same
         // as "master not ready" so process_files() retries on the next
         // tick instead of counting this as a real failure.
@@ -605,7 +606,7 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     ctx->body_bytes = payload.size();
     ctx->receive_bytes = payload.size();
 
-    Status st = _env->batch_write_mgr()->append_data(ctx);
+    Status st = _batch_write_mgr->append_data(ctx);
     if (st.ok()) {
         _last_http_status.store(200, std::memory_order_relaxed);
     } else {

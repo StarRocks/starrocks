@@ -157,6 +157,7 @@ int init_test_env(int argc, char** argv) {
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
     data_workflows_env_options.exec_env = exec_env;
+    data_workflows_env_options.batch_write_mgr = orchestration_env->batch_write_mgr();
     data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     data_workflows_env_options.diagnose_daemon = exec_env->diagnose_daemon();
     data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
@@ -184,8 +185,8 @@ int init_test_env(int argc, char** argv) {
     // Stop AgentServer before StorageEngine drains storage cleanup work its pools may submit.
     agent_server->stop();
     exec_env->set_agent_server(nullptr);
-    orchestration_env->stop();
     data_workflows_env->stop();
+    orchestration_env->stop();
     exec_env->stop();
     engine->stop();
 #ifdef USE_STAROS

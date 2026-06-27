@@ -25,8 +25,8 @@
 
 #include "base/concurrency/countdown_latch.h"
 #include "common/statusor.h"
-#include "runtime/batch_write/batch_write_util.h"
-#include "runtime/batch_write/txn_state_cache.h"
+#include "data_workflows/batch_write/batch_write_util.h"
+#include "data_workflows/batch_write/txn_state_cache.h"
 
 namespace starrocks {
 

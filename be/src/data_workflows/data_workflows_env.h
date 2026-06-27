@@ -20,6 +20,7 @@
 
 namespace starrocks {
 
+class BatchWriteMgr;
 class BrpcStubCache;
 class DiagnoseDaemon;
 class ExecEnv;
@@ -35,6 +36,7 @@ class TabletManager;
 
 struct DataWorkflowsEnvOptions {
     ExecEnv* exec_env = nullptr;
+    BatchWriteMgr* batch_write_mgr = nullptr;
     lake::TabletManager* lake_tablet_manager = nullptr;
     DiagnoseDaemon* diagnose_daemon = nullptr;
     BrpcStubCache* brpc_stub_cache = nullptr;

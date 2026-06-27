@@ -35,6 +35,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "connector/data_source_provider.h"
+#include "data_workflows/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/data_sinks/data_stream_sender.h"
@@ -66,7 +67,6 @@
 #include "exec/scan_node.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
-#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
@@ -652,7 +652,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr,
+                                                   const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
     if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return Status::OK();
@@ -704,7 +705,9 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                         broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
                 StreamLoadContext* ctx = nullptr;
                 if (is_batch_write) {
-                    auto* batch_write_mgr = exec_env->batch_write_mgr();
+                    if (batch_write_mgr == nullptr) {
+                        return Status::InternalError("BatchWriteMgr is not initialized");
+                    }
                     ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
                                                   exec_env, batch_write_mgr, db_name, table_name,
                                                   broker_scan_range.batch_write_parameters, label, txn_id, load_id,
@@ -917,7 +920,7 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
 }
 
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
-                                 const TExecPlanFragmentParams& unique_request) {
+                                 const TExecPlanFragmentParams& unique_request, BatchWriteMgr* batch_write_mgr) {
     DCHECK(common_request.__isset.desc_tbl);
     DCHECK(common_request.__isset.fragment);
 
@@ -1007,7 +1010,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
-        RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+        RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, batch_write_mgr, request));
     }
 
     FAIL_POINT_TRIGGER_EXECUTE(fragment_prepare_sleep, { sleep(2); });

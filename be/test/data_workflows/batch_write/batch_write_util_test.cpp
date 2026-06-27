@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/batch_write_util.h"
+#include "data_workflows/batch_write/batch_write_util.h"
 
 #include <gtest/gtest.h>
 
