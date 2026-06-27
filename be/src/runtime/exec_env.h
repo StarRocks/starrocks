@@ -122,7 +122,6 @@ public:
     // declarations for classes in scoped_ptrs.
     ~ExecEnv();
 
-    std::string token() const;
     ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
     DataStreamMgr* stream_mgr();

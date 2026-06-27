@@ -187,12 +187,12 @@ TEST(BeHandlerPrivilegeTest, greplog_requires_OPERATE) {
 // framework Basic is skipped (`need_auth() == false`).
 // ERROR_LOG (user-facing load-failure log): framework Basic required.
 TEST(BeHandlerNeedAuthTest, download_action_normal_skips_framework_auth) {
-    DownloadAction normal(nullptr, std::vector<std::string>{});
+    DownloadAction normal(std::vector<std::string>{});
     EXPECT_FALSE(normal.need_auth());
 }
 
 TEST(BeHandlerNeedAuthTest, download_action_error_log_requires_framework_auth) {
-    DownloadAction error_log(nullptr, std::string{});
+    DownloadAction error_log(std::string{});
     EXPECT_TRUE(error_log.need_auth());
 }
 
