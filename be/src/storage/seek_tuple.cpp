@@ -23,10 +23,11 @@
 namespace starrocks {
 
 void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>& new_types) const {
-    _schema.convert_to(&new_tuple->_schema, new_types);
+    new_tuple->_schema = std::make_shared<Schema>();
+    _schema->convert_to(new_tuple->_schema.get(), new_types);
 
     RowConverter converter;
-    WARN_IF_ERROR(converter.init(_schema, new_tuple->_schema), "Cannot get field converter");
+    WARN_IF_ERROR(converter.init(*_schema, *new_tuple->_schema), "Cannot get field converter");
     converter.convert(&new_tuple->_values, _values);
 }
 
@@ -37,7 +38,7 @@ std::string SeekTuple::debug_string() const {
         if (i != 0) {
             ss << ",";
         }
-        ss << datum_to_string(_schema.field(i)->type().get(), _values[i]);
+        ss << datum_to_string(_schema->field(i)->type().get(), _values[i]);
     }
     ss << ")";
 
