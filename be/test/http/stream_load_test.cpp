@@ -334,7 +334,7 @@ TEST_F(StreamLoadActionTest, plan_fail) {
 
 TEST_F(StreamLoadActionTest, huge_malloc) {
     StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
-    auto ctx = new StreamLoadContext(&_env, _env.load_stream_mgr());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
     ctx->ref();
     ctx->body_sink = std::make_shared<StreamLoadPipe>();
     HttpRequest request(_evhttp_req);
@@ -545,7 +545,7 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
 TEST_F(StreamLoadActionTest, merge_commit_response) {
     // success
     {
-        StreamLoadContext ctx(&_env, _env.load_stream_mgr());
+        StreamLoadContext ctx(_env.load_stream_mgr());
         ctx.enable_batch_write = true;
         ctx.status = Status::OK();
         ctx.txn_id = 1;
@@ -585,7 +585,7 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
 
     // fail
     {
-        StreamLoadContext ctx(&_env, _env.load_stream_mgr());
+        StreamLoadContext ctx(_env.load_stream_mgr());
         ctx.enable_batch_write = true;
         ctx.status = Status::InternalError("TestFail");
         ctx.txn_id = 2;

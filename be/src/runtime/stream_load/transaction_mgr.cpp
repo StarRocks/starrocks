@@ -90,7 +90,7 @@ std::string TransactionMgr::_build_reply(const std::string& txn_op, StreamLoadCo
 }
 
 std::string TransactionMgr::_build_reply(const std::string& label, const std::string& txn_op, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env, _exec_env->load_stream_mgr());
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = label;
     return ctx->to_resp_json(txn_op, st);
 }
@@ -162,7 +162,7 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {
-        ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr(),
+        ctx = new StreamLoadContext(_exec_env->load_stream_mgr(),
                                     &StreamLoadMetrics::instance()->transaction_streaming_load_current_processing);
         ctx->ref();
         std::lock_guard<std::mutex> l(ctx->lock);

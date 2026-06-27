@@ -54,7 +54,6 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "pulsar/Client.h"
 #include "runtime/byte_buffer.h"
-#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker_fwd.h"
 
 namespace starrocks {
@@ -150,10 +149,9 @@ class StreamLoadContext {
 public:
     using RollbackTxnCallback = std::function<Status(StreamLoadContext*)>;
 
-    StreamLoadContext(ExecEnv* exec_env, LoadStreamMgr* load_stream_mgr, IntGauge* running_loads = nullptr);
+    StreamLoadContext(LoadStreamMgr* load_stream_mgr, IntGauge* running_loads = nullptr);
 
-    StreamLoadContext(ExecEnv* exec_env, UniqueId id, LoadStreamMgr* load_stream_mgr,
-                      IntGauge* running_loads = nullptr);
+    StreamLoadContext(UniqueId id, LoadStreamMgr* load_stream_mgr, IntGauge* running_loads = nullptr);
 
     ~StreamLoadContext() noexcept;
 
@@ -358,10 +356,8 @@ public:
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }
-    ExecEnv* exec_env() { return _exec_env; }
 
 private:
-    ExecEnv* _exec_env;
     LoadStreamMgr* _load_stream_mgr;
     std::atomic<int> _refs;
     IntGauge* _running_loads;

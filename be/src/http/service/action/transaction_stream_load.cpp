@@ -98,7 +98,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
 }
 
 void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env, _exec_env->load_stream_mgr());
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(req->param(HTTP_TXN_OP_KEY), st);
@@ -183,7 +183,7 @@ TransactionStreamLoadAction::TransactionStreamLoadAction(
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
 
 void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env, _exec_env->load_stream_mgr());
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(TXN_LOAD, st);

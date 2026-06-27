@@ -65,7 +65,7 @@ public:
 
     StreamLoadContext* build_pipe_context(const std::string& label, int64_t txn_id, const BatchWriteId& batch_write_id,
                                           std::shared_ptr<TimeBoundedStreamLoadPipe> pipe) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr());
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;
@@ -79,7 +79,7 @@ public:
     }
 
     StreamLoadContext* build_data_context(const BatchWriteId& batch_write_id, const std::string& data) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env, _exec_env->load_stream_mgr());
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;
