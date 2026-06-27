@@ -417,6 +417,8 @@ struct TQueryOptions {
   222: optional i64 topn_back_pressure_num_rows = 1024;
   223: optional i64 topn_back_pressure_throttle_time_ms = 8;
   224: optional i64 topn_back_pressure_throttle_time_upper_bound_ms = 100;
+  // Master switch for the experimental Lake prepared physical split scan path.
+  225: optional bool enable_lake_prepared_physical_split_scan = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

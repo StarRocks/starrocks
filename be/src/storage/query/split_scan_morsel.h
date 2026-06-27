@@ -14,12 +14,15 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_set>
 #include <utility>
 
 #include "exec/pipeline/scan/scan_morsel.h"
+#include "storage/lake/types_fwd.h"
 
 namespace starrocks {
 
@@ -33,11 +36,36 @@ namespace pipeline {
 class SplitMorselQueue;
 
 struct LakeSplitContext : public ScanSplitContext {
+    // Describes how rowid_range was produced. REGULAR is used by normal physical
+    // splits. The other values are used by Lake range-refinement scheduling.
+    enum class RowidRangeSource : uint8_t {
+        REGULAR,
+        // First coarse range used to start scanning before refined ranges exist.
+        INITIAL_COARSE,
+        // Additional coarse range issued before segment-level refinement finishes.
+        PRE_REFINEMENT_COARSE,
+        // Range backed by final refined/pruned segment ranges.
+        REFINED,
+    };
+
     // physical split
     RowidRangeOptionPtr rowid_range;
+    RowidRangeSource rowid_range_source = RowidRangeSource::REGULAR;
     // logical split
     ShortKeyRangesOptionPtr short_key_range;
     std::shared_ptr<SplitMorselQueue> split_morsel_queue = nullptr;
+
+    // Optional metadata for Lake prepared physical split children.
+    // prepared_segment_read_state and indices are set only when the rowid range maps to one segment.
+    lake::PreparedTabletReadStatePtr prepared_tablet_read_state = nullptr;
+    lake::PreparedSegmentReadStatePtr prepared_segment_read_state = nullptr;
+    size_t rowset_index = 0;
+    size_t segment_index = 0;
+
+    bool is_prepared_physical_split() const {
+        return rowid_range != nullptr && short_key_range == nullptr && prepared_tablet_read_state != nullptr &&
+               prepared_segment_read_state != nullptr;
+    }
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {

@@ -42,11 +42,15 @@ class Tablet;
 class CompactionTask;
 class LocationProvider;
 class PersistentIndexSstable;
+struct PreparedSegmentReadState;
+struct PreparedTabletReadState;
 
 using RowsetPtr = std::shared_ptr<starrocks::lake::Rowset>;
 using SegmentPtr = std::shared_ptr<starrocks::Segment>;
 using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
 using CompactionTaskPtr = std::shared_ptr<CompactionTask>;
+using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
+using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
 using segment_rowid_t = uint32_t;
 using DeletesMap = std::unordered_map<uint32_t, std::vector<segment_rowid_t>>;
 using DelVectorPtr = std::shared_ptr<DelVector>;
