@@ -27,6 +27,7 @@ namespace orchestration {
 
 class ExternalScanContextMgr;
 class ExternalScanOrchestrator;
+class OrchestrationMetrics;
 class RoutineLoadTaskExecutor;
 class StreamLoadOrchestrator;
 
@@ -47,6 +48,7 @@ public:
     const ExternalScanOrchestrator* external_scan_orchestrator() const { return _external_scan_orchestrator.get(); }
 
 private:
+    std::unique_ptr<OrchestrationMetrics> _metrics;
     std::unique_ptr<ExternalScanContextMgr> _external_scan_context_mgr;
     std::unique_ptr<ExternalScanOrchestrator> _external_scan_orchestrator;
     std::unique_ptr<StreamLoadOrchestrator> _stream_load_orchestrator;

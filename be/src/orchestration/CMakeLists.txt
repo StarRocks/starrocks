@@ -18,6 +18,7 @@ set(ORCHESTRATION_FILES
     external_scan_context_mgr.cpp
     external_scan_orchestrator.cpp
     fragment_executor.cpp
+    orchestration_metrics.cpp
     orchestration_env.cpp
     query_orchestrator.cpp
     routine_load_task_executor.cpp
