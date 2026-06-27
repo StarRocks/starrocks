@@ -141,7 +141,7 @@ StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
                                                             config::merge_commit_stream_load_pipe_max_buffered_bytes);
     auto* load_stream_mgr = exec_env->load_stream_mgr();
     RETURN_IF_ERROR(load_stream_mgr->put(load_id, pipe));
-    StreamLoadContext* ctx = new StreamLoadContext(exec_env, load_id, load_stream_mgr);
+    StreamLoadContext* ctx = new StreamLoadContext(load_id, load_stream_mgr);
     ctx->ref();
     ctx->id = load_id;
     ctx->db = db;
@@ -172,7 +172,7 @@ static std::string s_empty;
 
 void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl,
                                             const PStreamLoadRequest* request, PStreamLoadResponse* response) {
-    auto* ctx = new StreamLoadContext(exec_env, exec_env->load_stream_mgr());
+    auto* ctx = new StreamLoadContext(exec_env->load_stream_mgr());
     ctx->ref();
     DeferOp defer([&]() {
         response->set_json_result(ctx->to_json());

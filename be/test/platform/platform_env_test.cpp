@@ -15,23 +15,74 @@
 #include "platform/platform_env.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
+#include <atomic>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "common/brpc/brpc_stub_cache.h"
+#include "common/config_path_fwd.h"
+#include "platform/small_file_mgr.h"
 #include "platform/store_path.h"
 #include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
 
+namespace {
+
+class ScopedSmallFileDir {
+public:
+    ScopedSmallFileDir() {
+        _old_small_file_dir = config::small_file_dir;
+        _path = std::filesystem::temp_directory_path() / ("starrocks_platform_env_test_" + std::to_string(getpid()) +
+                                                          "_" + std::to_string(_next_id.fetch_add(1)));
+        std::filesystem::remove_all(_path);
+        std::filesystem::create_directories(_path);
+        config::small_file_dir = _path.string();
+    }
+
+    ~ScopedSmallFileDir() {
+        config::small_file_dir = _old_small_file_dir;
+        std::error_code ec;
+        std::filesystem::remove_all(_path, ec);
+    }
+
+    const std::filesystem::path& path() const { return _path; }
+
+private:
+    inline static std::atomic<int> _next_id{0};
+    std::string _old_small_file_dir;
+    std::filesystem::path _path;
+};
+
+class PlatformEnvResetGuard {
+public:
+    explicit PlatformEnvResetGuard(PlatformEnv* env) : _env(env) {}
+    ~PlatformEnvResetGuard() {
+        _env->destroy();
+        _env->reset_store_paths_for_test();
+    }
+
+private:
+    PlatformEnv* _env;
+};
+
+} // namespace
+
 TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
     auto* env = PlatformEnv::GetInstance();
     env->destroy();
+    ScopedSmallFileDir small_file_dir;
 
     MetricRegistry metrics("platform_env_test");
+    PlatformEnvResetGuard guard(env);
     ASSERT_OK(env->init(PlatformEnvOptions{.metrics = &metrics}));
 
     ASSERT_NE(env->backend_client_cache(), nullptr);
@@ -51,6 +102,7 @@ TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
     EXPECT_EQ(env->frontend_client_cache(), nullptr);
     EXPECT_EQ(env->broker_client_cache(), nullptr);
     EXPECT_EQ(env->brpc_stub_cache(), nullptr);
+    EXPECT_EQ(env->small_file_mgr(), nullptr);
     EXPECT_EQ(ThriftRpcHelper::_s_backend_client_cache, nullptr);
     EXPECT_EQ(ThriftRpcHelper::_s_frontend_client_cache, nullptr);
     EXPECT_EQ(ThriftRpcHelper::_s_broker_client_cache, nullptr);
@@ -68,10 +120,39 @@ TEST(PlatformEnvTest, OwnsRpcTransportCacheAccessors) {
 #endif
 }
 
+TEST(PlatformEnvTest, OwnsSmallFileMgrLifecycle) {
+    auto* env = PlatformEnv::GetInstance();
+    env->destroy();
+    ScopedSmallFileDir small_file_dir;
+
+    static constexpr int64_t kFileId = 12345;
+    static constexpr const char* kEmptyFileMd5 = "d41d8cd98f00b204e9800998ecf8427e";
+    const auto cached_file = small_file_dir.path() / (std::to_string(kFileId) + "." + kEmptyFileMd5);
+    std::ofstream(cached_file.string()).close();
+
+    MetricRegistry metrics("platform_env_small_file_test");
+    PlatformEnvResetGuard guard(env);
+    ASSERT_OK(env->init(PlatformEnvOptions{.metrics = &metrics}));
+    ASSERT_NE(env->small_file_mgr(), nullptr);
+
+    std::string file_path;
+    ASSERT_OK(env->small_file_mgr()->get_file(kFileId, kEmptyFileMd5, &file_path));
+    EXPECT_EQ(cached_file.string(), file_path);
+
+    metrics.trigger_hook();
+    auto* small_file_metric = metrics.get_metric("small_file_cache_count");
+    ASSERT_NE(nullptr, small_file_metric);
+    EXPECT_EQ("1", small_file_metric->to_string());
+
+    env->destroy();
+    EXPECT_EQ(env->small_file_mgr(), nullptr);
+}
+
 TEST(PlatformEnvTest, OwnsStorePathsFromInitOptions) {
     auto* env = PlatformEnv::GetInstance();
     env->destroy();
     env->reset_store_paths_for_test();
+    ScopedSmallFileDir small_file_dir;
 
     std::vector<StorePath> paths;
     paths.emplace_back("/path1");
@@ -79,6 +160,7 @@ TEST(PlatformEnvTest, OwnsStorePathsFromInitOptions) {
     paths[1].storage_medium = TStorageMedium::SSD;
 
     MetricRegistry metrics("platform_env_store_path_test");
+    PlatformEnvResetGuard guard(env);
     PlatformEnvOptions options;
     options.metrics = &metrics;
     options.store_paths = paths;
@@ -106,8 +188,10 @@ TEST(PlatformEnvTest, RejectsConflictingStorePathReinitUntilTestReset) {
     auto* env = PlatformEnv::GetInstance();
     env->destroy();
     env->reset_store_paths_for_test();
+    ScopedSmallFileDir small_file_dir;
 
     MetricRegistry metrics("platform_env_store_path_reinit_test");
+    PlatformEnvResetGuard guard(env);
     PlatformEnvOptions options;
     options.metrics = &metrics;
     options.store_paths = {StorePath("/path1")};

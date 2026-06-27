@@ -41,12 +41,11 @@
 
 namespace starrocks {
 
-StreamLoadContext::StreamLoadContext(ExecEnv* exec_env, LoadStreamMgr* load_stream_mgr, IntGauge* running_loads)
-        : StreamLoadContext(exec_env, UniqueId::gen_uid(), load_stream_mgr, running_loads) {}
+StreamLoadContext::StreamLoadContext(LoadStreamMgr* load_stream_mgr, IntGauge* running_loads)
+        : StreamLoadContext(UniqueId::gen_uid(), load_stream_mgr, running_loads) {}
 
-StreamLoadContext::StreamLoadContext(ExecEnv* exec_env, UniqueId id, LoadStreamMgr* load_stream_mgr,
-                                     IntGauge* running_loads)
-        : id(id), _exec_env(exec_env), _load_stream_mgr(load_stream_mgr), _refs(0), _running_loads(running_loads) {
+StreamLoadContext::StreamLoadContext(UniqueId id, LoadStreamMgr* load_stream_mgr, IntGauge* running_loads)
+        : id(id), _load_stream_mgr(load_stream_mgr), _refs(0), _running_loads(running_loads) {
     start_nanos = MonotonicNanos();
     if (_running_loads != nullptr) {
         _running_loads->increment(1);

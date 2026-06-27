@@ -24,7 +24,6 @@
 
 namespace starrocks {
 
-class ExecEnv;
 class LoadStreamMgr;
 class StreamLoadContext;
 class TUniqueId;
@@ -40,9 +39,9 @@ public:
     void remove(const std::string& id);
     std::vector<std::string> get_ids();
 
-    Status create_channel_context(ExecEnv* exec_env, const std::string& label, int channel_id,
-                                  const std::string& db_name, const std::string& table_name, int32_t format,
-                                  StreamLoadContext*& ctx, const TUniqueId& load_id, long txn_id);
+    Status create_channel_context(const std::string& label, int channel_id, const std::string& db_name,
+                                  const std::string& table_name, int32_t format, StreamLoadContext*& ctx,
+                                  const TUniqueId& load_id, long txn_id);
     Status put_channel_context(const std::string& label, const std::string& table_name, int channel_id,
                                StreamLoadContext* ctx);
     StreamLoadContext* get_channel_context(const std::string& label, const std::string& table_name, int channel_id);

@@ -551,7 +551,7 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // ROOT, skipping password / INSERT-privilege checks. The placeholder
     // user/passwd fields below are kept syntactically valid; FE thrift
     // ignores them once the token bypass fires.
-    StreamLoadContext* ctx = new StreamLoadContext(_env, _env->load_stream_mgr());
+    StreamLoadContext* ctx = new StreamLoadContext(_env->load_stream_mgr());
     ctx->ref();
     DeferOp release([&] {
         if (ctx->unref()) {

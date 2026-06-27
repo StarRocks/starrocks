@@ -52,7 +52,7 @@ TEST(StreamLoadContextTest, calc_put_and_commit_rpc_timeout_ms) {
 
     for (const auto& tc : test_cases) {
         SCOPED_TRACE(tc.description);
-        StreamLoadContext ctx(nullptr, nullptr);
+        StreamLoadContext ctx(nullptr);
         ctx.timeout_second = tc.timeout_second;
 
         int32_t original_timeout_second = ctx.timeout_second;
@@ -71,7 +71,7 @@ TEST(StreamLoadContextTest, destructor_removes_pipe_from_injected_load_stream_mg
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
     ASSERT_NE(nullptr, load_stream_mgr.get(load_id));
 
-    { StreamLoadContext ctx(nullptr, load_id, &load_stream_mgr); }
+    { StreamLoadContext ctx(load_id, &load_stream_mgr); }
 
     EXPECT_EQ(nullptr, load_stream_mgr.get(load_id));
 }
@@ -81,7 +81,7 @@ TEST(StreamLoadContextTest, destructor_runs_rollback_callback_when_needed) {
     StreamLoadContext* expected_ctx = nullptr;
 
     {
-        StreamLoadContext ctx(nullptr, nullptr);
+        StreamLoadContext ctx(nullptr);
         expected_ctx = &ctx;
         ctx.set_need_rollback([&](StreamLoadContext* callback_ctx) {
             EXPECT_EQ(expected_ctx, callback_ctx);
@@ -99,7 +99,7 @@ TEST(StreamLoadContextTest, clear_need_rollback_prevents_destructor_rollback_cal
     int rollback_count = 0;
 
     {
-        StreamLoadContext ctx(nullptr, nullptr);
+        StreamLoadContext ctx(nullptr);
         ctx.set_need_rollback([&](StreamLoadContext* /*callback_ctx*/) {
             ++rollback_count;
             return Status::OK();
@@ -113,7 +113,7 @@ TEST(StreamLoadContextTest, clear_need_rollback_prevents_destructor_rollback_cal
 }
 
 TEST(StreamLoadContextTest, set_need_rollback_rejects_empty_callback) {
-    StreamLoadContext ctx(nullptr, nullptr);
+    StreamLoadContext ctx(nullptr);
     ASSERT_DEATH(ctx.set_need_rollback(nullptr), "callback");
 }
 
