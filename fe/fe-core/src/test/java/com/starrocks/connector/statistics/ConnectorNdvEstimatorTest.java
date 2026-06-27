@@ -14,15 +14,25 @@
 
 package com.starrocks.connector.statistics;
 
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.BOOLEAN;
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.DATE_IN_EPOCH_SECONDS;
+import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.FLOAT_LIKE;
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.INTEGER_LIKE;
+import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.OTHER;
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.STRING_LIKE;
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.TIMESTAMP_IN_EPOCH_MICROS;
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.TypeCategory.TIMESTAMP_IN_EPOCH_SECONDS;
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.estimate;
+import static com.starrocks.connector.statistics.ConnectorNdvEstimator.sizeNdv;
 import static com.starrocks.connector.statistics.ConnectorNdvEstimator.typeNdv;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -185,5 +195,84 @@ public class ConnectorNdvEstimatorTest {
         // Even with empty size and tiny row count, NDV should be ≥ 1
         double ndv = estimate(STRING_LIKE, Double.NaN, Double.NaN, -1, 0, 1);
         assertTrue(ndv >= 1.0);
+    }
+
+    // -------------------------------------------------------------------------
+    // sizeNdv 4-arg convenience overload (delegates to 5-arg with hint=0)
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testSizeNdv_4arg_delegatesToDefault() {
+        // 400 bytes, 100 rows, 100 total → INTEGER_LIKE default 4 bytes → NDV = 100
+        double ndv = sizeNdv(INTEGER_LIKE, 400, 100, 100);
+        assertEquals(100.0, ndv, 0.001);
+    }
+
+    // -------------------------------------------------------------------------
+    // typeNdv edge cases
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testTypeFraction_boolean_cappedAt2() {
+        assertEquals(2.0, typeNdv(BOOLEAN, 1_000_000), 0.001);
+    }
+
+    @Test
+    public void testTypeFraction_boolean_smallRowCount() {
+        assertEquals(1.0, typeNdv(BOOLEAN, 1), 0.001);
+    }
+
+    @Test
+    public void testTypeFraction_string_half() {
+        // STRING_LIKE fraction = 0.5
+        assertEquals(50.0, typeNdv(STRING_LIKE, 100), 0.001);
+    }
+
+    @Test
+    public void testTypeFraction_other_threeDecile() {
+        // OTHER fraction = 0.3
+        assertEquals(30.0, typeNdv(OTHER, 100), 0.001);
+    }
+
+    // -------------------------------------------------------------------------
+    // minBytesPerDistinctValue
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testMinBytesPerDistinctValue_boolean() {
+        assertEquals(1, ConnectorNdvEstimator.minBytesPerDistinctValue(BOOLEAN));
+    }
+
+    @Test
+    public void testMinBytesPerDistinctValue_timestamp() {
+        assertEquals(8, ConnectorNdvEstimator.minBytesPerDistinctValue(TIMESTAMP_IN_EPOCH_SECONDS));
+        assertEquals(8, ConnectorNdvEstimator.minBytesPerDistinctValue(TIMESTAMP_IN_EPOCH_MICROS));
+    }
+
+    @Test
+    public void testMinBytesPerDistinctValue_otherCategories() {
+        assertEquals(4, ConnectorNdvEstimator.minBytesPerDistinctValue(INTEGER_LIKE));
+        assertEquals(4, ConnectorNdvEstimator.minBytesPerDistinctValue(FLOAT_LIKE));
+        assertEquals(4, ConnectorNdvEstimator.minBytesPerDistinctValue(DATE_IN_EPOCH_SECONDS));
+        assertEquals(4, ConnectorNdvEstimator.minBytesPerDistinctValue(STRING_LIKE));
+        assertEquals(4, ConnectorNdvEstimator.minBytesPerDistinctValue(OTHER));
+    }
+
+    // -------------------------------------------------------------------------
+    // fromStarRocksType
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testFromStarRocksType_allCategories() {
+        assertEquals(BOOLEAN, ConnectorNdvEstimator.fromStarRocksType(BooleanType.BOOLEAN));
+        assertEquals(INTEGER_LIKE, ConnectorNdvEstimator.fromStarRocksType(IntegerType.INT));
+        assertEquals(INTEGER_LIKE, ConnectorNdvEstimator.fromStarRocksType(IntegerType.BIGINT));
+        assertEquals(FLOAT_LIKE, ConnectorNdvEstimator.fromStarRocksType(FloatType.FLOAT));
+        assertEquals(FLOAT_LIKE, ConnectorNdvEstimator.fromStarRocksType(FloatType.DOUBLE));
+        assertEquals(FLOAT_LIKE, ConnectorNdvEstimator.fromStarRocksType(DecimalType.DEFAULT_DECIMAL32));
+        assertEquals(DATE_IN_EPOCH_SECONDS, ConnectorNdvEstimator.fromStarRocksType(DateType.DATE));
+        assertEquals(TIMESTAMP_IN_EPOCH_SECONDS, ConnectorNdvEstimator.fromStarRocksType(DateType.DATETIME));
+        assertEquals(STRING_LIKE, ConnectorNdvEstimator.fromStarRocksType(VarcharType.VARCHAR));
+        assertEquals(OTHER, ConnectorNdvEstimator.fromStarRocksType(JsonType.JSON));
     }
 }

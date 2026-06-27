@@ -197,6 +197,23 @@ public class HiveStatisticsProviderTest {
     }
 
     @Test
+    public void testCreateUnknownStatistics_missingColumnFallsBackToUnknown() throws AnalysisException {
+        HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+
+        // "col_nonexistent" does not exist in the table schema → addFallbackColumnStats column==null path
+        ColumnRefOperator missingRef = new ColumnRefOperator(99, IntegerType.INT, "col_nonexistent", true);
+
+        Statistics statistics = statisticsProvider.createUnknownStatistics(
+                hiveTable, Lists.newArrayList(missingRef),
+                Lists.newArrayList(hivePartitionKey1), 50);
+
+        Assertions.assertEquals(1, statistics.getColumnStatistics().size());
+        Assertions.assertTrue(statistics.getColumnStatistics().get(missingRef).isUnknown());
+    }
+
+    @Test
     public void testEstimatedRowCount() throws AnalysisException {
         FeConstants.runningUnitTest = true;
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
