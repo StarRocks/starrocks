@@ -25,7 +25,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_filter_delivery.h"
 #include "runtime/runtime_filter_merger.h"
-#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_filter_worker_event.h"
 
@@ -41,7 +40,7 @@ public:
     void close();
     // open query for creating runtime filter merger.
     void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
-                    bool is_pipeline);
+                    bool is_pipeline) override;
     void close_query(const TUniqueId& query_id) override;
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params);
     void execute();

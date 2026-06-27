@@ -14,14 +14,18 @@
 
 #pragma once
 
-#include "gen_cpp/Types_types.h"
-
 namespace starrocks {
+
+class TQueryOptions;
+class TRuntimeFilterParams;
+class TUniqueId;
 
 class RuntimeFilterQueryLifecycle {
 public:
     virtual ~RuntimeFilterQueryLifecycle() = default;
 
+    virtual void open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
+                            const TRuntimeFilterParams& params, bool is_pipeline) = 0;
     virtual void close_query(const TUniqueId& query_id) = 0;
 };
 
