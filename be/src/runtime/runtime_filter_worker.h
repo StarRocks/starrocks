@@ -25,7 +25,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_filter_delivery.h"
 #include "runtime/runtime_filter_merger.h"
-#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_filter_worker_event.h"
 
