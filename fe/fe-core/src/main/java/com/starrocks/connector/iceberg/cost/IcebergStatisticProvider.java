@@ -339,12 +339,16 @@ public class IcebergStatisticProvider {
             return 1.0;
         }
 
-        // Tier 1: range-based for integer/date/timestamp types.
+        // Tier 1: range-based for boolean/integer/date/timestamp types.
         // min/max come from IcebergFileStats if column stats were computed — no new IO.
         Optional<Double> minVal = icebergStats.getMinValue(fieldId);
         Optional<Double> maxVal = icebergStats.getMaxValue(fieldId);
         if (minVal.isPresent() && maxVal.isPresent() && isRangeEstimableType(fieldId, icebergStats)) {
-            double diff = maxVal.get() - minVal.get();
+            // Undo the unit conversion applied by convertObjectToOptionalDouble so that
+            // diff reflects the count of distinct native-unit values, not the scaled double.
+            Map<Integer, Type.PrimitiveType> rangeTypeMap = icebergStats.getIdToTypeMapping();
+            Type.PrimitiveType rangeType = rangeTypeMap != null ? rangeTypeMap.get(fieldId) : null;
+            double diff = toDiffInNativeUnits(rangeType, maxVal.get() - minVal.get());
             // Guard against overflow: very wide BIGINT ranges may exceed Long.MAX_VALUE as a double
             long range = (diff >= (double) Long.MAX_VALUE) ? Long.MAX_VALUE : Math.max(0L, (long) diff) + 1;
             double rangeNdv = Math.min(rowCount, range);
@@ -364,6 +368,10 @@ public class IcebergStatisticProvider {
             long colSizeBytes = columnSizes.get(fieldId);
             int minBytesPerValue = minBytesPerDistinctValue(fieldId, icebergStats);
             double sizeNdv = (double) colSizeBytes / minBytesPerValue;
+            // Extrapolate to full table when column-size metrics cover only a subset of rows
+            if (columnSizeRcnt < rowCount) {
+                sizeNdv = sizeNdv * rowCount / columnSizeRcnt;
+            }
             return Math.max(1.0, Math.min(rowCount, sizeNdv));
         }
         // Tier 3: type-fraction last resort
@@ -386,8 +394,25 @@ public class IcebergStatisticProvider {
                 || type instanceof Types.IntegerType
                 || type instanceof Types.LongType
                 || type instanceof Types.DateType
-                || type instanceof Types.TimestampType
-                || type instanceof Types.TimeType;
+                || type instanceof Types.TimestampType;
+    }
+
+    /**
+     * Undoes the unit conversion applied by {@code IcebergFileStats.convertObjectToOptionalDouble}
+     * so that the returned value represents the difference in native Iceberg units:
+     * <ul>
+     *   <li>DateType: stored as epoch-days, but converted to epoch-seconds (×86400) → divide back</li>
+     *   <li>TimestampType: stored as epoch-microseconds, but converted to epoch-seconds (÷1_000_000) → multiply back</li>
+     *   <li>IntegerType/LongType/BooleanType: no conversion → identity</li>
+     * </ul>
+     */
+    private double toDiffInNativeUnits(Type.PrimitiveType type, double diff) {
+        if (type instanceof Types.DateType) {
+            return diff / 86400.0;
+        } else if (type instanceof Types.TimestampType) {
+            return diff * 1_000_000.0;
+        }
+        return diff;
     }
 
     private int minBytesPerDistinctValue(Integer fieldId, IcebergFileStats icebergStats) {
