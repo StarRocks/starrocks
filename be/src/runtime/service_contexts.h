@@ -36,7 +36,6 @@ class ResultQueueMgr;
 class RuntimeFilterCache;
 class RuntimeFilterQueryLifecycle;
 class RuntimeFilterSender;
-class SmallFileMgr;
 class StorePathRegistry;
 class StreamContextMgr;
 class StreamLoadExecutor;
@@ -132,7 +131,6 @@ struct RuntimeServices {
     TransactionMgr* transaction_mgr = nullptr;
     BatchWriteMgr* batch_write_mgr = nullptr;
     StreamLoadExecutor* stream_load_executor = nullptr;
-    SmallFileMgr* small_file_mgr = nullptr;
     RuntimeFilterSender* runtime_filter_sender = nullptr;
     RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* runtime_filter_cache = nullptr;

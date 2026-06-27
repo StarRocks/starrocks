@@ -30,7 +30,7 @@ TEST_F(KafkaDataConsumerTest, test_get_partition_offset_broker_down) {
     tKafkaLoadInfo.partition_begin_offset = {{0, 100}};
     auto kafka_info = std::make_unique<KafkaLoadInfo>(tKafkaLoadInfo);
     auto* exec_env = ExecEnv::GetInstance();
-    StreamLoadContext context(exec_env, exec_env->load_stream_mgr());
+    StreamLoadContext context(exec_env->load_stream_mgr());
     context.kafka_info = std::move(kafka_info);
 
     KafkaDataConsumer consumer(&context);
@@ -54,7 +54,7 @@ TEST_F(KafkaDataConsumerTest, test_get_partition_meta_broker_down) {
     tKafkaLoadInfo.partition_begin_offset = {{0, 100}};
     auto kafka_info = std::make_unique<KafkaLoadInfo>(tKafkaLoadInfo);
     auto* exec_env = ExecEnv::GetInstance();
-    StreamLoadContext context(exec_env, exec_env->load_stream_mgr());
+    StreamLoadContext context(exec_env->load_stream_mgr());
     context.kafka_info = std::move(kafka_info);
 
     KafkaDataConsumer consumer(&context);

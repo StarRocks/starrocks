@@ -63,8 +63,8 @@ TEST_F(StreamLoadContextHandleTest, cancel_and_close_channel_context) {
     const int channel_id = 7;
     const TUniqueId load_id = UniqueId::gen_uid().to_thrift();
 
-    ASSERT_OK(stream_context_mgr.create_channel_context(_exec_env, label, channel_id, db, table,
-                                                        TFileFormatType::FORMAT_CSV_PLAIN, ctx, load_id, 123));
+    ASSERT_OK(stream_context_mgr.create_channel_context(label, channel_id, db, table, TFileFormatType::FORMAT_CSV_PLAIN,
+                                                        ctx, load_id, 123));
     DeferOp release_ctx([&] { StreamLoadContext::release(ctx); });
 
     auto sink = std::make_shared<CountingBodySink>();

@@ -87,16 +87,15 @@ std::vector<std::string> StreamContextMgr::get_ids() {
     return ids;
 }
 
-Status StreamContextMgr::create_channel_context(ExecEnv* exec_env, const std::string& label, int channel_id,
-                                                const std::string& db_name, const std::string& table_name,
-                                                int32_t format, StreamLoadContext*& ctx, const TUniqueId& load_id,
-                                                long txn_id) {
+Status StreamContextMgr::create_channel_context(const std::string& label, int channel_id, const std::string& db_name,
+                                                const std::string& table_name, int32_t format, StreamLoadContext*& ctx,
+                                                const TUniqueId& load_id, long txn_id) {
     if (_load_stream_mgr == nullptr) {
         return Status::InternalError("load stream manager is not initialized");
     }
     auto pipe = std::make_shared<StreamLoadPipe>(true);
     RETURN_IF_ERROR(_load_stream_mgr->put(load_id, pipe));
-    ctx = new StreamLoadContext(exec_env, load_id, _load_stream_mgr);
+    ctx = new StreamLoadContext(load_id, _load_stream_mgr);
     if (ctx == nullptr) {
         return Status::InternalError("allocate stream load context fail");
     }

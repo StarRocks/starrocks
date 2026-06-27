@@ -66,7 +66,6 @@
 #include "gutil/strings/substitute.h"
 #include "platform/broker_mgr.h"
 #include "platform/platform_env.h"
-#include "platform/small_file_mgr.h"
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/diagnose_daemon.h"
@@ -154,7 +153,6 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.transaction_mgr = _transaction_mgr;
     _runtime_services.batch_write_mgr = _batch_write_mgr;
     _runtime_services.stream_load_executor = _stream_load_executor;
-    _runtime_services.small_file_mgr = _small_file_mgr;
     _runtime_services.runtime_filter_sender = _runtime_filter_sender;
     _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_query_lifecycle;
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
@@ -202,7 +200,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     auto* platform_env = PlatformEnv::GetInstance();
     if (platform_env->backend_client_cache() == nullptr || platform_env->frontend_client_cache() == nullptr ||
         platform_env->broker_client_cache() == nullptr || platform_env->broker_mgr() == nullptr ||
-        platform_env->brpc_stub_cache() == nullptr) {
+        platform_env->brpc_stub_cache() == nullptr || platform_env->small_file_mgr() == nullptr) {
         return Status::InternalError("PlatformEnv is not initialized");
     }
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
@@ -262,7 +260,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
-    _small_file_mgr = new SmallFileMgr(config::small_file_dir, process_metrics);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     RETURN_IF_ERROR(_compute_env->start_result_mgr());
@@ -294,8 +291,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());
-
-    RETURN_IF_ERROR(_small_file_mgr->init());
 
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
@@ -541,7 +536,6 @@ void ExecEnv::destroy() {
         _compute_env->destroy_profile_report_worker();
     }
     SAFE_DELETE(_heartbeat_flags);
-    SAFE_DELETE(_small_file_mgr);
     SAFE_DELETE(_transaction_mgr);
     if (_compute_env != nullptr) {
         _compute_env->destroy_stream_context_mgr();

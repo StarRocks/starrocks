@@ -715,8 +715,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                             }));
                 } else {
                     auto* stream_context_mgr = exec_env->stream_context_mgr();
-                    RETURN_IF_ERROR(stream_context_mgr->create_channel_context(
-                            exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+                    RETURN_IF_ERROR(stream_context_mgr->create_channel_context(label, channel_id, db_name, table_name,
+                                                                               format, ctx, load_id, txn_id));
                     DeferOp op([&] {
                         if (ctx->unref()) {
                             delete ctx;
