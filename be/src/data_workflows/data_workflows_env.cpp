@@ -82,6 +82,9 @@ void DataWorkflowsEnv::stop() {
         _load_channel_mgr->close();
         _load_channel_mgr_started = false;
     }
+    if (_transaction_mgr != nullptr) {
+        _transaction_mgr->stop();
+    }
     if (_batch_write_mgr != nullptr) {
         _batch_write_mgr->stop();
     }

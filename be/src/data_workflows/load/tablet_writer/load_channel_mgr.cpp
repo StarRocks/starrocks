@@ -105,14 +105,22 @@ LoadChannelMgr::LoadChannelMgr(lake::TabletManager* lake_tablet_manager, Diagnos
 }
 
 LoadChannelMgr::~LoadChannelMgr() {
+    _stop_bg_worker();
+}
+
+void LoadChannelMgr::_stop_bg_worker() {
     if (_load_channels_clean_thread != INVALID_BTHREAD) {
         [[maybe_unused]] void* ret;
         bthread_stop(_load_channels_clean_thread);
         bthread_join(_load_channels_clean_thread, &ret);
+        _load_channels_clean_thread = INVALID_BTHREAD;
     }
 }
 
 void LoadChannelMgr::close() {
+    // DataWorkflowsEnv::stop() calls close() before ExecEnv teardown; stop the
+    // cleaner here so it cannot touch StorageEnv/LakeTabletManager after that.
+    _stop_bg_worker();
     _async_rpc_pool->shutdown();
     std::lock_guard l(_lock);
     for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {

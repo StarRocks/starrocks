@@ -52,6 +52,9 @@ public:
     ~DataWorkflowsEnv();
 
     Status init(const DataWorkflowsEnvOptions& options);
+    // Stop background activity before ExecEnv teardown, but keep owned objects
+    // alive until destroy(); StreamLoadContext rollback callbacks can still
+    // reference the StreamLoadExecutor while ExecEnv releases stream contexts.
     void stop();
     void destroy();
 

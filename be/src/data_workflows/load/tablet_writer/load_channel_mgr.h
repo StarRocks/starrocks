@@ -146,6 +146,7 @@ private:
 
     void _open(LoadChannelOpenContext open_context);
     Status _start_bg_worker();
+    void _stop_bg_worker();
     std::shared_ptr<LoadChannel> _find_load_channel(const UniqueId& load_id);
     std::shared_ptr<LoadChannel> _find_load_channel(int64_t txn_id);
     void _start_load_channels_clean();

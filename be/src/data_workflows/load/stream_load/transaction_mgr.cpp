@@ -83,8 +83,13 @@ TransactionMgr::TransactionMgr(ExecEnv* exec_env, StreamLoadExecutor* stream_loa
 }
 
 TransactionMgr::~TransactionMgr() {
-    _is_stopped.store(true);
-    _transaction_clean_thread.join();
+    stop();
+}
+
+void TransactionMgr::stop() {
+    if (!_is_stopped.exchange(true) && _transaction_clean_thread.joinable()) {
+        _transaction_clean_thread.join();
+    }
 }
 
 std::string TransactionMgr::_build_reply(const std::string& txn_op, StreamLoadContext* ctx) {

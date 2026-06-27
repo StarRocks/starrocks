@@ -29,15 +29,36 @@
 
 namespace starrocks {
 
+namespace {
+
+void release_context_ref(StreamLoadContext* ctx) {
+    if (ctx != nullptr && ctx->unref()) {
+        delete ctx;
+    }
+}
+
+} // namespace
+
 StreamContextMgr::StreamContextMgr(LoadStreamMgr* load_stream_mgr) : _load_stream_mgr(load_stream_mgr) {}
 
 StreamContextMgr::~StreamContextMgr() {
     std::lock_guard<std::mutex> l(_lock);
     for (auto& iter : _stream_map) {
-        if (iter.second->unref()) {
-            delete iter.second;
+        release_context_ref(iter.second);
+    }
+    _stream_map.clear();
+
+    // ExecEnv teardown may be the last owner of channel stream-load contexts.
+    // Releasing them here lets StreamLoadContext run rollback callbacks while
+    // DataWorkflowsEnv still owns StreamLoadExecutor.
+    for (auto& label_entry : _channel_stream_map) {
+        for (auto& table_entry : label_entry.second) {
+            for (auto& channel_entry : table_entry.second) {
+                release_context_ref(channel_entry.second);
+            }
         }
     }
+    _channel_stream_map.clear();
 }
 
 Status StreamContextMgr::put(const std::string& id, StreamLoadContext* stream) {

@@ -194,10 +194,13 @@ int init_test_env(int argc, char** argv) {
 #endif
     orchestration_env->destroy();
     orchestration_env.reset();
+    // ExecEnv destroys StreamContextMgr here. Remaining StreamLoadContexts may
+    // invoke rollback callbacks that capture DataWorkflowsEnv's StreamLoadExecutor.
+    // Keep DataWorkflowsEnv alive until those contexts have been released.
+    exec_env->destroy();
     data_workflows_env->destroy();
     data_workflows_env.reset();
     delete engine;
-    exec_env->destroy();
     agent_server.reset();
     platform_env->destroy();
     cache_env->destroy();

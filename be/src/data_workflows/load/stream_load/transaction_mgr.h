@@ -32,6 +32,8 @@ public:
     TransactionMgr(ExecEnv* exec_env, StreamLoadExecutor* stream_load_executor);
     ~TransactionMgr();
 
+    void stop();
+
     Status begin_transaction(const HttpRequest* req, std::string* resp);
     Status commit_transaction(const HttpRequest* req, std::string* resp);
     Status rollback_transaction(const HttpRequest* req, std::string* resp);

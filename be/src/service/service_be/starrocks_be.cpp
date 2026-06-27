@@ -423,12 +423,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     orchestration_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env destroy successfully";
 
+    // ExecEnv destroys StreamContextMgr here. Remaining StreamLoadContexts may
+    // invoke rollback callbacks that capture DataWorkflowsEnv's StreamLoadExecutor.
+    // Keep DataWorkflowsEnv alive until those contexts have been released.
+    exec_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
+
     data_workflows_env->destroy();
     data_workflows_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
-
-    exec_env->destroy();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
     platform_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";

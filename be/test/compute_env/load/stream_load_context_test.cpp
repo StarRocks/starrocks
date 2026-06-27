@@ -22,6 +22,7 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_pipe.h"
 
 namespace starrocks {
@@ -90,6 +91,52 @@ TEST(StreamLoadContextTest, destructor_runs_rollback_callback_when_needed) {
         });
 
         EXPECT_TRUE(ctx.need_rollback());
+    }
+
+    EXPECT_EQ(1, rollback_count);
+}
+
+TEST(StreamContextMgrTest, destructor_releases_stream_contexts_and_runs_rollback_callback) {
+    int rollback_count = 0;
+    StreamLoadContext* ctx = new StreamLoadContext(nullptr, nullptr);
+    StreamLoadContext* expected_ctx = ctx;
+    ctx->label = "stream_context_mgr_dtor";
+    ctx->set_need_rollback([&rollback_count, expected_ctx](StreamLoadContext* callback_ctx) {
+        EXPECT_EQ(expected_ctx, callback_ctx);
+        ++rollback_count;
+        return Status::OK();
+    });
+
+    {
+        StreamContextMgr stream_context_mgr(nullptr);
+        ASSERT_OK(stream_context_mgr.put(ctx->label, ctx));
+    }
+
+    EXPECT_EQ(1, rollback_count);
+}
+
+TEST(StreamContextMgrTest, destructor_releases_channel_contexts_and_runs_rollback_callback) {
+    LoadStreamMgr load_stream_mgr;
+    int rollback_count = 0;
+    StreamLoadContext* ctx = nullptr;
+    const std::string label = "stream_context_mgr_channel_dtor";
+    const std::string db = "db";
+    const std::string table = "table";
+    const int channel_id = 7;
+    const TUniqueId load_id = UniqueId::gen_uid().to_thrift();
+
+    {
+        StreamContextMgr stream_context_mgr(&load_stream_mgr);
+        ASSERT_OK(stream_context_mgr.create_channel_context(nullptr, label, channel_id, db, table,
+                                                            TFileFormatType::FORMAT_CSV_PLAIN, ctx, load_id, 123));
+        StreamLoadContext* expected_ctx = ctx;
+        ctx->set_need_rollback([&rollback_count, expected_ctx](StreamLoadContext* callback_ctx) {
+            EXPECT_EQ(expected_ctx, callback_ctx);
+            ++rollback_count;
+            return Status::OK();
+        });
+        ASSERT_OK(stream_context_mgr.put_channel_context(label, table, channel_id, ctx));
+        StreamLoadContext::release(ctx);
     }
 
     EXPECT_EQ(1, rollback_count);

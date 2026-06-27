@@ -20,6 +20,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/monotime.h"
 #include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
@@ -33,6 +34,7 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "data_workflows/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
@@ -60,11 +62,25 @@ public:
         _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
                                                              PlatformEnv::GetInstance()->brpc_stub_cache());
         ASSERT_OK(_load_channel_mgr->init(_global_env->load_mem_tracker()));
-        register_config_update_hooks(ExecEnv::GetInstance(), *_global_env, _load_channel_mgr.get());
+        std::unique_ptr<ThreadPool> thread_pool;
+        ASSERT_OK(ThreadPoolBuilder("ConfigUpdateHooksTestBatchWrite")
+                          .set_min_threads(0)
+                          .set_max_threads(4)
+                          .set_max_queue_size(2048)
+                          .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                          .build(&thread_pool));
+        auto executor = std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
+        _batch_write_mgr = std::make_unique<BatchWriteMgr>(std::move(executor));
+        ASSERT_OK(_batch_write_mgr->init());
+        register_config_update_hooks(ExecEnv::GetInstance(), *_global_env, _load_channel_mgr.get(),
+                                     _batch_write_mgr.get());
         ConfigUpdateRegistry::instance()->set_ready();
     }
     void TearDown() override {
         ConfigUpdateRegistry::instance()->TEST_reset();
+        if (_batch_write_mgr != nullptr) {
+            _batch_write_mgr->stop();
+        }
         if (_load_channel_mgr != nullptr) {
             _load_channel_mgr->close();
         }
@@ -73,6 +89,7 @@ public:
 protected:
     GlobalEnv* _global_env = nullptr;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
+    std::unique_ptr<BatchWriteMgr> _batch_write_mgr;
 };
 
 TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
@@ -244,7 +261,8 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
 // TearDown's TEST_reset() restores a clean registry for the next test.
 TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_null_exec_env_returns_internal_error) {
     ConfigUpdateRegistry::instance()->TEST_reset();
-    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance(), _load_channel_mgr.get());
+    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance(), _load_channel_mgr.get(),
+                                 _batch_write_mgr.get());
     ConfigUpdateRegistry::instance()->set_ready();
 
     auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");
