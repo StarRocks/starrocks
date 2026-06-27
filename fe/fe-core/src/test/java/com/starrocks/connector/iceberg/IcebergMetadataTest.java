@@ -1473,7 +1473,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
         Assertions.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
+        Assertions.assertFalse(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
         ColumnStatistic columnStatistic = statistics.getColumnStatistic(columnRefOperator1);
         Assertions.assertEquals(1.0, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(2.0, columnStatistic.getMaxValue(), 0.001);
