@@ -14,10 +14,6 @@
 
 #pragma once
 
-#include <functional>
-#include <string>
-#include <vector>
-
 #include "base/metrics.h"
 
 namespace starrocks {
@@ -53,7 +49,6 @@ public:
     static RuntimeMetrics* instance();
 
     void install(MetricRegistry* registry);
-    void register_runtime_filter_event_queue_len_hook(std::function<int64_t()> value_fn);
 
     METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(fragment_request_duration_us, MetricUnit::MICROSECONDS);
@@ -104,19 +99,8 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
 
-    METRIC_DEFINE_INT_GAUGE(runtime_filter_event_queue_len, MetricUnit::NOUNIT);
-
 private:
-    struct PendingIntGaugeHook {
-        std::string name;
-        IntGauge* metric;
-        std::function<int64_t()> value_fn;
-    };
-
-    void _register_int_gauge_hook(const std::string& name, IntGauge* metric, std::function<int64_t()> value_fn);
-
     MetricRegistry* _registry = nullptr;
-    std::vector<PendingIntGaugeHook> _pending_int_gauge_hooks;
 };
 
 } // namespace starrocks

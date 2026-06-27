@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter_worker.h"
+#include "orchestration/runtime_filter_worker.h"
 
 #include <utility>
 
@@ -20,17 +20,18 @@
 #include "common/config_network_fwd.h"
 #include "common/config_runtime_fwd.h"
 #include "common/thread/thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/service_contexts.h"
 #include "runtime/time_guard.h"
 
-namespace starrocks {
+namespace starrocks::orchestration {
 
-RuntimeFilterWorker::RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services)
+RuntimeFilterWorker::RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
+                                         MemTracker* query_pool_mem_tracker)
         : _runtime_services(runtime_services),
           _rpc_services(rpc_services),
+          _query_pool_mem_tracker(query_pool_mem_tracker),
           _delivery(runtime_services, rpc_services),
           _thread([this] { execute(); }) {
     DCHECK(_runtime_services != nullptr);
@@ -85,8 +86,8 @@ bool RuntimeFilterWorker::_reach_queue_limit() {
         }
     } else if (config::runtime_filter_queue_limit == 0) {
         int64_t mem_usage = _metrics->total_rf_bytes();
-        auto tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
-        if (tracker->limit_exceeded_precheck(mem_usage)) {
+        auto* tracker = _query_pool_mem_tracker;
+        if (tracker != nullptr && tracker->limit_exceeded_precheck(mem_usage)) {
             LOG(WARNING) << "runtime filter worker queue mem-useage is too large(" << mem_usage
                          << "), query pool consum(" << tracker->consumption() << "), limit(" << tracker->limit() << ")";
             return true;
@@ -284,4 +285,4 @@ size_t RuntimeFilterWorker::queue_size() const {
     return _queue.get_size();
 }
 
-} // namespace starrocks
+} // namespace starrocks::orchestration

@@ -35,7 +35,8 @@ OrchestrationMetrics::~OrchestrationMetrics() {
 }
 
 void OrchestrationMetrics::install(MetricRegistry* registry,
-                                   RuntimeFilterMetricsProvider runtime_filter_metrics_provider) {
+                                   RuntimeFilterMetricsProvider runtime_filter_metrics_provider,
+                                   RuntimeFilterQueueSizeProvider runtime_filter_queue_size_provider) {
     if (registry == nullptr) {
         return;
     }
@@ -44,6 +45,8 @@ void OrchestrationMetrics::install(MetricRegistry* registry,
         return;
     }
     _runtime_filter_metrics_provider = std::move(runtime_filter_metrics_provider);
+    _runtime_filter_queue_size_provider = std::move(runtime_filter_queue_size_provider);
+    registry->register_metric("runtime_filter_event_queue_len", &runtime_filter_event_queue_len);
     for (int i = 0; i < EventType::MAX_COUNT; i++) {
         auto event_metrics = std::make_unique<RuntimeFilterEventMetrics>();
         const auto& type = EventTypeToString(static_cast<EventType>(i));
@@ -62,6 +65,9 @@ void OrchestrationMetrics::install(MetricRegistry* registry,
 }
 
 void OrchestrationMetrics::update_runtime_filter_metrics() {
+    if (_runtime_filter_queue_size_provider) {
+        runtime_filter_event_queue_len.set_value(_runtime_filter_queue_size_provider());
+    }
     if (!_runtime_filter_metrics_provider) {
         return;
     }

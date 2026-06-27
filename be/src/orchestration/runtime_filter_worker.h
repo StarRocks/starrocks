@@ -23,20 +23,23 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "orchestration/runtime_filter_worker_event.h"
 #include "runtime/runtime_filter_delivery.h"
 #include "runtime/runtime_filter_merger.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_filter_sender.h"
-#include "runtime/runtime_filter_worker_event.h"
 
 namespace starrocks {
-
 struct RuntimeServices;
 struct RpcServices;
+class MemTracker;
+
+namespace orchestration {
 
 class RuntimeFilterWorker : public RuntimeFilterQueryLifecycle, public RuntimeFilterSender {
 public:
-    RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services);
+    RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
+                        MemTracker* query_pool_mem_tracker);
     ~RuntimeFilterWorker();
     void close();
     // open query for creating runtime filter merger.
@@ -62,9 +65,11 @@ private:
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
     const RuntimeServices* _runtime_services;
     const RpcServices* _rpc_services;
+    MemTracker* _query_pool_mem_tracker;
     RuntimeFilterDelivery _delivery;
     std::thread _thread;
     RuntimeFilterWorkerMetrics* _metrics = nullptr;
 };
 
-}; // namespace starrocks
+} // namespace orchestration
+} // namespace starrocks

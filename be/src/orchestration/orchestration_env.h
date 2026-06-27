@@ -29,6 +29,7 @@ class ExternalScanContextMgr;
 class ExternalScanOrchestrator;
 class OrchestrationMetrics;
 class RoutineLoadTaskExecutor;
+class RuntimeFilterWorker;
 class StreamLoadOrchestrator;
 
 class OrchestrationEnv {
@@ -46,13 +47,18 @@ public:
     const StreamLoadOrchestrator* stream_load_orchestrator() const { return _stream_load_orchestrator.get(); }
     ExternalScanOrchestrator* external_scan_orchestrator() { return _external_scan_orchestrator.get(); }
     const ExternalScanOrchestrator* external_scan_orchestrator() const { return _external_scan_orchestrator.get(); }
+    RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker.get(); }
+    const RuntimeFilterWorker* runtime_filter_worker() const { return _runtime_filter_worker.get(); }
 
 private:
+    ExecEnv* _exec_env = nullptr;
     std::unique_ptr<OrchestrationMetrics> _metrics;
+    std::unique_ptr<RuntimeFilterWorker> _runtime_filter_worker;
     std::unique_ptr<ExternalScanContextMgr> _external_scan_context_mgr;
     std::unique_ptr<ExternalScanOrchestrator> _external_scan_orchestrator;
     std::unique_ptr<StreamLoadOrchestrator> _stream_load_orchestrator;
     std::unique_ptr<RoutineLoadTaskExecutor> _routine_load_task_executor;
+    bool _runtime_filter_worker_started = false;
     bool _routine_load_task_executor_started = false;
 };
 

@@ -102,7 +102,6 @@ set(RUNTIME_FILES
     runtime_filter_merger.cpp
     runtime_filter_port.cpp
     runtime_filter_rpc.cpp
-    runtime_filter_worker.cpp
     runtime_filter_worker_context.cpp
     runtime_filter_serde.cpp
     command_executor.cpp
