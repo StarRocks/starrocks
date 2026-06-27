@@ -98,7 +98,12 @@ set(RUNTIME_FILES
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp
+    runtime_filter_delivery.cpp
+    runtime_filter_merger.cpp
+    runtime_filter_port.cpp
+    runtime_filter_rpc.cpp
     runtime_filter_worker.cpp
+    runtime_filter_worker_context.cpp
     runtime_filter_serde.cpp
     command_executor.cpp
     diagnose_daemon.cpp
