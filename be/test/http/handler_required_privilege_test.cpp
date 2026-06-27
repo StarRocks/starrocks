@@ -21,6 +21,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
+#include "data_workflows/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
+#include "data_workflows/load/stream_load/transaction_mgr.h"
 #include "http/core/ev_http_server.h"
 #include "http/core/http_handler.h"
 #include "http/service/action/checksum_action.h"
@@ -205,7 +211,16 @@ TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_skip_framework_auth) 
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
     ExecEnv env;
     orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
-    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr);
+    StreamLoadExecutor stream_load_executor;
+    std::unique_ptr<ThreadPool> thread_pool;
+    ASSERT_OK(ThreadPoolBuilder("BeHandlerNeedAuthTest")
+                      .set_min_threads(0)
+                      .set_max_threads(1)
+                      .set_max_queue_size(1)
+                      .build(&thread_pool));
+    auto executor = std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
+    BatchWriteMgr batch_write_mgr(std::move(executor));
+    StreamLoadAction action(&env, &stream_load_orchestrator, &stream_load_executor, &batch_write_mgr, nullptr);
     EXPECT_FALSE(action.need_auth());
 }
 
@@ -213,11 +228,13 @@ TEST(BeHandlerNeedAuthTest, transaction_endpoints_skip_framework_auth) {
     // Both transaction-management endpoints opt out of the framework Basic-Auth
     // gate — they use a label-bound session model (begin parses Basic, later ops
     // look up the StreamLoadContext by label).
-    TransactionManagerAction txn_mgr(nullptr);
-    EXPECT_FALSE(txn_mgr.need_auth());
     ExecEnv env;
+    StreamLoadExecutor stream_load_executor;
+    TransactionMgr transaction_mgr(&env, &stream_load_executor);
+    TransactionManagerAction txn_mgr(&env, &transaction_mgr);
+    EXPECT_FALSE(txn_mgr.need_auth());
     orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
-    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator);
+    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator, &transaction_mgr);
     EXPECT_FALSE(txn_load.need_auth());
 }
 

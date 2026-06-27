@@ -88,8 +88,6 @@ set(RUNTIME_FILES
     plan_fragment_executor.cpp
     pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
-    stream_load/transaction_mgr.cpp
-    stream_load/stream_load_executor.cpp
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp

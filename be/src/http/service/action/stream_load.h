@@ -49,6 +49,7 @@ class BatchWriteMgr;
 class ExecEnv;
 class Status;
 class StreamLoadContext;
+class StreamLoadExecutor;
 class ConcurrentLimiter;
 
 namespace orchestration {
@@ -58,7 +59,8 @@ class StreamLoadOrchestrator;
 class StreamLoadAction : public HttpHandler {
 public:
     StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
-                     BatchWriteMgr* batch_write_mgr, ConcurrentLimiter* limiter);
+                     StreamLoadExecutor* stream_load_executor, BatchWriteMgr* batch_write_mgr,
+                     ConcurrentLimiter* limiter);
     ~StreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -86,6 +88,7 @@ private:
 private:
     ExecEnv* _exec_env;
     orchestration::StreamLoadOrchestrator* _stream_load_orchestrator;
+    StreamLoadExecutor* _stream_load_executor;
     BatchWriteMgr* _batch_write_mgr;
     ConcurrentLimiter* _http_concurrent_limiter = nullptr;
 };

@@ -67,8 +67,12 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
         consumer = std::make_shared<KafkaDataConsumer>(ctx);
         break;
     case TLoadSourceType::PULSAR:
+#ifdef __APPLE__
+        return Status::NotSupported("Pulsar routine load is not supported on MacOS");
+#else
         consumer = std::make_shared<PulsarDataConsumer>(ctx);
         break;
+#endif
     default:
         std::stringstream ss;
         ss << "PAUSE: unknown routine load task type: " << ctx->load_type;
@@ -107,6 +111,9 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
         *ret = grp;
         return Status::OK();
     } else {
+#ifdef __APPLE__
+        return Status::NotSupported("Pulsar routine load is not supported on MacOS");
+#else
         DCHECK(ctx->pulsar_info);
         DCHECK_GE(ctx->pulsar_info->partitions.size(), 1);
 
@@ -131,6 +138,7 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
         LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
         *ret = grp;
         return Status::OK();
+#endif
     }
 }
 

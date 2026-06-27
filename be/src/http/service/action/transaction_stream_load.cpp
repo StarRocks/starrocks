@@ -44,6 +44,7 @@
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/load/stream_load/transaction_mgr.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -57,8 +58,6 @@
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks {
 
@@ -85,7 +84,10 @@ static TFileFormatType::type parse_stream_load_format(const std::string& format_
     return TFileFormatType::FORMAT_UNKNOWN;
 }
 
-TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env, TransactionMgr* transaction_mgr)
+        : _exec_env(exec_env), _transaction_mgr(transaction_mgr) {
+    DCHECK(_transaction_mgr != nullptr);
+}
 
 TransactionManagerAction::~TransactionManagerAction() = default;
 
@@ -111,7 +113,7 @@ void TransactionManagerAction::handle(HttpRequest* req) {
 
     auto txn_op = req->param(HTTP_TXN_OP_KEY);
     if (boost::iequals(txn_op, TXN_LIST)) {
-        st = _exec_env->transaction_mgr()->list_transactions(req, &resp);
+        st = _transaction_mgr->list_transactions(req, &resp);
         return _send_reply(req, resp);
     }
 
@@ -128,11 +130,11 @@ void TransactionManagerAction::handle(HttpRequest* req) {
     }
 
     if (boost::iequals(txn_op, TXN_BEGIN)) {
-        st = _exec_env->transaction_mgr()->begin_transaction(req, &resp);
+        st = _transaction_mgr->begin_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
-        st = _exec_env->transaction_mgr()->commit_transaction(req, &resp);
+        st = _transaction_mgr->commit_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_ROLLBACK)) {
-        st = _exec_env->transaction_mgr()->rollback_transaction(req, &resp);
+        st = _transaction_mgr->rollback_transaction(req, &resp);
     } else {
         return _send_error_reply(req,
                                  Status::InvalidArgument(fmt::format("unsupport transaction operation {}", txn_op)));
@@ -175,9 +177,11 @@ private:
 };
 
 TransactionStreamLoadAction::TransactionStreamLoadAction(
-        ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator)
-        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator) {
+        ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
+        TransactionMgr* transaction_mgr)
+        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _transaction_mgr(transaction_mgr) {
     DCHECK(_stream_load_orchestrator != nullptr);
+    DCHECK(_transaction_mgr != nullptr);
 }
 
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
@@ -218,7 +222,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
 
     if (!ctx->status.ok()) {
         if (ctx->need_rollback()) {
-            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+            (void)_transaction_mgr->_rollback_transaction(ctx);
         }
     }
 
@@ -232,7 +236,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
         ctx->buffer = nullptr;
     }
 
-    auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
+    auto resp = _transaction_mgr->_build_reply(TXN_LOAD, ctx);
     _finish_and_reply(req, resp);
 }
 
@@ -301,9 +305,9 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
     if (!st.ok()) {
         ctx->status = st;
         if (ctx->need_rollback()) {
-            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+            (void)_transaction_mgr->_rollback_transaction(ctx);
         }
-        auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
+        auto resp = _transaction_mgr->_build_reply(TXN_LOAD, ctx);
         _finish_and_reply(req, resp);
         return -1;
     }

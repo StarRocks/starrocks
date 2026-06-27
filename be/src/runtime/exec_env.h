@@ -63,7 +63,6 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class StreamContextMgr;
-class TransactionMgr;
 class ProcessMetricsRegistry;
 class StorageEngine;
 class TableMetricsManager;
@@ -72,7 +71,6 @@ class PriorityThreadPool;
 class ResultBufferMgr;
 class ResultQueueMgr;
 class WebPageHandler;
-class StreamLoadExecutor;
 class SmallFileMgr;
 class RuntimeFilterCache;
 class ProfileReportWorker;
@@ -142,9 +140,6 @@ public:
     LoadStreamMgr* load_stream_mgr();
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr();
-    TransactionMgr* transaction_mgr() { return _transaction_mgr; }
-
-    StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
     const PlatformServices& platform_services() const { return _platform_services; }
@@ -192,11 +187,8 @@ private:
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<ComputeEnv> _compute_env;
 
-    TransactionMgr* _transaction_mgr = nullptr;
-
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
-    StreamLoadExecutor* _stream_load_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

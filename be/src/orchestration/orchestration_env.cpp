@@ -20,15 +20,13 @@
 #include <vector>
 
 #include "common/config_exec_env_fwd.h"
-#include "common/config_merge_commit_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/system/master_info.h"
-#include "common/thread/threadpool.h"
-#include "common/util/bthreads/executor.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/profile_report_worker.h"
 #include "data_workflows/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
 #include "exec/runtime/query_context_manager.h"
 #include "orchestration/external_scan_context_mgr.h"
 #include "orchestration/external_scan_orchestrator.h"
@@ -48,21 +46,14 @@ OrchestrationEnv::~OrchestrationEnv() {
     destroy();
 }
 
-Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
+Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, BatchWriteMgr* batch_write_mgr,
+                              StreamLoadExecutor* stream_load_executor) {
     DCHECK(exec_env != nullptr);
+    DCHECK(batch_write_mgr != nullptr);
+    DCHECK(stream_load_executor != nullptr);
     _exec_env = exec_env;
-
-    std::unique_ptr<ThreadPool> batch_write_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
-                            .set_min_threads(config::merge_commit_thread_pool_num_min)
-                            .set_max_threads(config::merge_commit_thread_pool_num_max)
-                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
-                            .build(&batch_write_thread_pool));
-    auto batch_write_executor =
-            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
-    _batch_write_mgr = std::make_unique<BatchWriteMgr>(std::move(batch_write_executor));
-    RETURN_IF_ERROR(_batch_write_mgr->init(metrics));
+    _batch_write_mgr = batch_write_mgr;
+    _stream_load_executor = stream_load_executor;
 
     _fragment_mgr = std::make_unique<FragmentMgr>(exec_env, metrics);
 
@@ -97,7 +88,8 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
 
     _stream_load_orchestrator = std::make_unique<StreamLoadOrchestrator>(exec_env, _fragment_mgr.get());
 
-    _routine_load_task_executor = std::make_unique<RoutineLoadTaskExecutor>(exec_env, _stream_load_orchestrator.get());
+    _routine_load_task_executor =
+            std::make_unique<RoutineLoadTaskExecutor>(exec_env, _stream_load_orchestrator.get(), _stream_load_executor);
     RETURN_IF_ERROR(_routine_load_task_executor->init(metrics));
     _routine_load_task_executor_started = true;
 
@@ -147,9 +139,6 @@ void OrchestrationEnv::stop() {
     if (_fragment_mgr != nullptr) {
         _fragment_mgr->close();
     }
-    if (_batch_write_mgr != nullptr) {
-        _batch_write_mgr->stop();
-    }
 }
 
 void OrchestrationEnv::destroy() {
@@ -166,7 +155,8 @@ void OrchestrationEnv::destroy() {
         _exec_env = nullptr;
     }
     _fragment_mgr.reset();
-    _batch_write_mgr.reset();
+    _batch_write_mgr = nullptr;
+    _stream_load_executor = nullptr;
 }
 
 size_t OrchestrationEnv::_get_running_fragments_count() const {

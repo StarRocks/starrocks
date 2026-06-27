@@ -73,8 +73,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
@@ -149,8 +147,6 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.load_path_mgr = load_path_mgr();
     _runtime_services.load_stream_mgr = load_stream_mgr();
     _runtime_services.stream_context_mgr = stream_context_mgr();
-    _runtime_services.transaction_mgr = _transaction_mgr;
-    _runtime_services.stream_load_executor = _stream_load_executor;
     _runtime_services.small_file_mgr = _small_file_mgr;
     _runtime_services.runtime_filter_sender = _runtime_filter_sender;
     _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_query_lifecycle;
@@ -240,9 +236,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
     workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
     RETURN_IF_ERROR(_compute_env->init_workgroup(workgroup_options));
-
-    _stream_load_executor = new StreamLoadExecutor(this);
-    _transaction_mgr = new TransactionMgr(this);
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
@@ -521,11 +514,9 @@ void ExecEnv::destroy() {
     }
     SAFE_DELETE(_heartbeat_flags);
     SAFE_DELETE(_small_file_mgr);
-    SAFE_DELETE(_transaction_mgr);
     if (_compute_env != nullptr) {
         _compute_env->destroy_stream_context_mgr();
     }
-    SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     if (_compute_env != nullptr) {
         _compute_env->destroy_load_path();

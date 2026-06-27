@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/stream_load/stream_load_executor.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
 
 #include <fmt/format.h>
 
@@ -51,7 +51,6 @@
 #include "gen_cpp/FrontendService.h"
 #include "gutil/walltime.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/exec_env.h"
 #include "storage/non_retryable_load_errors.h"
 
 namespace starrocks {
@@ -68,7 +67,7 @@ static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, s
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
                                    int64_t deadline);
-static void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env);
+static void set_need_rollback(StreamLoadContext* ctx, StreamLoadExecutor* executor);
 
 Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     StreamLoadMetrics::instance()->txn_begin_request_total.increment(1);
@@ -108,7 +107,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
         return status;
     }
     ctx->txn_id = result.txnId;
-    set_need_rollback(ctx, _exec_env);
+    set_need_rollback(ctx, this);
     ctx->load_deadline_sec = UnixSeconds() + result.timeout;
 
     return Status::OK();
@@ -156,7 +155,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
             std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
         } else if (st.is_time_out()) {
             if (++retry > 1) {
-                set_need_rollback(ctx, _exec_env);
+                set_need_rollback(ctx, this);
                 return st;
             }
             LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
@@ -164,7 +163,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
                 rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
             }
         } else {
-            set_need_rollback(ctx, _exec_env);
+            set_need_rollback(ctx, this);
             return st;
         }
     }
@@ -415,10 +414,9 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
     return false;
 }
 
-void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env) {
-    ctx->set_need_rollback([exec_env](StreamLoadContext* rollback_ctx) {
-        return exec_env->stream_load_executor()->rollback_txn(rollback_ctx);
-    });
+void set_need_rollback(StreamLoadContext* ctx, StreamLoadExecutor* executor) {
+    ctx->set_need_rollback(
+            [executor](StreamLoadContext* rollback_ctx) { return executor->rollback_txn(rollback_ctx); });
 }
 
 } // namespace starrocks

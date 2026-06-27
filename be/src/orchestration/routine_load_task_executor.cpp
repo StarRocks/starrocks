@@ -45,6 +45,7 @@
 #include "common/status.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
@@ -53,7 +54,6 @@
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks::orchestration {
 
@@ -86,9 +86,9 @@ std::string build_kafka_source_info(const TKafkaLoadInfo& info) {
     return std::string(buf.GetString(), buf.GetSize());
 }
 
-void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env) {
-    ctx->set_need_rollback([exec_env](StreamLoadContext* rollback_ctx) {
-        return exec_env->stream_load_executor()->rollback_txn(rollback_ctx);
+void set_need_rollback(StreamLoadContext* ctx, StreamLoadExecutor* stream_load_executor) {
+    ctx->set_need_rollback([stream_load_executor](StreamLoadContext* rollback_ctx) {
+        return stream_load_executor->rollback_txn(rollback_ctx);
     });
 }
 
@@ -96,6 +96,7 @@ void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env) {
 
 Status RoutineLoadTaskExecutor::init(MetricRegistry* metrics) {
     DCHECK(_stream_load_orchestrator != nullptr);
+    DCHECK(_stream_load_executor != nullptr);
 
     if (metrics != nullptr) {
         REGISTER_GAUGE_RUNTIME_METRIC(metrics, routine_load_task_count, [this]() {
@@ -354,7 +355,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     }
     // the routine load task'txn has alreay began in FE.
     // so it need to rollback if encounter error.
-    set_need_rollback(ctx, _exec_env);
+    set_need_rollback(ctx, _stream_load_executor);
     if (task.__isset.max_filter_ratio) {
         ctx->max_filter_ratio = task.max_filter_ratio;
     } else {
@@ -487,7 +488,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     consumer_pool->return_consumers(consumer_grp.get());
 
     // commit txn
-    HANDLE_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx), "commit failed")
+    HANDLE_ERROR(_stream_load_executor->commit_txn(ctx), "commit failed")
 
     // commit messages
     switch (ctx->load_src_type) {
@@ -556,7 +557,7 @@ void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& 
     LOG(WARNING) << err_msg << " " << ctx->brief();
     ctx->status = st;
     if (ctx->need_rollback()) {
-        (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
+        (void)_stream_load_executor->rollback_txn(ctx);
         ctx->clear_need_rollback();
     }
     if (ctx->body_sink != nullptr) {

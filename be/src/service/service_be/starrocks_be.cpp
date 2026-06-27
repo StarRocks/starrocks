@@ -155,14 +155,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
-    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
-    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
-
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
     data_workflows_env_options.exec_env = exec_env;
-    data_workflows_env_options.batch_write_mgr = orchestration_env->batch_write_mgr();
     data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     data_workflows_env_options.diagnose_daemon = exec_env->diagnose_daemon();
     data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
@@ -171,6 +166,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     data_workflows_env_options.load_mem_tracker = global_env->load_mem_tracker();
     EXIT_IF_ERROR(data_workflows_env->init(data_workflows_env_options));
     LOG(INFO) << process_name << " start step " << start_step++ << ": data workflows env init successfully";
+
+    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
+    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry(),
+                                          data_workflows_env->batch_write_mgr(),
+                                          data_workflows_env->stream_load_executor()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
     // AgentServer::start() starts workers that can read ExecEnv::agent_server()
@@ -300,14 +301,16 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, orchestration_env.get(), *global_env,
-                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
-                                                       config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(
+            cache_env, exec_env, orchestration_env.get(), *global_env, process_metrics_registry, load_channel_mgr,
+            data_workflows_env->batch_write_mgr(), data_workflows_env->stream_load_executor(),
+            data_workflows_env->transaction_mgr(), config::be_http_port, config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, orchestration_env.get(), *global_env,
-                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
-                                                       config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(
+            nullptr, exec_env, orchestration_env.get(), *global_env, process_metrics_registry, load_channel_mgr,
+            data_workflows_env->batch_write_mgr(), data_workflows_env->stream_load_executor(),
+            data_workflows_env->transaction_mgr(), config::be_http_port, config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
@@ -382,11 +385,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     agent_server->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server stop successfully";
 
-    data_workflows_env->stop();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env stop successfully";
-
     orchestration_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env stop successfully";
+
+    data_workflows_env->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env stop successfully";
 
     exec_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec engine destroy successfully";
@@ -416,13 +419,13 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     agent_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server destroy successfully";
 
-    data_workflows_env->destroy();
-    data_workflows_env.reset();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
-
     orchestration_env->destroy();
     orchestration_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env destroy successfully";
+
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";

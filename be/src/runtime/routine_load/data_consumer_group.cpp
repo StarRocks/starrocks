@@ -263,6 +263,7 @@ void KafkaDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>&
     cb(st);
 }
 
+#ifndef __APPLE__
 Status PulsarDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
     DCHECK(ctx->pulsar_info);
     DCHECK(_consumers.size() >= 1);
@@ -461,5 +462,24 @@ void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {
         }
     }
 }
+#else
+PulsarDataConsumerGroup::~PulsarDataConsumerGroup() = default;
+
+Status PulsarDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
+    return Status::NotSupported("Pulsar routine load is not supported on MacOS");
+}
+
+Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
+    return Status::NotSupported("Pulsar routine load is not supported on MacOS");
+}
+
+void PulsarDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>& consumer,
+                                             TimedBlockingQueue<pulsar::Message*>* queue, int64_t max_running_time_ms,
+                                             const ConsumeFinishCallback& cb) {
+    cb(Status::NotSupported("Pulsar routine load is not supported on MacOS"));
+}
+
+void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {}
+#endif
 
 } // namespace starrocks

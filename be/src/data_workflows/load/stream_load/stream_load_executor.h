@@ -36,14 +36,13 @@
 
 namespace starrocks {
 
-class ExecEnv;
 class Status;
 class StreamLoadContext;
 class TTxnCommitAttachment;
 
 class StreamLoadExecutor {
 public:
-    StreamLoadExecutor(ExecEnv* exec_env) : _exec_env(exec_env) {}
+    StreamLoadExecutor() = default;
 
     Status begin_txn(StreamLoadContext* ctx);
 
@@ -57,9 +56,6 @@ private:
     // collect the load statistics from context and set them to stat
     // return true if stat is set, otherwise, return false
     bool collect_load_stat(StreamLoadContext* ctx, TTxnCommitAttachment* attachment);
-
-private:
-    ExecEnv* _exec_env;
 };
 
 } // namespace starrocks

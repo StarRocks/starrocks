@@ -31,6 +31,7 @@ class PStreamLoadRequest;
 class PStreamLoadResponse;
 class PUpdateTransactionStateRequest;
 class PUpdateTransactionStateResponse;
+class StreamLoadExecutor;
 
 namespace orchestration {
 
@@ -47,7 +48,8 @@ public:
     OrchestrationEnv();
     ~OrchestrationEnv();
 
-    Status init(ExecEnv* exec_env, MetricRegistry* metrics);
+    Status init(ExecEnv* exec_env, MetricRegistry* metrics, BatchWriteMgr* batch_write_mgr,
+                StreamLoadExecutor* stream_load_executor);
     void wait_for_finish();
     void stop();
     void destroy();
@@ -62,8 +64,8 @@ public:
     const ExternalScanOrchestrator* external_scan_orchestrator() const { return _external_scan_orchestrator.get(); }
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker.get(); }
     const RuntimeFilterWorker* runtime_filter_worker() const { return _runtime_filter_worker.get(); }
-    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr.get(); }
-    const BatchWriteMgr* batch_write_mgr() const { return _batch_write_mgr.get(); }
+    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
+    const BatchWriteMgr* batch_write_mgr() const { return _batch_write_mgr; }
 
     void receive_batch_write_stream_load_rpc(brpc::Controller* cntl, const PStreamLoadRequest* request,
                                              PStreamLoadResponse* response);
@@ -74,7 +76,8 @@ private:
     size_t _get_running_fragments_count() const;
 
     ExecEnv* _exec_env = nullptr;
-    std::unique_ptr<BatchWriteMgr> _batch_write_mgr;
+    BatchWriteMgr* _batch_write_mgr = nullptr;
+    StreamLoadExecutor* _stream_load_executor = nullptr;
     std::unique_ptr<FragmentMgr> _fragment_mgr;
     std::unique_ptr<OrchestrationMetrics> _metrics;
     std::unique_ptr<RuntimeFilterWorker> _runtime_filter_worker;

@@ -46,7 +46,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -56,6 +55,7 @@ class DataSink;
 class DataStreamMgr;
 class RuntimeProfile;
 class RuntimeState;
+class StreamLoadContext;
 class TPlanFragment;
 class TPlanFragmentExecParams;
 class TPlanExecParams;

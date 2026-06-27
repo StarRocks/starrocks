@@ -38,10 +38,8 @@ class RuntimeFilterSender;
 class SmallFileMgr;
 class StorePathRegistry;
 class StreamContextMgr;
-class StreamLoadExecutor;
 class TFileBrokerServiceClient;
 class ThreadPool;
-class TransactionMgr;
 class FrontendServiceClient;
 class MetricRegistry;
 template <class T>
@@ -128,8 +126,6 @@ struct RuntimeServices {
     BaseLoadPathMgr* load_path_mgr = nullptr;
     LoadStreamMgr* load_stream_mgr = nullptr;
     StreamContextMgr* stream_context_mgr = nullptr;
-    TransactionMgr* transaction_mgr = nullptr;
-    StreamLoadExecutor* stream_load_executor = nullptr;
     SmallFileMgr* small_file_mgr = nullptr;
     RuntimeFilterSender* runtime_filter_sender = nullptr;
     RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;

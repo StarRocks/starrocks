@@ -36,15 +36,17 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "base/logging.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -66,20 +68,18 @@ public:
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
         k_stream_load_put_result = TStreamLoadPutResult();
 
-        _env._stream_load_executor = new StreamLoadExecutor(&_env);
+        _stream_load_executor = std::make_unique<StreamLoadExecutor>();
 
         config::max_consumer_num_per_group = 3;
         config::routine_load_kafka_timeout_second = 3;
     }
 
-    void TearDown() override {
-        delete _env._stream_load_executor;
-        _env._stream_load_executor = nullptr;
-    }
+    void TearDown() override { _stream_load_executor.reset(); }
 
 private:
     ExecEnv _env;
     orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env, nullptr};
+    std::unique_ptr<StreamLoadExecutor> _stream_load_executor;
 };
 
 TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
@@ -106,7 +106,7 @@ TEST_F(RoutineLoadTaskExecutorTest, exec_task) {
 
     task.__set_kafka_load_info(k_info);
 
-    orchestration::RoutineLoadTaskExecutor executor(&_env, &_stream_load_orchestrator);
+    orchestration::RoutineLoadTaskExecutor executor(&_env, &_stream_load_orchestrator, _stream_load_executor.get());
 
     // submit task
     Status st;

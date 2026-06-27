@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/stream_load/transaction_mgr.h"
+#include "data_workflows/load/stream_load/transaction_mgr.h"
 
 #include <deque>
 #include <future>
@@ -42,6 +42,7 @@
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -56,7 +57,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/message_body_sink.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -66,7 +66,9 @@ static uint32_t interval = 30;
 static uint32_t interval = 1;
 #endif
 
-TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
+TransactionMgr::TransactionMgr(ExecEnv* exec_env, StreamLoadExecutor* stream_load_executor)
+        : _exec_env(exec_env), _stream_load_executor(stream_load_executor) {
+    DCHECK(_stream_load_executor != nullptr);
     _transaction_clean_thread = std::thread([this] {
 #ifdef GOOGLE_PROFILER
         ProfilerRegisterThread();
@@ -314,7 +316,7 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     ctx->begin_txn_ts = UnixSeconds();
     int64_t begin_nanos = MonotonicNanos();
     ctx->last_active_ts = ctx->begin_txn_ts.load();
-    RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
+    RETURN_IF_ERROR(_stream_load_executor->begin_txn(ctx));
     ctx->begin_txn_cost_nanos = MonotonicNanos() - begin_nanos;
 
     // 4. put load stream context
@@ -349,9 +351,9 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
     // 3. commit transaction
     int64_t commit_and_publish_start_time = MonotonicNanos();
     if (prepare) {
-        RETURN_IF_ERROR(_exec_env->stream_load_executor()->prepare_txn(ctx));
+        RETURN_IF_ERROR(_stream_load_executor->prepare_txn(ctx));
     } else {
-        RETURN_IF_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx));
+        RETURN_IF_ERROR(_stream_load_executor->commit_txn(ctx));
     }
     ctx->commit_and_publish_txn_cost_nanos = MonotonicNanos() - commit_and_publish_start_time;
 
@@ -382,7 +384,7 @@ Status TransactionMgr::_rollback_transaction(StreamLoadContext* ctx) {
     _exec_env->load_stream_mgr()->remove(ctx->id);
 
     // 3. rollback transaction by send request to FE
-    RETURN_IF_ERROR(_exec_env->stream_load_executor()->rollback_txn(ctx));
+    RETURN_IF_ERROR(_stream_load_executor->rollback_txn(ctx));
     ctx->clear_need_rollback();
 
     // 4. remove stream load context
