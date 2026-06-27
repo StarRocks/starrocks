@@ -17,6 +17,7 @@ package com.starrocks.connector.delta;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.connector.PredicateSearchKey;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -88,18 +89,65 @@ public class DeltaStatisticProvider {
             DeltaLakeFileStats fileStats) {
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = new HashMap<>();
 
-        for (Map.Entry<ColumnRefOperator, Column> entry : columnRefOperatorColumns.entrySet())  {
+        for (Map.Entry<ColumnRefOperator, Column> entry : columnRefOperatorColumns.entrySet()) {
             if (columnStatistics.containsKey(entry.getKey())) {
                 continue;
             }
 
-            if (schema.get(entry.getValue().getName()) == null) {
+            String colName = entry.getValue().getName();
+            if (schema.get(colName) == null) {
                 columnStatistics.put(entry.getKey(), ColumnStatistic.unknown());
+                continue;
             }
 
-            columnStatistics.put(entry.getKey(), fileStats.fillColumnStats(entry.getValue()));
+            ColumnStatistic base = fileStats.fillColumnStats(entry.getValue());
+            double ndv = estimateDeltaNdv(colName, schema, fileStats);
+            ColumnStatistic stat = ColumnStatistic.buildFrom(base)
+                    .setDistinctValuesCount(ndv)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build();
+            columnStatistics.put(entry.getKey(), stat);
         }
 
         return columnStatistics;
+    }
+
+    private static double estimateDeltaNdv(String colName, StructType schema, DeltaLakeFileStats stats) {
+        ConnectorNdvEstimator.TypeCategory cat = toDeltaTypeCategory(schema, colName);
+        double min = stats.getMinDouble(colName);
+        double max = stats.getMaxDouble(colName);
+        long rowCount = stats.getRecordCount();
+        // Delta does not expose per-column compressed sizes; skip Tier 2
+        double ndv = ConnectorNdvEstimator.estimate(cat, min, max, -1L, 0L, rowCount);
+        return Math.max(1.0, Math.min(ndv, rowCount));
+    }
+
+    private static ConnectorNdvEstimator.TypeCategory toDeltaTypeCategory(StructType schema, String colName) {
+        io.delta.kernel.types.DataType dt = schema.get(colName).getDataType();
+        DeltaDataType ddt = DeltaDataType.instanceFrom(dt.getClass());
+        switch (ddt) {
+            case BOOLEAN:
+                return ConnectorNdvEstimator.TypeCategory.BOOLEAN;
+            case BYTE:
+            case SMALLINT:
+            case INTEGER:
+            case LONG:
+            case FLOAT:
+            case DOUBLE:
+            case DECIMAL:
+                return ConnectorNdvEstimator.TypeCategory.INTEGER_LIKE;
+            case DATE:
+                // DeltaLakeFileStats.parseDate() converts to epoch-seconds via toEpochSecond()
+                return ConnectorNdvEstimator.TypeCategory.DATE_IN_EPOCH_SECONDS;
+            case TIMESTAMP:
+            case TIMESTAMP_NTZ:
+                // DeltaLakeFileStats converts timestamps to epoch-seconds
+                return ConnectorNdvEstimator.TypeCategory.TIMESTAMP_IN_EPOCH_SECONDS;
+            case STRING:
+            case BINARY:
+                return ConnectorNdvEstimator.TypeCategory.STRING_LIKE;
+            default:
+                return ConnectorNdvEstimator.TypeCategory.OTHER;
+        }
     }
 }

@@ -29,6 +29,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
@@ -104,15 +105,23 @@ public class ElasticsearchMetadata
                                          TvrVersionRange tableVersionRange) {
         Statistics.Builder builder = Statistics.builder()
                 .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
-        for (ColumnRefOperator col : columns.keySet()) {
-            builder.addColumnStatistic(col, ColumnStatistic.unknown());
-        }
         EsTable esTable = (EsTable) table;
         long rowCount = rowCountCache.get(esTable.getIndexName(), key -> {
             long cnt = esRestClient.getRowCount(key);
             return cnt >= 0 ? cnt : Config.default_statistics_output_row_count;
         });
         builder.setOutputRowCount(rowCount);
+        for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
+            ConnectorNdvEstimator.TypeCategory cat =
+                    ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
+            double ndv = Math.max(1.0, Math.min(ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
+            builder.addColumnStatistic(entry.getKey(), ColumnStatistic.builder()
+                    .setDistinctValuesCount(ndv)
+                    .setAverageRowSize(entry.getValue().getType().getTypeSize())
+                    .setNullsFraction(0)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build());
+        }
         return builder.build();
     }
 

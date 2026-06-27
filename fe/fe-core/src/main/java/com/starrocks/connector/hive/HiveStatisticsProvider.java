@@ -23,6 +23,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.RowCountEstimator;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -94,7 +95,9 @@ public class HiveStatisticsProvider {
         avgRowNumPerPartition = getPerPartitionRowAvgNums(partitionStatistics.values());
 
         if (avgRowNumPerPartition <= 0) {
-            builder.setOutputRowCount(getEstimatedRowCount(table, partitionKeys));
+            double estimatedRows = getEstimatedRowCount(table, partitionKeys);
+            builder.setOutputRowCount(estimatedRows);
+            addTypeNdvColumnStats(builder, columns, table, estimatedRows);
             return builder.build();
         }
 
@@ -122,7 +125,9 @@ public class HiveStatisticsProvider {
             Table table) {
         long rowNum = tableStats.getCommonStats().getRowNums();
         if (rowNum == -1) {
-            builder.setOutputRowCount(getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey())));
+            double estimatedRows = getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey()));
+            builder.setOutputRowCount(estimatedRows);
+            addTypeNdvColumnStats(builder, columns, table, estimatedRows);
             return builder.build();
         } else {
             builder.setOutputRowCount(rowNum);
@@ -173,9 +178,6 @@ public class HiveStatisticsProvider {
             double presentRowNums) {
         Statistics.Builder builder = Statistics.builder()
                 .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
-        for (ColumnRefOperator columnRefOperator : columns) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
 
         double totalRowNums = 0;
         try {
@@ -185,6 +187,7 @@ public class HiveStatisticsProvider {
         } finally {
             builder.setOutputRowCount(totalRowNums);
         }
+        addTypeNdvColumnStats(builder, columns, table, totalRowNums);
 
         return builder.build();
     }
@@ -303,11 +306,17 @@ public class HiveStatisticsProvider {
                 .collect(Collectors.toList());
 
         if (columnStatistics.isEmpty()) {
-            return ColumnStatistic.unknown();
+            return typeNdvStatistic(column, rowNums);
         }
 
+        double ndv = ndv(columnStatistics);
+        if (Double.isNaN(ndv)) {
+            // No partition had a valid NDV in HMS → fall back to type-fraction
+            ndv = ConnectorNdvEstimator.typeNdv(
+                    ConnectorNdvEstimator.fromStarRocksType(column.getType()), Math.max(1L, (long) rowNums));
+        }
         return ColumnStatistic.builder()
-                .setDistinctValuesCount(ndv(columnStatistics))
+                .setDistinctValuesCount(ndv)
                 .setNullsFraction(nullsFraction(column, partitionStatistics))
                 .setAverageRowSize(averageRowSize(column, partitionStatistics, rowNums))
                 .setMaxValue(max(columnStatistics))
@@ -321,8 +330,8 @@ public class HiveStatisticsProvider {
                 .filter(x -> x >= 0)
                 .mapToDouble(x -> x)
                 .max();
-
-        return ndv.isPresent() ? ndv.getAsDouble() : 1;
+        // NaN signals "no valid HMS NDV found" so callers can apply Tier-3 fallback
+        return ndv.isPresent() ? ndv.getAsDouble() : Double.NaN;
     }
 
     private double nullsFraction(Column column, Collection<HivePartitionStats> partitionStatistics) {
@@ -459,5 +468,29 @@ public class HiveStatisticsProvider {
 
     public int getSamplePartitionSize(OptimizerContext session) {
         return session.getSessionVariable().getHivePartitionStatsSampleSize();
+    }
+
+    private static ColumnStatistic typeNdvStatistic(Column column, double rowCount) {
+        ConnectorNdvEstimator.TypeCategory cat = ConnectorNdvEstimator.fromStarRocksType(column.getType());
+        double ndv = ConnectorNdvEstimator.typeNdv(cat, Math.max(1L, (long) rowCount));
+        return ColumnStatistic.builder()
+                .setDistinctValuesCount(ndv)
+                .setAverageRowSize(column.getType().getTypeSize())
+                .setNullsFraction(0)
+                .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                .build();
+    }
+
+    private static void addTypeNdvColumnStats(Statistics.Builder builder,
+                                              List<ColumnRefOperator> columns,
+                                              Table table, double rowCount) {
+        for (ColumnRefOperator col : columns) {
+            Column column = table.getColumn(col.getName());
+            if (column != null) {
+                builder.addColumnStatistic(col, typeNdvStatistic(column, rowCount));
+            } else {
+                builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            }
+        }
     }
 }
