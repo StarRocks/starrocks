@@ -77,7 +77,6 @@ class StreamLoadExecutor;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 
-class HeartbeatFlags;
 class DiagnoseDaemon;
 class VectorIndexCache;
 
@@ -145,7 +144,6 @@ public:
     BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
-    HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
     const PlatformServices& platform_services() const { return _platform_services; }
     const RpcServices& rpc_services() const { return _rpc_services; }
@@ -198,7 +196,6 @@ private:
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
     StreamLoadExecutor* _stream_load_executor = nullptr;
-    HeartbeatFlags* _heartbeat_flags = nullptr;
 
     connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 

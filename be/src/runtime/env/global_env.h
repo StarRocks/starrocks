@@ -25,6 +25,7 @@
 
 namespace starrocks {
 
+class HeartbeatFlags;
 class MetricRegistry;
 
 class GlobalEnv {
@@ -41,6 +42,8 @@ public:
     void stop();
 
     static bool is_init();
+
+    HeartbeatFlags* heartbeat_flags() const { return _heartbeat_flags.get(); }
 
     MemTracker* process_mem_tracker() const { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() const { return _query_pool_mem_tracker.get(); }
@@ -190,6 +193,8 @@ private:
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
     GlobalThreadPools _thread_pools;
+
+    std::unique_ptr<HeartbeatFlags> _heartbeat_flags;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
 };

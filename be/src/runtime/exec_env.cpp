@@ -69,7 +69,6 @@
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/diagnose_daemon.h"
-#include "runtime/heartbeat_flags.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
@@ -165,7 +164,6 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.diagnose_daemon = _diagnose_daemon;
 
     _agent_services.agent_server = _agent_server;
-    _agent_services.heartbeat_flags = _heartbeat_flags;
 
     _query_execution_services.execution = &_execution_services;
     _query_execution_services.rpc = &_rpc_services;
@@ -292,7 +290,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());
 
-    _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     RETURN_IF_ERROR(_compute_env->init_query_cache(capacity));
 
@@ -535,7 +532,6 @@ void ExecEnv::destroy() {
     if (_compute_env != nullptr) {
         _compute_env->destroy_profile_report_worker();
     }
-    SAFE_DELETE(_heartbeat_flags);
     SAFE_DELETE(_transaction_mgr);
     if (_compute_env != nullptr) {
         _compute_env->destroy_stream_context_mgr();
