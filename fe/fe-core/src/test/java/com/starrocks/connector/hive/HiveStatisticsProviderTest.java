@@ -188,7 +188,7 @@ public class HiveStatisticsProviderTest {
         ColumnStatistic dataColStat = statistics.getColumnStatistics().get(dataColumnRefOperator);
         Assertions.assertFalse(partColStat.isUnknown());
         Assertions.assertFalse(dataColStat.isUnknown());
-        // INT type fraction = 0.3, capped at rowCount=100 → NDV = 30
+        // INT type fraction = 0.3, rowCount=100 → NDV = 30
         Assertions.assertEquals(30, partColStat.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(30, dataColStat.getDistinctValuesCount(), 0.001);
     }

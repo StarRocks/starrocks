@@ -292,8 +292,14 @@ public class HiveMetadataTest {
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+        // Stats disabled: falls back to type-fraction ESTIMATE (not UNKNOWN)
+        // rowCount=1, INT fraction=0.3 → NDV = max(1.0, 0.3) = 1.0
+        ColumnStatistic partStat = statistics.getColumnStatistics().get(partColumnRefOperator);
+        ColumnStatistic dataStat = statistics.getColumnStatistics().get(dataColumnRefOperator);
+        Assertions.assertFalse(partStat.isUnknown());
+        Assertions.assertFalse(dataStat.isUnknown());
+        Assertions.assertEquals(1.0, partStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(1.0, dataStat.getDistinctValuesCount(), 0.001);
     }
 
     @Test
