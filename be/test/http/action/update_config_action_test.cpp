@@ -57,7 +57,7 @@ public:
     void SetUp() override {
         ConfigUpdateRegistry::instance()->TEST_reset();
         _global_env = GlobalEnv::GetInstance();
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, GlobalEnv::GetInstance()->diagnose_daemon(),
                                                              PlatformEnv::GetInstance()->brpc_stub_cache());
         ASSERT_OK(_load_channel_mgr->init(_global_env->load_mem_tracker()));
         register_config_update_hooks(ExecEnv::GetInstance(), *_global_env, _load_channel_mgr.get());

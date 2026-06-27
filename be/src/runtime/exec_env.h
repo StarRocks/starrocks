@@ -77,7 +77,6 @@ class StreamLoadExecutor;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 
-class DiagnoseDaemon;
 class VectorIndexCache;
 
 namespace pipeline {
@@ -177,8 +176,6 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
 
-    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
-
     VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }
 
 private:
@@ -204,7 +201,6 @@ private:
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
     AgentServer* _agent_server = nullptr;
-    DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;
     PlatformServices _platform_services;
