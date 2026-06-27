@@ -82,7 +82,7 @@ inline BrokerServiceClientCache* client_cache(ExecEnv* env) {
 }
 
 inline const std::string& client_id(ExecEnv* env, const TNetworkAddress& addr) {
-    return env->broker_mgr()->get_client_id(addr);
+    return env->rpc_services().broker_mgr->get_client_id(addr);
 }
 #endif
 

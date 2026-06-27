@@ -45,7 +45,6 @@
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
-#include "common/system/master_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
@@ -64,15 +63,12 @@
 #include "exec/runtime/query_context_manager.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
-#include "platform/broker_mgr.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/diagnose_daemon.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
@@ -161,7 +157,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.spill_dir_mgr = _compute_env == nullptr ? nullptr : _compute_env->spill_dir_mgr();
     _runtime_services.global_spill_manager = _compute_env == nullptr ? nullptr : _compute_env->global_spill_manager();
     _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
-    _runtime_services.diagnose_daemon = _diagnose_daemon;
+    _runtime_services.diagnose_daemon = global_env->diagnose_daemon();
 
     _agent_services.agent_server = _agent_server;
 
@@ -210,10 +206,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
     RETURN_IF_ERROR(global_env->init_execution_thread_pools(process_metrics));
-    REGISTER_GAUGE_RUNTIME_METRIC(process_metrics, broker_count, []() -> uint64_t {
-        auto* broker_mgr = PlatformEnv::GetInstance()->broker_mgr();
-        return broker_mgr == nullptr ? 0 : broker_mgr->broker_count();
-    });
 
     // register the metrics to monitor the task queue len
     pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
@@ -287,9 +279,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
 
-    _diagnose_daemon = new DiagnoseDaemon();
-    RETURN_IF_ERROR(_diagnose_daemon->init());
-
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     RETURN_IF_ERROR(_compute_env->init_query_cache(capacity));
 
@@ -324,14 +313,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 #endif
 
     return Status::OK();
-}
-
-std::string ExecEnv::token() const {
-    return get_master_token();
-}
-
-BrokerMgr* ExecEnv::broker_mgr() const {
-    return PlatformEnv::GetInstance()->broker_mgr();
 }
 
 DataStreamMgr* ExecEnv::stream_mgr() {
@@ -502,12 +483,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("dictionary_cache_pool", MonotonicMillis() - start);
     }
 
-    if (_diagnose_daemon) {
-        start = MonotonicMillis();
-        _diagnose_daemon->stop();
-        component_times.emplace_back("diagnose_daemon", MonotonicMillis() - start);
-    }
-
     start = MonotonicMillis();
     PythonEnvManager::getInstance().close();
     component_times.emplace_back("PythonEnvManager", MonotonicMillis() - start);
@@ -555,7 +530,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
     StorageEnv::GetInstance()->destroy();
-    SAFE_DELETE(_diagnose_daemon);
     DCHECK(_global_env != nullptr);
     _global_env->destroy_thread_pools();
     _query_execution_services.process_metrics = nullptr;

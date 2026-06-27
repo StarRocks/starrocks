@@ -29,6 +29,7 @@
 #include "base/testutil/assert.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/config_path_fwd.h"
+#include "platform/broker_mgr.h"
 #include "platform/small_file_mgr.h"
 #include "platform/store_path.h"
 #include "platform/thrift_rpc_helper.h"
@@ -146,6 +147,35 @@ TEST(PlatformEnvTest, OwnsSmallFileMgrLifecycle) {
 
     env->destroy();
     EXPECT_EQ(env->small_file_mgr(), nullptr);
+}
+
+TEST(PlatformEnvTest, OwnsBrokerCountMetricLifecycle) {
+    auto* env = PlatformEnv::GetInstance();
+    env->destroy();
+    ScopedSmallFileDir small_file_dir;
+
+    MetricRegistry metrics("platform_env_broker_metric_test");
+    PlatformEnvResetGuard guard(env);
+    ASSERT_OK(env->init(PlatformEnvOptions{.metrics = &metrics}));
+    ASSERT_NE(env->broker_mgr(), nullptr);
+
+    auto* broker_count_metric = metrics.get_metric("broker_count");
+    ASSERT_NE(nullptr, broker_count_metric);
+
+    metrics.trigger_hook();
+    EXPECT_EQ("0", broker_count_metric->to_string());
+
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 8000;
+    env->broker_mgr()->get_client_id(address);
+
+    metrics.trigger_hook();
+    EXPECT_EQ("1", broker_count_metric->to_string());
+
+    env->destroy();
+    EXPECT_EQ(env->broker_mgr(), nullptr);
+    EXPECT_EQ(nullptr, metrics.get_metric("broker_count"));
 }
 
 TEST(PlatformEnvTest, OwnsStorePathsFromInitOptions) {

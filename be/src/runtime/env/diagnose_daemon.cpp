@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/diagnose_daemon.h"
+#include "runtime/env/diagnose_daemon.h"
 
 #include <fmt/format.h>
 

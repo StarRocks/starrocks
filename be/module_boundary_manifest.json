@@ -297,7 +297,7 @@
         "runtime/data_stream_mgr.h",
         "runtime/data_stream_recvr.h",
         "runtime/data_stream_sender.h",
-        "runtime/diagnose_daemon.h",
+        "runtime/env/diagnose_daemon.h",
         "runtime/exec_env.h",
         "runtime/export_sink.h",
         "runtime/external_scan_context_mgr.h",

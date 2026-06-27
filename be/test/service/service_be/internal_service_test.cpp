@@ -34,7 +34,7 @@ namespace starrocks {
 class InternalServiceTest : public testing::Test {
 public:
     void SetUp() override {
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, ExecEnv::GetInstance()->diagnose_daemon(),
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, GlobalEnv::GetInstance()->diagnose_daemon(),
                                                              PlatformEnv::GetInstance()->brpc_stub_cache());
         ASSERT_OK(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
     }

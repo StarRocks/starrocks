@@ -27,19 +27,43 @@
 
 namespace starrocks {
 
-BrokerMgr::BrokerMgr() : _ping_thread(&BrokerMgr::ping_worker, this) {
-    Thread::set_thread_name(_ping_thread, "broker_hrtbeat"); // broker heart beat
-}
+static constexpr const char* kBrokerCountMetricName = "broker_count";
+
+BrokerMgr::BrokerMgr() = default;
 
 BrokerMgr::~BrokerMgr() {
-    _thread_stop = true;
-    _ping_thread.join();
+    if (_metrics != nullptr) {
+        _metrics->deregister_hook(kBrokerCountMetricName);
+        _broker_count.hide();
+    }
+    _thread_stop.store(true);
+    if (_ping_thread.joinable()) {
+        _ping_thread.join();
+    }
 }
 
-void BrokerMgr::init() {
+Status BrokerMgr::init(MetricRegistry* metrics) {
+    if (_metrics == nullptr && metrics != nullptr) {
+        if (!metrics->register_metric(kBrokerCountMetricName, &_broker_count)) {
+            return Status::InternalError("register broker_count metric failed");
+        }
+        if (!metrics->register_hook(kBrokerCountMetricName, [this] { _broker_count.set_value(broker_count()); })) {
+            _broker_count.hide();
+            return Status::InternalError("register broker_count metric hook failed");
+        }
+        _metrics = metrics;
+    }
+
     std::stringstream ss;
     ss << BackendOptions::get_localhost() << ":" << config::be_port;
     _client_id = ss.str();
+
+    if (!_ping_thread.joinable()) {
+        _thread_stop.store(false);
+        _ping_thread = std::thread(&BrokerMgr::ping_worker, this);
+        Thread::set_thread_name(_ping_thread, "broker_hrtbeat"); // broker heart beat
+    }
+    return Status::OK();
 }
 
 const std::string& BrokerMgr::get_client_id(const TNetworkAddress& address) {
@@ -71,7 +95,7 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
 }
 
 void BrokerMgr::ping_worker() {
-    while (!_thread_stop) {
+    while (!_thread_stop.load()) {
         std::vector<TNetworkAddress> addresses;
         {
             std::lock_guard<std::mutex> l(_mutex);
@@ -82,7 +106,7 @@ void BrokerMgr::ping_worker() {
         for (auto& addr : addresses) {
             ping(addr);
         }
-        nap_sleep(5, [this] { return _thread_stop; });
+        nap_sleep(5, [this] { return _thread_stop.load(); });
     }
 }
 

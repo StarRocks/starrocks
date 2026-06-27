@@ -54,7 +54,6 @@
 namespace starrocks {
 struct StorePath;
 class AgentServer;
-class BrokerMgr;
 class ComputeEnv;
 class DataStreamMgr;
 class EvHttpServer;
@@ -77,7 +76,6 @@ class StreamLoadExecutor;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 
-class DiagnoseDaemon;
 class VectorIndexCache;
 
 namespace pipeline {
@@ -123,7 +121,6 @@ public:
     // declarations for classes in scoped_ptrs.
     ~ExecEnv();
 
-    std::string token() const;
     ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
     DataStreamMgr* stream_mgr();
@@ -137,7 +134,6 @@ public:
     workgroup::WorkGroupManager* workgroup_manager();
 
     BaseLoadPathMgr* load_path_mgr();
-    BrokerMgr* broker_mgr() const;
     LoadStreamMgr* load_stream_mgr();
     StreamContextMgr* stream_context_mgr();
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
@@ -177,8 +173,6 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
 
-    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
-
     VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }
 
 private:
@@ -204,7 +198,6 @@ private:
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
     AgentServer* _agent_server = nullptr;
-    DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;
     PlatformServices _platform_services;
