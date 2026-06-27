@@ -316,7 +316,6 @@
         "runtime/mysql_result_writer.h",
         "runtime/mysql_table_sink.h",
         "runtime/mysql_table_writer.h",
-        "runtime/plan_fragment_executor.h",
         "runtime/result_buffer_mgr.h",
         "runtime/result_queue_mgr.h",
         "runtime/result_sink.h",

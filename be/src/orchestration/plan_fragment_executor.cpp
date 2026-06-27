@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/plan_fragment_executor.h"
+#include "orchestration/plan_fragment_executor.h"
 
 #include <memory>
 #include <utility>
@@ -61,6 +61,7 @@
 #include "runtime/message_body_sink.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -427,6 +428,14 @@ const RowDescriptor& PlanFragmentExecutor::row_desc() {
 
 RuntimeProfile* PlanFragmentExecutor::profile() {
     return _runtime_state->runtime_profile();
+}
+
+ObjectPool* PlanFragmentExecutor::obj_pool() {
+    return _runtime_state->obj_pool();
+}
+
+const DescriptorTbl& PlanFragmentExecutor::desc_tbl() {
+    return _runtime_state->desc_tbl();
 }
 
 void PlanFragmentExecutor::report_profile_once() {

@@ -8,6 +8,5 @@ src/exprs/agg/group_concat.h
 src/exprs/table_function/generate_series.h
 src/exprs/table_function/unnest_bitmap.h
 src/runtime/noop_sink.h
-src/runtime/plan_fragment_executor.h
 test/exprs/exprs_test_helper.h
 test/storage/lake/test_util.h
