@@ -21,6 +21,7 @@ set(ORCHESTRATION_FILES
     fragment_mgr.cpp
     orchestration_metrics.cpp
     orchestration_env.cpp
+    plan_fragment_executor.cpp
     query_orchestrator.cpp
     routine_load_task_executor.cpp
     runtime_filter_delivery.cpp
