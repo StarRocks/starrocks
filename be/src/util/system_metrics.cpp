@@ -26,7 +26,6 @@
 #include "common/config_cache_fwd.h"
 #include "compute_env/query_cache/cache_manager.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/runtime_filter_worker.h"
 
 namespace starrocks {
 
@@ -61,12 +60,6 @@ private:
     uint64_t _previous_hit_count = 0;
 };
 
-class RuntimeFilterMetrics {
-public:
-    METRIC_DEFINE_INT_GAUGE(runtime_filter_events_in_queue, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(runtime_filter_bytes_in_queue, MetricUnit::BYTES);
-};
-
 SystemMetrics::SystemMetrics() = default;
 
 SystemMetrics* SystemMetrics::instance() {
@@ -82,9 +75,6 @@ SystemMetrics::~SystemMetrics() {
         _registry->deregister_hook(_s_hook_name);
         _registry = nullptr;
     }
-    for (auto& it : _runtime_filter_metrics) {
-        delete it.second;
-    }
 }
 
 void SystemMetrics::install(MetricRegistry* registry) {
@@ -97,7 +87,6 @@ void SystemMetrics::install(MetricRegistry* registry) {
     }
     _install_memory_metrics(registry);
     _install_query_cache_metrics(registry);
-    _install_runtime_filter_metrics(registry);
     _install_vector_index_cache_metrics(registry);
     _registry = registry;
 }
@@ -112,7 +101,6 @@ void SystemMetrics::update() {
 
     update_memory_metrics();
     _update_query_cache_metrics();
-    _update_runtime_filter_metrics();
     _update_vector_index_cache_metrics();
 }
 
@@ -280,36 +268,6 @@ void SystemMetrics::_install_query_cache_metrics(MetricRegistry* registry) {
     registry->register_metric("query_cache_lookup_count", &_query_cache_metrics->query_cache_lookup_count);
     registry->register_metric("query_cache_hit_count", &_query_cache_metrics->query_cache_hit_count);
     registry->register_metric("query_cache_hit_ratio", &_query_cache_metrics->query_cache_hit_ratio);
-}
-
-void SystemMetrics::_install_runtime_filter_metrics(MetricRegistry* registry) {
-    for (int i = 0; i < EventType::MAX_COUNT; i++) {
-        auto* metrics = new RuntimeFilterMetrics();
-        const auto& type = EventTypeToString((EventType)i);
-#define REGISTER_RUNTIME_FILTER_METRIC(name) \
-    registry->register_metric(#name, MetricLabels().add("type", type), &metrics->name)
-        REGISTER_RUNTIME_FILTER_METRIC(runtime_filter_events_in_queue);
-        REGISTER_RUNTIME_FILTER_METRIC(runtime_filter_bytes_in_queue);
-        _runtime_filter_metrics.emplace(type, metrics);
-#undef REGISTER_RUNTIME_FILTER_METRIC
-    }
-}
-
-void SystemMetrics::_update_runtime_filter_metrics() {
-    auto* runtime_filter_worker = ExecEnv::GetInstance()->runtime_filter_worker();
-    if (UNLIKELY(runtime_filter_worker == nullptr)) {
-        return;
-    }
-    const auto* metrics = runtime_filter_worker->metrics();
-    for (int i = 0; i < EventType::MAX_COUNT; i++) {
-        const auto& event_name = EventTypeToString((EventType)i);
-        auto iter = _runtime_filter_metrics.find(event_name);
-        if (iter == _runtime_filter_metrics.end()) {
-            continue;
-        }
-        iter->second->runtime_filter_events_in_queue.set_value(metrics->event_nums[i]);
-        iter->second->runtime_filter_bytes_in_queue.set_value(metrics->runtime_filter_bytes[i]);
-    }
 }
 
 void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry) {
