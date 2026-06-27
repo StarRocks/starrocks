@@ -72,7 +72,6 @@
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/index/vector/vector_index_cache.h"
@@ -210,10 +209,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
     RETURN_IF_ERROR(global_env->init_execution_thread_pools(process_metrics));
-    REGISTER_GAUGE_RUNTIME_METRIC(process_metrics, broker_count, []() -> uint64_t {
-        auto* broker_mgr = PlatformEnv::GetInstance()->broker_mgr();
-        return broker_mgr == nullptr ? 0 : broker_mgr->broker_count();
-    });
 
     // register the metrics to monitor the task queue len
     pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
