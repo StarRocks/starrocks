@@ -45,8 +45,8 @@
 #include "compute_env/result/result_queue_mgr.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
+#include "orchestration/fragment_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 
 namespace starrocks::orchestration {
 
@@ -67,14 +67,13 @@ protected:
         ComputeEnvOptions options;
         options.max_num_pipeline_drivers = 1;
         ASSERT_TRUE(_exec_env.compute_env()->init(options).ok());
-        _exec_env._fragment_mgr = new FragmentMgr(&_exec_env, nullptr);
+        _fragment_mgr = std::make_unique<FragmentMgr>(&_exec_env, nullptr);
         _exec_env._query_context_mgr = new pipeline::QueryContextManager(5);
         _exec_env._refresh_service_contexts();
     }
 
     void TearDown() override {
-        delete _exec_env._fragment_mgr;
-        _exec_env._fragment_mgr = nullptr;
+        _fragment_mgr.reset();
         delete _exec_env._query_context_mgr;
         _exec_env._query_context_mgr = nullptr;
         _exec_env.compute_env()->destroy();
@@ -82,11 +81,12 @@ protected:
 
 private:
     ExecEnv _exec_env;
+    std::unique_ptr<FragmentMgr> _fragment_mgr;
 };
 
 TEST_F(ExternalScanContextMgrTest, create_normal) {
     std::shared_ptr<ScanContext> context;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);
@@ -94,7 +94,7 @@ TEST_F(ExternalScanContextMgrTest, create_normal) {
 
 TEST_F(ExternalScanContextMgrTest, get_normal) {
     std::shared_ptr<ScanContext> context;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);
@@ -109,7 +109,7 @@ TEST_F(ExternalScanContextMgrTest, get_normal) {
 TEST_F(ExternalScanContextMgrTest, get_abnormal) {
     std::string context_id = "not_exist";
     std::shared_ptr<ScanContext> result;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     Status st = context_mgr.get_scan_context(context_id, &result);
     ASSERT_TRUE(!st.ok());
     ASSERT_TRUE(result == nullptr);
@@ -117,7 +117,7 @@ TEST_F(ExternalScanContextMgrTest, get_abnormal) {
 
 TEST_F(ExternalScanContextMgrTest, clear_context) {
     std::shared_ptr<ScanContext> context;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);

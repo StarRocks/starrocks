@@ -51,7 +51,6 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
-#include "compute_env/profile_report_worker.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "connector/builtin_connector_registry.h"
@@ -71,11 +70,9 @@
 #include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/diagnose_daemon.h"
-#include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/pipeline_fragment_reporter.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -151,7 +148,6 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.lookup_dispatcher_mgr = _lookup_dispatcher_mgr;
     _runtime_services.result_mgr = result_mgr();
     _runtime_services.result_queue_mgr = result_queue_mgr();
-    _runtime_services.fragment_mgr = _fragment_mgr;
     _runtime_services.load_path_mgr = load_path_mgr();
     _runtime_services.load_stream_mgr = load_stream_mgr();
     _runtime_services.stream_context_mgr = stream_context_mgr();
@@ -218,8 +214,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
     RETURN_IF_ERROR(global_env->init_execution_thread_pools(process_metrics));
-    _fragment_mgr = new FragmentMgr(this, process_metrics);
-
     REGISTER_GAUGE_RUNTIME_METRIC(process_metrics, broker_count, []() -> uint64_t {
         auto* broker_mgr = PlatformEnv::GetInstance()->broker_mgr();
         return broker_mgr == nullptr ? 0 : broker_mgr->broker_count();
@@ -271,18 +265,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _small_file_mgr = new SmallFileMgr(config::small_file_dir, process_metrics);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
-    ProfileReportWorkerOptions profile_report_worker_options;
-    profile_report_worker_options.report_non_pipeline_fragments =
-            [this](const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids) {
-                DCHECK(_fragment_mgr != nullptr);
-                return _fragment_mgr->report_fragments(non_pipeline_need_report_fragment_ids);
-            };
-    profile_report_worker_options.report_pipeline_fragments =
-            [this](const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
-                DCHECK(_query_context_mgr != nullptr);
-                return report_pipeline_fragments(_query_context_mgr, pipeline_need_report_query_fragment_ids);
-            };
-    RETURN_IF_ERROR(_compute_env->init_profile_report_worker(std::move(profile_report_worker_options)));
     RETURN_IF_ERROR(_compute_env->start_result_mgr());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
@@ -403,12 +385,6 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _compute_env->stop_stream_load_pipes();
         component_times.emplace_back("load_stream_mgr", MonotonicMillis() - start);
-    }
-
-    if (_fragment_mgr) {
-        start = MonotonicMillis();
-        _fragment_mgr->close();
-        component_times.emplace_back("fragment_mgr", MonotonicMillis() - start);
     }
 
     if (_compute_env != nullptr) {
@@ -572,7 +548,6 @@ void ExecEnv::destroy() {
     }
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
-    SAFE_DELETE(_fragment_mgr);
     if (_compute_env != nullptr) {
         _compute_env->destroy_load_path();
     }
@@ -603,44 +578,6 @@ void ExecEnv::destroy_vector_index_cache() {
     tenann::SetGlobalIndexCache(nullptr);
 #endif
     _vector_index_cache.reset();
-}
-
-void ExecEnv::_wait_for_fragments_finish() {
-    if (config::loop_count_wait_fragments_finish < 0) {
-        LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
-        return;
-    }
-
-    size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
-    if (max_loop_secs == 0) {
-        return;
-    }
-
-    size_t running_fragments = _get_running_fragments_count();
-    size_t loop_secs = 0;
-
-    // TODO: decouple the heartbeat with the graceful exit
-    // only wait for frontend's heartbeat when the node is ever received heartbeats from the frontend
-    bool need_wait_frontend_hb = config::graceful_exit_wait_for_frontend_heartbeat && get_backend_id().has_value();
-
-    while ((running_fragments > 0 || (need_wait_frontend_hb && !is_frontend_aware_of_exit())) &&
-           loop_secs < max_loop_secs) {
-        LOG(INFO) << "Frontend is aware of exit: " << is_frontend_aware_of_exit() << ", " << running_fragments
-                  << " fragment(s) are still running...";
-        sleep(1);
-        running_fragments = _get_running_fragments_count();
-        loop_secs++;
-    }
-}
-
-size_t ExecEnv::_get_running_fragments_count() const {
-    // fragment is registered in _fragment_mgr in non-pipeline env
-    // while _query_context_mgr is used in pipeline engine.
-    return _fragment_mgr->running_fragment_count() + _query_context_mgr->size();
-}
-
-void ExecEnv::wait_for_finish() {
-    _wait_for_fragments_finish();
 }
 
 uint32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {

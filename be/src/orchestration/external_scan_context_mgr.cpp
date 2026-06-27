@@ -48,13 +48,14 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/fragment_context_manager.h"
 #include "exec/runtime/query_context_manager.h"
+#include "orchestration/fragment_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 #include "runtime/runtime_metrics.h"
 
 namespace starrocks::orchestration {
 
-ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics) : _exec_env(exec_env) {
+ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics, FragmentMgr* fragment_mgr)
+        : _exec_env(exec_env), _fragment_mgr(fragment_mgr) {
     // start the reaper thread for gc the expired context
     _keep_alive_reaper = std::make_unique<std::thread>(
             std::bind<void>(std::mem_fn(&ExternalScanContextMgr::gc_expired_context), this));
@@ -174,8 +175,9 @@ void ExternalScanContextMgr::gc_expired_context() {
         }
         for (const auto& expired_context : expired_contexts) {
             // must cancel the fragment instance, otherwise return thrift transport TTransportException
+            DCHECK(_fragment_mgr != nullptr);
             WARN_IF_ERROR(
-                    _exec_env->fragment_mgr()->cancel(expired_context->fragment_instance_id),
+                    _fragment_mgr->cancel(expired_context->fragment_instance_id),
                     strings::Substitute("Fail to cancel fragment $0", print_id(expired_context->fragment_instance_id)));
             WARN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id),
                           strings::Substitute("Fail to cancel fragment $0 in result queue mgr",

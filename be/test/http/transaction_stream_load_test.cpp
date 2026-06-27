@@ -106,7 +106,7 @@ public:
 
 protected:
     ExecEnv _env;
-    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env};
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env, nullptr};
     evhttp_request* _evhttp_req = nullptr;
     MetricRegistry _metrics{"transaction_stream_load_action_test"};
     bool _owns_platform_env = false;

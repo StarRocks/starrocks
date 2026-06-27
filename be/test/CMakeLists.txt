@@ -253,7 +253,6 @@ set(EXEC_FILES
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/descriptors_test.cpp
         ./runtime/diagnose_daemon_test.cpp
-        ./runtime/fragment_mgr_test.cpp
         ./exec/data_sinks/http_result_writer_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp

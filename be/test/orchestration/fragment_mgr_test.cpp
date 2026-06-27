@@ -32,10 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/fragment_mgr.h"
+#include "orchestration/fragment_mgr.h"
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -43,10 +44,14 @@
 #include "common/config_runtime_fwd.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/plan_fragment_executor.h"
 
 namespace starrocks {
+
+using orchestration::FragmentMgr;
 
 // Mock used for this unittest
 PlanFragmentExecutor::PlanFragmentExecutor(const QueryExecutionServices* query_execution_services,
@@ -76,6 +81,37 @@ class FragmentMgrTest : public testing::Test {
 public:
     FragmentMgrTest() = default;
 
+    static void SetUpTestSuite() {
+        auto* global_env = GlobalEnv::GetInstance();
+        _previous_process_mem_tracker = global_env->_process_mem_tracker;
+        _previous_query_pool_mem_tracker = global_env->_query_pool_mem_tracker;
+
+        if (global_env->_process_mem_tracker == nullptr) {
+            _process_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::PROCESS, -1, "process");
+            global_env->_process_mem_tracker = _process_mem_tracker;
+        }
+        if (global_env->_query_pool_mem_tracker == nullptr) {
+            _query_pool_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, -1, "query_pool",
+                                                                   global_env->process_mem_tracker());
+            global_env->_query_pool_mem_tracker = _query_pool_mem_tracker;
+        }
+
+        _previous_global_env = ExecEnv::GetInstance()->_global_env;
+        ExecEnv::GetInstance()->_global_env = global_env;
+    }
+
+    static void TearDownTestSuite() {
+        auto* global_env = GlobalEnv::GetInstance();
+        ExecEnv::GetInstance()->_global_env = _previous_global_env;
+        _previous_global_env = nullptr;
+        global_env->_query_pool_mem_tracker = _previous_query_pool_mem_tracker;
+        global_env->_process_mem_tracker = _previous_process_mem_tracker;
+        _previous_query_pool_mem_tracker.reset();
+        _previous_process_mem_tracker.reset();
+        _query_pool_mem_tracker.reset();
+        _process_mem_tracker.reset();
+    }
+
 protected:
     void SetUp() override {
         config::fragment_pool_thread_num_min = 32;
@@ -83,7 +119,20 @@ protected:
         config::fragment_pool_queue_size = 1024;
     }
     void TearDown() override {}
+
+private:
+    static GlobalEnv* _previous_global_env;
+    static std::shared_ptr<MemTracker> _previous_process_mem_tracker;
+    static std::shared_ptr<MemTracker> _previous_query_pool_mem_tracker;
+    static std::shared_ptr<MemTracker> _process_mem_tracker;
+    static std::shared_ptr<MemTracker> _query_pool_mem_tracker;
 };
+
+GlobalEnv* FragmentMgrTest::_previous_global_env = nullptr;
+std::shared_ptr<MemTracker> FragmentMgrTest::_previous_process_mem_tracker;
+std::shared_ptr<MemTracker> FragmentMgrTest::_previous_query_pool_mem_tracker;
+std::shared_ptr<MemTracker> FragmentMgrTest::_process_mem_tracker;
+std::shared_ptr<MemTracker> FragmentMgrTest::_query_pool_mem_tracker;
 
 TEST_F(FragmentMgrTest, Normal) {
     FragmentMgr mgr(ExecEnv::GetInstance(), nullptr);

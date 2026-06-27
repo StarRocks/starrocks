@@ -26,7 +26,7 @@ namespace starrocks::orchestration {
 
 TEST(StreamLoadOrchestratorTest, execute_plan_fragment_preserves_be_test_sync_point) {
     ExecEnv exec_env;
-    StreamLoadOrchestrator stream_load_orchestrator(&exec_env);
+    StreamLoadOrchestrator stream_load_orchestrator(&exec_env, nullptr);
     StreamLoadContext ctx(&exec_env, nullptr);
 
     SyncPoint::GetInstance()->EnableProcessing();

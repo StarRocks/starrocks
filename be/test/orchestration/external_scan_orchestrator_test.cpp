@@ -27,8 +27,8 @@
 #include "exec/runtime/query_context_manager.h"
 #include "gen_cpp/StatusCode_types.h"
 #include "orchestration/external_scan_context_mgr.h"
+#include "orchestration/fragment_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
 
 namespace starrocks::orchestration {
 
@@ -45,24 +45,24 @@ protected:
         ComputeEnvOptions options;
         options.max_num_pipeline_drivers = 1;
         ASSERT_TRUE(_exec_env.compute_env()->init(options).ok());
-        _exec_env._fragment_mgr = new FragmentMgr(&_exec_env, nullptr);
+        _fragment_mgr = std::make_unique<FragmentMgr>(&_exec_env, nullptr);
         _exec_env._query_context_mgr = new pipeline::QueryContextManager(5);
         _exec_env._refresh_service_contexts();
     }
 
     void TearDown() override {
-        delete _exec_env._fragment_mgr;
-        _exec_env._fragment_mgr = nullptr;
+        _fragment_mgr.reset();
         delete _exec_env._query_context_mgr;
         _exec_env._query_context_mgr = nullptr;
         _exec_env.compute_env()->destroy();
     }
 
     ExecEnv _exec_env;
+    std::unique_ptr<FragmentMgr> _fragment_mgr;
 };
 
 TEST_F(ExternalScanOrchestratorTest, open_scanner_returns_context_for_invalid_batch_size) {
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     ExternalScanOrchestrator orchestrator(&_exec_env, &context_mgr);
 
     TScanOpenParams params;
@@ -79,7 +79,7 @@ TEST_F(ExternalScanOrchestratorTest, open_scanner_returns_context_for_invalid_ba
 }
 
 TEST_F(ExternalScanOrchestratorTest, get_next_missing_context_returns_not_found) {
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     ExternalScanOrchestrator orchestrator(&_exec_env, &context_mgr);
 
     TScanNextBatchParams params;
@@ -92,7 +92,7 @@ TEST_F(ExternalScanOrchestratorTest, get_next_missing_context_returns_not_found)
 }
 
 TEST_F(ExternalScanOrchestratorTest, get_next_offset_mismatch_returns_not_found_and_refreshes_access_time) {
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     ExternalScanOrchestrator orchestrator(&_exec_env, &context_mgr);
 
     std::shared_ptr<ScanContext> context;
@@ -112,7 +112,7 @@ TEST_F(ExternalScanOrchestratorTest, get_next_offset_mismatch_returns_not_found_
 }
 
 TEST_F(ExternalScanOrchestratorTest, close_scanner_clears_context) {
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
     ExternalScanOrchestrator orchestrator(&_exec_env, &context_mgr);
 
     std::shared_ptr<ScanContext> context;

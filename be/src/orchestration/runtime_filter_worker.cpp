@@ -28,14 +28,15 @@
 namespace starrocks::orchestration {
 
 RuntimeFilterWorker::RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
-                                         MemTracker* query_pool_mem_tracker)
+                                         MemTracker* query_pool_mem_tracker, FragmentMgr* fragment_mgr)
         : _runtime_services(runtime_services),
           _rpc_services(rpc_services),
           _query_pool_mem_tracker(query_pool_mem_tracker),
-          _delivery(runtime_services, rpc_services),
+          _delivery(runtime_services, rpc_services, fragment_mgr),
           _thread([this] { execute(); }) {
     DCHECK(_runtime_services != nullptr);
     DCHECK(_rpc_services != nullptr);
+    DCHECK(fragment_mgr != nullptr);
     Thread::set_thread_name(_thread, "runtime_filter");
     _metrics = new RuntimeFilterWorkerMetrics();
 }
