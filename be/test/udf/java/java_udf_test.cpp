@@ -453,7 +453,40 @@ TEST(GetUdafMethodDescTest, UDTFCrashScenarioSignature) {
     EXPECT_EQ(desc[3].type, TYPE_ARRAY);   // param List
 }
 
-// Test: Primitive array parsing — [I, [J, etc. don't end with ';'.
+// Tests: primitive element-type preservation after the elem_type overwrite bug fix.
+// Before the fix, the switch correctly set elem_type but the line immediately after
+// it unconditionally reset it to TYPE_UNKNOWN, so every primitive array appeared
+// as TYPE_UNKNOWN regardless of its actual element type.
+TEST(GetUdafMethodDescTest, PrimitiveBooleanArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    ASSERT_OK(analyzer.get_udaf_method_desc("([Z)V", &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
+    EXPECT_EQ(desc[1].type, TYPE_BOOLEAN);  // param boolean[]
+    EXPECT_EQ(desc[1].is_array, true);
+}
+
+TEST(GetUdafMethodDescTest, PrimitiveByteArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    ASSERT_OK(analyzer.get_udaf_method_desc("([B)V", &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);   // return V
+    EXPECT_EQ(desc[1].type, TYPE_TINYINT);   // param byte[]
+    EXPECT_EQ(desc[1].is_array, true);
+}
+
+TEST(GetUdafMethodDescTest, PrimitiveShortArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    ASSERT_OK(analyzer.get_udaf_method_desc("([S)V", &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);   // return V
+    EXPECT_EQ(desc[1].type, TYPE_SMALLINT);  // param short[]
+    EXPECT_EQ(desc[1].is_array, true);
+}
+
 TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
     ClassAnalyzer analyzer;
     std::vector<MethodTypeDescriptor> desc;
@@ -462,7 +495,38 @@ TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
     ASSERT_EQ(desc.size(), 3);
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_INT);     // param int
-    EXPECT_EQ(desc[2].type, TYPE_UNKNOWN); // param int[] (array)
+    EXPECT_EQ(desc[2].type, TYPE_INT);     // param int[]
+    EXPECT_EQ(desc[2].is_array, true);
+}
+
+TEST(GetUdafMethodDescTest, PrimitiveLongArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    ASSERT_OK(analyzer.get_udaf_method_desc("([J)V", &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
+    EXPECT_EQ(desc[1].type, TYPE_BIGINT);   // param long[]
+    EXPECT_EQ(desc[1].is_array, true);
+}
+
+TEST(GetUdafMethodDescTest, PrimitiveFloatArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    ASSERT_OK(analyzer.get_udaf_method_desc("([F)V", &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
+    EXPECT_EQ(desc[1].type, TYPE_FLOAT);    // param float[]
+    EXPECT_EQ(desc[1].is_array, true);
+}
+
+TEST(GetUdafMethodDescTest, PrimitiveDoubleArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    ASSERT_OK(analyzer.get_udaf_method_desc("([D)V", &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
+    EXPECT_EQ(desc[1].type, TYPE_DOUBLE);   // param double[]
+    EXPECT_EQ(desc[1].is_array, true);
 }
 
 // Test: Multi-dimensional primitive array — [[J (long[][])
