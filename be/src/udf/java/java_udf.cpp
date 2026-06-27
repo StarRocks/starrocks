@@ -1143,7 +1143,6 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 default:
                     break;
                 }
-                // elem_type is now set by the switch above; do not overwrite it.
             }
 
             desc->emplace_back(MethodTypeDescriptor{elem_type, elem_is_box, true});
