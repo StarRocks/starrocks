@@ -88,9 +88,6 @@ set(RUNTIME_FILES
     plan_fragment_executor.cpp
     pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
-    routine_load/data_consumer.cpp
-    routine_load/data_consumer_group.cpp
-    routine_load/data_consumer_pool.cpp
     runtime_filter_merger.cpp
     runtime_filter_port.cpp
     runtime_filter_rpc.cpp

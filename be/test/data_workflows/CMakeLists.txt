@@ -23,6 +23,8 @@ set(DATA_WORKFLOWS_TEST_FILES
     batch_write/batch_write_util_test.cpp
     batch_write/isomorphic_batch_write_test.cpp
     batch_write/txn_state_cache_test.cpp
+    load/routine_load/data_consumer_test.cpp
+    load/routine_load/kafka_consumer_pipe_test.cpp
     load/tablet_writer/lake_tablets_channel_test.cpp
     load/tablet_writer/load_channel_mgr_test.cpp
     load/tablet_writer/load_channel_test.cpp

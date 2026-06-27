@@ -29,6 +29,9 @@ set(DATA_WORKFLOWS_FILES
     load/push_broker_reader.cpp
     load/push_handler.cpp
     load/rejected_record_sync_daemon.cpp
+    load/routine_load/data_consumer.cpp
+    load/routine_load/data_consumer_group.cpp
+    load/routine_load/data_consumer_pool.cpp
     load/stream_load/stream_load_executor.cpp
     load/stream_load/transaction_mgr.cpp
     load/tablet_writer/lake_tablets_channel.cpp

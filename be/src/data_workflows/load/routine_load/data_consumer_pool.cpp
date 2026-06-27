@@ -32,13 +32,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/routine_load/data_consumer_pool.h"
+#include "data_workflows/load/routine_load/data_consumer_pool.h"
 
 #include "common/config_ingest_fwd.h"
 #include "common/thread/thread.h"
 #include "common/util/misc.h"
-#include "data_consumer.h"
-#include "runtime/routine_load/data_consumer_group.h"
+#include "data_workflows/load/routine_load/data_consumer.h"
+#include "data_workflows/load/routine_load/data_consumer_group.h"
 
 namespace starrocks {
 
