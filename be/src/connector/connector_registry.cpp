@@ -16,8 +16,6 @@
 
 namespace starrocks::connector {
 
-static ConnectorRegistry _global_default_instance;
-
 const Connector* ConnectorRegistry::get(const std::string& name) {
     auto it = _connectors.find(name);
     if (it == _connectors.end()) return nullptr;
@@ -29,7 +27,10 @@ void ConnectorRegistry::put(const std::string& name, std::unique_ptr<Connector> 
 }
 
 ConnectorRegistry* ConnectorRegistry::default_instance() {
-    return &_global_default_instance;
+    // Process-lifetime registry: connectors are installed during bootstrap and
+    // may reference libraries whose shutdown order is outside this module.
+    static auto* registry = new ConnectorRegistry();
+    return registry;
 }
 
 } // namespace starrocks::connector

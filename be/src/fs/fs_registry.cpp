@@ -114,11 +114,11 @@ const FrozenFileSystemProviderRegistry& FileSystemProviderRegistry::freeze() {
 namespace {
 
 const FrozenFileSystemProviderRegistry& posix_file_system_provider_registry() {
-    static FileSystemProviderRegistry registry;
     static const FrozenFileSystemProviderRegistry* frozen = [] {
-        auto st = registry.register_provider(new_posix_file_system_provider());
+        auto* registry = new FileSystemProviderRegistry();
+        auto st = registry->register_provider(new_posix_file_system_provider());
         CHECK(st.ok()) << st;
-        return &registry.freeze();
+        return &registry->freeze();
     }();
     return *frozen;
 }

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
+
 #include "bootstrap/bootstrap.h"
 
 #ifndef __APPLE__
@@ -33,24 +35,26 @@ namespace starrocks::bootstrap {
 
 Status install_builtin_file_system_providers() {
     static Status status = [] {
-        static fs::FileSystemProviderRegistry registry;
+        auto registry = std::make_unique<fs::FileSystemProviderRegistry>();
 
-        RETURN_IF_ERROR(registry.register_provider(fs::new_posix_file_system_provider()));
+        RETURN_IF_ERROR(registry->register_provider(fs::new_posix_file_system_provider()));
 #ifndef __APPLE__
-        RETURN_IF_ERROR(registry.register_provider(fs::new_hdfs_fallback_file_system_provider()));
+        RETURN_IF_ERROR(registry->register_provider(fs::new_hdfs_fallback_file_system_provider()));
 #endif
 #ifndef __APPLE__
-        RETURN_IF_ERROR(registry.register_provider(fs::new_s3_file_system_provider()));
-        RETURN_IF_ERROR(registry.register_provider(fs::new_azblob_file_system_provider()));
+        RETURN_IF_ERROR(registry->register_provider(fs::new_s3_file_system_provider()));
+        RETURN_IF_ERROR(registry->register_provider(fs::new_azblob_file_system_provider()));
 #endif
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-        RETURN_IF_ERROR(registry.register_provider(fs::new_starlet_file_system_provider()));
+        RETURN_IF_ERROR(registry->register_provider(fs::new_starlet_file_system_provider()));
 #endif
 #ifndef __APPLE__
-        RETURN_IF_ERROR(registry.register_provider(fs::new_hdfs_file_system_provider()));
+        RETURN_IF_ERROR(registry->register_provider(fs::new_hdfs_file_system_provider()));
 #endif
 
-        fs::install_default_file_system_provider_registry(registry.freeze());
+        fs::install_default_file_system_provider_registry(registry->freeze());
+        // The installed default registry is process-lifetime bootstrap state.
+        registry.release();
         return Status::OK();
     }();
     return status;
