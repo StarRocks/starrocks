@@ -74,7 +74,6 @@ class ResultBufferMgr;
 class ResultQueueMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
-class SmallFileMgr;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 
@@ -141,7 +140,6 @@ public:
     BaseLoadPathMgr* load_path_mgr();
     BrokerMgr* broker_mgr() const;
     LoadStreamMgr* load_stream_mgr();
-    SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr();
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
     BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
@@ -200,7 +198,6 @@ private:
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
     StreamLoadExecutor* _stream_load_executor = nullptr;
-    SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
 
     connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
