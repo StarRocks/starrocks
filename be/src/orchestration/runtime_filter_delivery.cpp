@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter_delivery.h"
+#include "orchestration/runtime_filter_delivery.h"
 
 #include <algorithm>
 #include <random>
@@ -37,7 +37,7 @@
 #include "runtime/runtime_filter_worker_context.h"
 #include "runtime/service_contexts.h"
 
-namespace starrocks {
+namespace starrocks::orchestration {
 
 // receive total runtime filter in pipeline engine.
 static inline void receive_total_runtime_filter_pipeline(const RuntimeServices* runtime_services,
@@ -310,4 +310,4 @@ void RuntimeFilterDelivery::deliver_part_runtime_filter(std::vector<TNetworkAddr
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::orchestration

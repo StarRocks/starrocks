@@ -27,6 +27,8 @@ namespace starrocks {
 struct RuntimeServices;
 struct RpcServices;
 
+namespace orchestration {
+
 class RuntimeFilterDelivery {
 public:
     RuntimeFilterDelivery(const RuntimeServices* runtime_services, const RpcServices* rpc_services)
@@ -55,4 +57,5 @@ private:
     const RpcServices* _rpc_services;
 };
 
+} // namespace orchestration
 } // namespace starrocks
