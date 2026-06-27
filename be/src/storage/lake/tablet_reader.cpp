@@ -611,8 +611,16 @@ Status TabletReader::init_rowset_read_options(const TabletReaderParams& params, 
     KeysType keys_type = _tablet_schema->keys_type();
     RETURN_IF_ERROR(init_predicates(params));
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
-    RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
-                                     &options->ranges, &_mempool));
+    // The seek range is invariant across this reader's per-split reopens, so parse it once and reuse the
+    // cached result. This skips the per-reopen seek-tuple rebuild (convert_field + datum decode +
+    // allocations) that dominated the lake split-scan open path.
+    if (!_cached_seek_ranges) {
+        std::vector<SeekRange> ranges;
+        RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key,
+                                         params.end_key, &ranges, &_mempool));
+        _cached_seek_ranges = std::move(ranges);
+    }
+    options->ranges = *_cached_seek_ranges;
     options->pred_tree = params.pred_tree;
     options->runtime_filter_preds = params.runtime_filter_preds;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, options->pred_tree,

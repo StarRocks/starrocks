@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <optional>
+#include <vector>
+
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
@@ -148,6 +151,15 @@ private:
 
     MemPool _mempool;
     ObjectPool _obj_pool;
+
+    // Cached result of parse_seek_range(), populated lazily on first use (the engaged optional is itself the
+    // "already parsed" flag). The seek range derives only from the tablet schema and the scan-constant key
+    // ranges (params.range/start_key/end_key from the planned scan range); it never changes across this
+    // reader's per-split reopens, and runtime filters narrow the row range separately rather than feeding
+    // back into the key range. Reusing it avoids rebuilding the seek tuples (convert_field + datum decode +
+    // allocations) on every reopen. The tuples' datums live in _mempool, so the cache stays valid for the
+    // reader's lifetime (declared after _mempool on purpose).
+    std::optional<std::vector<SeekRange>> _cached_seek_ranges;
 
     bool _is_asc_hint = true;
 
