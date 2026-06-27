@@ -359,9 +359,10 @@ public class IcebergStatisticProvider {
         Type.PrimitiveType type = typeMapping.get(fieldId);
         if (type instanceof Types.BooleanType) {
             return ConnectorNdvEstimator.TypeCategory.BOOLEAN;
-        } else if (type instanceof Types.IntegerType || type instanceof Types.LongType
-                || type instanceof Types.FloatType || type instanceof Types.DoubleType) {
+        } else if (type instanceof Types.IntegerType || type instanceof Types.LongType) {
             return ConnectorNdvEstimator.TypeCategory.INTEGER_LIKE;
+        } else if (type instanceof Types.FloatType || type instanceof Types.DoubleType) {
+            return ConnectorNdvEstimator.TypeCategory.FLOAT_LIKE;
         } else if (type instanceof Types.DateType) {
             // IcebergFileStats converts epoch-days → epoch-seconds (×86400)
             return ConnectorNdvEstimator.TypeCategory.DATE_IN_EPOCH_SECONDS;

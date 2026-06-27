@@ -132,10 +132,11 @@ public class DeltaStatisticProvider {
             case SMALLINT:
             case INTEGER:
             case LONG:
+                return ConnectorNdvEstimator.TypeCategory.INTEGER_LIKE;
             case FLOAT:
             case DOUBLE:
             case DECIMAL:
-                return ConnectorNdvEstimator.TypeCategory.INTEGER_LIKE;
+                return ConnectorNdvEstimator.TypeCategory.FLOAT_LIKE;
             case DATE:
                 // DeltaLakeFileStats.parseDate() converts to epoch-seconds via toEpochSecond()
                 return ConnectorNdvEstimator.TypeCategory.DATE_IN_EPOCH_SECONDS;

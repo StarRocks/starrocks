@@ -41,8 +41,14 @@ public final class ConnectorNdvEstimator {
     public enum TypeCategory {
         /** Boolean columns; at most 2 distinct values. */
         BOOLEAN,
-        /** Integer / floating-point columns (INT, LONG, FLOAT, DOUBLE). No unit conversion. */
+        /** Integer columns (INT, LONG). No unit conversion; range estimation is safe. */
         INTEGER_LIKE,
+        /**
+         * Floating-point / decimal columns (FLOAT, DOUBLE, DECIMAL).
+         * Range estimation is skipped: sub-unit ranges (e.g. 0.1–0.9) produce {@code (long)(max-min)=0},
+         * making rangeNdv=1 regardless of actual cardinality. Falls through to Tier 2/3.
+         */
+        FLOAT_LIKE,
         /**
          * Date columns whose min/max doubles are epoch-seconds.
          * Native unit = day → divide diff by 86400 to get the count of distinct days.
@@ -177,9 +183,10 @@ public final class ConnectorNdvEstimator {
     public static TypeCategory fromStarRocksType(Type t) {
         if (t.isBoolean()) {
             return TypeCategory.BOOLEAN;
-        } else if (t.isIntegerType() || t.isLargeIntType() || t.isFloatingPointType()
-                || t.isDecimalOfAnyVersion()) {
+        } else if (t.isIntegerType() || t.isLargeIntType()) {
             return TypeCategory.INTEGER_LIKE;
+        } else if (t.isFloatingPointType() || t.isDecimalOfAnyVersion()) {
+            return TypeCategory.FLOAT_LIKE;
         } else if (t.isDateType() && !t.isDatetime()) {
             return TypeCategory.DATE_IN_EPOCH_SECONDS;
         } else if (t.isDatetime() || t.isTime()) {

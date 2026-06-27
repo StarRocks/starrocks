@@ -121,7 +121,12 @@ public class HiveStatisticsProviderTest {
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
         Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
-        Assertions.assertEquals(0, statistics.getColumnStatistics().size());
+        // No partition stats → early-return with type-NDV estimates; rowCount=1, INT fraction → NDV=1
+        Assertions.assertEquals(2, statistics.getColumnStatistics().size());
+        Assertions.assertEquals(1.0,
+                statistics.getColumnStatistics().get(partColumnRefOperator).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(1.0,
+                statistics.getColumnStatistics().get(dataColumnRefOperator).getDistinctValuesCount(), 0.001);
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = statisticsProvider.getTableStatistics(
@@ -178,8 +183,14 @@ public class HiveStatisticsProviderTest {
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), 100);
         Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+        // createUnknownStatistics now uses Tier-3 type-fraction instead of unknown()
+        ColumnStatistic partColStat = statistics.getColumnStatistics().get(partColumnRefOperator);
+        ColumnStatistic dataColStat = statistics.getColumnStatistics().get(dataColumnRefOperator);
+        Assertions.assertFalse(partColStat.isUnknown());
+        Assertions.assertFalse(dataColStat.isUnknown());
+        // INT type fraction = 0.3, capped at rowCount=100 → NDV = 30
+        Assertions.assertEquals(30, partColStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(30, dataColStat.getDistinctValuesCount(), 0.001);
     }
 
     @Test
