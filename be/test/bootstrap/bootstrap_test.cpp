@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <cstdlib>
+
 #include "base/testutil/assert.h"
 #include "fs/fs_registry.h"
 
@@ -32,3 +35,18 @@ TEST(BootstrapTest, RegistryBootstrapIsIdempotent) {
 }
 
 } // namespace starrocks
+
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    const int result = RUN_ALL_TESTS();
+
+#ifdef __APPLE__
+    return result;
+#else
+    // brpc bvar starts a leaky sampler pthread during static initialization of
+    // filesystem metrics. In this small standalone test, normal static teardown
+    // can race that sampler against jemalloc shutdown after all tests pass.
+    std::fflush(nullptr);
+    std::_Exit(result);
+#endif
+}
