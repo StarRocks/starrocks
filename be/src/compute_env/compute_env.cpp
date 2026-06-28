@@ -57,6 +57,7 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     _load_stream_mgr->install_metrics(options.metrics);
     RETURN_IF_ERROR(pipeline_timer->start());
 
+    driver_limiter->init(options.metrics);
     _driver_limiter = std::move(driver_limiter);
     _pipeline_timer = std::move(pipeline_timer);
     _stream_mgr = std::move(stream_mgr);

@@ -214,11 +214,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
             max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread;
     compute_env_options.metrics = process_metrics;
     RETURN_IF_ERROR(_compute_env->init(compute_env_options));
-    pipeline::PipelineExecutorMetrics::instance()->register_pipe_drivers_hook([] {
-        auto* compute_env = ExecEnv::GetInstance()->compute_env();
-        auto* driver_limiter = compute_env == nullptr ? nullptr : compute_env->driver_limiter();
-        return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
-    });
 
     ComputeEnvWorkGroupOptions workgroup_options;
     workgroup_options.max_executor_threads = max_executor_threads;

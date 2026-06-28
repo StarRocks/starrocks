@@ -16,13 +16,25 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
 #include <utility>
 
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 
 namespace starrocks {
+
+namespace {
+
+void assert_metric_value(MetricRegistry* registry, const std::string& name, const std::string& value) {
+    auto* metric = registry->get_metric(name);
+    ASSERT_NE(nullptr, metric);
+    ASSERT_EQ(value, metric->to_string());
+}
+
+} // namespace
 
 TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     ComputeEnv env;
@@ -55,6 +67,52 @@ TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     EXPECT_EQ(env.stream_mgr(), nullptr);
     EXPECT_EQ(env.result_mgr(), nullptr);
     EXPECT_EQ(env.result_queue_mgr(), nullptr);
+}
+
+TEST(ComputeEnvTest, DriverLimiterOwnsPipeDriversMetric) {
+    MetricRegistry registry("test_registry");
+    {
+        pipeline::DriverLimiter driver_limiter(4);
+        driver_limiter.init(&registry);
+
+        auto token_or = driver_limiter.try_acquire(3);
+        ASSERT_TRUE(token_or.ok()) << token_or.status();
+        auto token = std::move(token_or).value();
+
+        registry.trigger_hook();
+        assert_metric_value(&registry, "pipe_drivers", "3");
+
+        token.reset();
+        registry.trigger_hook();
+        assert_metric_value(&registry, "pipe_drivers", "0");
+
+        auto next_token_or = driver_limiter.try_acquire(2);
+        ASSERT_TRUE(next_token_or.ok()) << next_token_or.status();
+        auto next_token = std::move(next_token_or).value();
+        registry.trigger_hook();
+        assert_metric_value(&registry, "pipe_drivers", "2");
+    }
+    registry.trigger_hook();
+    ASSERT_EQ(nullptr, registry.get_metric("pipe_drivers"));
+}
+
+TEST(ComputeEnvTest, ComputeEnvInstallsDriverLimiterMetric) {
+    MetricRegistry registry("test_registry");
+    ComputeEnv env;
+    ComputeEnvOptions options;
+    options.max_num_pipeline_drivers = 4;
+    options.metrics = &registry;
+
+    ASSERT_OK(env.init(options));
+    auto token_or = env.driver_limiter()->try_acquire(2);
+    ASSERT_TRUE(token_or.ok()) << token_or.status();
+    auto token = std::move(token_or).value();
+
+    registry.trigger_hook();
+    assert_metric_value(&registry, "pipe_drivers", "2");
+
+    token.reset();
+    env.destroy();
 }
 
 TEST(ComputeEnvTest, LoadPathLifecycle) {

@@ -176,14 +176,6 @@ void PipelineExecutorMetrics::register_pipe_prepare_pool_queue_len_hook(std::fun
     _register_int_gauge_hook("pipe_prepare_pool_queue_len", &pipe_prepare_pool_queue_len, std::move(value_fn));
 }
 
-void PipelineExecutorMetrics::register_pipe_drivers_hook(std::function<int64_t()> value_fn) {
-    if (_registry == nullptr) {
-        _pending_int_gauge_hooks.emplace_back(PendingIntGaugeHook{"pipe_drivers", &pipe_drivers, std::move(value_fn)});
-        return;
-    }
-    _register_int_gauge_hook("pipe_drivers", &pipe_drivers, std::move(value_fn));
-}
-
 void PipelineExecutorMetrics::_register_int_gauge_hook(const std::string& name, IntGauge* metric,
                                                        std::function<int64_t()> value_fn) {
     DCHECK(_registry != nullptr);
