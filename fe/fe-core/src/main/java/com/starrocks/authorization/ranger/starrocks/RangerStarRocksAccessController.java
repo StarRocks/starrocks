@@ -219,6 +219,28 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
+    public void checkAnyActionOnAnyView(ConnectContext context, String catalog, String db) throws AccessDeniedException {
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalog, db);
+        for (Table table : database.getViews()) {
+            try {
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(catalog)
+                                .setDatabase(database.getFullName())
+                                .setView(table.getName())
+                                .build(),
+                        context.getCurrentUserIdentity(),
+                        context.getGroups(),
+                        PrivilegeType.ANY);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+            return;
+        }
+        throw new AccessDeniedException();
+    }
+
+    @Override
     public void checkMaterializedViewAction(ConnectContext context, TableName tableName,
                                             PrivilegeType privilegeType) throws AccessDeniedException {
         hasPermission(
@@ -255,6 +277,29 @@ public class RangerStarRocksAccessController extends RangerAccessController {
                 hasPermission(
                         RangerStarRocksResource.builder()
                                 .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                .setDatabase(database.getFullName())
+                                .setMaterializedView(table.getName())
+                                .build(),
+                        context.getCurrentUserIdentity(),
+                        context.getGroups(),
+                        PrivilegeType.ANY);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+            return;
+        }
+        throw new AccessDeniedException();
+    }
+
+    @Override
+    public void checkAnyActionOnAnyMaterializedView(ConnectContext context, String catalog, String db)
+            throws AccessDeniedException {
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalog, db);
+        for (Table table : database.getMaterializedViews()) {
+            try {
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(catalog)
                                 .setDatabase(database.getFullName())
                                 .setMaterializedView(table.getName())
                                 .build(),

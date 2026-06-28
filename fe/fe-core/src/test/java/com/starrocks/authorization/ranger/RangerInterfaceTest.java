@@ -22,6 +22,7 @@ import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
@@ -293,6 +294,37 @@ public class RangerInterfaceTest {
             QueryStatement queryStatement = (QueryStatement) stmt;
             Assertions.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
         }
+    }
+
+    @Test
+    public void testCheckAnyActionOnAnyViewAndMvCatalogAware() throws Exception {
+        // Ranger allows everything
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks",
+                        new RangerServiceDef(), new RangerAccessRequestImpl());
+                result.setIsAllowed(true);
+                return result;
+            }
+        };
+
+        starRocksAssert.withView("CREATE VIEW db.v_ranger AS SELECT v4 FROM db.t1");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW db.mv_ranger " +
+                "DISTRIBUTED BY HASH(v4) REFRESH MANUAL AS SELECT v4 FROM db.t1");
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(new UserIdentity("alice", "%"));
+
+        RangerStarRocksAccessController controller = new RangerStarRocksAccessController();
+
+        // The catalog-aware overloads must be honored by Ranger rather than falling
+        // through to the AccessController default (which always throws). Otherwise a
+        // user whose only privilege in a db is on a view/MV loses db visibility.
+        Assertions.assertDoesNotThrow(() -> controller.checkAnyActionOnAnyView(
+                ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "db"));
+        Assertions.assertDoesNotThrow(() -> controller.checkAnyActionOnAnyMaterializedView(
+                ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "db"));
     }
 
     @Test
