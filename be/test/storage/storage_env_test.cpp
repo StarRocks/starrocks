@@ -16,12 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 #ifdef WITH_TENANN
 #include "tenann/index/index_cache.h"
 #endif
 
 #include "base/testutil/assert.h"
-#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "common/config_vector_index_fwd.h"
 #include "platform/store_path.h"
@@ -104,9 +105,12 @@ TEST(StorageEnvTest, vector_index_cache_init_installs_and_destroy_clears_global)
     DeferOp restore_global([&] { tenann::SetGlobalIndexCache(saved_cache); });
     tenann::SetGlobalIndexCache(nullptr);
 
+    const std::string saved_capacity = config::vector_query_cache_capacity.value();
+    DeferOp restore_capacity([&] { config::vector_query_cache_capacity = saved_capacity; });
+    config::vector_query_cache_capacity = std::string("1024");
+
     MemTracker vector_index_mem_tracker(-1, "storage_env_vector_index_test");
     StorageEnv env;
-    SCOPED_UPDATE(std::string, config::vector_query_cache_capacity, "1024");
 
     ASSERT_OK(env.init_vector_index_cache(1024 * 1024, &vector_index_mem_tracker));
     ASSERT_NE(env.vector_index_cache(), nullptr);
@@ -118,6 +122,28 @@ TEST(StorageEnvTest, vector_index_cache_init_installs_and_destroy_clears_global)
 
     env.destroy_vector_index_cache();
     EXPECT_EQ(env.vector_index_cache(), nullptr);
+    EXPECT_EQ(tenann::GetGlobalIndexCache(), nullptr);
+}
+
+TEST(StorageEnvTest, vector_index_cache_destroy_ignores_cache_owned_by_other_instance) {
+    auto* saved_cache = tenann::GetGlobalIndexCache();
+    DeferOp restore_global([&] { tenann::SetGlobalIndexCache(saved_cache); });
+    tenann::SetGlobalIndexCache(nullptr);
+
+    const std::string saved_capacity = config::vector_query_cache_capacity.value();
+    DeferOp restore_capacity([&] { config::vector_query_cache_capacity = saved_capacity; });
+    config::vector_query_cache_capacity = std::string("1024");
+
+    MemTracker vector_index_mem_tracker(-1, "storage_env_vector_index_test");
+    StorageEnv owner;
+    ASSERT_OK(owner.init_vector_index_cache(1024 * 1024, &vector_index_mem_tracker));
+    auto* installed_cache = tenann::GetGlobalIndexCache();
+    ASSERT_EQ(installed_cache, owner.vector_index_cache());
+
+    { StorageEnv unrelated_env; }
+    EXPECT_EQ(tenann::GetGlobalIndexCache(), installed_cache);
+
+    owner.destroy_vector_index_cache();
     EXPECT_EQ(tenann::GetGlobalIndexCache(), nullptr);
 }
 

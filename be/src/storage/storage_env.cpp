@@ -159,7 +159,9 @@ void StorageEnv::stop_lake_tablet_manager() {
 
 void StorageEnv::destroy_vector_index_cache() {
 #ifdef WITH_TENANN
-    tenann::SetGlobalIndexCache(nullptr);
+    if (_vector_index_cache != nullptr && tenann::GetGlobalIndexCache() == _vector_index_cache.get()) {
+        tenann::SetGlobalIndexCache(nullptr);
+    }
 #endif
     _vector_index_cache.reset();
 }
